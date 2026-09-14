@@ -33,7 +33,8 @@ export async function logicalIntegrity() {
 
   const active = async (name) => (await db.table(name).toArray()).filter((row) => !row.deleted_at);
   const animalIds = new Set((await active('animais')).map((row) => row.id));
-  const lotIds = new Set([...(await active('lotes')), ...(await active('loteApartacoes'))].map((row) => row.id));
+  // v7 (ADR-023): `loteApartacoes` é a única store de lote.
+  const lotIds = new Set((await active('loteApartacoes')).map((row) => row.id));
   const shipmentIds = new Set((await active('embarques')).map((row) => row.id));
   const documentIds = new Set((await active('documentosEmbarque')).map((row) => row.id));
   const weighingIds = new Set((await active('pesagens')).map((row) => row.id));

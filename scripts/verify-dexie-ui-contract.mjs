@@ -12,7 +12,8 @@ const read = (rel) => readFileSync(join(root, rel), 'utf8');
 const storage = (await imp('src/storage/storageAdapter.js')).default;
 
 // Contrato do facade de armazenamento que a UI/serviços consomem.
-const requiredRepos = ['weighing', 'apartacoes', 'loteApartacoes', 'embarques', 'documentosEmbarque', 'animais', 'lotes'];
+// v7 (ADR-023): a store 'lotes' foi removida; 'loteApartacoes' é o repositório canônico de lote.
+const requiredRepos = ['weighing', 'apartacoes', 'loteApartacoes', 'embarques', 'documentosEmbarque', 'animais', 'animalIdentificadores', 'sessoesPesagem', 'auditoria', 'importacoes'];
 for (const r of requiredRepos) {
   assert(storage[r] && typeof storage[r].list === 'function' && typeof storage[r].create === 'function',
     `storageAdapter.${r} tem list/create`);

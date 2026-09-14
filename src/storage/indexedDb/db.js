@@ -1,17 +1,33 @@
 // Instância Dexie (IndexedDB). Sem módulo nativo, sem conexão no main process,
 // sem app.asar.unpacked. O banco NASCE automaticamente na primeira abertura:
 // Dexie cria o database e os object stores ao abrir. O usuário não configura nada.
+//
+// Versões declaradas: 5 (histórica), 6 (1.1.17) e 7 (Programa 2.0). O upgrade
+// do Dexie executa apenas transformações leves e idempotentes; o backfill
+// pesado (cadastros a partir de texto livre, ids em animais/identificadores,
+// limpeza de legacy_payload) é resumível e roda após a abertura pelo
+// migrationCoordinator (docs/arquitetura-produto/14-MIGRACOES.md).
 import Dexie from 'dexie';
-import { DB_NAME, DB_VERSION, REMOVED_STORES_V6, STORES, STORES_V5 } from './schema.js';
+import {
+  DB_NAME,
+  DB_VERSION,
+  REMOVED_STORES_V6,
+  REMOVED_STORES_V7,
+  STORES_V5,
+  STORES_V6,
+  STORES_V7,
+} from './schema.js';
 
 let _db = null;
+
+const SESSION_STATUS_V7 = { Aberta: 'ABERTA', Fechada: 'FECHADA', Cancelada: 'CANCELADA' };
 
 export function getDb() {
   if (_db) return _db;
   const db = new Dexie(DB_NAME);
   db.version(5).stores(STORES_V5);
-  db.version(DB_VERSION)
-    .stores({ ...STORES, ...REMOVED_STORES_V6 })
+  db.version(6)
+    .stores({ ...STORES_V6, ...REMOVED_STORES_V6 })
     .upgrade(async (transaction) => {
       await transaction.table('pesagens').toCollection().modify((row) => {
         delete row.sanidade_ids;
@@ -29,6 +45,22 @@ export function getDb() {
             // Snapshot legado inválido permanece intacto; o mapper já o ignora.
           }
         }
+      });
+    });
+  db.version(7)
+    .stores({ ...STORES_V7, ...REMOVED_STORES_V7 })
+    .upgrade(async (transaction) => {
+      // Enumerações (idempotente). Nenhum dado é apagado aqui.
+      await transaction.table('sessoesPesagem').toCollection().modify((row) => {
+        if (SESSION_STATUS_V7[row.status]) row.status = SESSION_STATUS_V7[row.status];
+        if (row.local === undefined) row.local = null;
+      });
+      await transaction.table('loteApartacoes').toCollection().modify((row) => {
+        if (!row.situacao) row.situacao = row.fechado ? 'FECHADO' : 'ABERTO';
+        if (row.ativo === undefined) row.ativo = true;
+      });
+      await transaction.table('apartacoes').toCollection().modify((row) => {
+        if (row.ativo === undefined) row.ativo = true;
       });
     });
   _db = db;

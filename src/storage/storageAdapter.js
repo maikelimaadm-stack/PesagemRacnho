@@ -20,7 +20,6 @@ export const storage = {
   embarques: repos.shipmentRepository,
   documentosEmbarque: repos.shipmentDocumentRepository,
   animais: repos.animalRepository,
-  lotes: repos.lotRepository,
   animalIdentificadores: repos.animalIdentifierRepository,
   movimentosAnimais: repos.animalMovementRepository,
   animalLotes: repos.animalLotRepository,

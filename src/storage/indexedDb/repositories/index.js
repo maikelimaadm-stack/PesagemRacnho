@@ -17,7 +17,7 @@ export const loteApartacaoRepository = createRepository('loteApartacoes');
 export const shipmentRepository = createRepository('embarques');
 export const shipmentDocumentRepository = createRepository('documentosEmbarque');
 export const animalRepository = createRepository('animais');
-export const lotRepository = createRepository('lotes');
+// v7 (ADR-023): a store `lotes` foi removida; `loteApartacaoRepository` é o repositório canônico de lote.
 export const animalIdentifierRepository = createRepository('animalIdentificadores');
 export const animalMovementRepository = createRepository('movimentosAnimais');
 export const animalLotRepository = createRepository('animalLotes');
