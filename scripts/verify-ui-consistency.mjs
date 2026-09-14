@@ -149,7 +149,12 @@ assert.match(auxiliaryRegistryCss, /\.aux-record-mode\s*\{\s*--aux-card-gap:\s*1
 assert.match(auxiliaryRegistryCss, /html body \.d17b-shell\.cadastro-emp-scope \.d17b-page \.aux-record-mode \.mg-prototype-cards-layout\s*\{[\s\S]{0,180}gap:\s*var\(--aux-card-gap\)\s*!important/i, 'respiro dos cards prevalece sobre o reset global de três pixels');
 assert.match(auxiliaryRegistryCss, /\.aux-form-toolbar-actions\s*\{\s*gap:\s*6px/i, 'grupos de botões do lançamento auxiliar mantêm separação consistente');
 assert.match(auxiliaryRegistry, /aux-registry-page--record[\s\S]{0,80}aux-registry-page--table/, 'visualizações de registro e tabela possuem estados estruturais explícitos');
-assert.match(auxiliaryRegistry, /className=\{`view-seg aux-view-seg[\s\S]{0,600}aria-label="Visualizar registro"[\s\S]{0,350}aria-label="Visualizar tabela"/, 'alternância Registro/Tabela reutiliza a estrutura segmentada oficial');
+// Estrutura (não sintaxe): o controle Registro/Tabela/Cards usa o segmento oficial
+// .view-seg com slider e botões acessíveis "Visualizar <modo>" gerados de VIEW_MODES.
+assert.match(auxiliaryRegistry, /className=(?:"|\{`)view-seg aux-view-seg[^>]*role="group"[^>]*aria-label="Modo de visualização"/, 'alternância Registro/Tabela reutiliza a estrutura segmentada oficial (.view-seg com role group)');
+assert.match(auxiliaryRegistry, /className="view-seg-slider aux-view-seg__slider"/, 'segmento Registro/Tabela possui o slider oficial');
+assert.match(auxiliaryRegistry, /const VIEW_MODES = \[[\s\S]{0,400}id: 'registro'[\s\S]{0,200}id: 'tabela'/, 'modos Registro e Tabela estão declarados no segmento');
+assert.match(auxiliaryRegistry, /aria-label=\{`Visualizar \$\{view\.title/, 'cada modo do segmento expõe o rótulo acessível "Visualizar <modo>"');
 assert.match(auxiliaryRegistryCss, /\.aux-view-seg\s*\{[\s\S]{0,300}--mg-btn-icon-size[\s\S]{0,120}\* 2/i, 'controle Registro/Tabela preserva a geometria do ModeloBase1 com dois modos');
 assert.match(auxiliaryRegistry, /className="emp-th-select aux-check-cell"[\s\S]{0,300}className="emp-table-select-wrap"/, 'cabeçalho de seleção usa as classes e o invólucro oficiais');
 assert.match(auxiliaryRegistry, /className="emp-td-select aux-check-cell"[\s\S]{0,180}stopPropagation/, 'célula de seleção usa o contrato oficial sem propagar o clique para a linha');
