@@ -1,117 +1,111 @@
-# 11 — Autenticação local e controle de acesso (contrato de implementação)
+# 11 — Autenticação local, papéis e sessão (contrato de implementação)
 
-**Programa 2.0 · 14/09/2026 · ADR-035, ADR-036.**
+**Programa 1.1.17 → 1.6.0 · ADR-041…ADR-046 (DEC-023…DEC-029) · revisão 2 (14/09/2026).**
+Substitui a revisão 1 (três perfis, store `usuariosLocais`). Nada desta revisão depende de rede.
 
 ## 1. Princípios
 
-- 100 % offline: nenhuma dependência de rede, servidor, OAuth ou provedor externo.
-- Sem módulo nativo: hash com Web Crypto (`crypto.subtle`, disponível no renderer e no Node 24 dos gates).
-- Senha nunca é persistida, logada, exportada em CSV nem incluída em diagnóstico textual.
-- A UI esconde o que o perfil não pode; o **serviço** valida as ações críticas.
+- 100 % offline: sem servidor, Supabase, Firebase, OAuth, e-mail, SMS; a autenticação nunca impede o trabalho sem rede.
+- Sem módulo nativo: Web Crypto (`crypto.subtle`), disponível no renderer e no Node dos gates.
+- Senha, hash, salt, recovery key e tokens nunca vão para log, auditoria, CSV, diagnóstico ou `localStorage`.
+- A UI esconde o que o papel não pode; o **serviço** autoriza (`authorize(action)`) antes de gravar.
+- Threat model (docs/engineering/AUTH-THREAT-MODEL.md): controle e auditoria dentro do app; não protege contra quem tem acesso total ao perfil do SO e aos arquivos; sem criptografia total do banco.
 
-## 2. Módulo
+## 2. Store `usuarios` (esquema v7)
+
+Índices: `++localId, &id, empresa_id, &login_normalizado, role, ativo, created_at, updated_at, deleted_at` (hash e salt nunca indexados).
+
+| Campo | Regra |
+|---|---|
+| `id`, `empresa_id='local'` | padrão |
+| `nome`, `login`, `login_normalizado` | login normalizado = `trim` + minúsculas; único por empresa |
+| `role` | `ADMIN` · `GESTOR` · `OPERADOR` · `CONSULTA` |
+| `ativo` | inativo não entra; nunca apagar usuário referenciado em auditoria |
+| `password_hash`, `password_salt` | base64; salt aleatório de 16 bytes por usuário |
+| `password_algorithm` | `PBKDF2-SHA256` |
+| `password_iterations` | valor persistido (padrão 310 000; centralizado em `passwordPolicy.js` e testado) |
+| `password_version` | inteiro; permite recalibrar custo/algoritmo com rehash no próximo login |
+| `must_change_password` | `true` após criação por ADMIN ou reset |
+| `recovery_hash`, `recovery_salt` | só no ADMIN de bootstrap; verificador da Recovery Key |
+| `failed_login_count`, `locked_until` | bloqueio temporário persistido (limite e duração em `auth-policy`) |
+| `last_login_at` | atualizado no login |
+| `created_at`, `updated_at`, `deleted_at` | padrão |
+
+## 3. Módulo
 
 ```text
 src/modules/auth/
-  domain/passwordHasher.js      hashPassword(password, opts) → { algoritmo, salt, iteracoes, hash } ; verifyPassword(password, record) → boolean
-  domain/accessPolicy.js        PROFILES, PERMISSIONS, can(profile, permission), assertCan(profile, permission)
-  domain/loginLockout.js        registerFailure(loginNormalizado), isLocked(loginNormalizado) → {locked, until} ; 5 falhas → 30 s (memória)
-  application/localAuthService.js
-  application/authSession.js    sessão em memória + sessionStorage
-  application/auditContext.js   getActor() → { actor_user_id, actor_user_name, actor_user_profile } | nulls
-src/components/auth/
-  AuthGate.jsx                  decide: carregando → ConfiguracaoInicial → Login → Bloqueado → app
-  ConfiguracaoInicialScreen.jsx
-  LoginScreen.jsx
-  LockScreen.jsx
-  RequirePermission.jsx         envolve rotas/ações; sem permissão → tela "Acesso não permitido"
-  UserMenu.jsx                  topbar: usuário, perfil, versão, Bloquear, Trocar usuário, Sair
-src/pages/Usuarios.jsx          somente ADMIN (users.manage)
+  domain/passwordHasher.js      hashPassword(senha, { iterations?, salt? }) → { algorithm, salt, iterations, hash, version }; verifyPassword(senha, record); constantTimeEqual
+  domain/passwordPolicy.js      PBKDF2_ITERATIONS, PASSWORD_VERSION, MIN_PASSWORD_LENGTH=6, TRIVIAL_PASSWORDS, validatePassword(senha, login)
+  domain/recoveryKey.js         generateRecoveryKey() → texto legível (ex.: 5 grupos de 5), hashRecoveryKey, verifyRecoveryKey
+  domain/permissionService.js   ROLES, ACTIONS, MATRIX, can(role, action), authorize(role, action) → lança AUTH_FORBIDDEN, listActions(role)
+  application/authService.js    countActiveUsers, bootstrapFirstAdmin, authenticate, findActiveUser, createUser, updateUser, setActive, resetPassword, forcePasswordChange, changeOwnPassword, recoverAdminPassword, listUsers
+  application/sessionService.js sessão em memória (+ sessionStorage para recarga técnica), inatividade, lock/unlock/logout/switchUser, subscribe; registra o provedor de ator
+  application/auditContext.js   getActor() → { usuario_id, usuario_nome_snapshot } | nulos
+  application/authAudit.js      registra LOGIN_SUCESSO, LOGOUT, BLOQUEIO, RESET_SENHA, ALTERACAO_USUARIO (resumidos, sem segredos)
+src/components/auth/            AuthGate, FirstRunAdminSetupScreen (com exibição única da Recovery Key), LoginScreen, LockScreen, TrocarSenhaScreen, RecuperarSenhaScreen, RequirePermission, UserMenu, useAuth
+src/pages/Usuarios.jsx          ação users.manage (ADMIN)
 ```
 
-### 2.1 `passwordHasher`
+## 4. Matriz de permissões (`permissionService`)
 
-- PBKDF2 · SHA-256 · salt aleatório de 16 bytes por usuário · 310 000 iterações · 32 bytes derivados.
-- Persistido: `senha_hash` (base64), `senha_salt` (base64), `senha_iteracoes`, `senha_algoritmo = 'PBKDF2-SHA256'`.
-- Comparação em tempo constante (XOR sobre bytes).
-- `hashPassword` aceita `iteracoes` opcional só para testes rápidos (nunca abaixo de 310 000 em produção; o serviço fixa o valor).
+| Ação | ADMIN | GESTOR | OPERADOR | CONSULTA |
+|---|---|---|---|---|
+| `launch.use` | ✔ | ✔ | ✔ | ✘ |
+| `weighing.read` | ✔ | ✔ | ✔ | ✔ |
+| `weighing.write` / `weighing.edit` | ✔ | ✔ | ✔ | ✘ |
+| `animal.read` | ✔ | ✔ | ✔ | ✔ |
+| `animal.write` (cadastro rápido) | ✔ | ✔ | ✔ | ✘ |
+| `registry.read` | ✔ | ✔ | ✔ | ✔ |
+| `registry.write` | ✔ | ✔ | ✘ | ✘ |
+| `commercial.read` | ✔ | ✔ | ✘ | ✔ (sem valores) |
+| `commercial.write` | ✔ | ✔ | ✘ | ✘ |
+| `commercial.values` (ver preços) | ✔ | ✔ | ✘ | ✘ |
+| `shipment.read` / `shipment.write` | ✔ / ✔ | ✔ / ✔ | ✔ / ✘ | ✔ / ✘ |
+| `session.close` / `session.reopen` | ✔ | ✔ | ✘ | ✘ |
+| `reports.read` | ✔ | ✔ | ✘ | ✔ |
+| `maintenance.backup` | ✔ | ✔ | ✘ | ✘ |
+| `maintenance.restore` / `maintenance.clear` / `maintenance.reset` / `maintenance.migrate` | ✔ | ✘ | ✘ | ✘ |
+| `users.manage` | ✔ | ✘ | ✘ | ✘ |
+| `settings.operational` | ✔ | ✔ | ✘ | ✘ |
+| `settings.auth` / `settings.manage` | ✔ | ✘ | ✘ | ✘ |
+| `audit.read` | ✔ | ✔ | ✘ | ✔ |
 
-### 2.2 `accessPolicy`
+Regra: ações destrutivas/administrativas chamam `authorize` no serviço; `RequirePermission` na UI é conveniência.
 
-Perfis: `ADMIN`, `GESTOR`, `OPERADOR`. Permissões (mapa estático):
-
-| Permissão | ADMIN | GESTOR | OPERADOR |
-|---|---|---|---|
-| `launch.use` | ✔ | ✔ | ✔ |
-| `weighing.read` | ✔ | ✔ | ✔ |
-| `weighing.write` | ✔ | ✔ | ✔ |
-| `weighing.edit` | ✔ | ✔ | ✔ (só o próprio dia; regra futura) |
-| `animal.read` | ✔ | ✔ | ✔ |
-| `animal.write` | ✔ | ✔ | ✔ (cadastro rápido) |
-| `registry.read` | ✔ | ✔ | ✔ |
-| `registry.write` | ✔ | ✔ | ✘ |
-| `commercial.read` | ✔ | ✔ | ✘ |
-| `commercial.write` | ✔ | ✔ | ✘ |
-| `shipment.read` | ✔ | ✔ | ✘ |
-| `shipment.write` | ✔ | ✔ | ✘ |
-| `session.close` | ✔ | ✔ | ✘ |
-| `session.reopen` | ✔ | ✔ | ✘ |
-| `reports.read` | ✔ | ✔ | ✘ |
-| `maintenance.backup` | ✔ | ✔ | ✘ |
-| `maintenance.restore` | ✔ | ✘ | ✘ |
-| `maintenance.clear` | ✔ | ✘ | ✘ |
-| `maintenance.migrate` | ✔ | ✘ | ✘ |
-| `users.manage` | ✔ | ✘ | ✘ |
-| `settings.manage` | ✔ | ✘ | ✘ |
-
-### 2.3 `localAuthService`
-
-| Função | Regra |
-|---|---|
-| `countActiveUsers()` | `usuariosLocais` com `ativo` e sem `deleted_at` |
-| `createInitialAdmin({nome, login, senha})` | só quando `count === 0`; perfil ADMIN; `deve_trocar_senha=false`; recusa senha < 6 caracteres e senhas triviais (`123`, `123456`, `admin`, igual ao login) |
-| `authenticate(login, senha)` | normaliza login; se bloqueado por tentativas → erro `AUTH_LOCKED` com `until`; usuário inexistente/inativo/senha errada → registra falha e devolve o **mesmo** erro `AUTH_INVALID`; sucesso → zera falhas, grava `ultimo_login_at`, devolve `{ id, nome, login, perfil, deve_trocar_senha }` |
-| `createUser(actor, dados)` | exige `users.manage`; login único normalizado; senha inicial; `deve_trocar_senha=true` |
-| `updateUser(actor, id, dados)` | nome, perfil, login (único); nunca senha por aqui |
-| `setActive(actor, id, ativo)` | exige `users.manage`; **recusa desativar o último ADMIN ativo** (`AUTH_LAST_ADMIN`); nunca apaga fisicamente |
-| `resetPassword(actor, id, novaSenha)` | exige `users.manage`; `deve_trocar_senha=true` |
-| `changeOwnPassword(userId, senhaAtual, novaSenha)` | verifica a atual; `deve_trocar_senha=false` |
-| `listUsers(actor)` | exige `users.manage`; nunca devolve hash/salt |
-
-Erros: `AUTH_INVALID`, `AUTH_LOCKED`, `AUTH_FORBIDDEN`, `AUTH_LAST_ADMIN`, `AUTH_LOGIN_EXISTS`, `AUTH_WEAK_PASSWORD`, `AUTH_SETUP_DONE`.
-
-### 2.4 `authSession`
-
-- Estado em memória: `{ userId, nome, perfil, loginAt, lastActivityAt }`; espelho em `sessionStorage['pesagens.auth.session']` para sobreviver a recarga da janela (não a fechamento do app).
-- `touch()` em eventos de teclado/mouse (throttle 30 s); `bloqueio_inatividade_minutos` (configuração; padrão 60; 0 desliga) → estado `LOCKED` (tela de bloqueio pede a senha do mesmo usuário; "Trocar usuário" volta ao login).
-- `logout()` limpa memória e `sessionStorage`.
-- `auditContext.getActor()` lê a sessão; sem sessão devolve nulos (gates Node e migrações).
-
-## 3. Fluxo de primeira execução
+## 5. Fluxo
 
 ```text
-DbBootstrap (banco pronto, migração concluída)
-  └─ AuthGate: countActiveUsers() === 0 ?
-        sim → ConfiguracaoInicialScreen (Nome do administrador, Login, Senha, Confirmar) → createInitialAdmin → LoginScreen
-        não → LoginScreen → authenticate → (deve_trocar_senha ? TrocarSenha : app)
+Splash/preflight de storage → (migração: backup físico → v7 → backfill → integridade)
+  → usuarios.count === 0 ? FirstRunAdminSetup (nome, login, senha, confirmação → Recovery Key exibida uma vez)
+  → Login (login + senha; Enter envia; erro genérico; falhas contam; bloqueio temporário; inativo não entra)
+  → must_change_password ? TrocarSenha : App principal
+Bloqueio por inatividade (padrão 30 min; 0 desliga) → LockScreen (senha do mesmo usuário) · Trocar usuário · Sair
+Recuperação: Login › "Esqueci a senha do administrador" → Recovery Key → nova senha → nova key gerada e exibida
 ```
 
-Nenhuma tela de dados é montada antes da autenticação; a `LoginScreen` mostra só nome do produto, campos e versão (`APP_VERSION`).
+Nenhuma tela de dados é montada antes da autenticação. Restore, reset ou alteração do próprio usuário encerram a sessão. Fechar o app encerra a sessão.
 
-## 4. Integração com o restante
+## 6. Tela Sistema › Usuários (ModeloBase1)
 
-- `App.jsx`: `DbBootstrap` → `AuthGate` → `Router`. Rotas recebem `RequirePermission` conforme `Layout.jsx` (`permission` por item de menu).
-- `Layout.jsx`/AppShell: itens de menu filtrados por `can(perfil, permission)`; `UserMenu` na topbar.
-- Auditoria: `weighingDataAdapter` e os serviços de cadastro chamam `getActor()` ao gravar `auditoria` (`actor_user_id`, `actor_user_name`, `actor_user_profile`); registros antigos ficam nulos.
-- Serviços críticos validam `assertCan(actor.perfil, …)`: restore, limpeza, migração manual, usuários, configurações, fechamento/reabertura, operações comerciais.
+Lista: Nome, Login, Papel, Ativo, Último acesso. Ações: Novo usuário, Editar (nome/papel/ativo), Redefinir senha (temporária + `must_change_password`), Forçar troca. Nunca mostrar hash/salt. Não desativar/remover o último ADMIN ativo. OPERADOR e CONSULTA não abrem a tela.
 
-## 5. Backup e restauração
+## 7. Auditoria por usuário
 
-- `usuariosLocais` entra no backup completo (hash/salt, nunca senha).
-- Restaurar um backup que contém usuários exige perfil ADMIN e substitui os usuários (o restore é integral por definição); após o restore, a sessão atual é encerrada e o login é exigido.
-- Backups v2 (sem `usuariosLocais`) restaurados em v7: a store nasce vazia → o `AuthGate` volta para a Configuração Inicial. Isso é comportamento esperado e documentado.
+`auditoria`: `usuario_id`, `usuario_nome_snapshot`, `resumo`, `campos_alterados[]`. `sessoesPesagem.operador_usuario_id`. Eventos de acesso resumidos (`entidade='usuarios'`, `acao` ∈ {LOGIN_SUCESSO, LOGOUT, BLOQUEIO, RESET_SENHA, ALTERACAO_USUARIO}). Registros antigos: `usuario_id = null`.
 
-## 6. Gates
+## 8. Configuração `auth-policy:<empresa>` (appSettings, versionada)
 
-- `auth:local:verify` (`scripts/verify-local-auth.mjs`): hash/verify; senha errada não autentica; bloqueio após 5 falhas por 30 s (relógio injetável); primeira execução cria ADMIN; senha trivial recusada; login duplicado recusado; último ADMIN não pode ser desativado; `listUsers` não expõe hash; troca/redefinição de senha.
-- `auth:access:verify` (`scripts/verify-access-policy.mjs`): tabela de permissões; OPERADOR não tem `users.manage`; `assertCan` lança `AUTH_FORBIDDEN`; serviço de usuários recusa ator sem permissão; `AuthGate`/`Layout` referenciam `RequirePermission`/`can` (verificação textual).
+`{ versao, inactivity_lock_minutes: 30, failed_attempt_limit: 5, lock_minutes: 0.5 }` — alterável só por `settings.auth` (ADMIN).
+
+## 9. Backup e restauração
+
+`usuarios` entra no backup (hash/salt, nunca senha nem sessão). Restore com usuários exige `maintenance.restore` e encerra a sessão. Backup formato 2 restaurado em v7 nasce sem usuários → FirstRunAdminSetup.
+
+## 10. Gates
+
+- `auth:crypto:verify` — hash/verify, salt aleatório, iterações ≥ política, comparação constante, `password_version`, senha errada não autentica.
+- `auth:bootstrap:verify` — banco vazio abre bootstrap; cria ADMIN; recovery key exibida uma vez e só hash gravado; backup com usuários não faz bootstrap; `admin/admin` impossível.
+- `auth:permissions:verify` — matriz completa (4 papéis × ações); `authorize` lança `AUTH_FORBIDDEN`; serviços críticos recusam ator sem permissão; OPERADOR/CONSULTA não abrem Usuários.
+- `auth:recovery:verify` — key válida redefine e gera nova; key antiga invalidada; key inválida recusada e conta falha.
+- `audit:actor:verify` — eventos gravam `usuario_id`/`usuario_nome_snapshot`; nenhum segredo na auditoria; login events resumidos.

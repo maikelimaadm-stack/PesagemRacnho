@@ -1,78 +1,56 @@
 # 13 — Versionamento e política de release (contrato de implementação)
 
-**Programa 2.0 · 14/09/2026 · ADR-037, ADR-039, ADR-040.**
+**Programa 1.1.17 → 1.6.0 · ADR-047, ADR-048 (DEC-030) · revisão 2 (14/09/2026).**
 
-## 1. Cinco versões, um único módulo
+## 1. Quatro versões que nunca se confundem
 
-`src/versioning/versionInfo.js`:
+| Eixo | Onde vive | Valor no início | Regra |
+|---|---|---|---|
+| App SemVer | `package.json` → Electron `app.getVersion()`; renderer via constante de build (`__APP_VERSION__`, Vite) | 1.1.17 | PATCH correção; MINOR funcionalidade/store/migração compatível; MAJOR quebra deliberada de backup/export/API local |
+| `DB_SCHEMA_VERSION` | `src/storage/indexedDb/schema.js` (`DB_VERSION`) | 6 → 7 (1.2.0) → 8 (1.5.0) | só muda com migração testada e backup prévio |
+| `BACKUP_FORMAT_VERSION` | módulo de backup (importado de `src/versioning/versionInfo.js`) | 2 → 3 (1.2.0) | formato anterior continua restaurável |
+| `RELEASE_MANIFEST_VERSION` | `scripts/generate-release-manifest.mjs` | 1 → 2 (1.1.18) | muda quando o manifesto ganha/perde campos |
 
-```js
-import { APP_VERSION } from '../lib/appVersion.js';            // derivada de package.json (Vite define __APP_VERSION__)
-import { DB_VERSION } from '../storage/indexedDb/schema.js';   // DB_SCHEMA_VERSION
-import { UI_BUILD_ID, UI_MODEL, UI_VERSION } from '../components/modelobase1/uiBuildInfo.js';
+Marcadores de build (não são versões): `UI_BUILD_ID`, `DATA_BUILD_ID`, `UI_CONTRACT_VERSION`, `DATA_CONTRACT_VERSION`, `gitCommit`, `buildTimestamp` — todos reunidos por `describeVersions()` em `src/versioning/versionInfo.js`. `gitCommit`/`buildTimestamp` entram como constantes de build (`__BUILD_INFO__`, Vite) quando disponíveis.
 
-export const DB_SCHEMA_VERSION = DB_VERSION;        // 7 na 1.2.0, 8 na 1.4.0
-export const BACKUP_FORMAT_VERSION = 3;             // 2 até 1.1.17
-export const UI_CONTRACT_VERSION = 'ModeloBase1-2.0';
-export const DATA_CONTRACT_VERSION = 2;             // 1 até 1.1.17; 3 na v8
-export const DATA_BUILD_ID = 'schema-v7';           // 'schema-v8' na 1.4.0
-export { APP_VERSION, UI_BUILD_ID, UI_MODEL, UI_VERSION };
-export function describeVersions() { return { app, dbSchema, backupFormat, uiContract, dataContract, uiBuildId, dataBuildId }; }
-```
-
-Regras: `APP_VERSION` nunca é digitada em outro lugar; `backupService` importa `BACKUP_FORMAT_VERSION` daqui; `uiBuildInfo.js` continua sendo o dono de `UI_BUILD_ID` (atualizado a cada release visual: `2.0-modelobase1-r<N>`); `DATA_BUILD_ID` muda quando o esquema muda.
-
-## 2. Onde as versões aparecem
+## 2. Onde aparecem
 
 | Lugar | Conteúdo |
 |---|---|
-| Manutenção › Status | Aplicativo, Banco (schema), Backup (formato), Build UI, Build dados, Contrato UI, Contrato dados, Instalador (nome do Setup quando empacotado) |
-| Copiar diagnóstico | as mesmas + perfil do usuário atual, estado de migração (`migration:vN`), status do IndexedDB, último backup; **nunca senha/hash** |
-| Login | versão do app, discreta |
-| Topbar | versão do app |
-| `release-manifest.json` | `version, dbSchema, backupFormat, uiContract, dataContract, uiBuildId, dataBuildId, installer{file,sha256,sizeBytes,builtAt}, signed, distribution` |
+| Sistema › Backup e Manutenção › Status (e "Sobre") | app, esquema, formato de backup, manifesto, commit/build, contrato UI/dados |
+| Copiar diagnóstico | idem + papel do usuário atual + estado de migração + último backup; nunca senha/hash/recovery |
+| Login e topbar | versão do app, discreta |
+| `release-manifest.json` | `releaseManifestVersion, appVersion, dbSchemaVersion, backupFormatVersion, gitCommit, buildTimestamp, platform, arch, installer{file,sha256,sizeBytes,builtAt}, signed, distribution, uiBuildId, dataBuildId, uiContract, dataContract` |
 | Backup JSON | `manifest.appVersion, dbVersion, formatVersion, dataContractVersion, uiBuildId` |
 
-## 3. Roadmap de releases
+## 3. Marcos
 
-| Versão | Conteúdo | Schema | Backup |
+| Marco | Conteúdo | Esquema | Backup |
 |---|---|---|---|
-| 1.2.0 | Git, ADRs, gates verdes, login local, usuários/RBAC, Dexie v7, cadastros mestres, sanidade removida, migration coordinator | 7 | 3 |
-| 1.3.0 | faixas/exceções, identificadores, Animais/Ficha, Apartações/Lotes, Lançamento enxuto | 7 | 3 |
-| 1.4.0 | Dexie v8, operações comerciais, embarques, parceiros por id, retorno de frigorífico | 8 | 3 |
-| 1.5.0 | sessões, fechamento, snapshot, pendências, relatórios mínimos, auditoria melhorada | 8 | 3 |
-| 2.0.0 | estabilização, migrações certificadas, UI final, instalador, máquina limpa, docs | 8 | 3 |
+| 1.1.18 | baseline verde (S-00.0), contrato de versão, ADRs, docs de engenharia, gate `release:version-contract`, notas e CHANGELOG; **sem esquema novo** | 6 | 2 |
+| 1.2.0 | Dexie v7 (usuários, cadastros, identidade), preflight/backfill, backup 3, login/papéis/recovery, telas de cadastros, Lançamento seleciona cadastros | 7 | 3 |
+| 1.3.0 | faixas/exceções, identificadores, resolução indexada, tela Faixas | 7 | 3 |
+| 1.4.0 | lançamento enxuto, Apartações/Lotes, contexto de sessão | 7 | 3 |
+| 1.5.0 | Dexie v8, operações comerciais, embarques, relatórios mínimos | 8 | 3 |
+| 1.6.0 | sessão real, fechamento, Animais/ficha, auditoria consolidada | 8 | 3 |
 
-## 4. Política de release (cada versão)
+Cada marco deixa `package.json`, CHANGELOG, `docs/release/<versão>/` e evidência coerentes (rollback/bisect). Nenhum marco é publicado remotamente sem autorização; tags locais só após o gate do marco.
 
-1. `package.json` e `package-lock.json` sincronizados na versão.
-2. `npm run release:clean` → `npm run build` → `electron-builder --win` (assinado em `release/`; sem certificado, `dist:unsigned` em `release-unsigned/` com `signed=false`).
-3. `packaged:build:verify` (`scripts/verify-packaged-build.mjs`): versão do `package.json` = `app.asar` = manifesto; `app.asar` contém `UI_BUILD_ID`, `DB_SCHEMA_VERSION` e `DATA_BUILD_ID`; `dist/assets` contém os mesmos marcadores; `Setup` não é anterior aos bundles (mtime) e o nome é `Pesagens Individuais Setup X.Y.Z.exe`; `release-manifest.json` com SHA-256 e tamanho conferidos. Substitui/estende `verify-packaged-ui-build.mjs`.
-4. `release:checksum` (`.sha256`) e `release:manifest` (campos de §2).
-5. Nunca reutilizar `.exe` antigo; `release:current-only:verify` garante um único Setup da versão atual.
-6. Notas de release em `docs/release/<versão>/RELEASE-NOTES.md` + `RELEASE-CHECKLIST.md`; `docs/user` atualizado; `docs:user:verify` verde.
-7. Teste instalado (abre, login, banco, persistência, backup, fechar/abrir, versão, UI). Sem GUI disponível ao agente → `MANUAL PENDENTE`, nunca "aprovado".
-8. Tag `vX.Y.Z` só após o gate da release.
+## 4. Política de release
+
+1. `package.json` e `package-lock.json` sincronizados.
+2. `release:clean` → `build` → electron-builder (assinado em `release/`; sem certificado, `dist:unsigned` em `release-unsigned/`, `signed=false`).
+3. `packaged:build:verify` (versões = `app.asar` = manifesto; marcadores no bundle e no asar; Setup não anterior aos bundles; nome `Pesagens Individuais Setup X.Y.Z.exe`).
+4. `release:version-contract:verify`: `package.json` = manifesto = `docs/release/<versão>/`; nenhum release anterior sobrescrito; artefatos antigos nunca aparecem como "current"; CHANGELOG com bloco `## [versão]` e data real.
+5. `release:checksum` (`.sha256`) e `release:manifest`.
+6. Notas, checklist e `MIGRATION-*.md` em `docs/release/<versão>/`; `docs/user` atualizado; `docs:user:verify` verde.
+7. Teste instalado automatizado (smoke) + teste físico declarado EXECUTADO só com evidência humana; caso contrário NÃO EXECUTADO.
+8. Tag `vX.Y.Z` após o gate.
 
 ## 5. CHANGELOG
 
-Um bloco por versão, sem múltiplos "Não lançado":
+Um bloco por versão com data real: `## [X.Y.Z] — AAAA-MM-DD` e seções Added / Changed / Fixed / Removed / Migration / Security. Sem múltiplos "Não lançado".
 
-```
-## [1.2.0] — 2026-09-XX
-### Added
-### Changed
-### Fixed
-### Removed
-### Migration
-### Security
-```
+## 6. Git e fatias
 
-O bloco "Não lançado" existente é consolidado no primeiro release do programa.
-
-## 6. Git
-
-- `main`: só integrações de release (merge de `program/2.0` com tag).
-- `program/2.0`: integração contínua do programa; commits semânticos (`feat(auth): …`, `feat(storage): …`, `test(...)`, `docs(...)`, `refactor(launch): …`).
-- Agentes trabalham em áreas disjuntas na mesma árvore ou em worktrees próprias; **nunca** dois agentes no mesmo arquivo compartilhado (`schema.js`, `package.json`, `pages.config.js`, `Layout.jsx`, `d17b-modelobase1.css`, `verify-ui-consistency.mjs`, `CHANGELOG.md`, `App.jsx`), que pertencem ao coordenador.
-- Tags: `v1.1.17-baseline` (existente), `v1.2.0`, `v1.3.0`, `v1.4.0`, `v1.5.0`, `v2.0.0`.
+`main` = baseline; `program/pesagens-master-evolution` = integração; `slice/sNN-*` quando possível. Dono único por fatia; arquivos compartilhados (`schema.js`, `package.json`, `pages.config.js`, `Layout.jsx`, `App.jsx`, `d17b-modelobase1.css`, `verify-ui-consistency.mjs`, `CHANGELOG.md`, `vite.config.js`) pertencem ao orquestrador. Sem merge/push em `main` e sem release remota sem autorização.

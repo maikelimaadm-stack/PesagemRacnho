@@ -284,6 +284,42 @@ Tags só após o gate da release. CHANGELOG em seções consolidadas (Added/Chan
 patches ao coordenador, que integra sequencialmente, roda os gates e faz commits semânticos.
 Nenhuma edição concorrente de arquivo compartilhado.
 
+## ADRs do Programa Master de Evolução 1.1.17 → 1.6.0 (14/09/2026, DEC-023…DEC-030)
+
+Refinam as ADR-035…ADR-040 do mesmo dia. Onde houver diferença, estas prevalecem.
+
+## ADR-041 — Autenticação local e offline (DEC-023; substitui a parte correspondente de ADR-035)
+
+**Decisão:** login LOCAL, sem servidor, Supabase, Firebase, OAuth, e-mail ou SMS; a autenticação nunca impede o app de trabalhar sem rede. **Threat model** (docs/engineering/AUTH-THREAT-MODEL.md): o login local melhora controle e auditoria; **não** é fronteira contra quem tem acesso completo ao perfil do sistema operacional e aos arquivos do usuário; não há criptografia total do banco.
+
+## ADR-042 — Quatro papéis fixos (DEC-024; substitui ADR-036)
+
+**Decisão:** ADMIN (tudo), GESTOR (operação, rebanho, comercial, relatórios, fechamento/reabertura, configurações operacionais; sem usuários, restore total, limpar tudo ou política de autenticação), OPERADOR (lançamento, consulta operacional, cadastro rápido, rotinas de curral; sem valores comerciais, usuários, manutenção, restore, limpeza, fechamento gerencial, configuração global), **CONSULTA** (somente leitura). Sem permissões por usuário. `permissionService` central com ações nomeadas e `authorize(action)` no boundary de serviço; nenhum `if (role === …)` espalhado pelas telas.
+
+## ADR-043 — Credenciais (DEC-025)
+
+**Decisão:** store **`usuarios`** no esquema v7 (`id`, `empresa_id`, `nome`, `login`, `login_normalizado` único por empresa, `role`, `ativo`, `password_hash`, `password_salt`, `password_algorithm='PBKDF2-SHA256'`, `password_iterations`, `password_version`, `must_change_password`, `recovery_hash`/`recovery_salt` só para o ADMIN de bootstrap, `failed_login_count`, `locked_until`, `last_login_at`, timestamps). Web Crypto PBKDF2-HMAC-SHA-256 com salt aleatório por usuário; parâmetros de custo centralizados, versionados no registro e calibrados para desktop. Senha mínima simples (6 caracteres, sem regras artificiais; triviais recusadas). Reset por ADMIN gera senha temporária e `must_change_password=true`. Sem backdoor, sem `admin/admin`. Hash e salt nunca indexados, logados, exportados em CSV ou incluídos em diagnóstico.
+
+## ADR-044 — Bootstrap e recuperação (DEC-026)
+
+**Decisão:** ao abrir uma instalação sem usuários (migração ou banco novo) o app mostra o FIRST-RUN ADMIN SETUP antes da tela principal (nome, login, senha, confirmação). Gera uma **Recovery Key** aleatória exibida uma única vez, com botão para copiar/salvar mediante confirmação; o banco guarda só o verificador (hash + salt). A key redefine a senha do ADMIN local, invalida a anterior e gera uma nova. Backup restaurado com usuários válidos não executa bootstrap.
+
+## ADR-045 — Sessão de usuário (DEC-027; substitui os parâmetros de ADR-035)
+
+**Decisão:** sessão em memória; nenhuma senha ou token em `localStorage`; `sessionStorage` apenas para a recarga técnica do renderer, nunca para sobreviver ao fechamento do app. Auto-bloqueio por inatividade configurável, padrão **30 min**. Ações Bloquear, Trocar usuário, Sair. Restore, limpeza destrutiva ou alteração do próprio usuário invalidam a sessão. Bloqueio temporário após tentativas incorretas (`failed_login_count`, `locked_until` persistidos; limite e duração em `auth-policy`).
+
+## ADR-046 — Autorização e auditoria por usuário (DEC-028, DEC-029)
+
+**Decisão:** ações críticas exigem checagem explícita de permissão no serviço. `auditoria` grava `usuario_id` e `usuario_nome_snapshot` (o nome no momento do fato) e `resumo`; `created_by_user_id`/`updated_by_user_id` onde fizer sentido (sem índice); `sessoesPesagem.operador_usuario_id`; fechamento/reabertura e operações comerciais com usuário. Eventos LOGIN_SUCESSO, LOGOUT, BLOQUEIO, RESET_SENHA e ALTERACAO_USUARIO registrados de forma resumida. Nunca gravar senha, hash, recovery key ou segredo. Registros anteriores ficam com `usuario_id = null`.
+
+## ADR-047 — Versionamento em quatro eixos e política SemVer (DEC-030; complementa ADR-037/039)
+
+**Decisão:** App SemVer (`package.json`/Electron `app.getVersion()`), `DB_SCHEMA_VERSION` (schema.js), `BACKUP_FORMAT_VERSION` (módulo de backup) e `RELEASE_MANIFEST_VERSION` (gerador do manifesto) nunca se confundem; `UI_BUILD_ID`/`DATA_BUILD_ID`/contratos continuam como marcadores de build. PATCH = correção sem contrato persistente; MINOR = funcionalidade/store/migração compatível; MAJOR = quebra deliberada de backup/export/API local. Manifesto de release com `appVersion`, `dbSchemaVersion`, `backupFormatVersion`, `releaseManifestVersion`, `gitCommit`, `buildTimestamp`, `platform`, `arch`, instalador e SHA-256. Gate `release:version-contract:verify`. Marcos: **1.1.18** (baseline + contrato de versão, sem esquema novo) → 1.2.0 (v7, usuários, cadastros, backfill, lançamento seleciona cadastros) → 1.3.0 (identificadores) → 1.4.0 (lançamento enxuto + lotes) → 1.5.0 (v8 comercial/embarque) → 1.6.0 (sessão/fechamento/animais/auditoria). Cada marco deixa versão, CHANGELOG, notas e evidência coerentes para rollback e bisect; nenhum marco é publicado remotamente sem autorização.
+
+## ADR-048 — Governança de fatias e evidências (complementa ADR-040)
+
+**Decisão:** branch `program/pesagens-master-evolution`; fatias `slice/sNN-…` quando possível; um dono por fatia; integração sequencial; fatia só entra na linha de integração com gates verdes; evidência em `docs/evidence/<slice>/` (REPORT, FILES-CHANGED, TESTS, MIGRATION, PERF, SCREENSHOTS, RISKS, ROLLBACK). Migração real registra contagens antes/depois, ids não resolvidos, colisões, duração, hash do backup e integridade antes/depois. Teste físico só é declarado EXECUTADO com evidência humana.
+
 ## Decisões pendentes
 
 | ID | Decisão | Informação necessária |
