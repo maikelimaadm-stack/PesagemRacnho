@@ -103,18 +103,199 @@ entram nos testes de consistência visual.
 **Decisão:** toda fase mede p50/p95/p99 nas massas homologadas; otimização deve ser
 baseada em perfil, não em impressão isolada.
 
+## ADRs do Programa Pesagens Individuais 2.0 (14/09/2026)
+
+Origem: Auditoria Master (`docs/evidence/auditoria-master-produto-pecuario/DECISION-REGISTER.md`,
+DEC-001…DEC-022) e programa mestre aprovado pelo responsável em 14/09/2026. Todas as ADRs
+abaixo estão **aceitas**. Nenhuma ADR anterior é sobrescrita; quando uma decisão nova
+complementa uma antiga, a referência é indicada.
+
+## ADR-018 — Cadastros mestres são stores Dexie (DEC-001)
+
+**Decisão:** marcas, raças, categorias, parceiros, propriedades, causas de morte, faixas de
+identificadores e usuários locais são stores versionadas do Dexie, com `id` de domínio,
+`nome_normalizado`, `ativo` e `deleted_at`. `appSettings` fica restrito a preferências,
+políticas, resumos, modelos de importação e estado técnico de migração.
+**Consequência:** `registryService` e as chaves `cadastros-auxiliares:*` são migrados e removidos.
+**Migração:** esquema v7 (ADR-034); dry-run obrigatório; chaves legadas apagadas só após validação.
+**Rollback:** backup físico pré-migração (ADR-038).
+
+## ADR-019 — Estoque de identificadores por faixas e exceções (DEC-002, DEC-015, DEC-017)
+
+**Decisão:** o estoque é representado por `faixasIdentificadores` (tipo, marca, prefixo, início,
+fim, dígitos, direção, cursor `proximo`) e `excecoesIdentificadores` (número, motivo). O item só se
+materializa em `animalIdentificadores` quando é usado. Numeração = prefixo + número com padding.
+"Estoque" no produto significa **somente identificadores**; nada de medicamentos, ração ou sal.
+**Consequência:** `SequenciaBrincos` vira visão do `identifierInventoryService`; `window.__sequenciaBrincos` é removido.
+
+## ADR-020 — Identidade visual número + marca_id e unicidade por tipo (DEC-003, DEC-005; complementa ADR-004)
+
+**Decisão:** identificador VISUAL é único por `(marca_id, valor_normalizado)`; o mesmo número pode
+existir em marcas diferentes. RFID e SISBOV são únicos globalmente; SISBOV não é reutilizado. A
+unicidade é verificada no serviço, dentro da transação, e também pelo diagnóstico de integridade.
+**Consequência:** `animalIdentificadores` ganha `tipo` (VISUAL, RFID, SISBOV, MANEJO, TEMPORARIO,
+LEGADO), `marca_id`, `faixa_id`, `inicio`, `fim`, `motivo_troca`.
+
+## ADR-021 — Migração de marca e raça com dry-run (DEC-004)
+
+**Decisão:** valores livres de marca são agrupados por normalização; a fusão de grafias só ocorre
+após verificar colisões `NÚMERO::MARCA` resultantes e com dry-run registrado em evidência. Raça
+normaliza automaticamente quando não houver ambiguidade. Snapshots históricos nos eventos não são
+reescritos (regra de leitura: coluna nova → legado → nulo).
+
+## ADR-022 — Sanidade retirada do produto neste ciclo (DEC-006; reafirma ADR-007)
+
+**Decisão:** a tela "Configurações de Sanidade", o grupo `sanidade` do registry e a chave
+`cadastros-auxiliares:sanidade:*` são removidos. Se houver dados, são exportados para JSON em
+`docs/evidence/program-2.0/` antes da remoção, com registro. Retorno exige nova ADR e módulo próprio.
+
+## ADR-023 — `loteApartacoes` é a store canônica de lote; `lotes` é removida (DEC-007)
+
+**Decisão:** remover a store `lotes` (sem uso na UI) no esquema v7 após verificar que está vazia.
+`loteApartacoes` recebe `codigo`, `situacao`, `categoria_id`, `data_abertura`, `data_fechamento`,
+`ativo`, `ordem`. Ocupação de lote é calculada por `animalLotes` com permanência aberta, nunca por
+contagem de pesagens. Renomear apartação ou lote não reescreve `nome_lote`/`nome_apartacao` nos eventos.
+
+## ADR-024 — Parceiro único com papéis (DEC-008)
+
+**Decisão:** store `parceiros` com `papeis[]` (COMPRADOR, VENDEDOR, FRIGORIFICO, TRANSPORTADOR,
+PROPRIETARIO). Operações, embarques e marcas referenciam `parceiro_id`, nunca o nome.
+
+## ADR-025 — Operações comerciais como entidade e rendimento com origem (DEC-009, DEC-022; complementa ADR-012)
+
+**Decisão:** compra, venda e abate são registros de `operacoesComerciais` (esquema v8) com status
+RASCUNHO → CONFERIDA → FECHADA / CANCELADA; os eventos do animal apontam `operacao_id`. O rendimento
+de carcaça é gravado por operação com origem `INFORMADO`, `PADRAO_EMPRESA` ou `PADRAO_PARCEIRO`;
+nunca um 50 % silencioso. Nenhum valor monetário é digitado no curral.
+
+## ADR-026 — Embarque com máquina de estados (DEC-010)
+
+**Decisão:** estados PLANEJADO → EM_CARREGAMENTO → CONFERIDO → CONCLUIDO, além de CANCELADO;
+transições exclusivamente no serviço. Saída só entra em embarque EM_CARREGAMENTO; embarque concluído
+é somente leitura; reabrir exige motivo e auditoria. O evento de saída com `embarque_id` é o item do
+embarque; não existe store de itens.
+
+## ADR-027 — `legacy_payload` congelado com lista permitida (DEC-011)
+
+**Decisão:** nenhuma chave estrutural nova entra em `legacy_payload`. Um gate
+(`payload:allowlist:verify`) prova a lista permitida e a ausência de `_localId`, `peso_kg`,
+`created_date`, `updated_date` e `status_animal` redundantes. Campos com consulta ou regra são
+promovidos a colunas (`motivo_saida`, `operacao_id`, `causa_morte_id`, `marca_id`, `categoria_id`,
+`apartacao_id`, `versao_formula`). O legado só é removido com zero consumidores, gate e backup.
+
+## ADR-028 — Classificação do animal: nascimento opcional/estimado e categoria (DEC-012)
+
+**Decisão:** `animais` ganha `nascimento`, `nascimento_estimado`, `categoria_id`, `marca_id`,
+`raca_id`, `propriedade_id`; `situacao` passa a ATIVO, VENDIDO, ABATIDO, MORTO, DOADO, TRANSFERIDO,
+CANCELADO (projeção derivada dos eventos). "Era" vira campo legado somente-leitura. Categoria é
+cadastro (`categoriasAnimal`) com sexo aplicável e faixa etária; a sugestão por idade é explicável e
+nunca sobrescreve valor informado.
+
+## ADR-029 — Propriedades no modelo v7, sem multi-fazenda avançada (DEC-013; parcial de P-003)
+
+**Decisão:** store `propriedades` (PROPRIA/TERCEIRO, parceiro, município/UF, código oficial,
+padrão). `empresa_id` permanece `'local'`; nenhum `fazenda_id` é adicionado às demais stores até P-003.
+
+## ADR-030 — Sessão única por data + local, fechada bloqueia, reabertura com motivo (DEC-014; complementa ADR-005)
+
+**Decisão:** `sessoesPesagem` com status ABERTA, CONFERENCIA, FECHADA, CANCELADA; índice
+`[data+local]`; sessão fechada recusa novos eventos no serviço; reabertura grava
+`motivo_reabertura` e auditoria; fechamento persiste `snapshot`. Sessões de importação nascem FECHADA.
+
+## ADR-031 — Remoção de `GerenciarSaidasDialog` e `perfis-saida` (DEC-016)
+
+**Decisão:** após migrar compradores para `parceiros`, o diálogo legado e a chave
+`perfis-saida:*` são removidos; perfis de venda/abate não são migrados (substituídos por operações).
+
+## ADR-032 — Limpeza de dados em dois níveis (DEC-018)
+
+**Decisão:** "Limpar dados operacionais" preserva usuários, configurações e cadastros mestres.
+"Reset completo" apaga tudo, é exclusivo do ADMIN e exige backup físico validado, senha do usuário
+atual e confirmação textual.
+
+## ADR-033 — Documento obrigatório na venda é configuração (DEC-019)
+
+**Decisão:** `exigir_documento_venda` em configurações (padrão `false`), aplicado no serviço e no
+fechamento, encerrando a divergência entre Lançamento e Fechamento.
+
+## ADR-034 — Corte das migrações: v7 e v8; cadastros antes do restante da F1 (DEC-020, DEC-021)
+
+**Decisão:** v7 = cadastros mestres + identidade + identificadores + login local; v8 = operações
+comerciais + embarques com estados + colunas promovidas em `pesagens`. Os cadastros mestres entram
+antes das pendências restantes da F1; a resolução do animal por índice de identificadores é parte
+do slice de identificação.
+
+## ADR-035 — Login local com usuários locais
+
+**Decisão:** autenticação 100 % offline com store `usuariosLocais` (nome, login,
+`login_normalizado`, `senha_hash`, `senha_salt`, `senha_iteracoes`, algoritmo, perfil, ativo,
+`deve_trocar_senha`, `ultimo_login_at`). Hash PBKDF2-SHA-256 via Web Crypto, salt ≥ 16 bytes
+aleatório por usuário, ≥ 310 000 iterações, 32 bytes. Sem módulo nativo, sem servidor, sem OAuth.
+Primeira execução sem usuários abre "Configuração Inicial" para criar o ADMIN (sem senha padrão).
+Sessão autenticada em memória + `sessionStorage` (userId, nome, perfil, loginAt, lastActivityAt);
+bloqueio por inatividade configurável (padrão 60 min; 0 desliga); bloqueio temporário de 30 s após
+5 tentativas incorretas (memória de runtime). Senhas nunca aparecem em logs, backups textuais de
+diagnóstico ou CSV. Não desativar o último ADMIN ativo. Usuário referenciado em auditoria nunca é
+apagado, apenas inativado. Substitui a parte "desktop offline" de ADR-013 para este ciclo;
+P-006 (provedor OIDC) permanece para a fase online.
+
+## ADR-036 — Controle de acesso simples por perfis fixos
+
+**Decisão:** perfis ADMIN, GESTOR e OPERADOR com mapa estático de permissões em
+`src/modules/auth/domain/accessPolicy.js` (`launch.use`, `weighing.*`, `animal.*`, `registry.*`,
+`commercial.*`, `shipment.*`, `session.close/reopen`, `reports.read`, `maintenance.backup/restore/clear`,
+`users.manage`, `settings.manage`). Não existe store de permissões nem editor. A UI esconde o que o
+perfil não pode; o serviço valida as ações críticas (restore, limpeza, usuários, fechamento,
+operações). Auditoria grava `actor_user_id`, `actor_user_name`, `actor_user_profile`; registros
+antigos ficam com `actor_user_id = null`.
+
+## ADR-037 — Versionamento em cinco eixos e identificadores de build
+
+**Decisão:** `src/versioning/versionInfo.js` expõe `APP_VERSION` (derivada de `package.json`),
+`DB_SCHEMA_VERSION`, `BACKUP_FORMAT_VERSION`, `UI_CONTRACT_VERSION`, `DATA_CONTRACT_VERSION`,
+`UI_BUILD_ID` e `DATA_BUILD_ID`. A tela de Manutenção e o diagnóstico exibem todos. O gate
+`packaged:build:verify` prova que o Setup contém os marcadores e não é anterior aos bundles.
+
+## ADR-038 — Migrações resumíveis, backup pré-migração e fail closed
+
+**Decisão:** `src/storage/migrations/migrationCoordinator.js` detecta a versão do banco, gera e
+valida backup físico (`pre-migration-vN-<data>.json`, SHA-256) **antes** de abrir na versão nova;
+se o backup falhar, a migração é bloqueada. Backfills grandes rodam como migração resumível após a
+abertura, com checkpoints em `appSettings['migration:vN']` (status, processados, total, erro), podendo
+parar e continuar sem duplicar. Em falha: escrita bloqueada, diagnóstico exibido, backup preservado.
+Backups de formato anterior continuam restauráveis; restore de banco anterior dispara o backfill.
+
+## ADR-039 — Política de release
+
+**Decisão:** cada versão nasce de build limpo (`release:clean` → `build` → electron-builder), com
+verificação do `app.asar` (versão, `UI_BUILD_ID`, `DB_SCHEMA_VERSION`), checksum SHA-256, manifesto
+(`version`, `dbSchema`, `backupFormat`, `uiContract`, `dataContract`, `installer`, `sha256`,
+`signed`) e nome `Pesagens Individuais Setup X.Y.Z.exe`. `release/` é reservado à distribuição
+assinada; `release-unsigned/` ao diagnóstico; `signed=false` enquanto não houver Authenticode, e
+nenhum pacote sem assinatura é declarado release oficial. Roadmap: 1.2.0 → 1.3.0 → 1.4.0 → 1.5.0 → 2.0.0.
+Tags só após o gate da release. CHANGELOG em seções consolidadas (Added/Changed/Fixed/Removed/Migration/Security).
+
+## ADR-040 — Governança Git e trabalho multiagente
+
+**Decisão:** repositório inicializado em 14/09/2026 (tag `v1.1.17-baseline`). Desenvolvimento em
+`program/2.0`; `main` só recebe integrações de release. Arquivos compartilhados têm dono único
+(`schema.js`, `package.json`, `pages.config.js`, `Layout.jsx`, `d17b-modelobase1.css`,
+`verify-ui-consistency.mjs`, `CHANGELOG.md`): agentes trabalham em áreas disjuntas e devolvem
+patches ao coordenador, que integra sequencialmente, roda os gates e faz commits semânticos.
+Nenhuma edição concorrente de arquivo compartilhado.
+
 ## Decisões pendentes
 
 | ID | Decisão | Informação necessária |
 |---|---|---|
 | P-001 | Primeira balança | fabricante, modelo, firmware, cabo/protocolo |
 | P-002 | Primeiro leitor RFID | fabricante, modelo e padrão do brinco |
-| P-003 | Estrutura organizacional | empresas, fazendas e currais reais |
-| P-004 | Método de custo | insumos considerados e regra de rateio |
+| P-003 | Estrutura organizacional | empresas, fazendas e currais reais (propriedades mínimas já decididas em ADR-029; multi-fazenda continua pendente) |
+| P-004 | Método de custo | insumos considerados e regra de rateio (rateio por cabeça é o padrão provisório da compra) |
 | P-005 | Canal online | provedor, região, orçamento e SLA |
-| P-006 | Autenticação | identidade própria ou provedor OIDC |
+| P-006 | Autenticação online | identidade própria ou provedor OIDC (login local decidido em ADR-035) |
 | P-007 | Escopo SISBOV | propriedade certificada, parceiro/certificadora e acesso |
-| P-008 | Relatórios iniciais | ordem entre PDF, XLSX e painéis |
+| P-008 | Relatórios iniciais | ordem entre PDF, XLSX e painéis (tabela + CSV é o mínimo do 2.0) |
 
 ## Processo para nova decisão
 
