@@ -1,0 +1,102 @@
+{
+  "baseUrl": "http://localhost:5173",
+  "massKey": "pequena",
+  "routes": [
+    "PesagensIndividuais"
+  ],
+  "themes": [
+    "claro",
+    "escuro"
+  ],
+  "files": [
+    {
+      "route": "PesagensIndividuais",
+      "theme": "claro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-relacao-2026-09-14\\screens\\PesagensIndividuais-claro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "PesagensIndividuais",
+      "theme": "claro",
+      "step": "painel-filtros",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-relacao-2026-09-14\\screens\\PesagensIndividuais-claro-painel-filtros.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "PesagensIndividuais",
+      "theme": "claro",
+      "step": "pesquisa",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-relacao-2026-09-14\\screens\\PesagensIndividuais-claro-pesquisa.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "PesagensIndividuais",
+      "theme": "claro",
+      "step": "mais-opcoes",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-relacao-2026-09-14\\screens\\PesagensIndividuais-claro-mais-opcoes.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "PesagensIndividuais",
+      "theme": "escuro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-relacao-2026-09-14\\screens\\PesagensIndividuais-escuro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "PesagensIndividuais",
+      "theme": "escuro",
+      "step": "painel-filtros",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-relacao-2026-09-14\\screens\\PesagensIndividuais-escuro-painel-filtros.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "PesagensIndividuais",
+      "theme": "escuro",
+      "step": "pesquisa",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-relacao-2026-09-14\\screens\\PesagensIndividuais-escuro-pesquisa.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "PesagensIndividuais",
+      "theme": "escuro",
+      "step": "mais-opcoes",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-relacao-2026-09-14\\screens\\PesagensIndividuais-escuro-mais-opcoes.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    }
+  ],
+  "errors": [],
+  "dataset": {
+    "pesagens": 300,
+    "animais": 100,
+    "sessoes": 201,
+    "apartacoes": 3,
+    "lotes": 9,
+    "animalLotes": 120
+  }
+}

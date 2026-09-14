@@ -1,0 +1,125 @@
+{
+  "baselineVersion": 1,
+  "massKey": "pequena",
+  "label": "Pequena",
+  "seed": 20260908,
+  "startedAt": "2026-09-08T20:03:26.053Z",
+  "runtime": {
+    "kind": "node",
+    "userAgent": "node v24.18.0",
+    "indexedDb": "fake-indexeddb (memória)",
+    "electron": false
+  },
+  "dbVersion": 6,
+  "dataset": {
+    "pesagens": 300,
+    "animais": 100,
+    "sessoes": 201,
+    "apartacoes": 3,
+    "lotes": 9,
+    "animalLotes": 120
+  },
+  "seedMs": 56.6,
+  "metrics": {
+    "carga_inicial_listEntries": {
+      "n": 3,
+      "min": 2.217,
+      "p50": 2.348,
+      "p95": 2.824,
+      "p99": 2.824,
+      "max": 2.824,
+      "mean": 2.463,
+      "registros": 300
+    },
+    "indice_animais_rebuild": {
+      "n": 3,
+      "min": 3.628,
+      "p50": 3.705,
+      "p95": 5.138,
+      "p99": 5.138,
+      "max": 5.138,
+      "mean": 4.157,
+      "animais": 100
+    },
+    "identificacao_para_peso": {
+      "n": 200,
+      "min": 0.006,
+      "p50": 0.007,
+      "p95": 0.02,
+      "p99": 0.053,
+      "max": 0.243,
+      "mean": 0.01,
+      "ambiguos": 54
+    },
+    "busca_indexada_animal": {
+      "n": 200,
+      "min": 0.044,
+      "p50": 0.052,
+      "p95": 0.094,
+      "p99": 0.502,
+      "max": 1.157,
+      "mean": 0.071
+    },
+    "busca_indexada_periodo_30d": {
+      "n": 20,
+      "min": 0.034,
+      "p50": 0.175,
+      "p95": 0.348,
+      "p99": 0.472,
+      "max": 0.472,
+      "mean": 0.184
+    },
+    "salvamento_local": {
+      "n": 30,
+      "min": 9.304,
+      "p50": 10.894,
+      "p95": 16.299,
+      "p99": 17.227,
+      "max": 17.227,
+      "mean": 11.327
+    },
+    "recarga_apos_salvar": {
+      "n": 3,
+      "min": 2.304,
+      "p50": 2.393,
+      "p95": 2.486,
+      "p99": 2.486,
+      "max": 2.486,
+      "mean": 2.394
+    }
+  },
+  "budgets": {
+    "busca_indexada_animal": {
+      "p95": 100
+    },
+    "identificacao_para_peso": {
+      "p95": 100
+    },
+    "salvamento_local": {
+      "p95": 250
+    }
+  },
+  "notes": [
+    "A tela de lançamento executa salvamento_local + recarga_apos_salvar + indice_animais_rebuild a cada gravação."
+  ],
+  "finishedAt": "2026-09-08T20:03:26.531Z",
+  "verdict": {
+    "busca_indexada_animal": {
+      "status": "dentro",
+      "p95": 0.094,
+      "budgetP95": 100
+    },
+    "identificacao_para_peso": {
+      "status": "dentro",
+      "p95": 0.02,
+      "budgetP95": 100
+    },
+    "salvamento_local": {
+      "status": "dentro",
+      "p95": 16.299,
+      "budgetP95": 250
+    }
+  },
+  "appVersion": "1.1.17",
+  "wallMs": 478
+}

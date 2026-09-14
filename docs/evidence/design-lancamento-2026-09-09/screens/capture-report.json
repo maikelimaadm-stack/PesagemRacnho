@@ -1,0 +1,84 @@
+{
+  "baseUrl": "http://localhost:5173",
+  "massKey": "pequena",
+  "routes": [
+    "PesagensIndividuais",
+    "LancamentoPesagensIndividuais",
+    "ManutencaoSistema"
+  ],
+  "themes": [
+    "claro",
+    "escuro"
+  ],
+  "files": [
+    {
+      "route": "PesagensIndividuais",
+      "theme": "claro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\design-lancamento-2026-09-09\\screens\\PesagensIndividuais-claro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "LancamentoPesagensIndividuais",
+      "theme": "claro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\design-lancamento-2026-09-09\\screens\\LancamentoPesagensIndividuais-claro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "ManutencaoSistema",
+      "theme": "claro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\design-lancamento-2026-09-09\\screens\\ManutencaoSistema-claro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "PesagensIndividuais",
+      "theme": "escuro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\design-lancamento-2026-09-09\\screens\\PesagensIndividuais-escuro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "LancamentoPesagensIndividuais",
+      "theme": "escuro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\design-lancamento-2026-09-09\\screens\\LancamentoPesagensIndividuais-escuro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "ManutencaoSistema",
+      "theme": "escuro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\design-lancamento-2026-09-09\\screens\\ManutencaoSistema-escuro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    }
+  ],
+  "errors": [],
+  "dataset": {
+    "pesagens": 300,
+    "animais": 100,
+    "sessoes": 201,
+    "apartacoes": 3,
+    "lotes": 9,
+    "animalLotes": 120
+  }
+}

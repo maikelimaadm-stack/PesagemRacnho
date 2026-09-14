@@ -1,0 +1,39 @@
+/* Estrutura mínima compartilhada pelas barras de ação operacionais.
+   Os antigos componentes de laboratório foram removidos; o acabamento final
+   das telas oficiais permanece em d17b-modelobase1.css. */
+.mb1-scope .mb1-action-bar,
+.mb1-scope .mb1-action-cluster {
+  display: flex;
+  align-items: center;
+}
+
+.mb1-scope .mb1-action-bar {
+  min-height: var(--mb1-toolbar-height);
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mb1-scope .mb1-action-cluster {
+  gap: 4px;
+}
+
+.mb1-scope .mb1-action-cluster--end {
+  margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  .mb1-scope .mb1-action-bar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .mb1-scope .mb1-action-cluster {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .mb1-scope .mb1-action-cluster::-webkit-scrollbar {
+    display: none;
+  }
+}

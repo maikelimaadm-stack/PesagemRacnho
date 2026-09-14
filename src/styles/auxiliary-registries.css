@@ -1,0 +1,373 @@
+.aux-registry-page { display: flex; flex-direction: column; min-height: 0; padding: 8px 10px 10px; gap: 8px; }
+.aux-registry-page--table .aux-table-card,
+.aux-registry-page--record .aux-launch-panel { flex: 1 1 auto; min-height: 0; }
+.aux-registry-toolbar {
+  --emp-button-radius: 999px;
+  --erp-radius-button: 999px;
+  --erp-radius-toolbar-btn: 999px;
+  flex: 0 0 auto;
+}
+.aux-toolbar-stack { display: flex; flex: 0 0 auto; flex-direction: column; min-width: 0; }
+.aux-new-button { display: inline-flex; align-items: center; }
+.aux-form-toolbar-actions,
+.aux-form-toolbar-commands { display: inline-flex; align-items: center; min-width: 0; }
+.aux-form-toolbar-actions { gap: 6px; }
+.aux-form-toolbar-commands { gap: 6px; }
+.aux-form-toolbar-end { gap: 8px; }
+.aux-view-seg {
+  width: calc((var(--mg-btn-icon-size, 28px) * 3) + (var(--mg-view-seg-track-padding, 1px) * 2)) !important;
+  min-width: calc((var(--mg-btn-icon-size, 28px) * 3) + (var(--mg-view-seg-track-padding, 1px) * 2)) !important;
+}
+.aux-view-seg .aux-view-seg__slider {
+  left: var(--mg-view-seg-track-padding, 1px);
+  width: var(--mg-btn-icon-size, 28px);
+}
+.aux-search { display: flex !important; width: 230px; }
+.aux-table-card { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: hidden; border: 1px solid #e1e6eb; border-radius: 12px; background: #fff; box-shadow: 0 2px 7px rgba(15, 23, 42, .05); }
+.aux-table-scroll { flex: 1; min-height: 250px; overflow: auto; }
+.aux-cards-scroll { padding: 12px; background: var(--bg-page, #f1f3f6); }
+.aux-cards-grid { align-content: start; gap: 12px; }
+.aux-record-card { min-width: 0; min-height: 112px; padding: 12px 16px !important; border: 1px solid #e1e6eb !important; border-radius: 12px !important; background: #fff !important; box-shadow: 0 2px 7px rgba(15, 23, 42, .05) !important; }
+.aux-record-card__header { display: flex; align-items: center; gap: 10px; min-width: 0; margin-bottom: 8px !important; }
+.aux-record-card__avatar { display: flex; flex: 0 0 36px; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 10px; color: #fff; font-size: 10px; font-weight: 700; }
+.aux-record-card .mg-emp-card__meta-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.aux-record-card .mg-emp-card__select-badge svg { width: 12px; height: 12px; stroke: #fff !important; }
+.aux-cards-empty { display: flex; align-items: center; justify-content: center; min-height: 180px; }
+.aux-data-table { width: 100% !important; min-width: 820px; }
+html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .aux-table-card .mg-view-panel.emp-table-root .emp-table-pro.aux-data-table {
+  width: 100% !important;
+  min-width: 820px !important;
+}
+.aux-data-table th,
+.aux-data-table td { height: 34px; padding: 0 10px; border-right: 1px solid #dfe5eb; border-bottom: 1px solid #dfe5eb; font-size: 12px; white-space: nowrap; }
+.aux-data-table th { background: #fff; color: #17243a; font-weight: 700; }
+.aux-data-table td { color: #5b6b80; }
+.aux-data-table th:last-child,
+.aux-data-table td:last-child { border-right: 0; }
+.aux-data-table tbody tr:nth-child(even) td { background: #fafbfc; }
+.aux-data-table tbody tr:hover td { background: rgba(64, 222, 99, .10); }
+.aux-data-table tbody tr.emp-row-selected td { background: rgba(64, 222, 99, .14); }
+.aux-check-cell { width: 36px !important; min-width: 36px !important; max-width: 36px !important; padding: 0 !important; text-align: center; }
+.aux-table-footer {
+  --emp-button-radius: 999px;
+  --erp-radius-button: 999px;
+  --erp-radius-toolbar-btn: 999px;
+  flex: 0 0 auto;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .aux-table-card .mg-view-panel.emp-table-root .emp-table-pro.aux-data-table thead .emp-th .emp-th-menu-button,
+html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17c-table-footer__pagination button,
+html body .d17b-shell.cadastro-emp-scope .aux-registry-page .aux-view-seg {
+  border-radius: 999px !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .aux-table-card .mg-view-panel.emp-table-root .emp-table-pro.aux-data-table thead .emp-th .emp-th-menu-button:hover,
+html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .aux-table-card .mg-view-panel.emp-table-root .emp-table-pro.aux-data-table thead .emp-th .emp-th-menu-button:focus-visible,
+html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17c-table-footer__pagination button:hover:not(:disabled) {
+  background: #e7ebef !important;
+}
+html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17c-table-footer__pagination [role="combobox"] {
+  border-radius: 999px !important;
+}
+html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17e-selection-action {
+  min-width: 78px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 14px !important;
+  border-radius: 999px !important;
+}
+html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17e-selection-action.emp-toolbar-btn-delete {
+  border-color: #dc2626 !important;
+}
+.aux-launch-toolbar.d17c-table-toolbar {
+  min-height: 38px;
+  max-height: 38px;
+  height: 38px;
+  padding: 0 6px !important;
+  border-top: 1px solid var(--d17b-border) !important;
+}
+.mb1-app-shell .mb1-operational-page > .aux-launch-toolbar.d17c-table-toolbar {
+  min-height: 38px !important;
+  max-height: 38px !important;
+  height: 38px !important;
+}
+.mb1-app-shell .aux-launch-toolbar.d17c-table-toolbar > .mb1-action-cluster {
+  flex: 0 0 36px;
+  height: 36px;
+}
+.aux-launch-toolbar .d17c-table-toolbar__primary { min-height: 36px; height: 36px; flex-basis: 36px; }
+.aux-context-panel-wrap {
+  flex: 0 0 36px;
+  min-height: 36px;
+  max-height: 36px !important;
+  border: 1px solid var(--d17b-border, #e1e6eb) !important;
+  border-top: 0 !important;
+  border-radius: 0 0 var(--d17b-radius-card, 12px) var(--d17b-radius-card, 12px) !important;
+  background: var(--bg-card, #fff) !important;
+  box-shadow: var(--d17b-card-shadow, 0 2px 7px rgba(15, 23, 42, .05)) !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  overflow: visible !important;
+}
+.aux-toolbar-stack.is-form-open .aux-launch-toolbar {
+  border-bottom-right-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+  box-shadow: none !important;
+}
+.aux-context-panel {
+  display: flex !important;
+  width: 100%;
+  height: 35px !important;
+  min-height: 35px !important;
+  max-height: 35px !important;
+  padding: 0 8px !important;
+  border-radius: inherit;
+}
+.aux-context-panel .mg-context-panel__nav { max-width: 320px; opacity: 1; overflow: visible; pointer-events: auto; }
+.aux-context-panel .mg-nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; min-width: 26px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: #f1f3f4; color: #5c7088; }
+.aux-context-panel .mg-nav-btn:hover:not(:disabled) { background: #e8edf1; color: #25354a; }
+.aux-context-panel .mg-nav-btn:disabled { opacity: .38; cursor: not-allowed; }
+.aux-context-panel .mg-nav-btn svg { width: 13px; height: 13px; }
+html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button {
+  --emp-button-radius: 999px;
+  --erp-radius-button: 999px;
+  --erp-radius-toolbar-btn: 999px;
+  border-color: #e1e6eb !important;
+  border-radius: 999px !important;
+  background: #f1f3f4 !important;
+  color: #26374b !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button:hover:not(:disabled) { border-color: #dde3e9 !important; background: #e7ebef !important; color: #1f3045 !important; }
+.aux-form-action {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  min-width: 78px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  padding: 0 14px !important;
+  gap: 5px;
+  border-radius: 999px !important;
+}
+.aux-record-identity { color: var(--text-1, #253449); font-size: 13px; line-height: 16px; }
+.aux-required-status { color: #6f7e91; font-size: 10px; white-space: nowrap; }
+.aux-required-status strong { color: #26374b; }
+.aux-launch-panel { display: flex; flex: 1; min-height: 0; padding: 0; overflow: hidden; background: var(--bg-page, #f1f3f6); }
+.aux-modelobase1-form,
+.aux-record-mode { display: flex; flex: 1; flex-direction: column; min-height: 0; width: 100%; overflow: hidden; background: var(--bg-page, #f1f3f6); }
+.aux-record-mode { --aux-card-gap: 12px; }
+.aux-record-tabs { flex: 0 0 var(--mg-toolbar-row-height, 36px); min-height: var(--mg-toolbar-row-height, 36px); max-height: var(--mg-toolbar-row-height, 36px); padding: 0 12px !important; background: var(--bg-page, #f1f3f6) !important; border-bottom: 1px solid var(--mg-panel-tabs-strip-divider-color, #d0d5dc); }
+.aux-record-tabs .mg-panel-tabs-rail,
+.aux-record-tabs .mg-panel-tabs-rail__viewport,
+.aux-record-tabs .seg-control { width: 100%; height: 100%; }
+.aux-record-tabs .mg-panel-tabs-rail__viewport { overflow: hidden; }
+.aux-record-tabs .seg-control { position: relative; display: flex; align-items: stretch; }
+.aux-record-tabs .seg-tab { height: 100%; padding: 0 12px; border: 0; background: transparent; color: var(--text-2, #68778a); font-size: var(--mg-panel-tab-font, 13px); font-weight: 500; }
+.aux-record-tabs .seg-tab.active { color: var(--text-1, #1f2f44); font-weight: 700; }
+.aux-record-tabs .seg-tab-slider { position: absolute; bottom: 0; left: 0; height: var(--mg-panel-tab-indicator-height, 2px); background: var(--mg-panel-tab-indicator-color, #000); transition: width 180ms ease, transform 180ms ease; }
+.aux-record-mode .emp-form-section-panel--corp,
+.aux-record-mode .emp-form-fields-corp { border: 0 !important; background: transparent !important; box-shadow: none !important; }
+.aux-record-mode .emp-form-fields-corp { padding: 0 !important; }
+html body .d17b-shell.cadastro-emp-scope .d17b-page .aux-record-mode .mg-prototype-cards-layout {
+  align-content: start;
+  gap: var(--aux-card-gap) !important;
+  padding-bottom: var(--aux-card-gap) !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-page .aux-record-mode .mg-prototype-cards-layout .emp-form-cards-row {
+  column-gap: var(--aux-card-gap) !important;
+  row-gap: var(--aux-card-gap) !important;
+}
+.aux-model-card { min-height: 0; }
+.aux-model-card-grid {
+  display: flex !important;
+  flex-flow: row wrap !important;
+  align-items: flex-end !important;
+  gap: var(--mg-card-row-gap, 10px) !important;
+}
+.mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field,
+.mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field.is-wide {
+  flex: 3 1 260px !important;
+  min-width: min(260px, 100%) !important;
+  max-width: 100% !important;
+  width: auto !important;
+  height: 38px;
+}
+.mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field[data-width-type="CODIGO"],
+.mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field[data-width-type="SIM_NAO"] {
+  flex: .5 1 120px !important;
+  min-width: min(120px, 100%) !important;
+}
+.mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field[data-width-type="TEXTO_CURTO"] {
+  flex: 1 1 140px !important;
+  min-width: min(140px, 100%) !important;
+}
+.mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field[data-width-type="NUMERO"] {
+  flex: 1 1 120px !important;
+  min-width: min(120px, 100%) !important;
+}
+.mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field--textarea {
+  flex: 1 0 100% !important;
+  min-width: 100% !important;
+  width: 100% !important;
+  height: auto;
+  min-height: 82px;
+}
+.aux-model-field--textarea textarea { min-height: 82px !important; }
+.aux-model-field--select { position: relative; }
+.aux-model-cmd-select { width: 100%; height: var(--mg-field-height, 38px); }
+.aux-model-cmd-display { width: 100%; min-height: var(--mg-field-height, 38px) !important; height: var(--mg-field-height, 38px) !important; border-radius: var(--mg-radius-control, 8px) !important; }
+.aux-model-cmd-display > svg { display: none; }
+.aux-model-cmd-select > .cmd-chevron { pointer-events: none; }
+.aux-model-cmd-panel { min-width: var(--radix-select-trigger-width); }
+
+html.dark .aux-table-card,
+html.dark .aux-table-footer,
+html.dark .aux-data-table th,
+html.tema-escuro .aux-table-card,
+html.tema-escuro .aux-table-footer,
+html.tema-escuro .aux-data-table th { border-color: var(--mb1-border); background: var(--mb1-bg-card); color: var(--mb1-text-1); }
+html:is(.dark, .tema-escuro, .escuro) .aux-cards-scroll { background: var(--mb1-bg-page); }
+html:is(.dark, .tema-escuro, .escuro) .aux-record-card { border-color: var(--mb1-border) !important; background: var(--mb1-bg-card) !important; color: var(--mb1-text-1) !important; box-shadow: 0 2px 7px rgba(0, 0, 0, .22) !important; }
+html.dark .aux-data-table td,
+html.tema-escuro .aux-data-table td { border-color: var(--mb1-border); color: var(--mb1-text-2); }
+html.dark .aux-data-table tbody tr:nth-child(even) td,
+html.tema-escuro .aux-data-table tbody tr:nth-child(even) td { background: var(--mb1-bg-subtle); }
+html.dark .aux-launch-panel,
+html.dark .aux-modelobase1-form,
+html.dark .aux-record-mode,
+html.tema-escuro .aux-launch-panel,
+html.tema-escuro .aux-modelobase1-form,
+html.tema-escuro .aux-record-mode { background: var(--mb1-bg-page); }
+html.dark .aux-record-tabs,
+html.tema-escuro .aux-record-tabs { border-color: var(--mb1-border); background: var(--mb1-bg-card) !important; }
+html.dark .aux-context-panel-wrap,
+html.dark .aux-context-panel,
+html.tema-escuro .aux-context-panel-wrap,
+html.tema-escuro .aux-context-panel { border-color: var(--mb1-border) !important; background: var(--mb1-bg-card) !important; }
+html.dark .aux-context-panel .mg-nav-btn,
+html.tema-escuro .aux-context-panel .mg-nav-btn { background: var(--mb1-bg-field); color: var(--mb1-text-2); }
+html.dark .aux-context-panel .mg-nav-btn:hover:not(:disabled),
+html.tema-escuro .aux-context-panel .mg-nav-btn:hover:not(:disabled) { background: var(--mb1-bg-subtle); color: var(--mb1-text-1); }
+html.dark body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button,
+html.tema-escuro body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button { border-color: var(--mb1-border) !important; background: var(--mb1-bg-field) !important; color: var(--mb1-text-1) !important; }
+html.dark body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button:hover:not(:disabled),
+html.tema-escuro body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button:hover:not(:disabled) { background: var(--mb1-bg-subtle) !important; color: var(--mb1-text-1) !important; }
+html.dark body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-data-table .emp-th-menu-button, .d17c-table-footer__pagination button):hover:not(:disabled),
+html.tema-escuro body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-data-table .emp-th-menu-button, .d17c-table-footer__pagination button):hover:not(:disabled) { background: var(--mb1-bg-subtle) !important; }
+html.dark .aux-record-identity strong,
+html.dark .aux-required-status strong,
+html.tema-escuro .aux-record-identity strong,
+html.tema-escuro .aux-required-status strong { color: var(--mb1-text-1); }
+
+/* O pacote legado carrega algumas superfícies claras depois do tema. Este bloco
+   mantém o contrato do ModeloBase1 no escopo dos cadastros auxiliares. */
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page .aux-record-mode,
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page .aux-record-tabs,
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.mg-form-scroll, .emp-form-body, .emp-form-panels-zone, .emp-form-section-panel, .emp-form-fields-corp) {
+  border-color: var(--mb1-border) !important;
+  background: var(--mb1-bg-page) !important;
+  color: var(--mb1-text-1) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page .aux-model-card {
+  border-color: var(--mb1-border) !important;
+  background: var(--mb1-bg-card) !important;
+  color: var(--mb1-text-1) !important;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, .22) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.emp-form-card-title, .fg-label, .cmd-label, .seg-tab.active) {
+  color: var(--mb1-text-1) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-model-field input, .aux-model-field textarea, .aux-model-cmd-display) {
+  border-color: var(--mb1-border) !important;
+  background: var(--mb1-bg-field) !important;
+  color: var(--mb1-text-1) !important;
+  box-shadow: none !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .aux-record-mode .mg-prototype-form--edit .mg-prototype-field.aux-model-field > input[id^="aux-"]:not([type="hidden"]),
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .aux-record-mode .mg-prototype-form--edit .mg-prototype-field.aux-model-field > textarea[id^="aux-"],
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .aux-record-mode .mg-prototype-form--edit .mg-prototype-composite.aux-model-field .cmd-select .cmd-display.aux-model-cmd-display[id^="aux-"] {
+  border-color: var(--mb1-border) !important;
+  background-color: var(--mb1-bg-field) !important;
+  color: var(--mb1-text-1) !important;
+  box-shadow: none !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-model-field input, .aux-model-field textarea, .aux-model-cmd-display):focus,
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-model-field input, .aux-model-field textarea, .aux-model-cmd-display):focus-visible,
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page .aux-model-cmd-display[data-state="open"] {
+  border-color: #40de63 !important;
+  box-shadow: 0 0 0 2px rgba(64, 222, 99, .14) !important;
+  outline: 0 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-model-field input, .aux-model-field textarea)::placeholder {
+  color: var(--mb1-text-2) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar.d17c-table-toolbar button.aux-cancel-button.aux-form-action.d17c-launch-button {
+  border-color: var(--mb1-border) !important;
+  background: var(--mb1-bg-field) !important;
+  color: var(--mb1-text-1) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page .aux-view-seg {
+  border-color: var(--mb1-border) !important;
+  background: var(--mb1-bg-field) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page .aux-view-seg__slider {
+  background: var(--mb1-bg-card) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar.d17c-table-toolbar button.aux-cancel-button.aux-form-action.d17c-launch-button {
+  color: var(--mb1-text-1) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-record-identity, .mg-context-panel__code, .mg-context-panel__title) {
+  color: var(--mb1-text-1) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page .aux-required-status {
+  color: var(--mb1-text-2) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page :is(
+  .d17c-round-action,
+  .mg-filter-pills-rail__toggle,
+  .mg-filter-pill__trigger,
+  .mg-filter-pills-rail__config,
+  .emp-th-menu-button
+) {
+  color: var(--mb1-text-2) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page :is(
+  .d17c-round-action,
+  .mg-filter-pills-rail__toggle,
+  .mg-filter-pill__trigger,
+  .mg-filter-pills-rail__config,
+  .emp-th-menu-button
+) svg {
+  color: currentColor !important;
+  stroke: currentColor !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page .mg-filter-pill__trigger span {
+  color: currentColor !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page .mg-filter-pills-rail__toggle.is-active {
+  color: #40de63 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page div.mg-view-panel.emp-table-root.emp-table-shell.d17c-table-scroll {
+  scrollbar-color: #5c6a7d #232a33 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page div.mg-view-panel.emp-table-root.emp-table-shell.d17c-table-scroll::-webkit-scrollbar {
+  background: #232a33 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page div.mg-view-panel.emp-table-root.emp-table-shell.d17c-table-scroll::-webkit-scrollbar-track {
+  background: #232a33 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page div.mg-view-panel.emp-table-root.emp-table-shell.d17c-table-scroll::-webkit-scrollbar-thumb {
+  border-color: #232a33 !important;
+  background: #5c6a7d !important;
+}
+
+@media (max-width: 850px) {
+  .aux-registry-page { padding: 6px; }
+  .aux-search { width: 190px; }
+  .aux-required-status { display: none; }
+  .aux-form-toolbar-actions { gap: 6px; }
+  .aux-form-toolbar-commands { gap: 4px; }
+  .aux-cards-grid { grid-template-columns: minmax(0, 1fr) !important; }
+  .mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field,
+  .mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field.is-wide { flex-basis: 100% !important; min-width: 100% !important; }
+  .mb1-app-shell .mb1-operational-page > .aux-launch-toolbar.d17c-table-toolbar { min-height: 46px !important; max-height: none !important; height: auto !important; }
+}

@@ -1,0 +1,36 @@
+# Dependências e saídas de build
+node_modules/
+dist/
+release/
+release-unsigned/
+coverage/
+
+# Ambiente e segredos
+.env
+.env.*
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Temporários
+tmp/
+.tmp/*
+!.tmp/formulario-escopo/
+.audit-tmp/
+*.local
+docs/evidence/**/screenshots/runtime-temp/
+
+# Dados locais de desenvolvimento (legado JSON/SQLite)
+data/*.json
+data/*.db
+data/backups/
+data/logs/
+
+# Editor / SO
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+Thumbs.db

@@ -1,0 +1,145 @@
+{
+  "baseUrl": "http://localhost:5173",
+  "massKey": "pequena",
+  "routes": [
+    "CadastrosComerciais",
+    "CausasMorte",
+    "ConfiguracoesSanidade"
+  ],
+  "themes": [
+    "claro",
+    "escuro"
+  ],
+  "files": [
+    {
+      "route": "CadastrosComerciais",
+      "theme": "claro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\CadastrosComerciais-claro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "CadastrosComerciais",
+      "theme": "claro",
+      "step": "painel-filtros",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\CadastrosComerciais-claro-painel-filtros.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "CadastrosComerciais",
+      "theme": "claro",
+      "step": "pesquisa",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\CadastrosComerciais-claro-pesquisa.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "CadastrosComerciais",
+      "theme": "claro",
+      "step": "mais-opcoes",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\CadastrosComerciais-claro-mais-opcoes.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "CausasMorte",
+      "theme": "claro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\CausasMorte-claro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "ConfiguracoesSanidade",
+      "theme": "claro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\ConfiguracoesSanidade-claro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "CadastrosComerciais",
+      "theme": "escuro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\CadastrosComerciais-escuro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "CadastrosComerciais",
+      "theme": "escuro",
+      "step": "painel-filtros",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\CadastrosComerciais-escuro-painel-filtros.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "CadastrosComerciais",
+      "theme": "escuro",
+      "step": "pesquisa",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\CadastrosComerciais-escuro-pesquisa.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "CadastrosComerciais",
+      "theme": "escuro",
+      "step": "mais-opcoes",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\CadastrosComerciais-escuro-mais-opcoes.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "route": "CausasMorte",
+      "theme": "escuro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\CausasMorte-escuro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    },
+    {
+      "route": "ConfiguracoesSanidade",
+      "theme": "escuro",
+      "file": "C:\\Users\\maike\\Desktop\\projeto\\MAKGESTAO-main\\docs\\evidence\\modelobase1-cadastros-2026-09-14\\screens\\ConfiguracoesSanidade-escuro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      },
+      "ready": true
+    }
+  ],
+  "errors": [],
+  "dataset": {
+    "pesagens": 300,
+    "animais": 100,
+    "sessoes": 201,
+    "apartacoes": 3,
+    "lotes": 9,
+    "animalLotes": 120
+  },
+  "prelude": "cadastros semeados"
+}

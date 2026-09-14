@@ -1,0 +1,36 @@
+.mb1-scope,
+.mb1-scope *,
+.mb1-scope *::before,
+.mb1-scope *::after {
+  box-sizing: border-box;
+}
+
+.mb1-scope button,
+.mb1-scope input {
+  font: inherit;
+}
+
+.mb1-scope button:focus-visible,
+.mb1-scope input:focus-visible,
+.mb1-scope [role="button"]:focus-visible {
+  outline: none;
+  box-shadow: var(--mb1-focus-ring);
+}
+
+.mb1-scope button:disabled,
+.mb1-scope input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.mb1-scope .mb1-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

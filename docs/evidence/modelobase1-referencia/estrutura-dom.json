@@ -1,0 +1,823 @@
+{
+  "ready": true,
+  "errors": [],
+  "apiCalls": [
+    "GET /api/auth/session",
+    "GET /api/auth/session",
+    "GET /api/auth/session",
+    "GET /api/empresas?page=1&pageSize=50&sortBy=codempresa&sortDir=asc",
+    "GET /api/metrics/contadores",
+    "GET /api/cadcps/campos?page=1&pageSize=50&sortBy=codigo&sortDir=asc",
+    "GET /api/empresas/campos?mode=aplicavel",
+    "GET /api/user/preferences/bootstrap",
+    "GET /api/user/preferences/bootstrap",
+    "GET /api/empresas?page=1&pageSize=100&sortBy=codempresa&sortDir=asc&includeTotal=true",
+    "GET /api/empresas?page=1&pageSize=30&search=EMPRESA+0&sortBy=codempresa&sortDir=asc",
+    "GET /api/empresas/distinct?column=razao_social&limit=100"
+  ],
+  "shots": [
+    "02-painel-filtros-aberto",
+    "03-menu-coluna",
+    "04-pesquisa-toolbar",
+    "05-config-colunas",
+    "06-config-filtros",
+    "07-menu-mais-opcoes",
+    "08-pill-filtro-aberta"
+  ],
+  "buttons": [
+    {
+      "x": 12,
+      "y": 5,
+      "w": 26,
+      "h": 26,
+      "cls": "mg-topbar-icon-btn.ios-btn.mg-desktop-menu-trigger",
+      "label": "Fixar menu"
+    },
+    {
+      "x": 1240,
+      "y": 5,
+      "w": 26,
+      "h": 26,
+      "cls": "mg-topbar-icon-btn.ios-btn",
+      "label": "Ativar tema escuro"
+    },
+    {
+      "x": 1272,
+      "y": 5,
+      "w": 26,
+      "h": 26,
+      "cls": "mg-topbar-icon-btn.ios-btn",
+      "label": "Notificações"
+    },
+    {
+      "x": 1304,
+      "y": 5,
+      "w": 26,
+      "h": 26,
+      "cls": "mg-topbar-icon-btn.ios-btn",
+      "label": "Ajuda"
+    },
+    {
+      "x": 1336,
+      "y": 5,
+      "w": 26,
+      "h": 26,
+      "cls": "mg-topbar-icon-btn.ios-btn",
+      "label": "Aplicativos"
+    },
+    {
+      "x": 1368,
+      "y": 5,
+      "w": 26,
+      "h": 26,
+      "cls": "mg-topbar-icon-btn.ios-btn",
+      "label": "Usuário"
+    },
+    {
+      "x": 210,
+      "y": 48,
+      "w": 28,
+      "h": 28,
+      "cls": "filter-panel__close.ios-btn",
+      "label": "Fechar filtros"
+    },
+    {
+      "x": 12,
+      "y": 40,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-ghost.tb-btn-filter",
+      "label": "Filtrar"
+    },
+    {
+      "x": 44,
+      "y": 40,
+      "w": 64,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-green",
+      "label": "Novo"
+    },
+    {
+      "x": 106,
+      "y": 40,
+      "w": 18,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-green",
+      "label": "Salvar"
+    },
+    {
+      "x": 106,
+      "y": 40,
+      "w": 18,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Cancelar"
+    },
+    {
+      "x": 106,
+      "y": 40,
+      "w": 18,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Editar"
+    },
+    {
+      "x": 106,
+      "y": 40,
+      "w": 18,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Excluir"
+    },
+    {
+      "x": 106,
+      "y": 40,
+      "w": 18,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Duplicar"
+    },
+    {
+      "x": 1230,
+      "y": 40,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-ghost.tb-btn-icon",
+      "label": "Pesquisar"
+    },
+    {
+      "x": 1266,
+      "y": 40,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-ghost.tb-btn-icon",
+      "label": "Anexos"
+    },
+    {
+      "x": 1306,
+      "y": 43,
+      "w": 27,
+      "h": 22,
+      "cls": "view-mode-btn",
+      "label": "Registro"
+    },
+    {
+      "x": 1333,
+      "y": 43,
+      "w": 27,
+      "h": 22,
+      "cls": "view-mode-btn.active",
+      "label": "Tabela"
+    },
+    {
+      "x": 1361,
+      "y": 43,
+      "w": 27,
+      "h": 22,
+      "cls": "view-mode-btn",
+      "label": "Cards"
+    },
+    {
+      "x": 1247,
+      "y": 78,
+      "w": 175,
+      "h": 31,
+      "cls": "mg-speed-dial__item",
+      "label": "Duplicar"
+    },
+    {
+      "x": 1247,
+      "y": 109,
+      "w": 175,
+      "h": 31,
+      "cls": "mg-speed-dial__item",
+      "label": "Imprimir"
+    },
+    {
+      "x": 1400,
+      "y": 40,
+      "w": 28,
+      "h": 28,
+      "cls": "mg-speed-dial__trigger.ios-btn.tb-btn.tb-btn-ghost",
+      "label": "Mais opções"
+    },
+    {
+      "x": 1244,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "mg-nav-btn.ios-btn",
+      "label": "Primeiro"
+    },
+    {
+      "x": 1276,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "mg-nav-btn.ios-btn",
+      "label": "Anterior"
+    },
+    {
+      "x": 1368,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "mg-nav-btn.ios-btn",
+      "label": "Próximo"
+    },
+    {
+      "x": 1400,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "mg-nav-btn.ios-btn",
+      "label": "Último"
+    },
+    {
+      "x": 12,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.mg-nav-btn.mg-filter-pills-rail__toggle.is-active",
+      "label": "Recolher faixa de filtros"
+    },
+    {
+      "x": 46,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.mg-nav-btn.mg-filter-pills-rail__nav.mg-filter-pills-rail__nav--prev",
+      "label": "Rolar filtros para a esquerda"
+    },
+    {
+      "x": 81,
+      "y": 76,
+      "w": 88,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "ID Global"
+    },
+    {
+      "x": 173,
+      "y": 76,
+      "w": 114,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Cód. Empresa"
+    },
+    {
+      "x": 290,
+      "y": 76,
+      "w": 172,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Nome/Razão Social Emp."
+    },
+    {
+      "x": 466,
+      "y": 76,
+      "w": 117,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Nome fantasia"
+    },
+    {
+      "x": 587,
+      "y": 76,
+      "w": 63,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Tipo"
+    },
+    {
+      "x": 655,
+      "y": 76,
+      "w": 80,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Vínculo"
+    },
+    {
+      "x": 739,
+      "y": 76,
+      "w": 93,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "CPF/CNPJ"
+    },
+    {
+      "x": 835,
+      "y": 76,
+      "w": 138,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Inscrição Estadual"
+    },
+    {
+      "x": 977,
+      "y": 76,
+      "w": 85,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Telefone"
+    },
+    {
+      "x": 1067,
+      "y": 76,
+      "w": 96,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "WhatsApp"
+    },
+    {
+      "x": 1167,
+      "y": 76,
+      "w": 75,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "E-mail"
+    },
+    {
+      "x": 1246,
+      "y": 76,
+      "w": 65,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Logo"
+    },
+    {
+      "x": 1315,
+      "y": 76,
+      "w": 61,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "CEP"
+    },
+    {
+      "x": 1380,
+      "y": 76,
+      "w": 91,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Endereço"
+    },
+    {
+      "x": 1475,
+      "y": 76,
+      "w": 82,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Número"
+    },
+    {
+      "x": 1561,
+      "y": 76,
+      "w": 72,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Bairro"
+    },
+    {
+      "x": 1637,
+      "y": 76,
+      "w": 78,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Cidade"
+    },
+    {
+      "x": 1719,
+      "y": 76,
+      "w": 54,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "UF"
+    },
+    {
+      "x": 1777,
+      "y": 76,
+      "w": 110,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Observações"
+    },
+    {
+      "x": 1891,
+      "y": 76,
+      "w": 75,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Status"
+    },
+    {
+      "x": 1970,
+      "y": 76,
+      "w": 111,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Limpar filtros"
+    },
+    {
+      "x": 679,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.mg-nav-btn.mg-filter-pills-rail__nav.mg-filter-pills-rail__nav--next",
+      "label": "Rolar filtros para a direita"
+    },
+    {
+      "x": 720,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-ghost.tb-btn-filter",
+      "label": "Limpar todos os filtros"
+    },
+    {
+      "x": 1364,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "mg-nav-btn.ios-btn.mg-cards-panel-strip__config-btn",
+      "label": "Configurar layout dos cards"
+    },
+    {
+      "x": 1400,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "mg-nav-btn.ios-btn.mg-cards-panel-strip__config-btn",
+      "label": "Configurar campos dos cards"
+    },
+    {
+      "x": 13,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.mg-nav-btn.mg-filter-pills-rail__toggle.is-active",
+      "label": "Recolher faixa de filtros"
+    },
+    {
+      "x": 47,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.mg-nav-btn.mg-filter-pills-rail__nav.mg-filter-pills-rail__nav--prev",
+      "label": "Rolar filtros para a esquerda"
+    },
+    {
+      "x": 82,
+      "y": 76,
+      "w": 88,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "ID Global"
+    },
+    {
+      "x": 174,
+      "y": 76,
+      "w": 114,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Cód. Empresa"
+    },
+    {
+      "x": 291,
+      "y": 76,
+      "w": 172,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Nome/Razão Social Emp."
+    },
+    {
+      "x": 467,
+      "y": 76,
+      "w": 117,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Nome fantasia"
+    },
+    {
+      "x": 588,
+      "y": 76,
+      "w": 63,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Tipo"
+    },
+    {
+      "x": 656,
+      "y": 76,
+      "w": 80,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Vínculo"
+    },
+    {
+      "x": 740,
+      "y": 76,
+      "w": 93,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "CPF/CNPJ"
+    },
+    {
+      "x": 836,
+      "y": 76,
+      "w": 138,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Inscrição Estadual"
+    },
+    {
+      "x": 978,
+      "y": 76,
+      "w": 85,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Telefone"
+    },
+    {
+      "x": 1068,
+      "y": 76,
+      "w": 96,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "WhatsApp"
+    },
+    {
+      "x": 1168,
+      "y": 76,
+      "w": 75,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "E-mail"
+    },
+    {
+      "x": 1247,
+      "y": 76,
+      "w": 65,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Logo"
+    },
+    {
+      "x": 1316,
+      "y": 76,
+      "w": 61,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "CEP"
+    },
+    {
+      "x": 1381,
+      "y": 76,
+      "w": 91,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Endereço"
+    },
+    {
+      "x": 1476,
+      "y": 76,
+      "w": 82,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Número"
+    },
+    {
+      "x": 1562,
+      "y": 76,
+      "w": 72,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Bairro"
+    },
+    {
+      "x": 1638,
+      "y": 76,
+      "w": 78,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Cidade"
+    },
+    {
+      "x": 1720,
+      "y": 76,
+      "w": 54,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "UF"
+    },
+    {
+      "x": 1778,
+      "y": 76,
+      "w": 110,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Observações"
+    },
+    {
+      "x": 1892,
+      "y": 76,
+      "w": 75,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Status"
+    },
+    {
+      "x": 1971,
+      "y": 76,
+      "w": 111,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-labeled.tb-btn-ghost",
+      "label": "Limpar filtros"
+    },
+    {
+      "x": 679,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.mg-nav-btn.mg-filter-pills-rail__nav.mg-filter-pills-rail__nav--next",
+      "label": "Rolar filtros para a direita"
+    },
+    {
+      "x": 720,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "ios-btn.tb-btn.tb-btn-ghost.tb-btn-filter",
+      "label": "Limpar todos os filtros"
+    },
+    {
+      "x": 1399,
+      "y": 76,
+      "w": 28,
+      "h": 28,
+      "cls": "mg-nav-btn.ios-btn.mg-table-panel-strip__config-btn",
+      "label": "Configurar colunas da tabela"
+    },
+    {
+      "x": 178,
+      "y": 125,
+      "w": 16,
+      "h": 16,
+      "cls": "emp-th-menu-button",
+      "label": "Abrir menu da coluna Cód. Empresa"
+    },
+    {
+      "x": 438,
+      "y": 125,
+      "w": 16,
+      "h": 16,
+      "cls": "emp-th-menu-button",
+      "label": "Abrir menu da coluna Nome/Razão Social E"
+    },
+    {
+      "x": 658,
+      "y": 125,
+      "w": 16,
+      "h": 16,
+      "cls": "emp-th-menu-button",
+      "label": "Abrir menu da coluna Nome fantasia"
+    },
+    {
+      "x": 767,
+      "y": 125,
+      "w": 16,
+      "h": 16,
+      "cls": "emp-th-menu-button",
+      "label": "Abrir menu da coluna Tipo"
+    },
+    {
+      "x": 927,
+      "y": 125,
+      "w": 16,
+      "h": 16,
+      "cls": "emp-th-menu-button",
+      "label": "Abrir menu da coluna CPF/CNPJ"
+    },
+    {
+      "x": 1057,
+      "y": 125,
+      "w": 16,
+      "h": 16,
+      "cls": "emp-th-menu-button",
+      "label": "Abrir menu da coluna Telefone"
+    },
+    {
+      "x": 1207,
+      "y": 125,
+      "w": 16,
+      "h": 16,
+      "cls": "emp-th-menu-button",
+      "label": "Abrir menu da coluna Cidade"
+    },
+    {
+      "x": 1316,
+      "y": 125,
+      "w": 16,
+      "h": 16,
+      "cls": "emp-th-menu-button",
+      "label": "Abrir menu da coluna UF"
+    },
+    {
+      "x": 1432,
+      "y": 125,
+      "w": 16,
+      "h": 16,
+      "cls": "emp-th-menu-button",
+      "label": "Abrir menu da coluna Status"
+    },
+    {
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 900,
+      "cls": "mg-mobile-menu-backdrop",
+      "label": "Fechar menu"
+    }
+  ],
+  "filterPanelDom": {
+    "open": "filter-panel open",
+    "width": "260px",
+    "html": "<aside id=\"filter-panel\" class=\"filter-panel open\" aria-hidden=\"false\"><div class=\"filter-panel__inner\"><div class=\"filter-panel__header\"><span class=\"filter-panel__title\">Filtros</span><button type=\"button\" class=\"filter-panel__close ios-btn\" aria-label=\"Fechar filtros\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-x h-4 w-4\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"></path><path d=\"m6 6 12 12\"></path></svg></button></div><div class=\"filter-panel__body\"><div class=\"fg\"><label class=\"fg-label\">Razão Social</label><input type=\"text\" value=\"\" style=\"\"></div><div class=\"fg\"><label class=\"fg-label\">Nome Fantasia</label><input type=\"text\" value=\"\" style=\"\"></div><div class=\"fg\"><label class=\"fg-label\">CNPJ</label><input type=\"text\" value=\"\" style=\"\"></div><div class=\"fg\"><label class=\"fg-label\">Telefone</label><input type=\"text\" value=\"\" style=\"\"></div><div class=\"fg\"><label class=\"fg-label\">Cidade</label><input type=\"text\" value=\"\" style=\"\"></div><div class=\"fg\"><label class=\"fg-label\">UF</label><input type=\"text\" value=\"\" style=\"\"></div><div class=\"cmd-select mg-has-value\"><span class=\"cmd-label\">Status</span><div class=\"cmd-display\" tabindex=\"0\" role=\"combobox\" aria-expanded=\"false\" aria-disabled=\"false\">Todos</div><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-chevron-down cmd-chevron h-3 w-3\" aria-hidden=\"true\"><path d=\"m6 9 6 6 6-6\"></path></svg></div></div><div class=\"filter-panel__footer\"><button type=\"button\" class=\"tb-btn tb-btn-ghost\">Limpar</button><button type=\"button\" class=\"tb-btn tb-btn-blue\">Aplicar</button></div></div></aside>"
+  },
+  "searchDom": {
+    "placeholder": "Pesquisar...",
+    "aria": "Pesquisar",
+    "cls": "",
+    "boxCls": "mg-search-pill",
+    "boxHtml": "<div class=\"mg-search-pill\" role=\"search\"><button type=\"button\" class=\"mg-search-pill-clear\" aria-label=\"Limpar pesquisa\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"24\" height=\"24\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-x mg-search-pill-icon h-3.5 w-3.5 shrink-0\" aria-hidden=\"true\"><path d=\"M18 6 6 18\"></path><path d=\"m6 6 12 12\"></path></svg></button><input type=\"text\" placeholder=\"Pesquisar...\" aria-label=\"Pesquisar\" aria-expanded=\"true\" aria-haspopup=\"listbox\" tabindex=\"0\" value=\"EMPRESA 0\" style=\"\"></div>",
+    "dropdown": null
+  },
+  "structure": {
+    "regions": [],
+    "toolbar": null,
+    "panelStrip": null,
+    "tableHead": "<tr.border-b.transition-colors.data-[state=selected]:bg-muted.hover:bg-transparent>\n  <th.h-10.px-2.font-medium.text-muted-foreground.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px]>\n    <div.emp-table-select-wrap>\n      <span.mg-cards-config-menu__check.emp-table-select-check>\n        <input.mg-cards-config-menu__checkbox-input aria-label=\"Selecionar todos os registros listados\">\n  <th.h-10.px-2.font-medium.text-muted-foreground.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px]>\n    <div.emp-th-label-wrap.flex.w-full.h-full.min-w-0.overflow-hidden>\n      <span.emp-th-label.flex-1.min-w-0.truncate.font-semibold.whitespace-nowrap title=\"Cód. Empresa\"> \"Cód. Empresa\"\n      <div.emp-th-trailing.flex.shrink-0.items-center>\n        <span.emp-th-icon-button.emp-th-icon-button--indicator>\n        <button.emp-th-menu-button aria-label=\"Abrir menu da coluna Cód. Empresa\">\n    <div.emp-col-resize-handle.absolute.top-0.right-0.h-full.w-[7px] aria-label=\"Redimensionar coluna Cód. Empresa. Duplo clique para ajustar automaticamente.\" role=\"separator\">\n  <th.h-10.px-2.font-medium.text-muted-foreground.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px]>\n    <div.emp-th-label-wrap.flex.w-full.h-full.min-w-0.overflow-hidden>\n      <span.emp-th-label.flex-1.min-w-0.truncate.font-semibold.whitespace-nowrap title=\"Nome/Razão Social Emp.\"> \"Nome/Razão Social Emp.\"\n      <div.emp-th-trailing.flex.shrink-0.items-center>\n        <button.emp-th-menu-button aria-label=\"Abrir menu da coluna Nome/Razão Social Emp.\">\n    <div.emp-col-resize-handle.absolute.top-0.right-0.h-full.w-[7px] aria-label=\"Redimensionar coluna Nome/Razão Social Emp.. Duplo clique para ajustar automaticamente.\" role=\"separator\">\n  <th.h-10.px-2.font-medium.text-muted-foreground.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px]>\n    <div.emp-th-label-wrap.flex.w-full.h-full.min-w-0.overflow-hidden>\n      <span.emp-th-label.flex-1.min-w-0.truncate.font-semibold.whitespace-nowrap title=\"Nome fantasia\"> \"Nome fantasia\"\n      <div.emp-th-trailing.flex.shrink-0.items-center>\n        <button.emp-th-menu-button aria-label=\"Abrir menu da coluna Nome fantasia\">\n    <div.emp-col-resize-handle.absolute.top-0.right-0.h-full.w-[7px] aria-label=\"Redimensionar coluna Nome fantasia. Duplo clique para ajustar automaticamente.\" role=\"separator\">\n  <th.h-10.px-2.font-medium.text-muted-foreground.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px]>\n    <div.emp-th-label-wrap.flex.w-full.h-full.min-w-0.overflow-hidden>\n      <span.emp-th-label.flex-1.min-w-0.truncate.font-semibold.whitespace-nowrap title=\"Tipo\"> \"Tipo\"\n      <div.emp-th-trailing.flex.shrink-0.items-center>\n        <button.emp-th-menu-button aria-label=\"Abrir menu da coluna Tipo\">\n    <div.emp-col-resize-handle.absolute.top-0.right-0.h-full.w-[7px] aria-label=\"Redimensionar coluna Tipo. Duplo clique para ajustar automaticamente.\" role=\"separator\">\n  <th.h-10.px-2.font-medium.text-muted-foreground.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px]>\n    <div.emp-th-label-wrap.flex.w-full.h-full.min-w-0.overflow-hidden>\n      <span.emp-th-label.flex-1.min-w-0.truncate.font-semibold.whitespace-nowrap title=\"CPF/CNPJ\"> \"CPF/CNPJ\"\n      <div.emp-th-trailing.flex.shrink-0.items-center>\n        <button.emp-th-menu-button aria-label=\"Abrir menu da coluna CPF/CNPJ\">\n    <div.emp-col-resize-handle.absolute.top-0.right-0.h-full.w-[7px] aria-label=\"Redimensionar coluna CPF/CNPJ. Duplo clique para ajustar automaticamente.\" role=\"separator\">\n  <th.h-10.px-2.font-medium.text-muted-foreground.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px]>\n    <div.emp-th-label-wrap.flex.w-full.h-full.min-w-0.overflow-hidden>\n      <span.emp-th-label.flex-1.min-w-0.truncate.font-semibold.whitespace-nowrap title=\"Telefone\"> \"Telefone\"\n      <div.emp-th-trailing.flex.shrink-0.items-center>\n        <button.emp-th-menu-button aria-label=\"Abrir menu da coluna Telefone\">\n    <div.emp-col-resize-handle.absolute.top-0.right-0.h-full.w-[7px] aria-label=\"Redimensionar coluna Telefone. Duplo clique para ajustar automaticamente.\" role=\"separator\">\n  <th.h-10.px-2.font-medium.text-muted-foreground.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px]>\n    <div.emp-th-label-wrap.flex.w-full.h-full.min-w-0.overflow-hidden>\n      <span.emp-th-label.flex-1.min-w-0.truncate.font-semibold.whitespace-nowrap title=\"Cidade\"> \"Cidade\"\n      <div.emp-th-trailing.flex.shrink-0.items-center>\n        <button.emp-th-menu-button aria-label=\"Abrir menu da coluna Cidade\">\n    <div.emp-col-resize-handle.absolute.top-0.right-0.h-full.w-[7px] aria-label=\"Redimensionar coluna Cidade. Duplo clique para ajustar automaticamente.\" role=\"separator\">\n  <th.h-10.px-2.font-medium.text-muted-foreground.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px]>\n    <div.emp-th-label-wrap.flex.w-full.h-full.min-w-0.overflow-hidden>\n      <span.emp-th-label.flex-1.min-w-0.truncate.font-semibold.whitespace-nowrap title=\"UF\"> \"UF\"\n      <div.emp-th-trailing.flex.shrink-0.items-center>\n        <button.emp-th-menu-button aria-label=\"Abrir menu da coluna UF\">\n    <div.emp-col-resize-handle.absolute.top-0.right-0.h-full.w-[7px] aria-label=\"Redimensionar coluna UF. Duplo clique para ajustar automaticamente.\" role=\"separator\">\n  <th.h-10.px-2.font-medium.text-muted-foreground.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px]>\n    <div.emp-th-label-wrap.flex.w-full.h-full.min-w-0.overflow-hidden>\n      <span.emp-th-label.flex-1.min-w-0.truncate.font-semibold.whitespace-nowrap title=\"Status\"> \"Status\"\n      <div.emp-th-trailing.flex.shrink-0.items-center>\n        <button.emp-th-menu-button aria-label=\"Abrir menu da coluna Status\">\n    <div.emp-col-resize-handle.absolute.top-0.right-0.h-full.w-[7px] aria-label=\"Redimensionar coluna Status. Duplo clique para ajustar automaticamente.\" role=\"separator\">",
+    "firstRow": "<tr.border-b.data-[state=selected]:bg-muted.emp-table-data-row.emp-row-even.cursor-pointer.select-none>\n  <td.p-2.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px].emp-td.emp-td-select.py-0>\n    <div.emp-table-select-wrap>\n  <td.p-2.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px].emp-td.py-0.text-left title=\"1\"> \"1\"\n  <td.p-2.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px].emp-td.py-0.text-left title=\"EMPRESA 01 AGROPECUARIA LTDA\"> \"EMPRESA 01 AGROPECUARIA LTDA\"\n  <td.p-2.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px].emp-td.py-0.text-left title=\"FAZENDA 01\"> \"FAZENDA 01\"\n  <td.p-2.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px].emp-td.py-0.text-left title=\"PF\"> \"PF\"\n  <td.p-2.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px].emp-td.py-0.text-left title=\"123.456.789-10\"> \"123.456.789-10\"\n  <td.p-2.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px].emp-td.py-0.text-left title=\"(67) 99000-1000\"> \"(67) 99000-1000\"\n  <td.p-2.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px].emp-td.py-0.text-left title=\"Campo Grande\"> \"Campo Grande\"\n  <td.p-2.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px].emp-td.py-0.text-left title=\"MS\"> \"MS\"\n  <td.p-2.[&:has([role=checkbox])]:pr-0.[&>[role=checkbox]]:translate-y-[2px].emp-td.py-0.text-left title=\"Ativa\"> \"Ativa\"",
+    "footer": null,
+    "filterPanel": "<aside.filter-panel>\n  <div.filter-panel__inner>\n    <div.filter-panel__header>\n      <span.filter-panel__title> \"Filtros\"\n      <button.filter-panel__close.ios-btn aria-label=\"Fechar filtros\">\n        <svg>\n    <div.filter-panel__body>\n      <div.fg>\n        <label.fg-label> \"Razão Social\"\n        <input>\n      <div.fg>\n        <label.fg-label> \"Nome Fantasia\"\n        <input>\n      <div.fg>\n        <label.fg-label> \"CNPJ\"\n        <input>\n      <div.fg>\n        <label.fg-label> \"Telefone\"\n        <input>\n      <div.fg>\n        <label.fg-label> \"Cidade\"\n        <input>\n      <div.fg>\n        <label.fg-label> \"UF\"\n        <input>\n      <div.cmd-select.mg-has-value>\n        <span.cmd-label> \"Status\"\n        <div.cmd-display role=\"combobox\"> \"Todos\"\n        <svg>\n    <div.filter-panel__footer>\n      <button.tb-btn.tb-btn-ghost> \"Limpar\"\n      <button.tb-btn.tb-btn-blue> \"Aplicar\"",
+    "bodyText": "Business OS\nCADASTRO\nEmpresas\nCampos Personalizados\nMODELO BASE1\nEmpresas\nCampos Personalizados\nFixar menu\nCadastro\nEmpresas\nAR\nNovo\nMais opções\nID Global\nCód. Empresa\nNome/Razão Social Emp.\nNome fantasia\nTipo\nVínculo\nCPF/CNPJ\nInscrição Estadual\nTelefone\nWhatsApp\nE-mail\nLogo\nCEP\nEndereço\nNúmero\nBairro\nCidade\nUF\nObservações\nStatus\nLimpar filtros\nEMP\n000001 • EMPRESA 01 AGROPECUARIA LTDA\nCód. Empres"
+  },
+  "computed": {
+    "toolbar": null,
+    "searchInput": null,
+    "panelStrip": null,
+    "pill": {
+      "rect": [
+        28,
+        28
+      ],
+      "height": "28px",
+      "font-size": "13px",
+      "border-radius": "999px",
+      "background-color": "rgb(241, 243, 244)",
+      "border-top-color": "rgba(64, 222, 99, 0.35)",
+      "color": "rgb(64, 222, 99)",
+      "padding-left": "0px"
+    },
+    "th": {
+      "rect": [
+        36,
+        30
+      ],
+      "height": "30px",
+      "font-size": "12px",
+      "font-weight": "600",
+      "color": "rgb(51, 65, 85)",
+      "background-color": "rgb(255, 255, 255)",
+      "border-bottom-color": "rgb(51, 65, 85)"
+    },
+    "td": {
+      "rect": [
+        36,
+        26
+      ],
+      "height": "26px",
+      "font-size": "12px",
+      "color": "rgb(107, 114, 128)",
+      "border-bottom-color": "rgb(107, 114, 128)"
+    },
+    "filterPanel": {
+      "rect": [
+        0,
+        818
+      ],
+      "width": "0px",
+      "position": "static",
+      "background-color": "rgb(255, 255, 255)"
+    },
+    "filterInput": {
+      "rect": [
+        236,
+        38
+      ],
+      "height": "38px",
+      "font-size": "13px",
+      "border-radius": "8px",
+      "background-color": "rgb(241, 243, 244)"
+    }
+  }
+}

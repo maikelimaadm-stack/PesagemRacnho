@@ -1,0 +1,82 @@
+{
+  "baselineVersion": 1,
+  "massKey": "vazia",
+  "label": "Vazia",
+  "seed": 20260908,
+  "startedAt": "2026-09-08T20:03:25.973Z",
+  "runtime": {
+    "kind": "node",
+    "userAgent": "node v24.18.0",
+    "indexedDb": "fake-indexeddb (memória)",
+    "electron": false
+  },
+  "dbVersion": 6,
+  "dataset": {
+    "pesagens": 0,
+    "animais": 0,
+    "sessoes": 0,
+    "apartacoes": 3,
+    "lotes": 9,
+    "animalLotes": 0
+  },
+  "seedMs": 7.6,
+  "metrics": {
+    "carga_inicial_listEntries": {
+      "n": 3,
+      "min": 0.126,
+      "p50": 0.18,
+      "p95": 1.487,
+      "p99": 1.487,
+      "max": 1.487,
+      "mean": 0.598,
+      "registros": 0
+    },
+    "indice_animais_rebuild": {
+      "n": 3,
+      "min": 0.003,
+      "p50": 0.006,
+      "p95": 0.216,
+      "p99": 0.216,
+      "max": 0.216,
+      "mean": 0.075,
+      "animais": 0
+    },
+    "salvamento_local_primeiro_registro": {
+      "n": 1,
+      "min": 22.753,
+      "p50": 22.753,
+      "p95": 22.753,
+      "p99": 22.753,
+      "max": 22.753,
+      "mean": 22.753
+    }
+  },
+  "budgets": {
+    "busca_indexada_animal": {
+      "p95": 100
+    },
+    "identificacao_para_peso": {
+      "p95": 100
+    },
+    "salvamento_local": {
+      "p95": 250
+    }
+  },
+  "notes": [
+    "Massa vazia: somente carga inicial e índice foram medidos."
+  ],
+  "finishedAt": "2026-09-08T20:03:26.037Z",
+  "verdict": {
+    "busca_indexada_animal": {
+      "status": "sem-medida"
+    },
+    "identificacao_para_peso": {
+      "status": "sem-medida"
+    },
+    "salvamento_local": {
+      "status": "sem-medida"
+    }
+  },
+  "appVersion": "1.1.17",
+  "wallMs": 64
+}

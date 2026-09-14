@@ -1,0 +1,11 @@
+BANCO DE DADOS LOCAL
+====================
+
+Arquivo: pesagens.json
+
+Voce pode abrir este arquivo com:
+- Bloco de Notas (Windows)
+- Visual Studio Code
+- Qualquer editor de texto
+
+Nao apague esta pasta enquanto usar o sistema.

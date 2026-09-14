@@ -1,0 +1,60 @@
+/**
+ * Cola mínima entre a nossa marcação e o CSS do Cadastro de Empresas.
+ * O estilo em si vem dos arquivos originais do PROJETOMG em src/styles/modelobase1/
+ * (erp-design-system-2030.css, emp-scope.css, erp-responsive.css, erp-scrollbar.css).
+ * Aqui só existe o que o modelo resolve com classes que a nossa marcação não tem.
+ */
+
+/* zebra e hover: agora vêm das classes emp-row-even/odd do próprio modelo */
+
+/* moldura da área rolável da tabela (equivalente ao emp-table-shell do modelo) */
+.cadastro-emp-scope .emp-table-shell {
+  border: 1px solid var(--emp-table-frame-border, #d5dde8);
+  border-radius: var(--erp-radius-control, 8px);
+  background: var(--emp-table-bg, #ffffff);
+  overflow: auto;
+}
+
+/* superfície da página */
+.cadastro-emp-scope {
+  background: var(--background-page, #f5f6fa);
+}
+
+/* alturas/padding do modelo (nossa marcação vem do shadcn com h-10/p-2) */
+.cadastro-emp-scope .emp-table-pro thead th.emp-th {
+  height: var(--emp-table-header-height, 26px) !important;
+  padding: 0 8px !important;
+  line-height: 1.2 !important;
+}
+
+.cadastro-emp-scope .emp-table-pro tbody td.emp-td {
+  height: var(--emp-table-data-height, 26px) !important;
+  padding: 0 8px !important;
+  line-height: 1.2 !important;
+  border-bottom: 1px solid var(--emp-table-line, #d9e1eb) !important;
+}
+
+/* conteúdo do cabeçalho em uma linha só, como no modelo */
+.cadastro-emp-scope .emp-table-pro thead th.emp-th > * {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* botão de menu da coluna — mesmas medidas do modelo (16px / ícone 12px) */
+.cadastro-emp-scope .emp-table-pro thead .emp-th .emp-th-menu-button {
+  width: 16px !important;
+  height: 16px !important;
+  padding: 0 !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  min-height: 0 !important;
+}
+
+.cadastro-emp-scope .emp-table-pro thead .emp-th .emp-th-menu-button__icon,
+.cadastro-emp-scope .emp-table-pro thead .emp-th .emp-th-icon-button__icon {
+  width: 12px !important;
+  height: 12px !important;
+}

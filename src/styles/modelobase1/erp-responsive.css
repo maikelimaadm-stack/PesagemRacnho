@@ -1,0 +1,793 @@
+/**
+ * ERP — Padrão Responsivo Oficial
+ *
+ * DESKTOP  (>1024px): 4–6 campos/linha, cards lado a lado, toolbar completa
+ * TABLET  (641–1024px): máx. 2 campos/linha, cards empilhados
+ * MOBILE  (≤640px): 1–2 campos/linha, rodapé fixo, toolbar responsiva
+ */
+
+/* —— Breadcrumb: desktop = 1 linha; mobile = 2 linhas —— */
+.erp-shell-breadcrumbs__meta {
+  display: none;
+}
+
+.erp-shell-operation-badge--mobile {
+  display: none !important;
+}
+
+.erp-shell-operation-badge--desktop {
+  display: inline-flex;
+}
+
+.cadastro-emp-scope .emp-form-tabs-required-desktop {
+  display: inline-flex;
+}
+
+/* Toolbar desktop: alinhamento e sem barra de rolagem */
+@media (min-width: 1025px) {
+  .cadastro-emp-scope .emp-toolbar-row {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    align-items: center !important;
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-card .emp-toolbar > div {
+    padding-left: var(--erp-toolbar-inner-px, 8px) !important;
+    padding-right: var(--erp-toolbar-inner-px, 8px) !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-actions-primary,
+  .cadastro-emp-scope .emp-toolbar-actions-nav,
+  .cadastro-emp-scope .emp-toolbar-actions-save-mobile {
+    display: flex !important;
+    align-items: center !important;
+    flex-shrink: 0;
+    gap: 6px;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-actions-end {
+    display: flex !important;
+    align-items: center !important;
+    flex: 1 1 auto !important;
+    flex-shrink: 1 !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin-left: auto !important;
+    justify-content: flex-end !important;
+    gap: 6px !important;
+    overflow: hidden !important;
+  }
+
+  /* Desktop: contador após "Mais opções", sem ultrapassar a borda */
+  .cadastro-emp-scope .emp-toolbar-actions-end .emp-toolbar-record-counter {
+    order: 0 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar .emp-toolbar-btn {
+    align-self: center;
+    flex-shrink: 0;
+    box-sizing: border-box !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar .emp-toolbar-btn.emp-toolbar-btn-new {
+    border: 1px solid transparent !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-card {
+    overflow: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar {
+    overflow: hidden !important;
+    max-width: 100% !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-search {
+    flex: 0 1 auto !important;
+    min-width: 0 !important;
+    max-width: 13rem !important;
+    width: auto !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-bubble-counter.emp-bubble-counter,
+  .cadastro-emp-scope .emp-toolbar-record-counter.emp-bubble-counter {
+    max-width: none !important;
+    min-width: 2rem !important;
+    height: var(--erp-toolbar-height) !important;
+    min-height: var(--erp-toolbar-height) !important;
+    padding: 0 8px !important;
+    box-sizing: border-box !important;
+    align-self: center !important;
+    margin: 0 !important;
+    white-space: nowrap !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border-color) !important;
+    font-weight: 400 !important;
+    box-shadow: none !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-bubble-counter .emp-bubble-counter__tail {
+    display: none !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-card .emp-toolbar > div {
+    align-items: center !important;
+  }
+}
+
+/* —— Desktop: largura total e campos legíveis —— */
+@media (min-width: 1025px) {
+  .cadastro-emp-scope .emp-form-fields-corp,
+  .cadastro-emp-scope .emp-form-cards-layout,
+  .cadastro-emp-scope .emp-form-cards-row,
+  .cadastro-emp-scope .emp-form-card-slot,
+  .cadastro-emp-scope .emp-form-fieldset {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .cadastro-emp-scope .emp-form-card-row-grid--flex {
+    flex-wrap: wrap !important;
+    overflow: visible !important;
+  }
+
+  .cadastro-emp-scope .emp-form-field-corp--balanced-grow {
+    flex-shrink: 1 !important;
+  }
+}
+
+/* —— Tablet (≤1024px) —— */
+@media (max-width: 1024px) {
+  .erp-shell {
+    --erp-shell-padding: 12px;
+    --erp-layout-gap: 10px;
+    --erp-card-padding: 8px;
+    --erp-radius-card: 14px;
+  }
+
+  .cadastro-emp-scope {
+    --erp-layout-gap: 10px;
+    --erp-card-padding: 8px;
+    --erp-radius-card: 14px;
+  }
+
+  .cadastro-emp-scope .emp-form-section-principal,
+  .cadastro-emp-scope .emp-form-section-panel:not(.emp-form-section-panel--corp) {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Cards empilhados verticalmente (exceto MG — mantém card meio no tablet/desktop) */
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-cards-row {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-card-slot {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Máximo 2 campos por linha */
+  .cadastro-emp-scope .emp-form-card-row-grid--flex {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+    overflow: visible !important;
+    align-items: start !important;
+  }
+
+  .cadastro-emp-scope .emp-form-fields-corp .emp-form-field-corp {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    flex: unset !important;
+  }
+
+  .cadastro-emp-scope .emp-form-card-row-grid--single {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .cadastro-emp-scope .emp-form-card-row-grid--single > .emp-form-field-corp,
+  .cadastro-emp-scope .emp-form-card-row-grid--flex > .emp-form-field-corp:only-child {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .cadastro-emp-scope .emp-form-card-row-grid--pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .cadastro-emp-scope .emp-form-fields-corp .emp-form-field-corp--textarea,
+  .cadastro-emp-scope .emp-form-fields-corp .emp-form-field-corp--media-inline,
+  .cadastro-emp-scope .emp-form-fields-corp .emp-form-field-corp[data-width-type="CAMPO_PRINCIPAL"],
+  .cadastro-emp-scope .emp-form-fields-corp .emp-form-field-corp[data-width-type="IMAGEM"],
+  .cadastro-emp-scope .emp-form-fields-corp .emp-form-field-corp[data-width-type="ANEXO"],
+  .cadastro-emp-scope .emp-form-fields-corp .emp-form-field-corp[data-width-type="DATA_HORA"] {
+    grid-column: 1 / -1 !important;
+  }
+
+  .cadastro-emp-scope .emp-form-fields.emp-form-fields-compact,
+  .cadastro-emp-scope .emp-form-section-panel .emp-form-fields.emp-form-fields-compact {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .cadastro-emp-scope .emp-form-fields-compact .emp-form-field-span-full {
+    grid-column: 1 / -1 !important;
+  }
+
+  .cadastro-emp-scope .emp-form-tab-list {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .erp-shell-breadcrumbs {
+    flex-wrap: wrap;
+    row-gap: 6px;
+  }
+
+  .erp-shell-operation-badge {
+    margin-left: 0 !important;
+  }
+}
+
+/* —— Mobile (≤640px) —— */
+@media (max-width: 640px) {
+  .erp-shell {
+    --erp-shell-padding: 8px;
+    --erp-layout-gap: 8px;
+    --erp-radius-card: 12px;
+  }
+
+  .cadastro-emp-scope {
+    --erp-toolbar-btn-size: 36px;
+    --erp-layout-gap: 8px;
+    --erp-radius-card: 12px;
+  }
+
+  .erp-shell-header {
+    flex-wrap: wrap;
+    height: auto !important;
+    min-height: 2.5rem;
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+    row-gap: 6px;
+  }
+
+  .erp-shell-header > div:first-child {
+    order: 1;
+  }
+
+  .erp-shell-header > div:nth-child(2) {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .erp-shell-header > div:last-child {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .erp-shell-company-select {
+    min-width: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .erp-shell-header label {
+    display: none;
+  }
+
+  .erp-shell-breadcrumbs {
+    padding-top: 6px !important;
+    padding-bottom: 6px !important;
+  }
+
+  /* Linha 1: menu + submenu + registro — uma linha com reticências */
+  .erp-shell-breadcrumbs__trail {
+    width: 100%;
+    flex-wrap: nowrap !important;
+    overflow: hidden;
+  }
+
+  .erp-shell-breadcrumb-list {
+    flex-wrap: nowrap !important;
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .erp-shell-breadcrumb-pill,
+  .erp-record-meta,
+  .erp-shell-breadcrumbs__trail .erp-info-pill {
+    max-width: 34vw !important;
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .erp-shell-breadcrumbs__meta .erp-shell-operation-badge {
+    max-width: none !important;
+    flex-shrink: 0 !important;
+  }
+
+  .erp-shell-breadcrumbs__meta .erp-shell-operation-badge .erp-info-pill__text {
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: nowrap !important;
+    max-width: none !important;
+  }
+
+  .erp-shell-breadcrumb-list > li:last-child .erp-info-pill,
+  .erp-shell-breadcrumb-list > li:last-child .erp-record-meta {
+    max-width: 42vw !important;
+  }
+
+  .erp-info-pill__text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+
+  .erp-shell-operation-badge--desktop {
+    display: none !important;
+  }
+
+  /* Linha 2: status (editando/novo) + obrigatórios */
+  .erp-shell-breadcrumbs__meta {
+    display: flex !important;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .erp-shell .form-validation-status--inline.erp-info-pill {
+    gap: 12px !important;
+  }
+
+  .erp-shell-operation-badge--mobile {
+    display: inline-flex !important;
+  }
+
+  .cadastro-emp-scope .emp-form-tabs-required-desktop {
+    display: none !important;
+  }
+
+  /* Toolbar: uma linha + scroll horizontal (sem quebra, barra oculta) */
+  .cadastro-emp-scope .emp-toolbar-card .emp-toolbar > div,
+  .cadastro-emp-scope .emp-toolbar-row {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    -webkit-overflow-scrolling: touch;
+    align-items: center;
+    row-gap: 0;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-actions-end {
+    flex-wrap: nowrap !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-actions-save-mobile {
+    display: none !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-separator {
+    display: none !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-btn-labeled span {
+    display: none;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-btn-labeled {
+    width: var(--erp-toolbar-btn-size, 36px) !important;
+    min-width: var(--erp-toolbar-btn-size, 36px) !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+    gap: 0 !important;
+    justify-content: center;
+  }
+
+  /* Busca: sempre visível, sem quebra de linha ao focar */
+  .cadastro-emp-scope .emp-toolbar-search {
+    width: auto !important;
+    min-width: 7.5rem !important;
+    max-width: 9rem !important;
+    flex: 0 0 auto !important;
+    cursor: text;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-search-input {
+    position: static !important;
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 !important;
+    clip: auto !important;
+    overflow: visible !important;
+    opacity: 1 !important;
+    padding-right: 2rem !important;
+    font-size: 16px !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-actions-end {
+    margin-left: auto !important;
+    width: auto !important;
+    flex-wrap: nowrap;
+    gap: 6px !important;
+  }
+
+  /* Até 2 campos por linha no mobile — nunca metade sozinho */
+  .cadastro-emp-scope .emp-form-card-row-grid--flex {
+    display: grid !important;
+    gap: 8px !important;
+    flex-wrap: unset !important;
+  }
+
+  .cadastro-emp-scope .emp-form-card-row-grid--single {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .cadastro-emp-scope .emp-form-card-row-grid--pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .cadastro-emp-scope .emp-form-fields-corp .emp-form-field-corp {
+    flex: unset !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    grid-column: span 1 !important;
+    scroll-margin-bottom: calc(64px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .cadastro-emp-scope .emp-form-card-row-grid--single > .emp-form-field-corp,
+  .cadastro-emp-scope .emp-form-card-row-grid--flex > .emp-form-field-corp:only-child {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .cadastro-emp-scope .emp-form-field-corp--textarea,
+  .cadastro-emp-scope .emp-form-field-corp--media-inline,
+  .cadastro-emp-scope .emp-form-field-corp[class*="--type-textarea"],
+  .cadastro-emp-scope .emp-form-field-corp[class*="--type-image"],
+  .cadastro-emp-scope .emp-form-field-corp[class*="--type-file"],
+  .cadastro-emp-scope .emp-form-field-corp[data-width-type="CAMPO_PRINCIPAL"]:has(.emp-form-textarea-corp),
+  .cadastro-emp-scope .emp-form-field-corp--wide {
+    grid-column: 1 / -1 !important;
+  }
+
+  .cadastro-emp-scope .emp-form-fields.emp-form-fields-compact,
+  .cadastro-emp-scope .emp-form-section-panel .emp-form-fields.emp-form-fields-compact {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .cadastro-emp-scope .emp-form-fields-compact .emp-form-field-column,
+  .cadastro-emp-scope .emp-form-fields-compact .emp-form-field-column-compact,
+  .cadastro-emp-scope .emp-form-fields-compact .emp-form-field-span-full {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Abas com scroll horizontal */
+  .cadastro-emp-scope .emp-form-tabs.emp-form-tabs-launch {
+    align-items: center;
+    overflow: hidden;
+    min-height: 32px;
+  }
+
+  .cadastro-emp-scope .emp-form-tab {
+    padding: 0 10px !important;
+    font-size: 11px !important;
+  }
+
+  .cadastro-emp-scope .form-validation-status,
+  .erp-info-pill {
+    height: 24px !important;
+    padding: 0 10px !important;
+    font-size: 11px !important;
+  }
+
+  /* Cards sempre inteiros (nunca meio card na tela) — exceto MG em mobile (grid próprio) */
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-section-panel--corp,
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-fieldset,
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-cards-layout,
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-cards-row,
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-card-slot,
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-card,
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-card--virtual {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    box-sizing: border-box;
+  }
+
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-cards-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: var(--erp-layout-gap, 8px) !important;
+    overflow-x: hidden !important;
+  }
+
+  .cadastro-emp-scope:not(.mg-empresas-scope) .emp-form-card-slot {
+    flex: 0 0 auto !important;
+    grid-column: unset !important;
+  }
+
+  .cadastro-emp-scope .form-scroll-container,
+  .cadastro-emp-scope .emp-form-fields-corp {
+    overflow-x: hidden !important;
+    max-width: 100% !important;
+  }
+
+  /* Evita zoom automático ao focar campos (iOS) */
+  .cadastro-emp-scope input,
+  .cadastro-emp-scope textarea,
+  .cadastro-emp-scope select,
+  .cadastro-emp-scope .emp-form-input,
+  .cadastro-emp-scope .emp-autocomplete input,
+  .cadastro-emp-scope .erp-field-select-input,
+  .cadastro-emp-scope .erp-field-lookup-input,
+  .cadastro-emp-scope .erp-field-select .erp-field-select-input,
+  .cadastro-emp-scope .erp-select-control input,
+  .cadastro-emp-scope .erp-menu-search-field__input,
+  .cadastro-emp-scope .emp-form-input-no-zoom {
+    font-size: 16px !important;
+  }
+
+  /* Espaço extra para rodapé não tampar campos */
+  .cadastro-emp-scope .form-scroll-container {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px) + 20px) !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .cadastro-emp-scope .emp-form-body,
+  .cadastro-emp-scope .emp-form-panels-zone {
+    padding-bottom: 8px;
+  }
+
+  /* Rodapé fixo — mais suave e baixo */
+  .cadastro-emp-scope .emp-form-mobile-footer {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--mg-mobile-view-bar-height, 56px) + env(safe-area-inset-bottom, 0px));
+    z-index: 90;
+    display: flex;
+    gap: 5px;
+    padding: 4px 8px calc(4px + env(safe-area-inset-bottom, 0px));
+    background: rgba(255, 255, 255, 0.92);
+    border-top: 1px solid rgba(228, 234, 242, 0.85);
+    box-shadow: 0 -1px 4px rgba(15, 23, 42, 0.03);
+    backdrop-filter: blur(4px);
+    pointer-events: auto;
+  }
+
+  .cadastro-emp-scope .emp-form-mobile-footer__btn {
+    flex: 1 1 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 28px !important;
+    min-height: 28px !important;
+    width: auto !important;
+    min-width: 0 !important;
+    padding: 0 10px !important;
+    border-radius: 8px !important;
+    font-size: 11px !important;
+    font-weight: 600 !important;
+    box-shadow: none !important;
+    opacity: 0.96;
+  }
+
+  .cadastro-emp-scope .emp-form-mobile-footer__btn:disabled {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  .cadastro-emp-scope .emp-form-mobile-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--mg-mobile-view-bar-height, 56px) + env(safe-area-inset-bottom, 0px));
+    z-index: 90;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: rgba(255, 255, 255, 0.94);
+    border-top: 1px solid rgba(228, 234, 242, 0.9);
+    box-shadow: 0 -2px 8px rgba(15, 23, 42, 0.05);
+    backdrop-filter: blur(6px);
+  }
+
+  .cadastro-emp-scope .emp-form-mobile-nav__btn {
+    flex: 1 1 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 44px;
+    padding: 0 10px;
+    border-radius: 10px;
+    border: 1px solid rgba(228, 234, 242, 0.95);
+    background: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-1, #0f172a);
+  }
+
+  .cadastro-emp-scope .emp-form-mobile-nav__btn:disabled {
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  .cadastro-emp-scope .emp-form-mobile-nav__counter {
+    flex: 0 0 auto;
+    min-width: 72px;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-2, #64748b);
+    white-space: nowrap;
+  }
+
+  .cadastro-emp-scope:has(.emp-form-mobile-nav) .form-scroll-container,
+  .cadastro-emp-scope:has(.emp-form-mobile-nav) .mg-form-scroll,
+  .cadastro-emp-scope:has(.emp-form-mobile-footer) .form-scroll-container,
+  .cadastro-emp-scope:has(.emp-form-mobile-footer) .mg-form-scroll {
+    padding-bottom: calc(
+      var(--mg-mobile-view-bar-height, 56px) + 72px + env(safe-area-inset-bottom, 0px) + 20px
+    ) !important;
+  }
+
+  .cadastro-emp-scope .emp-table-view,
+  .cadastro-emp-scope .emp-split-view {
+    border-radius: var(--erp-radius-card, 12px) !important;
+  }
+
+  .cadastro-emp-scope .emp-table-body-scroll,
+  .cadastro-emp-scope .emp-table-stage {
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .cadastro-emp-scope .emp-table-panel {
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .erp-shell-logout {
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* Rodapé mobile oculto em desktop/tablet largo */
+.cadastro-emp-scope .emp-form-mobile-footer,
+.cadastro-emp-scope .emp-form-mobile-nav {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .cadastro-emp-scope .emp-form-mobile-footer,
+  .cadastro-emp-scope .emp-form-mobile-nav {
+    display: flex;
+  }
+}
+
+/* —— Mobile UX: alvos de toque, modais, tabelas e overflow —— */
+@media (max-width: 767px) {
+  .cadastro-emp-scope .emp-form-details-panels,
+  .cadastro-emp-scope .emp-form-section-principal,
+  .cadastro-emp-scope .emp-form-section-panel:not(.emp-form-section-panel--corp) {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* Rodapé fixo — altura mínima WCAG 44px */
+  .cadastro-emp-scope .emp-form-mobile-footer {
+    gap: 8px;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .cadastro-emp-scope .emp-form-mobile-footer__btn {
+    min-height: 44px !important;
+    height: 44px !important;
+    font-size: 12px !important;
+    border-radius: 10px !important;
+  }
+
+  /* Paginação — alvos de toque maiores */
+  .cadastro-emp-scope .emp-table-pagination-btn {
+    min-width: 36px !important;
+    min-height: 36px !important;
+    height: 36px !important;
+    max-height: 36px !important;
+  }
+
+  .cadastro-emp-scope .emp-table-pagination-size {
+    min-height: 36px !important;
+    height: 36px !important;
+    max-height: 36px !important;
+  }
+
+  .cadastro-emp-scope .emp-table-pagination-ellipsis {
+    line-height: 36px !important;
+  }
+
+  /* Modais de configuração — largura total em telas pequenas */
+  .cadastro-emp-scope.emp-layout-presets-dialog,
+  .cadastro-emp-scope.emp-config-columns-dialog {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px) !important;
+  }
+
+  .cadastro-emp-scope .emp-campos-config-table-wrap,
+  .cadastro-emp-scope .emp-layout-presets-table-wrap {
+    -webkit-overflow-scrolling: touch;
+    overflow-x: auto !important;
+  }
+
+  /* Toast — não ultrapassar a viewport */
+  .erp-toast-panel {
+    min-width: 0 !important;
+    max-width: min(420px, calc(100vw - 24px)) !important;
+    width: 100% !important;
+  }
+
+  [data-sonner-toaster],
+  [data-sonner-toast] {
+    max-width: calc(100vw - 16px) !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .cadastro-emp-scope .emp-table-pagination {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .cadastro-emp-scope .emp-table-pagination-size {
+    width: auto !important;
+    min-width: 7.5rem !important;
+    flex: 1 1 100%;
+  }
+
+  .cadastro-emp-scope .emp-table-pagination-ellipsis {
+    display: none;
+  }
+}
+
+@media (max-width: 390px) {
+  .erp-shell-breadcrumb-pill,
+  .erp-record-meta,
+  .erp-shell-breadcrumbs__trail .erp-info-pill {
+    max-width: 28vw !important;
+  }
+
+  .cadastro-emp-scope .emp-toolbar-search {
+    min-width: 6rem !important;
+    max-width: 7.5rem !important;
+  }
+}

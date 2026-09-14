@@ -1,0 +1,572 @@
+/* ==========================================================================
+   ERP Scrollbar — fonte oficial única (claro/escuro, global)
+   Aplica em TODAS as áreas roláveis: tabelas, forms, painéis, modais,
+   dropdowns, filtros, cards, sidebars, virtualizados e ErpScrollNav.
+   ========================================================================== */
+
+:root,
+.tema-claro,
+[data-tema="claro"] {
+  /* Valor inteiro evita arredondamento distinto entre Chrome de desenvolvimento
+     e Chromium empacotado pelo Electron (DPI/escala do Windows). */
+  --erp-scrollbar-size: 10px;
+  --erp-scrollbar-thumb: #6a798a;
+  --erp-scrollbar-thumb-hover: #607082;
+  --erp-scrollbar-thumb-active: #566779;
+  --erp-scrollbar-track: #e7ebef;
+  --erp-scrollbar-bg: #e7ebef;
+  --erp-scrollbar-radius: 999px;
+  --erp-scrollbar-min-thumb-size: 24px;
+}
+
+.escuro,
+.tema-escuro,
+[data-tema="escuro"],
+.dark {
+  --erp-scrollbar-thumb: #afbdcb;
+  --erp-scrollbar-thumb-hover: #c0ccd8;
+  --erp-scrollbar-thumb-active: #ced8e1;
+  --erp-scrollbar-track: #2b3440;
+  --erp-scrollbar-bg: #2b3440;
+}
+
+/* Comportamento de rolagem em containers comuns */
+.erp-scrollbar,
+.erp-scroll-nav__viewport,
+.cadastro-emp-scope .form-scroll-container,
+.cadastro-emp-scope .emp-table-body-scroll,
+.cadastro-emp-scope .emp-form-section-panel--corp,
+.cadastro-emp-scope .emp-search-results,
+.mg-empresas-scope .mg-form-scroll,
+.mg-empresas-scope .mg-grid-scroll,
+.mg-empresas-scope .filter-panel__body,
+.mg-empresas-scope .mobile-menu,
+.mg-empresas-scope .mg-search-dropdown__list,
+.mg-empresas-scope .mg-search-dropdown__config-list,
+.mg-empresas-scope .mg-tp-col,
+.mg-empresas-scope .cmd-panel-options,
+.mg-empresas-scope .mg-panel-options,
+.mg-empresas-scope .mg-lookup-list,
+.emp-campos-config-table-wrap,
+.emp-layout-config-available-list,
+.emp-layout-config-panel-body,
+.erp-select-menu__list,
+.erp-search-panel__results,
+.erp-menu-panel [cmdk-list],
+.emp-filter-value-list,
+[data-radix-scroll-area-viewport],
+[data-radix-select-viewport],
+[data-radix-dialog-content],
+[data-sidebar="content"],
+.cadastro-emp-scope :is(.overflow-auto, .overflow-y-auto, .overflow-x-auto, .overflow-scroll),
+.mg-empresas-scope :is(.overflow-auto, .overflow-y-auto, .overflow-x-auto, .overflow-scroll),
+.erp-shell :is(.overflow-auto, .overflow-y-auto, .overflow-x-auto, .overflow-scroll),
+.bos-shell :is(.overflow-auto, .overflow-y-auto, .overflow-x-auto, .overflow-scroll),
+.bos-main,
+html,
+body {
+  overscroll-behavior: contain;
+  scroll-behavior: auto;
+}
+
+/* Firefox / engines sem WebKit: thin remove setas nativas do SO */
+@supports not selector(::-webkit-scrollbar) {
+  html,
+  html *:not(.no-scrollbar):not(.erp-no-scrollbar) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--erp-scrollbar-thumb) var(--erp-scrollbar-track);
+  }
+}
+
+/* Chromium / Safari / Edge — scrollbar customizada completa */
+html:not(.erp-no-scrollbar)::-webkit-scrollbar,
+html:not(.erp-no-scrollbar) *:not(.no-scrollbar):not(.erp-no-scrollbar)::-webkit-scrollbar {
+  width: var(--erp-scrollbar-size) !important;
+  height: var(--erp-scrollbar-size) !important;
+  background: var(--erp-scrollbar-bg) !important;
+  border-radius: var(--erp-scrollbar-radius) !important;
+  padding: 0 !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+html:not(.erp-no-scrollbar) *:not(.no-scrollbar):not(.erp-no-scrollbar)::-webkit-scrollbar-track,
+html:not(.erp-no-scrollbar) *:not(.no-scrollbar):not(.erp-no-scrollbar)::-webkit-scrollbar-track-piece {
+  background: var(--erp-scrollbar-track) !important;
+  border: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: var(--erp-scrollbar-radius) !important;
+  box-shadow: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+html:not(.erp-no-scrollbar) *:not(.no-scrollbar):not(.erp-no-scrollbar)::-webkit-scrollbar-track:vertical {
+  width: var(--erp-scrollbar-size) !important;
+}
+
+html:not(.erp-no-scrollbar) *:not(.no-scrollbar):not(.erp-no-scrollbar)::-webkit-scrollbar-track:horizontal {
+  height: var(--erp-scrollbar-size) !important;
+}
+
+html:not(.erp-no-scrollbar) *:not(.no-scrollbar):not(.erp-no-scrollbar)::-webkit-scrollbar-thumb {
+  background: var(--erp-scrollbar-thumb) !important;
+  border: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: var(--erp-scrollbar-radius) !important;
+  box-shadow: none !important;
+  min-height: var(--erp-scrollbar-min-thumb-size);
+  min-width: var(--erp-scrollbar-min-thumb-size);
+  background-clip: border-box !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+html:not(.erp-no-scrollbar) *:not(.no-scrollbar):not(.erp-no-scrollbar)::-webkit-scrollbar-thumb:hover {
+  background: var(--erp-scrollbar-thumb-hover) !important;
+}
+
+html:not(.erp-no-scrollbar) *:not(.no-scrollbar):not(.erp-no-scrollbar)::-webkit-scrollbar-thumb:active {
+  background: var(--erp-scrollbar-thumb-active) !important;
+}
+
+html:not(.erp-no-scrollbar) *:not(.no-scrollbar):not(.erp-no-scrollbar)::-webkit-scrollbar-corner {
+  background: var(--erp-scrollbar-bg) !important;
+}
+
+/* Remoção total de botões/setas (incremento/decremento) — prioridade máxima */
+html *::-webkit-scrollbar-button,
+html *::-webkit-scrollbar-button:single-button,
+html *::-webkit-scrollbar-button:double-button,
+html *::-webkit-scrollbar-button:start,
+html *::-webkit-scrollbar-button:end,
+html *::-webkit-scrollbar-button:increment,
+html *::-webkit-scrollbar-button:decrement,
+html *::-webkit-scrollbar-button:horizontal,
+html *::-webkit-scrollbar-button:vertical,
+html *::-webkit-scrollbar-button:horizontal:increment,
+html *::-webkit-scrollbar-button:horizontal:decrement,
+html *::-webkit-scrollbar-button:vertical:increment,
+html *::-webkit-scrollbar-button:vertical:decrement,
+html *::-webkit-scrollbar-button:vertical:start:decrement,
+html *::-webkit-scrollbar-button:vertical:end:increment,
+html *::-webkit-scrollbar-button:horizontal:start:decrement,
+html *::-webkit-scrollbar-button:horizontal:end:increment,
+html *::-webkit-scrollbar-button:single-button:vertical:decrement,
+html *::-webkit-scrollbar-button:single-button:vertical:increment,
+html *::-webkit-scrollbar-button:single-button:horizontal:decrement,
+html *::-webkit-scrollbar-button:single-button:horizontal:increment,
+html *::-webkit-scrollbar-button:double-button:vertical:decrement,
+html *::-webkit-scrollbar-button:double-button:vertical:increment,
+html *::-webkit-scrollbar-button:double-button:horizontal:decrement,
+html *::-webkit-scrollbar-button:double-button:horizontal:increment {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-width: 0 !important;
+  max-height: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  background: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+/* Opt-out explícito (uso raro) */
+.erp-no-scrollbar,
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.erp-no-scrollbar::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Radix ScrollArea */
+[data-radix-scroll-area-scrollbar] {
+  display: flex !important;
+  touch-action: none;
+  user-select: none;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background: var(--erp-scrollbar-track) !important;
+  box-shadow: none !important;
+}
+
+[data-radix-scroll-area-scrollbar][data-orientation="vertical"] {
+  width: var(--erp-scrollbar-size) !important;
+}
+
+[data-radix-scroll-area-scrollbar][data-orientation="horizontal"] {
+  height: var(--erp-scrollbar-size) !important;
+}
+
+[data-radix-scroll-area-thumb] {
+  flex: 1 1 auto !important;
+  margin: 0 !important;
+  border: 0 !important;
+  border-radius: var(--erp-scrollbar-radius) !important;
+  background: var(--erp-scrollbar-thumb) !important;
+  box-shadow: none !important;
+}
+
+[data-radix-scroll-area-thumb]:hover {
+  background: var(--erp-scrollbar-thumb-hover) !important;
+}
+
+[data-radix-scroll-area-thumb]:active {
+  background: var(--erp-scrollbar-thumb-active) !important;
+}
+
+/* ==========================================================================
+   ERP Ícones — cor preta em todo o sistema
+   Carregado por último para sobrescrever tokens accent/verde/branco.
+   ========================================================================== */
+
+:root {
+  --mg-ink: #1a1f26;
+  --mg-icon-color: #5b6b80;
+  --mg-icon-on-accent-color: #ffffff;
+  --mg-icon-danger-color: var(--red, #dc2626);
+}
+
+html body svg.lucide,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) svg.lucide,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  button:not(.emp-layout-config-field-action):not(.emp-layout-field-settings-close),
+  a,
+  [role="button"]:not(.emp-layout-config-field),
+  label,
+  span:not(.emp-layout-config-field-status-icons):not(.emp-layout-config-field-actions),
+  div:not(.emp-layout-config-field)
+) svg.lucide,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  .tb-btn-ghost,
+  .tb-btn-icon,
+  .tb-btn-filter,
+  .tb-btn-more,
+  .tb-btn-labeled,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .emp-toolbar-btn,
+  .emp-toolbar-nav-btn,
+  .mg-search-pill,
+  .mg-action-bar,
+  .mg-topbar-icon-btn,
+  .emp-header-filter-icon,
+  .emp-table-fullscreen-btn,
+  .emp-config-restore-btn,
+  .emp-layout-presets-close-icon,
+  .mg-filter-pills-rail__nav,
+  .view-mode-btn,
+  .seg-tab,
+  .erp-sidebar-group-trigger,
+  .mg-desktop-header__logo,
+  .mg-speed-dial__action
+) svg.lucide {
+  color: var(--mg-icon-color) !important;
+  stroke: var(--mg-icon-color) !important;
+}
+
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  button:not(.emp-layout-config-field-action):not(.emp-layout-field-settings-close),
+  a,
+  [role="button"]:not(.emp-layout-config-field)
+):hover:not(:disabled) svg.lucide,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  button:not(.emp-layout-config-field-action):not(.emp-layout-field-settings-close),
+  a,
+  [role="button"]:not(.emp-layout-config-field)
+):focus-visible:not(:disabled) svg.lucide,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  .tb-btn-ghost,
+  .tb-btn-icon,
+  .tb-btn-filter,
+  .tb-btn-more,
+  .mg-nav-btn,
+  .mg-search-pill,
+  .mg-topbar-icon-btn,
+  .emp-header-filter-icon,
+  .mg-filter-pills-rail__nav,
+  .view-mode-btn,
+  .seg-tab
+):hover:not(:disabled) svg.lucide {
+  color: var(--mg-icon-color) !important;
+  stroke: var(--mg-icon-color) !important;
+}
+
+/* Ícones SVG customizados (sem classe lucide) */
+html body .emp-table-fullscreen-btn svg,
+html body .emp-toolbar-search-icon,
+html body .mg-search-pill-icon,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) .emp-table-fullscreen-btn svg,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) .emp-toolbar-search-icon,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) .mg-search-pill-icon {
+  color: var(--mg-icon-color) !important;
+  stroke: var(--mg-icon-color) !important;
+}
+
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(button, a, [role="button"]):hover:not(:disabled) :is(.emp-table-fullscreen-btn svg, .emp-toolbar-search-icon, .mg-search-pill-icon),
+html body .mg-search-pill:focus-within .mg-search-pill-icon {
+  color: var(--mg-icon-color) !important;
+  stroke: var(--mg-icon-color) !important;
+}
+
+/* Fundo verde — botões com ícone + e ações primárias */
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  .tb-btn-green,
+  .tb-btn-blue,
+  .emp-toolbar-btn-new,
+  .emp-toolbar-btn-save,
+  .emp-config-anexos-attach-btn
+) {
+  background: var(--mg-brand-green, #40de63) !important;
+  border-color: transparent !important;
+  color: #ffffff !important;
+}
+
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  .tb-btn-green,
+  .tb-btn-blue,
+  .emp-toolbar-btn-new,
+  .emp-toolbar-btn-save,
+  .emp-config-anexos-attach-btn
+):hover:not(:disabled) {
+  background: var(--mg-brand-green-hover, #36c956) !important;
+}
+
+/* Branco — ícones em botões coloridos, checkbox marcado e toasts */
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  .tb-btn-green,
+  .tb-btn-blue,
+  .tb-btn-red,
+  .emp-toolbar-btn-new,
+  .emp-toolbar-btn-save,
+  .emp-config-anexos-attach-btn
+) svg.lucide,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  .tb-btn-green,
+  .tb-btn-blue,
+  .tb-btn-red,
+  .emp-toolbar-btn-new,
+  .emp-toolbar-btn-save,
+  .emp-config-anexos-attach-btn
+):hover:not(:disabled) svg.lucide,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) [role="checkbox"][data-state="checked"]:not(.emp-form-toggle-switch) svg.lucide,
+html body .emp-filter-checkbox[data-state="checked"] svg.lucide,
+html body .erp-toast-panel__icon-badge svg.lucide,
+html body .erp-toast-panel__icon-badge svg,
+html body [data-sonner-toast] .erp-toast-panel__icon-badge svg.lucide,
+html body [data-sonner-toast] .erp-toast-panel__icon-badge svg {
+  color: var(--mg-icon-on-accent-color) !important;
+  stroke: var(--mg-icon-on-accent-color) !important;
+}
+
+/* Branco obrigatório — qualquer botão com ícone de + */
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  button,
+  a,
+  [role="button"]
+) :is(svg.lucide-plus, svg[data-lucide="plus"]) {
+  color: var(--mg-icon-on-accent-color) !important;
+  stroke: var(--mg-icon-on-accent-color) !important;
+}
+
+/* Fundo verde obrigatório — qualquer botão com ícone de + */
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  button,
+  a,
+  [role="button"]
+):has(:is(svg.lucide-plus, svg[data-lucide="plus"])):not(:disabled) {
+  background: var(--mg-brand-green, #40de63) !important;
+  border-color: transparent !important;
+  color: var(--mg-icon-on-accent-color) !important;
+}
+
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  button,
+  a,
+  [role="button"]
+):has(:is(svg.lucide-plus, svg[data-lucide="plus"])):not(:disabled):hover,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  button,
+  a,
+  [role="button"]
+):has(:is(svg.lucide-plus, svg[data-lucide="plus"])):not(:disabled):focus-visible {
+  background: var(--mg-brand-green-hover, #36c956) !important;
+}
+
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  button,
+  a,
+  [role="button"]
+) svg.lucide-plus,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  button,
+  a,
+  [role="button"]
+):hover:not(:disabled) svg.lucide-plus,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  button,
+  a,
+  [role="button"]
+):focus-visible:not(:disabled) svg.lucide-plus {
+  color: var(--mg-icon-on-accent-color) !important;
+  stroke: var(--mg-icon-on-accent-color) !important;
+}
+
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) [role="checkbox"][data-state="checked"]:not(.emp-form-toggle-switch),
+html body .emp-filter-checkbox[data-state="checked"] {
+  background-color: var(--mg-brand-green, #40de63) !important;
+  border-color: var(--mg-brand-green, #40de63) !important;
+  color: var(--mg-icon-on-accent-color) !important;
+}
+
+/* Branco obrigatório — ícones de checkbox marcado (claro/escuro) */
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) [role="checkbox"][data-state="checked"]:not(.emp-form-toggle-switch) :is(svg, svg.lucide),
+html body .emp-filter-checkbox[data-state="checked"] :is(svg, svg.lucide),
+html.tema-escuro .cadastro-emp-scope [role="checkbox"][data-state="checked"]:not(.emp-form-toggle-switch) :is(svg, svg.lucide),
+html.tema-escuro .cadastro-emp-scope .emp-filter-checkbox[data-state="checked"] :is(svg, svg.lucide),
+html.tema-escuro .emp-filter-checkbox[data-state="checked"] :is(svg, svg.lucide),
+html.escuro .cadastro-emp-scope [role="checkbox"][data-state="checked"]:not(.emp-form-toggle-switch) :is(svg, svg.lucide),
+html.escuro .cadastro-emp-scope .emp-filter-checkbox[data-state="checked"] :is(svg, svg.lucide),
+html.escuro .emp-filter-checkbox[data-state="checked"] :is(svg, svg.lucide) {
+  color: var(--mg-icon-on-accent-color) !important;
+  stroke: var(--mg-icon-on-accent-color) !important;
+}
+
+/* Checkboxes de listas/configurações — selecionado com fundo verde + ícone branco */
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  .mg-cards-config-menu__check.is-checked,
+  .mg-cards-config-menu__check.is-indeterminate,
+  .mg-cards-config-menu__check--radio.is-checked
+) {
+  background: var(--mg-brand-green, #40de63) !important;
+  border-color: var(--mg-brand-green, #40de63) !important;
+}
+
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  .mg-cards-config-menu__check.is-checked .mg-cards-config-menu__check-icon,
+  .mg-cards-config-menu__check.is-indeterminate .mg-cards-config-menu__check-icon
+) {
+  color: var(--mg-icon-on-accent-color) !important;
+  stroke: var(--mg-icon-on-accent-color) !important;
+}
+
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell)
+  .mg-cards-config-menu__check--radio.is-checked
+  .mg-cards-config-menu__radio-dot {
+  background: var(--mg-icon-on-accent-color) !important;
+}
+
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) input[type="checkbox"] {
+  accent-color: var(--mg-brand-green, #40de63) !important;
+}
+
+/* Vermelho — ícones de excluir/lixeira e limpar filtros (botões neutros, não fundo sólido vermelho) */
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  .tb-btn-ghost.tb-btn-danger,
+  .tb-btn-danger.tb-btn-labeled,
+  .tb-btn-danger.tb-btn-icon:not(.tb-btn-green),
+  .emp-toolbar-btn-delete,
+  .emp-config-anexos-remove-btn,
+  .emp-config-plain-icon-btn,
+  .mg-filter-pills-rail__config.is-clear-active
+) svg.lucide,
+html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
+  .tb-btn-ghost.tb-btn-danger,
+  .tb-btn-danger.tb-btn-labeled,
+  .tb-btn-danger.tb-btn-icon:not(.tb-btn-green),
+  .emp-toolbar-btn-delete,
+  .emp-config-anexos-remove-btn,
+  .emp-config-plain-icon-btn,
+  .mg-filter-pills-rail__config.is-clear-active
+):hover:not(:disabled) svg.lucide,
+html body .mg-action-bar :is(.tb-btn-ghost.tb-btn-danger, .tb-btn-danger) svg.lucide,
+html body .mg-action-bar :is(.tb-btn-ghost.tb-btn-danger, .tb-btn-danger):hover:not(:disabled) svg.lucide {
+  color: var(--mg-icon-danger-color) !important;
+  stroke: var(--mg-icon-danger-color) !important;
+}
+
+/* Configurador de layout — ícones brancos nos campos coloridos (neutraliza regras globais acima) */
+html body :is(.cadastro-emp-scope, .mg-empresas-scope).emp-layout-configurator
+  :is(
+    .emp-layout-config-field,
+    .emp-layout-config-field-action,
+    .emp-layout-config-field-status-icons,
+    .emp-layout-config-field-actions
+  )
+  svg.lucide,
+html body :is(.cadastro-emp-scope, .mg-empresas-scope).emp-layout-configurator
+  .emp-layout-config-field:is(:hover, :focus, :focus-within, :active)
+  svg.lucide,
+html body :is(.cadastro-emp-scope, .mg-empresas-scope).emp-layout-configurator
+  .emp-layout-config-field-action:is(:hover, :focus, :focus-visible, :active)
+  svg.lucide {
+  color: var(--mg-icon-on-accent-color, #ffffff) !important;
+  stroke: var(--mg-icon-on-accent-color, #ffffff) !important;
+}
+
+/* Configurador de layout — mesmo arredondamento dos campos de lançamento (8px) */
+html body :is(.cadastro-emp-scope, .mg-empresas-scope).emp-layout-configurator
+  :is(
+    .emp-layout-config-field,
+    .emp-layout-config-field-required,
+    .emp-layout-config-field-optional,
+    .emp-layout-config-field-panel,
+    .emp-layout-config-field-available,
+    .emp-layout-config-field-available-item
+  ) {
+  border-radius: var(--mg-radius-control, 8px) !important;
+  overflow: hidden;
+}
+
+/* Popover de configuração do campo — ícone fechar branco no header colorido */
+html body .emp-layout-field-settings-popover
+  :is(.emp-layout-config-field-required, .emp-layout-config-field-optional)
+  .emp-layout-field-settings-close,
+html body .emp-layout-field-settings-popover
+  :is(.emp-layout-config-field-required, .emp-layout-config-field-optional)
+  .emp-layout-field-settings-close:is(:hover, :focus-visible, :active),
+html body .emp-layout-field-settings-popover
+  :is(.emp-layout-config-field-required, .emp-layout-config-field-optional)
+  .emp-layout-field-settings-close
+  svg.lucide,
+html body .emp-layout-field-settings-popover
+  :is(.emp-layout-config-field-required, .emp-layout-config-field-optional)
+  .emp-layout-field-settings-close:is(:hover, :focus-visible, :active)
+  svg.lucide {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
+
+/* Ícones de status nos campos — bloqueado, oculto, limpar ao duplicar (sempre brancos) */
+html body .cadastro-emp-scope.mg-empresas-scope.emp-layout-configurator
+  .emp-layout-config-field-status-icons
+  :is(svg.lucide, .emp-layout-config-field-status-icon),
+html body .cadastro-emp-scope.mg-empresas-scope.emp-layout-configurator
+  .emp-layout-config-field
+  .emp-layout-config-field-status-icons
+  :is(svg.lucide, .emp-layout-config-field-status-icon),
+html body .cadastro-emp-scope.mg-empresas-scope.emp-layout-configurator
+  .emp-layout-config-field-status-icons
+  span {
+  color: #ffffff !important;
+  stroke: #ffffff !important;
+}
