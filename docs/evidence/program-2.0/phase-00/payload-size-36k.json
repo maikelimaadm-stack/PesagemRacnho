@@ -1,0 +1,88 @@
+{
+  "massKey": "36k",
+  "measuredAt": "2026-09-14T22:02:21.411Z",
+  "pesagens": {
+    "rows": 36000,
+    "rowBytes": {
+      "n": 36000,
+      "min": 1125,
+      "mean": 1136,
+      "p50": 1136,
+      "p95": 1140,
+      "max": 1143,
+      "total": 40889701
+    },
+    "payloadBytes": {
+      "n": 36000,
+      "min": 715,
+      "mean": 723,
+      "p50": 723,
+      "p95": 728,
+      "max": 731,
+      "total": 26044807
+    },
+    "payloadShareOfRow": 0.637,
+    "payloadKeys": {
+      "n": 36000,
+      "min": 28,
+      "mean": 28,
+      "p50": 28,
+      "p95": 28,
+      "max": 28,
+      "total": 1008000
+    },
+    "keyFrequency": {
+      "id": 36000,
+      "empresa_id": 36000,
+      "tipo_manejo": 36000,
+      "motivo_saida": 36000,
+      "status_animal": 36000,
+      "data_pesagem": 36000,
+      "animal_id": 36000,
+      "sessao_id": 36000,
+      "numero_animal": 36000,
+      "sexo": 36000,
+      "raca": 36000,
+      "era": 36000,
+      "marca": 36000,
+      "peso": 36000,
+      "observacao": 36000,
+      "apartacao_id": 36000,
+      "nome_apartacao": 36000,
+      "lote_id": 36000,
+      "nome_lote": 36000,
+      "origem": 36000,
+      "operador": 36000,
+      "created_date": 36000,
+      "updated_date": 36000,
+      "data_anterior": 36000,
+      "peso_anterior": 36000,
+      "dias": 36000,
+      "ganho": 36000,
+      "gmd": 36000
+    }
+  },
+  "editGrowth": {
+    "sampleId": "75d5e73d-ab10-4e9e-8af2-854bdc0f96e6",
+    "keysBefore": 28,
+    "keysAfter": 29,
+    "addedKeys": [
+      "peso_kg"
+    ],
+    "payloadBytesBefore": 725,
+    "payloadBytesAfter": 753
+  },
+  "auditoria": {
+    "rowsAfterOneEdit": 1,
+    "rowBytes": {
+      "n": 1,
+      "min": 2550,
+      "mean": 2550,
+      "p50": 2550,
+      "p95": 2550,
+      "max": 2550,
+      "total": 2550
+    },
+    "estimatedBytesPerEdit": 2550
+  }
+}
