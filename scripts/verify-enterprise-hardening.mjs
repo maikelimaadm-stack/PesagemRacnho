@@ -65,7 +65,7 @@ assert.ok(await db.table('auditoria').count() >= 3, 'operações devem possuir t
 
 await weighingService.createEntry({ id: 'saida-animal', animal_id: 'animal-1', tipo_manejo: 'Saída', motivo_saida: 'Venda', numero_animal: '1', marca: 'A', data_pesagem: '2026-05-01', peso: 280 });
 let canonicalAnimal = await db.table('animais').where('id').equals('animal-1').first();
-assert.equal(canonicalAnimal.situacao, 'Inativo', 'saída definitiva deve atualizar a projeção canônica do animal');
+assert.equal(canonicalAnimal.situacao, 'VENDIDO', 'saída definitiva por venda deve atualizar a projeção canônica do animal (enum v7, ADR-028)');
 assert.equal(canonicalAnimal.data_saida, '2026-05-01');
 await assert.rejects(
   weighingService.createEntry({ id: 'apos-saida', animal_id: 'animal-1', tipo_manejo: 'Manejo', numero_animal: '1', marca: 'A', data_pesagem: '2026-06-01', peso: 290 }),
@@ -74,7 +74,7 @@ await assert.rejects(
 );
 await weighingService.deleteEntry('saida-animal');
 canonicalAnimal = await db.table('animais').where('id').equals('animal-1').first();
-assert.equal(canonicalAnimal.situacao, 'Ativo', 'cancelar a saída deve reconstruir a situação atual pelo histórico restante');
+assert.equal(canonicalAnimal.situacao, 'ATIVO', 'cancelar a saída deve reconstruir a situação atual pelo histórico restante (enum v7)');
 
 const indexedPeriod = await storage.weighing.listByPeriodo({ animalId: 'animal-1', dataInicial: '2026-02-01', dataFinal: '2026-04-30' });
 assert.deepEqual(indexedPeriod.map((row) => row.id).sort(), ['final', 'retroativa'], 'consulta indexada deve respeitar animal e intervalo inclusivo');

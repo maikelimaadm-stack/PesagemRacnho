@@ -11,15 +11,28 @@ import {
   X,
 } from "lucide-react";
 import { createPageUrl } from "@/utils";
+import UserMenu from "@/components/auth/UserMenu";
+import { APP_VERSION } from "@/versioning/versionInfo";
 import ModeloBase1Tokens from "../foundations/ModeloBase1Tokens";
 import "./modelo-base1-shell.css";
 
-function ShellNav({ items, location, onNavigate, mobile = false }) {
-  const groups = [
-    { label: "Operação", items: items.filter((item) => item.group === "operacao" || !item.group) },
-    { label: "Cadastros", items: items.filter((item) => item.group === "cadastros") },
-    { label: "Sistema", items: items.filter((item) => item.group === "sistema") },
-  ];
+// Grupos padrão do menu (docs 10 §3). O Layout pode passar  com a ordem
+// e os rótulos; itens sem grupo caem no primeiro. Grupos vazios não aparecem.
+const DEFAULT_NAV_GROUPS = [
+  { id: "operacao", label: "Operação" },
+  { id: "rebanho", label: "Rebanho" },
+  { id: "comercial", label: "Comercial" },
+  { id: "cadastros", label: "Cadastros" },
+  { id: "sistema", label: "Sistema" },
+];
+const GROUP_LABELS = Object.fromEntries(DEFAULT_NAV_GROUPS.map((group) => [group.id, group.label]));
+
+function ShellNav({ items, location, onNavigate, mobile = false, navGroups = DEFAULT_NAV_GROUPS }) {
+  const firstGroupId = navGroups[0]?.id;
+  const groups = navGroups.map((group) => ({
+    label: group.label,
+    items: items.filter((item) => item.group === group.id || (!item.group && group.id === firstGroupId)),
+  }));
 
   return (
     <nav className={`mb1-shell-nav${mobile ? " mb1-shell-nav--mobile" : ""}`} aria-label="Navegação principal">
@@ -59,20 +72,26 @@ function ShellIdentity({ compact = false }) {
   );
 }
 
-export default function ModeloBase1AppShell({ children, navItems }) {
+/**
+ * Shell do ModeloBase1. `navItems` chega já filtrado por permissão pelo Layout
+ * (doc 11 §4): o shell só renderiza o que recebe, sem decidir acesso.
+ * O menu do usuário (UserMenu) fica na topbar do desktop e, no celular, dentro
+ * do menu lateral; ele devolve null sem sessão (capturas e gates não quebram).
+ */
+export default function ModeloBase1AppShell({ children, navItems, navGroups = DEFAULT_NAV_GROUPS }) {
   const location = useLocation();
   const [desktopMenuOpen, setDesktopMenuOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem("erp-tema") === "escuro");
   const [breadcrumbDetail, setBreadcrumbDetail] = useState("");
   const activeItem = useMemo(
-    () => navItems.find((item) => location.pathname === createPageUrl(item.url)) || navItems[0],
+    () => navItems.find((item) => location.pathname === createPageUrl(item.url)) || navItems[0] || null,
     [location.pathname, navItems],
   );
   const isWeighingLaunch = location.pathname === createPageUrl("LancamentoPesagensIndividuais");
   const isAnimalSheet = location.pathname === createPageUrl("FichaAnimal");
   const isOperationalInsight = isAnimalSheet || location.pathname === createPageUrl("FechamentoDia");
-  const activeGroupLabel = activeItem.group === "cadastros" ? "Cadastros" : activeItem.group === "sistema" ? "Sistema" : "Operação";
+  const activeGroupLabel = (navGroups.find((group) => group.id === activeItem?.group) || navGroups[0] || { label: GROUP_LABELS.operacao }).label;
 
   useEffect(() => {
     const onDetail = (event) => setBreadcrumbDetail(String(event.detail || ""));
@@ -135,7 +154,7 @@ export default function ModeloBase1AppShell({ children, navItems }) {
                 <ChevronRight aria-hidden="true" />
               </>
             ) : null}
-            <strong>{isAnimalSheet && breadcrumbDetail ? breadcrumbDetail : activeItem.longTitle}</strong>
+            <strong>{isAnimalSheet && breadcrumbDetail ? breadcrumbDetail : activeItem?.longTitle}</strong>
           </div>
 
           {isWeighingLaunch ? (
@@ -152,7 +171,7 @@ export default function ModeloBase1AppShell({ children, navItems }) {
           {desktopMenuOpen ? (
             <aside className="mb1-floating-sidebar is-open">
               <ShellIdentity />
-              <ShellNav items={navItems} location={location} onNavigate={() => setDesktopMenuOpen(false)} />
+              <ShellNav items={navItems} location={location} onNavigate={() => setDesktopMenuOpen(false)} navGroups={navGroups} />
               <div className="mb1-floating-sidebar__footer">
                 <Database aria-hidden="true" />
                 <div><strong>Dados locais</strong><span>IndexedDB · Dexie</span></div>
@@ -162,9 +181,10 @@ export default function ModeloBase1AppShell({ children, navItems }) {
         </div>
 
         <div className="mb1-desktop-topbar__status">
+          <UserMenu />
           {!isOperationalInsight ? themeToggle : null}
           <span className="mb1-shell-offline"><CloudOff aria-hidden="true" /> Offline</span>
-          <span className="mb1-shell-product-mark" aria-label="Pesagens Individuais">PI</span>
+          <span className="mb1-shell-product-mark" aria-label={`Pesagens Individuais ${APP_VERSION}`} title={`Pesagens Individuais · versão ${APP_VERSION}`}>PI</span>
         </div>
       </header>
 
@@ -180,7 +200,7 @@ export default function ModeloBase1AppShell({ children, navItems }) {
         </button>
         <ShellIdentity compact />
         {themeToggle}
-        <span className="mb1-mobile-local">Local</span>
+        <span className="mb1-mobile-local" title={`Versão ${APP_VERSION}`}>Local</span>
       </header>
 
       <div className="mb1-shell-content">
@@ -197,7 +217,8 @@ export default function ModeloBase1AppShell({ children, navItems }) {
                 <X aria-hidden="true" />
               </button>
             </div>
-            <ShellNav items={navItems} location={location} onNavigate={() => setMobileMenuOpen(false)} mobile />
+            <ShellNav items={navItems} location={location} onNavigate={() => setMobileMenuOpen(false)} mobile navGroups={navGroups} />
+            <UserMenu variant="panel" />
           </aside>
         </div>
       ) : null}

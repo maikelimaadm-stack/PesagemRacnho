@@ -58,7 +58,7 @@ export default function FechamentoDia() {
   }), [catalog, date, apartacaoId]);
 
   const session = catalog.sessoes.find((item) => item.data === date && !item.deleted_at);
-  const isClosed = session?.status === 'Fechada';
+  const isClosed = session?.status === 'FECHADA' || session?.status === 'Fechada';
   useEffect(() => { setJustified(new Set(session?.justificativas || [])); }, [date, session?.id, session?.updated_at]);
   const totalWeight = rows.reduce((sum, row) => sum + (Number(row.peso) || 0), 0);
   const uniqueAnimals = new Set(rows.map(animalKey).filter(Boolean)).size;

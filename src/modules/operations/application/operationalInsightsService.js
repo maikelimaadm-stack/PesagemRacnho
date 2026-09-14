@@ -19,7 +19,7 @@ export async function closeWeighingDay(date, { operator = 'LOCAL', justification
   const timestamp = new Date().toISOString();
   if (existing) {
     return storage.sessoesPesagem.update(existing.id, {
-      status: 'Fechada',
+      status: 'FECHADA',
       operador: existing.operador || operator,
       fim: timestamp,
       justificativas: justifications,
@@ -27,7 +27,7 @@ export async function closeWeighingDay(date, { operator = 'LOCAL', justification
   }
   return storage.sessoesPesagem.create({
     data: date,
-    status: 'Fechada',
+    status: 'FECHADA',
     operador: operator,
     inicio: timestamp,
     fim: timestamp,
@@ -38,5 +38,5 @@ export async function closeWeighingDay(date, { operator = 'LOCAL', justification
 export async function reopenWeighingDay(date) {
   const existing = (await storage.sessoesPesagem.list({ data: date }))[0];
   if (!existing) throw new Error('Não existe sessão de pesagem para essa data.');
-  return storage.sessoesPesagem.update(existing.id, { status: 'Aberta', fim: null });
+  return storage.sessoesPesagem.update(existing.id, { status: 'ABERTA', fim: null });
 }

@@ -54,7 +54,7 @@ import { isFutureCivilDate, parseBrazilianNumber, parseCivilDate } from "@/modul
 import { calculateCarcassTrade, normalizeCarcassYield } from "@/modules/weighing/domain/commercialCalculations";
 import { evaluateWeighingWarnings } from "@/modules/weighing/domain/weighingWarnings";
 import { buildWeightPreview } from "@/components/pesagens/weightPreview";
-import { loadRegistryGroup } from "@/modules/auxiliary/application/registryService";
+import { loadAuxiliaryCatalogs } from "@/modules/auxiliary/application/legacyCatalogBridge";
 const formatarData = fmtDateBR;
 const n = fmtNum;
 const m = fmtCurrency;
@@ -234,11 +234,8 @@ export default function LancamentoPesagensIndividuais() {
   }, [empresaSelecionadaId]);
 
   useEffect(() => {
-    Promise.all([
-      loadRegistryGroup('comerciais', empresaSelecionadaId),
-      loadRegistryGroup('mortalidade', empresaSelecionadaId),
-    ])
-      .then(([comerciais, mortalidade]) => setAuxiliaryCatalogs({ ...comerciais, ...mortalidade }))
+    loadAuxiliaryCatalogs(empresaSelecionadaId)
+      .then(setAuxiliaryCatalogs)
       .catch((error) => toast.error(error.message || 'Não foi possível carregar os cadastros auxiliares.'));
   }, [empresaSelecionadaId]);
 

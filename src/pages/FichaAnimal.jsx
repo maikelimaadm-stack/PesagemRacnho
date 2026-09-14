@@ -46,7 +46,7 @@ function buildProfiles(catalog) {
       sex: animal.sexo || registration.sexo || latest.sexo || '—',
       race: animal.raca || registration.raca || latest.raca || '—',
       era: animal.era || registration.era || latest.era || '—',
-      status: animal.situacao || latest.status_animal || (latest.tipo_manejo === 'Saída' ? 'Inativo' : 'Ativo'),
+      status: animal.situacao || latest.status_animal || (latest.tipo_manejo === 'Saída' ? 'INATIVO' : 'ATIVO'),
       lot: latest.nome_lote || '—',
       apartacao: latest.nome_apartacao || '—',
     };
@@ -147,7 +147,7 @@ export default function FichaAnimal() {
     <main className="op-screen" aria-label="Ficha do Animal">
       <div className="op-toolbar op-toolbar--animal">
         <label className="op-field" style={{ width: 260 }}><Search /><input value={query} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)} placeholder="Brinco, nome ou marca" aria-label="Buscar animal" />{searchOpen && <div className="op-search-results">{results.map((profile) => <button className="op-search-result" type="button" key={profile.key} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(profile)}><span>{profile.number}</span><span className="op-pill">{profile.brand}</span><small>{profile.sex} · {profile.race}</small></button>)}{!results.length && <div className="op-empty">Nenhum animal encontrado.</div>}</div>}</label>
-        <div className="op-animal-heading"><div className="op-animal-heading__line"><strong>{selected.number}</strong><span className="op-pill">{selected.brand}</span><span className={`op-pill ${selected.status === 'Ativo' ? 'op-pill--active' : ''}`}>{selected.status}</span></div><span className="op-animal-heading__meta">{selected.sex} · {selected.race} · {selected.era} · {selected.lot} · {selected.apartacao}</span></div>
+        <div className="op-animal-heading"><div className="op-animal-heading__line"><strong>{selected.number}</strong><span className="op-pill">{selected.brand}</span><span className={`op-pill ${['ATIVO', 'Ativo'].includes(selected.status) ? 'op-pill--active' : ''}`}>{selected.status}</span></div><span className="op-animal-heading__meta">{selected.sex} · {selected.race} · {selected.era} · {selected.lot} · {selected.apartacao}</span></div>
         <div className="op-toolbar-actions"><button className="op-button" type="button" onClick={exportHistory}>Exportar histórico</button><button className="op-button op-button--primary" type="button" onClick={() => navigate('/LancamentoPesagensIndividuais')}>Lançar pesagem</button></div>
       </div>
 

@@ -178,6 +178,28 @@ assert.match(auxiliaryRegistryCss, /div\.mg-view-panel\.emp-table-root\.emp-tabl
 assert.match(auxiliaryRegistry, /const requiredFormFields = formPrimaryFields\.filter[\s\S]{0,220}filledRequiredFields/, 'contador de obrigatórios considera também o tipo do novo cadastro');
 assert.match(auxiliaryRegistry, /checked=\{allPageSelected\}[\s\S]{0,300}pageKeys/, 'seleção geral atua somente sobre os registros listados na página atual');
 assert.match(deathCausesPage, /newLabel:\s*'Nova causa de morte'/, 'novo cadastro de causa usa concordância correta no painel de contexto');
+
+// Programa 2.0 — Fase 1 (TARGET-SCREEN-MAP §5): telas novas na Tela Mãe/registro do ModeloBase1.
+for (const page of ['Marcas', 'Racas', 'Categorias', 'Parceiros', 'Propriedades', 'CausasMorte']) {
+  const source = readFileSync(join(root, `src/pages/${page}.jsx`), 'utf8');
+  assert.match(source, /<CadastroAuxiliarPage /, `${page} usa a página genérica de cadastro do ModeloBase1`);
+}
+assert.doesNotMatch(auxiliaryRegistry, /registryService/, 'cadastros não dependem mais do registry em appSettings (ADR-018)');
+assert.ok(!existsSync(join(root, 'src/pages/ConfiguracoesSanidade.jsx')), 'tela de sanidade removida (ADR-022)');
+assert.ok(!existsSync(join(root, 'src/pages/CadastrosComerciais.jsx')), 'cadastros comerciais migraram para Parceiros (ADR-024)');
+const settingsPage = readFileSync(join(root, 'src/pages/Configuracoes.jsx'), 'utf8');
+assert.match(settingsPage, /<RequirePermission permission="settings\.manage">/, 'Configurações exige settings.manage');
+assert.match(settingsPage, /FormCard/, 'Configurações usa o padrão registro (FormCard)');
+const usersPage = readFileSync(join(root, 'src/pages/Usuarios.jsx'), 'utf8');
+assert.match(usersPage, /users\.manage/, 'Usuários exige users.manage');
+assert.match(usersPage, /mg-action-bar/, 'Usuários usa a barra de ações do ModeloBase1');
+const layoutSource = readFileSync(join(root, 'src/Layout.jsx'), 'utf8');
+assert.match(layoutSource, /permission: "registry\.read"/, 'menu de cadastros declara permissão');
+assert.match(layoutSource, /RequirePermission/, 'Layout protege a página pela permissão do item');
+const shellSource = readFileSync(join(root, 'src/components/modelobase1/layout/ModeloBase1AppShell.jsx'), 'utf8');
+assert.match(shellSource, /<UserMenu/, 'topbar monta o menu do usuário');
+assert.match(shellSource, /navGroups/, 'grupos do menu são declarados pelo Layout');
+
 console.log('OK verify-ui-consistency');
 console.log(JSON.stringify({
   whiteHoverRemoved: true,

@@ -9,19 +9,31 @@ const PesagensIndividuais = lazy(() => import('./pages/PesagensIndividuais'));
 const ManutencaoSistema = lazy(() => import('./pages/ManutencaoSistema'));
 const FechamentoDia = lazy(() => import('./pages/FechamentoDia'));
 const FichaAnimal = lazy(() => import('./pages/FichaAnimal'));
-const CadastrosComerciais = lazy(() => import('./pages/CadastrosComerciais'));
+// Cadastros mestres (Programa 2.0 · ADR-018)
+const Marcas = lazy(() => import('./pages/Marcas'));
+const Racas = lazy(() => import('./pages/Racas'));
+const Categorias = lazy(() => import('./pages/Categorias'));
+const Parceiros = lazy(() => import('./pages/Parceiros'));
+const Propriedades = lazy(() => import('./pages/Propriedades'));
 const CausasMorte = lazy(() => import('./pages/CausasMorte'));
-const ConfiguracoesSanidade = lazy(() => import('./pages/ConfiguracoesSanidade'));
+// Sistema (ADR-035/036)
+const Usuarios = lazy(() => import('./pages/Usuarios'));
+const Configuracoes = lazy(() => import('./pages/Configuracoes'));
 
 export const PAGES = {
     "LancamentoPesagensIndividuais": LancamentoPesagensIndividuais,
     "PesagensIndividuais": PesagensIndividuais,
-    "ManutencaoSistema": ManutencaoSistema,
     "FechamentoDia": FechamentoDia,
     "FichaAnimal": FichaAnimal,
-    "CadastrosComerciais": CadastrosComerciais,
+    "Marcas": Marcas,
+    "Racas": Racas,
+    "Categorias": Categorias,
+    "Parceiros": Parceiros,
+    "Propriedades": Propriedades,
     "CausasMorte": CausasMorte,
-    "ConfiguracoesSanidade": ConfiguracoesSanidade,
+    "Usuarios": Usuarios,
+    "Configuracoes": Configuracoes,
+    "ManutencaoSistema": ManutencaoSistema,
 }
 
 export const pagesConfig = {

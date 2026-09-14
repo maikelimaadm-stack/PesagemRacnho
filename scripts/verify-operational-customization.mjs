@@ -24,7 +24,7 @@ const resumos = [
   { id: 'r1', label: 'Peso total', field: 'peso', operation: 'sum', scope: 'dia' },
   { id: 'r2', label: 'Peso por arroba', field: 'peso', operation: 'ratio', divisorField: 'quantidade_arrobas', scope: 'venda' },
 ];
-// Mesma chave/shape que registryService.saveRegistryGroup grava (o módulo usa o alias '@' e não roda em Node).
+// Chave legada do registry (apagada pelo passo B11 da migração v7); a persistência de appSettings continua válida.
 await setSetting('cadastros-auxiliares:comerciais:empresa-teste', comerciais);
 await setSetting('resumo-personalizado:empresa-teste', resumos);
 resetDbForTests();
@@ -37,7 +37,7 @@ assert.deepEqual(await getSetting('resumo-personalizado:empresa-teste'), resumos
 
 const launch = readFileSync(join(root, 'src/pages/LancamentoPesagensIndividuais.jsx'), 'utf8');
 assert.doesNotMatch(launch, /GerenciarSaidasDialog/, 'o popup legado de perfis de venda/abate não deve voltar ao lançamento');
-assert.match(launch, /loadRegistryGroup\('comerciais'/, 'lançamento carrega compradores/vendedores/frigoríficos do registry');
+assert.match(launch, /loadAuxiliaryCatalogs\(/, 'lançamento carrega compradores/vendedores/frigoríficos da ponte de cadastros mestres (stores v7)');
 assert.match(launch, /auxiliaryCatalogs\.compradores[\s\S]{0,200}<SelectItem/, 'comprador da venda é selecionado do cadastro, não digitado');
 assert.match(launch, /auxiliaryCatalogs\.frigorificos[\s\S]{0,200}<SelectItem/, 'frigorífico do abate é selecionado do cadastro, não digitado');
 assert.match(launch, /auxiliaryCatalogs\.vendedores[\s\S]{0,200}<SelectItem/, 'vendedor da compra é selecionado do cadastro, não digitado');
