@@ -3,102 +3,134 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
-## [Não lançado] — Tela Mãe do ModeloBase1 na Relação e nos cadastros (14/09/2026)
+## [1.1.18] — 2026-09-14
 
-### Alterado
-- Relação de Pesagens e cadastros auxiliares (Parceiros, Mortalidade, Sanidade)
-  passam a usar a Tela Mãe do Cadastro de Empresas do PROJETOMG-main: barra de
-  ações `mg-action-bar` (Filtrar, ação principal, Editar/Excluir da seleção;
-  pesquisa expansível com lista de resultados e "Buscar todos"; modos de
-  visualização; menu "Mais opções" com Atualizar, exportar, importar, modelo e
-  configuração de colunas), faixa `mg-table-panel-strip` com uma pílula de filtro
-  por coluna e o botão de configurar colunas, e painel lateral `filter-panel`
-  (260 px, campos rotulados por coluna, seleções e datas, Limpar/Aplicar).
-- Cadastros auxiliares ganharam configuração de colunas (ordem e visibilidade
-  guardadas por grupo) e pílulas de filtro por coluna, antes limitadas ao tipo.
-- Componentes portados do modelo para `src/components/mak/`: `MgFilterPanel`,
-  `MgDesktopSearch`, `MgSearchResultsDropdown`, `MgSpeedDialMenu`,
-  `MgTablePanelStrip`, `MgCmdSelect`, `MgPortalPanel`, `useMgPanelPosition`,
-  `mgSearchHighlight`. Bloco `D.17D.2R34` no `d17b-modelobase1.css` compõe a
-  página; os estilos dos componentes já existiam em `mg-layout.css`.
-- Contratos R34 em `ui:consistency:verify` protegem a estrutura das duas telas.
-- Pesquisa expansível corrigida após revisão: a barra passa a usar os 28 px do
-  modelo e o campo dentro da pílula deixa de herdar fundo, altura de 38 px, raio
-  e anel de foco dos inputs globais; a abertura não depende mais de
-  `requestAnimationFrame` (aba sem pintura não travava mais a pílula fechada).
+Marco 1.1.18 do Programa Master de Evolução (ADR-047): baseline verde, contrato de
+versão e governança. **Sem esquema novo** — Dexie 6 e backup formato 2 inalterados.
+Instalador não gerado neste marco; teste físico NÃO EXECUTADO.
 
-### Verificado
-- Referência renderizada do ModeloBase1 real (Cadastro de Empresas com API
-  simulada) em `docs/evidence/modelobase1-referencia/`; capturas das telas
-  portadas em `docs/evidence/modelobase1-relacao-2026-09-14/` e
-  `docs/evidence/modelobase1-cadastros-2026-09-14/`.
-
-## [Não lançado] — Design "Lançamento de Pesagens" (Claude Design, 09/09/2026)
-
-### Alterado
-- Revisão R33: a tabela da tela de lançamento voltou a reutilizar o contrato
-  visual da tabela Pesagens Individuais — cabeçalho, linhas, tipografia, cores,
-  grade, zebra e modo escuro — preservando apenas os dados próprios da tela.
-- Revisão R32: o campo Data do lançamento e o botão do calendário agora formam
-  uma única superfície contínua, sem divisor interno, sombra duplicada ou troca
-  de fundo no hover, tanto no tema claro quanto no escuro.
-- Revisão R31 refeita diretamente sobre o HTML final de 09/09/2026: controles
-  com 28 px, faixa operacional com 32 px, contornos verdes suaves, valores de
-  identificação/peso em âmbar, ganho em verde, alerta em âmbar, tabela e painel
-  lateral na proporção 3:1 e rodapé de 44 px.
-- A visualização inicial passou a reproduzir as 14 colunas do modelo (as demais
-  continuam disponíveis no configurador). Configurações da versão anterior são
-  migradas uma vez para esse padrão, sem alterar registros de pesagem.
-- A prévia do ganho aceita decimal e data brasileiros, ignora lançamentos
-  futuros/mesmo dia e não conta o peso ainda não salvo como pesagem histórica.
-- O campo composto Peso usa uma única borda de foco suave; corrigidos conflitos
-  antigos que deixavam os títulos da faixa azuis e os rótulos de ganho escuros.
-- Ações Editar e Excluir da tabela são exibidas somente por texto.
-- Tela de Lançamento de Pesagens alinhada ao design `Lançamento de Pesagens.dc.html`
-  do projeto Claude Design (`formulario-escopo`): malha única de nove colunas
-  iguais nas linhas de campos e de Apartação/Transferência para todos os tipos
-  de movimentação; indicação automática do lote ocupa três colunas como pílula;
-  ações redondas da barra com fundo branco e borda `#d8dde5`; campo de
-  identificação com borda verde translúcida; tabela em 12 px com cabeçalho
-  `#17243a`/`#dfe5eb`, linhas de 26 px `#5f6f82`/`#e5e9ee` e zebrado `#fafbfc`;
-  coluna Tipo em texto simples; rodapé com rótulos `#6b7280` e marcas em pílulas
-  de 10 px; painel Distribuição de Lotes com título 12 px, seletor Dia/Total em
-  pílula verde, contexto centralizado e tabela 9 px/10 px.
-- Bloco `D.17D.2R29` no `d17b-modelobase1.css` concentra a paridade, com
-  variantes de modo escuro; contratos `ui:consistency:verify` atualizados
-  (lote em três colunas, resumos em 10 px) e novas verificações R29.
-
-### Verificado
-- Estilos computados conferidos no navegador (1440 px, claro e escuro) e
-  capturas em `docs/evidence/design-lancamento-2026-09-09/`.
-
-## [Não lançado] — F0 Contratos e baseline
-
-### Adicionado
-- Massa de teste anônima e determinística (`src/modules/perf/testMass.js`) nos
-  tamanhos vazia, pequena, 36 mil e 250 mil pesagens, no formato das stores
-  Dexie, com `npm run perf:testmass`.
-- Bench de baseline (`src/modules/perf/baselineBench.js`) que mede p50/p95/p99
-  de carga inicial, índice de animais, identificação → peso, busca indexada por
-  animal e por período, salvamento local e recarga após salvar; roda em Node
-  (`npm run perf:baseline`) e no navegador/Electron (IndexedDB real).
-- Captura visual das três telas em tema claro e escuro com massa pequena e
-  userData isolado (`npm run evidence:screens`).
-- Contrato `perf:contract:verify` incluído em `test:quick` e `test:full`.
+### Added
+- Contrato de versão em quatro eixos (`src/versioning/versionInfo.js`): `APP_VERSION`,
+  `DB_SCHEMA_VERSION` (= 6), `BACKUP_FORMAT_VERSION` (= 2), `RELEASE_MANIFEST_VERSION`
+  (= 2), marcadores `UI_CONTRACT_VERSION` (`ModeloBase1-R34`), `DATA_CONTRACT_VERSION`
+  (1), `DATA_BUILD_ID` (`schema-v6`), `BUILD_INFO` (commit e instante do build via
+  `__BUILD_INFO__` do Vite) e `describeVersions()`.
+- Gate `release:version-contract:verify` (`scripts/verify-version-contract.mjs`), incluído
+  em `test:quick` e `test:full` logo após `release:current-only:verify`: package.json =
+  package-lock = fallback de `appVersion.js`; notas e checklist da versão presentes;
+  CHANGELOG com bloco datado e sem "Não lançado"; nenhum Setup ou manifesto de outra
+  versão em `release/`/`release-unsigned/`; `RELEASE_MANIFEST_VERSION` único. Inclui
+  `--self-test` com fixtures positivas e negativas em pasta temporária.
+- Manutenção › Status do banco › **Versões**: Aplicativo, Esquema do banco, Formato do
+  backup, Manifesto, Build (commit · data) e Contrato UI/dados; "Copiar diagnóstico"
+  inclui os mesmos campos.
+- Documentos de engenharia: `docs/engineering/VERSIONING.md`, `RELEASE-POLICY.md` e
+  `AUTH-THREAT-MODEL.md` (o que o login local de 1.2.0 protege e o que não protege).
+- ADR-041 a ADR-048 (DEC-023 a DEC-030), contratos 10–14 em revisão 2 e
+  `docs/evidence/STATE-OF-REPO-BEFORE.md` incorporados à árvore do marco; evidências em
+  `docs/evidence/s00-baseline-recovery/` e `docs/evidence/s00-versioning-auth-contract/`.
+- Repositório Git inicializado em 14/09/2026 com a tag `v1.1.17-baseline` (commit
+  `77eeb3b`) como ponto de partida imutável do programa.
+- Massa de teste anônima e determinística (`src/modules/perf/testMass.js`) nos tamanhos
+  vazia, pequena, 36 mil e 250 mil pesagens, no formato das stores Dexie
+  (`npm run perf:testmass`).
+- Bench de baseline (`src/modules/perf/baselineBench.js`) com p50/p95/p99 de carga
+  inicial, índice de animais, identificação → peso, busca indexada por animal e por
+  período, salvamento local e recarga; roda em Node (`npm run perf:baseline`) e no
+  navegador/Electron. Contrato `perf:contract:verify` em `test:quick` e `test:full`.
+- Captura visual das três telas em tema claro e escuro com massa pequena e userData
+  isolado (`npm run evidence:screens`).
 - Documentos F0: mapa de campos atual → modelo-alvo, catálogo de fórmulas com
   divergências D1–D7 e status da fase em `docs/arquitetura-produto/`.
+- Referência renderizada do ModeloBase1 real em `docs/evidence/modelobase1-referencia/`;
+  capturas das telas portadas em `docs/evidence/modelobase1-relacao-2026-09-14/` e
+  `docs/evidence/modelobase1-cadastros-2026-09-14/`; estilos computados e capturas do
+  design de Lançamento em `docs/evidence/design-lancamento-2026-09-09/`; baseline de
+  desempenho em `docs/evidence/f0-baseline/` e `docs/evidence/program-2.0/phase-00/`.
 
-### Corrigido
+### Changed
+- `release-manifest.json` passa ao formato 2: `releaseManifestVersion`, `appVersion`
+  (mantido `version` para compatibilidade), `dbSchemaVersion`, `backupFormatVersion`,
+  `uiBuildId`, `dataBuildId`, `uiContract`, `dataContract`, `gitCommit`, `buildTimestamp`,
+  `platform`, `arch`, `installer{file,sha256,sizeBytes,builtAt}`, `signed` (sempre
+  `false` até Authenticode), `distribution` e `features`. O gerador exporta
+  `buildReleaseManifest`/`writeReleaseManifest` para teste.
+- `backupService.js` importa `BACKUP_FORMAT_VERSION` de `versionInfo.js` em vez de
+  declarar a constante localmente (valor 2; comportamento e formato idênticos).
+- `vite.config.js` define `__BUILD_INFO__` (commit curto via `git rev-parse`, com
+  fallback `null`, e `buildTimestamp` ISO).
+- `.gitignore` ancora `/release/` e `/release-unsigned/` na raiz para que
+  `docs/release/<versão>/` seja rastreado pelo git.
+- Relação de Pesagens e cadastros auxiliares (Parceiros, Mortalidade, Sanidade) passam a
+  usar a Tela Mãe do Cadastro de Empresas do PROJETOMG-main: barra de ações
+  `mg-action-bar` (Filtrar, ação principal, Editar/Excluir da seleção; pesquisa
+  expansível com lista de resultados e "Buscar todos"; modos de visualização; menu "Mais
+  opções" com Atualizar, exportar, importar, modelo e configuração de colunas), faixa
+  `mg-table-panel-strip` com uma pílula de filtro por coluna e o botão de configurar
+  colunas, e painel lateral `filter-panel` (260 px, campos rotulados por coluna, seleções
+  e datas, Limpar/Aplicar).
+- Cadastros auxiliares ganharam configuração de colunas (ordem e visibilidade guardadas
+  por grupo) e pílulas de filtro por coluna, antes limitadas ao tipo.
+- Componentes portados do modelo para `src/components/mak/`: `MgFilterPanel`,
+  `MgDesktopSearch`, `MgSearchResultsDropdown`, `MgSpeedDialMenu`, `MgTablePanelStrip`,
+  `MgCmdSelect`, `MgPortalPanel`, `useMgPanelPosition`, `mgSearchHighlight`. Bloco
+  `D.17D.2R34` no `d17b-modelobase1.css` compõe a página; os estilos dos componentes já
+  existiam em `mg-layout.css`. Contratos R34 em `ui:consistency:verify` protegem a
+  estrutura das duas telas.
+- Revisão R33: a tabela da tela de lançamento voltou a reutilizar o contrato visual da
+  tabela Pesagens Individuais — cabeçalho, linhas, tipografia, cores, grade, zebra e modo
+  escuro — preservando apenas os dados próprios da tela.
+- Revisão R32: o campo Data do lançamento e o botão do calendário formam uma única
+  superfície contínua, sem divisor interno, sombra duplicada ou troca de fundo no hover,
+  nos temas claro e escuro.
+- Revisão R31 refeita sobre o HTML final de 09/09/2026 (`Lançamento de Pesagens.dc.html`,
+  projeto Claude Design `formulario-escopo`): controles com 28 px, faixa operacional com
+  32 px, contornos verdes suaves, valores de identificação/peso em âmbar, ganho em verde,
+  alerta em âmbar, tabela e painel lateral na proporção 3:1 e rodapé de 44 px; malha única
+  de nove colunas iguais nas linhas de campos e de Apartação/Transferência; indicação
+  automática do lote em pílula de três colunas; ações redondas da barra com fundo branco e
+  borda `#d8dde5`; tabela em 12 px com cabeçalho `#17243a`/`#dfe5eb`, linhas de 26 px e
+  zebrado `#fafbfc`; painel Distribuição de Lotes com seletor Dia/Total em pílula verde.
+  Bloco `D.17D.2R29` no `d17b-modelobase1.css` concentra a paridade, com variantes de
+  modo escuro; contratos `ui:consistency:verify` atualizados.
+- A visualização inicial do lançamento reproduz as 14 colunas do modelo (as demais
+  continuam no configurador). Configurações da versão anterior são migradas uma vez para
+  esse padrão, sem alterar registros de pesagem.
+- Ações Editar e Excluir da tabela de lançamento são exibidas somente por texto.
+
+### Fixed
+- Gates `ui:operational-customization:verify` e `ui:consistency:verify` (vermelhos na
+  tag `v1.1.17-baseline`) realinhados ao contrato real do código, sem alterar código de
+  produto (commit `8c79022`): o Lançamento seleciona compradores, vendedores e
+  frigoríficos do registry e não usa mais `GerenciarSaidasDialog`; a alternância
+  Registro/Tabela é validada por estrutura (`.view-seg`, slider, `VIEW_MODES`, rótulos
+  acessíveis), não por sintaxe de template literal. `test:quick` volta a 20/20 (21/21 com
+  o gate de versão).
 - `main:boot:verify` voltou a passar: o stub do Electron em Node não definia
-  `process.resourcesPath`, e o caminho do ícone empacotado (`main.cjs`)
-  derrubava a verificação de boot desde a 1.1.16.
+  `process.resourcesPath`, e o caminho do ícone empacotado (`main.cjs`) derrubava a
+  verificação de boot desde a 1.1.16.
+- Pesquisa expansível da Tela Mãe: a barra usa os 28 px do modelo e o campo dentro da
+  pílula deixa de herdar fundo, altura de 38 px, raio e anel de foco dos inputs globais; a
+  abertura não depende mais de `requestAnimationFrame` (aba sem pintura não trava mais a
+  pílula fechada).
+- A prévia do ganho aceita decimal e data brasileiros, ignora lançamentos futuros/mesmo dia
+  e não conta o peso ainda não salvo como pesagem histórica.
+- O campo composto Peso usa uma única borda de foco suave; corrigidos conflitos antigos
+  que deixavam os títulos da faixa azuis e os rótulos de ganho escuros.
 
-### Verificado
-- `npm run test:quick` integral (19 gates) aprovado com os novos contratos.
-- Baseline registrado em `docs/evidence/f0-baseline/`. Busca indexada e
-  identificação → peso ficam dentro do orçamento; o salvamento local sai do
-  orçamento a partir de 36 mil registros porque o recálculo da série relê a
-  base inteira (divergência D3, alvo da F1).
+### Removed
+- Nenhuma funcionalidade removida. O popup legado `GerenciarSaidasDialog` continua no
+  repositório sem uso pelo Lançamento; sua remoção está prevista para o marco 1.4.0
+  (ADR-031).
+
+### Migration
+- Nenhuma — esquema Dexie 6 e backup formato 2 inalterados. Backups de 1.1.16/1.1.17
+  restauram sem conversão; nenhum dado é regravado.
+
+### Security
+- Nenhuma alteração; login local previsto para 1.2.0 (ADR-041…046). O modelo de ameaças
+  já está documentado em `docs/engineering/AUTH-THREAT-MODEL.md`. Distribuição oficial
+  continua bloqueada sem certificado Authenticode; nenhum pacote foi gerado neste marco.
 
 ## [1.1.16] — 2026-09-04
 

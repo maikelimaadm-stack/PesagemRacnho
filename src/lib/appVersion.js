@@ -2,4 +2,4 @@
 // ferramentas de migração independentes do bundler.
 export const APP_VERSION = typeof __APP_VERSION__ !== 'undefined'
   ? __APP_VERSION__
-  : '1.1.16';
+  : '1.1.18';
