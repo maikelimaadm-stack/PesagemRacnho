@@ -1,13 +1,15 @@
-// Sessão autenticada (ADR-035): estado em memória + espelho em sessionStorage
-// ('pesagens.auth.session') para sobreviver à recarga da janela, não ao fechamento do app.
-// Registra o provedor de ator da auditoria (storage/indexedDb/auditActor.js).
+// Sessão autenticada (ADR-045): estado em memória + espelho em sessionStorage
+// ('pesagens.auth.session') SOMENTE para a recarga técnica do renderer — nunca em
+// localStorage, nunca sobrevive ao fechamento do app. Sem senha nem token.
+// Registra o provedor de ator da auditoria (storage/indexedDb/auditActor.js):
+// () => { id, nome, role } | null.
 import { setActorProvider } from '../../../storage/indexedDb/auditActor.js';
 
 export const SESSION_STORAGE_KEY = 'pesagens.auth.session';
 export const TOUCH_THROTTLE_MS = 30000;
-export const DEFAULT_INACTIVITY_MINUTES = 60;
+export const DEFAULT_INACTIVITY_MINUTES = 30; // auth-policy.inactivity_lock_minutes (0 desliga)
 
-let state = null; // { userId, nome, perfil, loginAt, lastActivityAt, locked }
+let state = null; // { userId, nome, login, role, loginAt, lastActivityAt, locked }
 let inactivityMinutes = DEFAULT_INACTIVITY_MINUTES;
 let clock = () => Date.now();
 const listeners = new Set();
@@ -31,28 +33,39 @@ function persist() {
   }
 }
 
-function emit() {
+function emit(reason) {
   const snapshot = getSession();
   for (const listener of listeners) {
-    try { listener(snapshot); } catch { /* ouvinte não pode derrubar a sessão */ }
+    try { listener(snapshot, reason); } catch { /* ouvinte não pode derrubar a sessão */ }
   }
 }
 
-function commit(next) {
+function commit(next, reason) {
   state = next;
   persist();
-  emit();
+  emit(reason);
 }
 
-setActorProvider(() => (state
-  ? { actor_user_id: state.userId, actor_user_name: state.nome, actor_user_profile: state.perfil }
-  : null));
+/** Ator para o storage/auditoria: { id, nome, role } ou null (sem sessão). */
+export function getSessionActor() {
+  return state ? { id: state.userId, nome: state.nome, role: state.role } : null;
+}
 
-/** Inicia a sessão após autenticação bem-sucedida. */
-export function startSession({ id, nome, perfil }) {
+setActorProvider(getSessionActor);
+
+/** Inicia a sessão após autenticação bem-sucedida. Aceita { id, nome, login, role } (ou perfil, rev. 1). */
+export function startSession({ id, nome, login, role, perfil }) {
   if (!id) throw new Error('Sessão exige o id do usuário.');
   const now = new Date(clock()).toISOString();
-  commit({ userId: String(id), nome: nome || '', perfil: perfil || null, loginAt: now, lastActivityAt: now, locked: false });
+  commit({
+    userId: String(id),
+    nome: nome || '',
+    login: login || '',
+    role: role || perfil || null,
+    loginAt: now,
+    lastActivityAt: now,
+    locked: false,
+  }, 'login');
   return getSession();
 }
 
@@ -68,9 +81,15 @@ export function isLocked() {
   return Boolean(state?.locked);
 }
 
-/** Ator para os serviços ({ id, nome, perfil }) ou null. */
-export function getSessionActor() {
-  return state ? { id: state.userId, nome: state.nome, perfil: state.perfil } : null;
+/** Ressincroniza nome/papel/login com o banco (após restaurar a sessão ou editar o usuário). */
+export function updateSessionUser({ nome, login, role } = {}) {
+  if (!state) return null;
+  const next = { ...state };
+  if (nome !== undefined) next.nome = nome || '';
+  if (login !== undefined) next.login = login || '';
+  if (role !== undefined) next.role = role || null;
+  commit(next, 'update');
+  return getSession();
 }
 
 /** Atualiza lastActivityAt com throttle de 30 s (force ignora o throttle). */
@@ -109,21 +128,27 @@ export function checkInactivity() {
 
 export function lock() {
   if (!state || state.locked) return;
-  commit({ ...state, locked: true });
+  commit({ ...state, locked: true }, 'lock');
 }
 
 /** Chamar somente após verificar a senha do mesmo usuário. */
 export function unlock() {
   if (!state) return;
-  commit({ ...state, locked: false, lastActivityAt: new Date(clock()).toISOString() });
+  commit({ ...state, locked: false, lastActivityAt: new Date(clock()).toISOString() }, 'unlock');
 }
 
 export function logout() {
   if (!state) return;
-  commit(null);
+  commit(null, 'logout');
 }
 
-/** Recupera a sessão espelhada após recarga da janela. */
+/** Trocar usuário: encerra a sessão atual e volta ao login (o motivo chega aos assinantes). */
+export function switchUser() {
+  if (!state) return;
+  commit(null, 'switch-user');
+}
+
+/** Recupera a sessão espelhada após recarga da janela (o AuthGate a ressincroniza com o banco). */
 export function restoreSession() {
   const store = storage();
   if (!store) return null;
@@ -138,19 +163,20 @@ export function restoreSession() {
     state = {
       userId: String(parsed.userId),
       nome: parsed.nome || '',
-      perfil: parsed.perfil || null,
+      login: parsed.login || '',
+      role: parsed.role || parsed.perfil || null,
       loginAt: parsed.loginAt || new Date(clock()).toISOString(),
       lastActivityAt: parsed.lastActivityAt || new Date(clock()).toISOString(),
       locked: Boolean(parsed.locked),
     };
-    emit();
+    emit('restore');
     return getSession();
   } catch {
     return null;
   }
 }
 
-/** Ouve mudanças da sessão (login, bloqueio, saída). Devolve a função de cancelamento. */
+/** Ouve mudanças da sessão: listener(snapshot | null, reason). Devolve a função de cancelamento. */
 export function subscribe(listener) {
   if (typeof listener !== 'function') return () => {};
   listeners.add(listener);

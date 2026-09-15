@@ -1,9 +1,9 @@
-// Hash de senha local (ADR-035): PBKDF2-SHA256 via Web Crypto, sem módulo nativo.
-// Funciona no renderer (Electron/Chromium) e no Node 24 dos gates (globalThis.crypto.subtle).
-// Contrato: docs/arquitetura-produto/11-AUTENTICACAO-LOCAL.md §2.1.
+// Hash de senha local (ADR-043): PBKDF2-HMAC-SHA-256 via Web Crypto, sem módulo nativo.
+// Funciona no renderer (Electron/Chromium) e no Node dos gates (globalThis.crypto.subtle).
+// Contrato: docs/arquitetura-produto/11-AUTENTICACAO-LOCAL.md §3 (passwordHasher.js).
+import { PASSWORD_ALGORITHM, PASSWORD_VERSION, PBKDF2_ITERATIONS, getPasswordIterations } from './passwordPolicy.js';
 
-export const PASSWORD_ALGORITHM = 'PBKDF2-SHA256';
-export const PBKDF2_ITERATIONS = 310000;
+export { PASSWORD_ALGORITHM, PASSWORD_VERSION, PBKDF2_ITERATIONS };
 export const SALT_BYTES = 16;
 export const HASH_BYTES = 32;
 
@@ -34,10 +34,10 @@ export function fromBase64(text) {
   return bytes;
 }
 
-async function deriveBits(password, saltBytes, iteracoes) {
-  const key = await subtle().importKey('raw', textEncoder.encode(password), 'PBKDF2', false, ['deriveBits']);
+export async function deriveBits(secret, saltBytes, iterations) {
+  const key = await subtle().importKey('raw', textEncoder.encode(secret), 'PBKDF2', false, ['deriveBits']);
   const bits = await subtle().deriveBits(
-    { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes, iterations: iteracoes },
+    { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes, iterations },
     key,
     HASH_BYTES * 8,
   );
@@ -55,29 +55,41 @@ export function constantTimeEqual(a, b) {
 }
 
 /**
- * Gera o registro de senha: { algoritmo, salt (base64), iteracoes, hash (base64) }.
- * `iteracoes` só existe para testes rápidos; o serviço fixa PBKDF2_ITERATIONS.
+ * Gera o registro de senha: { algorithm, salt (base64), iterations, hash (base64), version }.
+ * `iterations` só existe para testes; o serviço usa getPasswordIterations() (política).
  */
-export async function hashPassword(password, { iteracoes = PBKDF2_ITERATIONS, salt } = {}) {
+export async function hashPassword(password, { iterations = getPasswordIterations(), salt } = {}) {
   if (typeof password !== 'string' || !password.length) throw new TypeError('Senha inválida para hash.');
-  const iterations = Number(iteracoes);
-  if (!Number.isInteger(iterations) || iterations < 1) throw new TypeError('Número de iterações inválido.');
+  const count = Number(iterations);
+  if (!Number.isInteger(count) || count < 1) throw new TypeError('Número de iterações inválido.');
   const saltBytes = salt ? fromBase64(salt) : randomBytes(SALT_BYTES);
-  const hash = await deriveBits(password, saltBytes, iterations);
-  return { algoritmo: PASSWORD_ALGORITHM, salt: toBase64(saltBytes), iteracoes: iterations, hash: toBase64(hash) };
+  const hash = await deriveBits(password, saltBytes, count);
+  return { algorithm: PASSWORD_ALGORITHM, salt: toBase64(saltBytes), iterations: count, hash: toBase64(hash), version: PASSWORD_VERSION };
+}
+
+/** Converte o registro do hasher nos campos persistidos da store `usuarios`. */
+export function toPasswordFields(record) {
+  return {
+    password_hash: record.hash,
+    password_salt: record.salt,
+    password_algorithm: record.algorithm,
+    password_iterations: record.iterations,
+    password_version: record.version,
+  };
 }
 
 /**
- * Confere a senha contra um registro { hash, salt, iteracoes } ou contra a linha
- * persistida { senha_hash, senha_salt, senha_iteracoes }. Nunca lança por dado ausente: devolve false.
+ * Confere a senha contra { hash, salt, iterations, algorithm } ou contra a linha
+ * persistida { password_hash, password_salt, password_iterations, password_algorithm }.
+ * Nunca lança por dado ausente: devolve false.
  */
 export async function verifyPassword(password, record) {
   if (typeof password !== 'string' || !record) return false;
-  const hash = record.hash ?? record.senha_hash;
-  const salt = record.salt ?? record.senha_salt;
-  const iteracoes = Number(record.iteracoes ?? record.senha_iteracoes);
-  const algoritmo = record.algoritmo ?? record.senha_algoritmo ?? PASSWORD_ALGORITHM;
-  if (!hash || !salt || !Number.isInteger(iteracoes) || iteracoes < 1 || algoritmo !== PASSWORD_ALGORITHM) return false;
+  const hash = record.hash ?? record.password_hash;
+  const salt = record.salt ?? record.password_salt;
+  const iterations = Number(record.iterations ?? record.password_iterations);
+  const algorithm = record.algorithm ?? record.password_algorithm ?? PASSWORD_ALGORITHM;
+  if (!hash || !salt || !Number.isInteger(iterations) || iterations < 1 || algorithm !== PASSWORD_ALGORITHM) return false;
   let expected;
   let saltBytes;
   try {
@@ -86,6 +98,21 @@ export async function verifyPassword(password, record) {
   } catch {
     return false;
   }
-  const actual = await deriveBits(password, saltBytes, iteracoes);
+  const actual = await deriveBits(password, saltBytes, iterations);
   return constantTimeEqual(actual, expected);
+}
+
+/**
+ * Registro fictício FIXO usado quando o login não existe ou está inativo: o serviço
+ * executa verifyPassword contra ele antes de responder AUTH_INVALID, para que o tempo
+ * de resposta não revele se o login existe (oráculo de tempo). Nenhuma senha real
+ * corresponde a este hash (hash arbitrário, não derivado de senha).
+ */
+export function dummyPasswordRecord(iterations = getPasswordIterations()) {
+  return {
+    hash: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+    salt: 'cGVzYWdlbnMtZHVtbXktc2FsdA==', // "pesagens-dummy-salt" fixo
+    iterations,
+    algorithm: PASSWORD_ALGORITHM,
+  };
 }

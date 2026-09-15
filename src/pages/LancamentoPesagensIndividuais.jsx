@@ -31,7 +31,6 @@ import {
 "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import ComboboxComNovo from "../components/pesagens/ComboboxComNovo";
 import ConfigurarResumosDialog from "../components/pesagens/ConfigurarResumosDialog";
 import ResumoPersonalizado from "../components/pesagens/ResumoPersonalizado";
 import { getSetting, setSetting } from "@/modules/settings/application/settingsService";
@@ -52,13 +51,29 @@ import { deleteEntriesRespectingHistory, propagateAnimalProfile } from "@/module
 import { fmtCurrency, fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
 import { isFutureCivilDate, parseBrazilianNumber, parseCivilDate } from "@/modules/weighing/domain/brazilianValues";
 import { calculateCarcassTrade, normalizeCarcassYield } from "@/modules/weighing/domain/commercialCalculations";
-import { evaluateWeighingWarnings } from "@/modules/weighing/domain/weighingWarnings";
+import { DEFAULT_WEIGHT_WARNING_POLICY, evaluateWeighingWarnings } from "@/modules/weighing/domain/weighingWarnings";
 import { buildWeightPreview } from "@/components/pesagens/weightPreview";
 import { loadAuxiliaryCatalogs } from "@/modules/auxiliary/application/legacyCatalogBridge";
+import { brandService, breedService, categoryService } from "@/modules/catalog/application/index";
+import { normalizeName } from "@/modules/catalog/domain/normalize";
+import { RENDIMENTO_ORIGEM_INFORMADO, RENDIMENTO_ORIGEM_PADRAO_EMPRESA, formatRendimento, loadOperationalPolicies, resolveDefaultRegistry } from "@/modules/operations/application/operationalPolicies";
+import { getAnimalRecord } from "@/modules/operations/application/operationalInsightsService";
+import { suggestCategory } from "@/modules/operations/domain/categorySuggestion";
 const formatarData = fmtDateBR;
 const n = fmtNum;
 const m = fmtCurrency;
-const criarConfiguracaoPadraoMovimentacao = () => ({ sexo: "M", raca: "Nelore", era: "", marca: "", apartacaoSelecionada: "", loteTransferencia: "", mostrarSequenciaBrinco: false, mostrarDadosCompra: false, valorPagoCabeca: "", origemAnimal: "", numeroGTA: "", numeroNFeCompra: "", valorFreteCompra: "", observacoesCompra: "", motivoSaida: "", causaMorte: "", mostrarDadosVenda: false, comprador: "", valorVendaTotal: "", valorArroba: "", rendimentoCarcacaVenda: "50", destinoVenda: "", numeroGTAVenda: "", numeroNFeVenda: "", valorFreteVenda: "", observacoesVenda: "", mostrarDadosAbate: false, frigorifico: "", valorArrobaAbate: "", rendimentoCarcacaAbate: "50", valorTotalAbate: "", numeroGTAAbate: "", observacoesAbate: "", embarqueSelecionadoDoc: "", documentoSelecionado: "" });
+// Padrões da empresa (marca/raça/apartação/rendimento) vêm da configuração e dos
+// cadastros mestres; nunca de valores fixos no código (ADR-025, S-01.5).
+const PADROES_VAZIOS = Object.freeze({ marca: "", marcaId: "", raca: "", racaId: "", apartacaoSelecionada: "", rendimento: "" });
+const criarConfiguracaoPadraoMovimentacao = (padroes = PADROES_VAZIOS) => ({ sexo: "M", raca: padroes.raca, racaId: padroes.racaId, era: "", marca: padroes.marca, marcaId: padroes.marcaId, categoriaId: "", categoriaOrigem: "", nascimento: "", nascimentoEstimado: false, apartacaoSelecionada: padroes.apartacaoSelecionada, loteTransferencia: "", mostrarSequenciaBrinco: false, mostrarDadosCompra: false, valorPagoCabeca: "", origemAnimal: "", numeroGTA: "", numeroNFeCompra: "", valorFreteCompra: "", observacoesCompra: "", motivoSaida: "", causaMorte: "", mostrarDadosVenda: false, comprador: "", valorVendaTotal: "", valorArroba: "", rendimentoCarcacaVenda: padroes.rendimento, rendimentoOrigemVenda: RENDIMENTO_ORIGEM_PADRAO_EMPRESA, destinoVenda: "", numeroGTAVenda: "", numeroNFeVenda: "", valorFreteVenda: "", observacoesVenda: "", mostrarDadosAbate: false, frigorifico: "", valorArrobaAbate: "", rendimentoCarcacaAbate: padroes.rendimento, rendimentoOrigemAbate: RENDIMENTO_ORIGEM_PADRAO_EMPRESA, valorTotalAbate: "", numeroGTAAbate: "", observacoesAbate: "", embarqueSelecionadoDoc: "", documentoSelecionado: "" });
+const CATALOGOS_VAZIOS = Object.freeze({ marcas: [], racas: [], categorias: [] });
+const POLITICAS_INICIAIS = Object.freeze({
+  defaults: { marca_padrao_id: null, raca_padrao_id: null, propriedade_padrao_id: null, apartacao_padrao_id: null },
+  sales: { exigir_documento_venda: false, rendimento_padrao: null, rendimento_padrao_origem: RENDIMENTO_ORIGEM_PADRAO_EMPRESA },
+  weightWarnings: null,
+  weightWarningPolicy: DEFAULT_WEIGHT_WARNING_POLICY,
+});
+const SEM_SELECAO = '__none__';
 const NUMBER_COLUMN_IDS = new Set(["numero_registro", "peso", "peso_anterior", "valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "doc_qtd", "dias", "ganho", "gmd"]);
 const DATE_COLUMN_IDS = new Set(["data_pesagem", "data_anterior"]);
 const getColumnFilterType = (id) => DATE_COLUMN_IDS.has(id) ? "date" : NUMBER_COLUMN_IDS.has(id) ? "number" : "text";
@@ -97,9 +112,23 @@ export default function LancamentoPesagensIndividuais() {
   const [snDialogInherited, setSnDialogInherited] = useState(false);
   const [peso, setPeso] = useState("");
   const [sexo, setSexo] = useState("M");
-  const [raca, setRaca] = useState("Nelore");
-  const [era, setEra] = useState("");
+  // Marca/raça: nome (snapshot) + id do cadastro mestre selecionado.
+  const [raca, setRaca] = useState("");
+  const [racaId, setRacaId] = useState("");
   const [marca, setMarca] = useState("");
+  const [marcaId, setMarcaId] = useState("");
+  // Era é legado somente-leitura: não é editada no formulário, só preservada
+  // ao editar registros antigos e exibida na grade/faixa.
+  const [era, setEra] = useState("");
+  const [categoriaId, setCategoriaId] = useState("");
+  const [categoriaOrigem, setCategoriaOrigem] = useState(""); // '' | 'sugerida' | 'manual'
+  const [nascimento, setNascimento] = useState("");
+  const [nascimentoEstimado, setNascimentoEstimado] = useState(false);
+  const [catalogos, setCatalogos] = useState(CATALOGOS_VAZIOS);
+  const [politicas, setPoliticas] = useState(POLITICAS_INICIAIS);
+  const [animalRegistro, setAnimalRegistro] = useState(null);
+  const padroesEmpresaRef = useRef(PADROES_VAZIOS);
+  const apartacaoPadraoAplicadaRef = useRef(false);
   const [observacao, setObservacao] = useState("");
   const [apartacaoSelecionada, setApartacaoSelecionada] = useState("");
   const [loteTransferencia, setLoteTransferencia] = useState("");
@@ -126,7 +155,10 @@ export default function LancamentoPesagensIndividuais() {
   const [comprador, setComprador] = useState("");
   const [valorVendaTotal, setValorVendaTotal] = useState("");
   const [valorArroba, setValorArroba] = useState("");
-  const [rendimentoCarcacaVenda, setRendimentoCarcacaVenda] = useState("50");
+  // Rendimento de carcaça: valor inicial = padrão da empresa (origem
+  // PADRAO_EMPRESA); ao digitar, origem INFORMADO. Nunca um percentual fixo.
+  const [rendimentoCarcacaVenda, setRendimentoCarcacaVenda] = useState("");
+  const [rendimentoOrigemVenda, setRendimentoOrigemVenda] = useState(RENDIMENTO_ORIGEM_PADRAO_EMPRESA);
   const [destinoVenda, setDestinoVenda] = useState("");
   const [numeroGTAVenda, setNumeroGTAVenda] = useState("");
   const [numeroNFeVenda, setNumeroNFeVenda] = useState("");
@@ -135,7 +167,8 @@ export default function LancamentoPesagensIndividuais() {
   const [mostrarDadosAbate, setMostrarDadosAbate] = useState(false);
   const [frigorifico, setFrigorifico] = useState("");
   const [valorArrobaAbate, setValorArrobaAbate] = useState("");
-  const [rendimentoCarcacaAbate, setRendimentoCarcacaAbate] = useState("50");
+  const [rendimentoCarcacaAbate, setRendimentoCarcacaAbate] = useState("");
+  const [rendimentoOrigemAbate, setRendimentoOrigemAbate] = useState(RENDIMENTO_ORIGEM_PADRAO_EMPRESA);
   const [valorTotalAbate, setValorTotalAbate] = useState("");
   const [numeroGTAAbate, setNumeroGTAAbate] = useState("");
   const [observacoesAbate, setObservacoesAbate] = useState("");
@@ -194,23 +227,124 @@ export default function LancamentoPesagensIndividuais() {
     () => buildWeightPreview({ history: historicoAnimalSelecionado, date: dataPesagem, weight: peso, editingId }),
     [historicoAnimalSelecionado, dataPesagem, peso, editingId],
   );
+  // Política de avisos de conferência carregada uma vez com a configuração da empresa.
+  const weightWarningPolicy = politicas.weightWarningPolicy || DEFAULT_WEIGHT_WARNING_POLICY;
+  const exigirDocumentoVenda = politicas.sales.exigir_documento_venda === true;
   const avisosPesoVisual = useMemo(() => {
     if (!animalSelecionado || !Number.isFinite(parseBrazilianNumber(peso))) return [];
-    return evaluateWeighingWarnings({ weight: peso, date: dataPesagem, history: historicoAnimalSelecionado });
-  }, [animalSelecionado, dataPesagem, historicoAnimalSelecionado, peso]);
+    return evaluateWeighingWarnings({ weight: peso, date: dataPesagem, history: historicoAnimalSelecionado, policy: weightWarningPolicy });
+  }, [animalSelecionado, dataPesagem, historicoAnimalSelecionado, peso, weightWarningPolicy]);
+
+  // Cadastros mestres: só registros ativos entram nos seletores; a busca por
+  // nome normalizado serve para restaurar registros antigos (snapshot em texto).
+  const marcasAtivas = useMemo(() => catalogos.marcas.filter((item) => item.ativo !== false), [catalogos.marcas]);
+  const racasAtivas = useMemo(() => catalogos.racas.filter((item) => item.ativo !== false), [catalogos.racas]);
+  const categoriasAtivas = useMemo(() => catalogos.categorias.filter((item) => item.ativo !== false), [catalogos.categorias]);
+  const marcaIdPorNome = (nome) => catalogos.marcas.find((item) => item.nome_normalizado === normalizeName(nome))?.id || '';
+  const racaIdPorNome = (nome) => catalogos.racas.find((item) => item.nome_normalizado === normalizeName(nome))?.id || '';
+  const nomeCategoria = (id) => catalogos.categorias.find((item) => item.id === id)?.nome || '';
+  const selecionarMarca = (id) => {
+    const registro = marcasAtivas.find((item) => item.id === id) || null;
+    setMarcaId(registro?.id || '');
+    setMarca(registro?.nome || '');
+    setAvisoTela(null);
+  };
+  const selecionarRaca = (id) => {
+    const registro = racasAtivas.find((item) => item.id === id) || null;
+    setRacaId(registro?.id || '');
+    setRaca(registro?.nome || '');
+  };
+  // Descrição do cadastro do animal na faixa (Manejo/Saída): categoria do
+  // registro v7 quando existe; a era legada só aparece quando não há categoria.
+  const descricaoCadastroAnimal = useMemo(() => {
+    if (!animalSelecionado) return '';
+    const categoria = animalRegistro?.categoria_id ? nomeCategoria(animalRegistro.categoria_id) : '';
+    const nasc = animalRegistro?.nascimento ? `nasc. ${fmtDateBR(animalRegistro.nascimento)}${animalRegistro.nascimento_estimado ? ' (est.)' : ''}` : '';
+    return [animalSelecionado.marca || 'Sem marca', animalSelecionado.raca || '-', categoria || animalSelecionado.era || '-', animalSelecionado.sexo || '-', nasc].filter(Boolean).join(' · ');
+  }, [animalSelecionado, animalRegistro, catalogos.categorias]);
 
   const aplicarAnimalSelecionado = (animal) => {
     if (!animal) return false;
     setAnimalIdSelecionado(animal.animal_id || animal.id);
     setNumeroAnimal(normalizeAnimalIdentifier(animal.numero_animal));
     setSexo(animal.sexo || 'M');
-    setRaca(animal.raca || 'Nelore');
+    setRaca(animal.raca || '');
+    setRacaId(racaIdPorNome(animal.raca));
     setEra(animal.era || '');
     setMarca(animal.marca || '');
+    setMarcaId(marcaIdPorNome(animal.marca));
     setAvisoTela(criarMensagemAnimal({ numero: animal.numero_animal, dadosCadastro: animal, ultimo: animal, tipoManejo, editingId, formatarData }));
     setTimeout(() => pesoInputRef.current?.focus(), 0);
     return true;
   };
+
+  // Aplica os padrões da empresa ao formulário (abertura da tela e "limpar").
+  const aplicarPadroesEmpresa = (padroes = padroesEmpresaRef.current) => {
+    setMarca(padroes.marca); setMarcaId(padroes.marcaId);
+    setRaca(padroes.raca); setRacaId(padroes.racaId);
+    setRendimentoCarcacaVenda(padroes.rendimento); setRendimentoOrigemVenda(RENDIMENTO_ORIGEM_PADRAO_EMPRESA);
+    setRendimentoCarcacaAbate(padroes.rendimento); setRendimentoOrigemAbate(RENDIMENTO_ORIGEM_PADRAO_EMPRESA);
+    setCategoriaId(''); setCategoriaOrigem(''); setNascimento(''); setNascimentoEstimado(false); setEra('');
+  };
+
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      try {
+        const [carregadas, marcas, racas, categorias] = await Promise.all([
+          loadOperationalPolicies(empresaSelecionadaId),
+          brandService.list({ empresaId: empresaSelecionadaId }),
+          breedService.list({ empresaId: empresaSelecionadaId }),
+          categoryService.list({ empresaId: empresaSelecionadaId }),
+        ]);
+        if (!ativo) return;
+        setCatalogos({ marcas, racas, categorias });
+        setPoliticas(carregadas);
+        const marcaPadrao = resolveDefaultRegistry(marcas, carregadas.defaults.marca_padrao_id);
+        const racaPadrao = resolveDefaultRegistry(racas, carregadas.defaults.raca_padrao_id);
+        const padroes = {
+          marca: marcaPadrao?.nome || '', marcaId: marcaPadrao?.id || '',
+          raca: racaPadrao?.nome || '', racaId: racaPadrao?.id || '',
+          apartacaoSelecionada: carregadas.defaults.apartacao_padrao_id || '',
+          rendimento: formatRendimento(carregadas.sales.rendimento_padrao),
+        };
+        padroesEmpresaRef.current = padroes;
+        configuracoesPorTipoRef.current = { Cadastro: criarConfiguracaoPadraoMovimentacao(padroes), Manejo: criarConfiguracaoPadraoMovimentacao(padroes), Saída: criarConfiguracaoPadraoMovimentacao(padroes) };
+        // Um registro em edição (?editar=) não é sobrescrito pelos padrões.
+        if (!editarId) aplicarPadroesEmpresa(padroes);
+      } catch (error) {
+        if (ativo) toast.error(error.message || 'Não foi possível carregar os cadastros e a configuração da empresa.');
+      }
+    })();
+    return () => { ativo = false; };
+  }, [empresaSelecionadaId]);
+
+  // Apartação padrão da configuração pré-selecionada ao abrir a tela (só quando
+  // a apartação existe na lista carregada).
+  useEffect(() => {
+    if (apartacaoPadraoAplicadaRef.current || !apartacoes.length || !politicas.weightWarnings) return;
+    apartacaoPadraoAplicadaRef.current = true;
+    const padraoId = politicas.defaults.apartacao_padrao_id;
+    if (padraoId && !editarId && !apartacaoSelecionada && apartacoes.some((item) => item.id === padraoId)) setApartacaoSelecionada(padraoId);
+  }, [apartacoes, politicas]);
+
+  // Registro do animal (store `animais`): ids de cadastro, categoria e nascimento para a faixa e o payload.
+  useEffect(() => {
+    let ativo = true;
+    if (!animalIdSelecionado) { setAnimalRegistro(null); return undefined; }
+    getAnimalRecord(animalIdSelecionado).then((registro) => { if (ativo) setAnimalRegistro(registro || null); });
+    return () => { ativo = false; };
+  }, [animalIdSelecionado]);
+
+  // Sugestão de categoria por sexo + nascimento; a escolha manual nunca é sobrescrita.
+  useEffect(() => {
+    if (tipoManejo !== 'Cadastro' || categoriaOrigem === 'manual') return;
+    const sugerida = suggestCategory({ categorias: categoriasAtivas, sexo, nascimento, referenceDate: dataPesagem });
+    const proximoId = sugerida?.id || '';
+    if (proximoId !== categoriaId) setCategoriaId(proximoId);
+    const proximaOrigem = proximoId ? 'sugerida' : '';
+    if (proximaOrigem !== categoriaOrigem) setCategoriaOrigem(proximaOrigem);
+  }, [tipoManejo, sexo, nascimento, dataPesagem, categoriasAtivas, categoriaOrigem, categoriaId]);
 
   const resolverAnimalDigitado = (value = numeroAnimal) => {
     if (tipoManejo === 'Cadastro' || isSnIdentifier(value)) return true;
@@ -247,11 +381,12 @@ export default function LancamentoPesagensIndividuais() {
 
   const configuracoesPorTipoRef = useRef({ Cadastro: criarConfiguracaoPadraoMovimentacao(), Manejo: criarConfiguracaoPadraoMovimentacao(), Saída: criarConfiguracaoPadraoMovimentacao() });
   const salvarConfiguracaoTipoAtual = () => {
-    configuracoesPorTipoRef.current[tipoManejo] = { sexo, raca, era, marca, apartacaoSelecionada, loteTransferencia, mostrarSequenciaBrinco, mostrarDadosCompra, valorPagoCabeca, origemAnimal, numeroGTA, numeroNFeCompra, valorFreteCompra, observacoesCompra, motivoSaida, causaMorte, mostrarDadosVenda, comprador, valorVendaTotal, valorArroba, rendimentoCarcacaVenda, destinoVenda, numeroGTAVenda, numeroNFeVenda, valorFreteVenda, observacoesVenda, mostrarDadosAbate, frigorifico, valorArrobaAbate, rendimentoCarcacaAbate, valorTotalAbate, numeroGTAAbate, observacoesAbate, embarqueSelecionadoDoc, documentoSelecionado };
+    configuracoesPorTipoRef.current[tipoManejo] = { sexo, raca, racaId, era, marca, marcaId, categoriaId, categoriaOrigem, nascimento, nascimentoEstimado, apartacaoSelecionada, loteTransferencia, mostrarSequenciaBrinco, mostrarDadosCompra, valorPagoCabeca, origemAnimal, numeroGTA, numeroNFeCompra, valorFreteCompra, observacoesCompra, motivoSaida, causaMorte, mostrarDadosVenda, comprador, valorVendaTotal, valorArroba, rendimentoCarcacaVenda, rendimentoOrigemVenda, destinoVenda, numeroGTAVenda, numeroNFeVenda, valorFreteVenda, observacoesVenda, mostrarDadosAbate, frigorifico, valorArrobaAbate, rendimentoCarcacaAbate, rendimentoOrigemAbate, valorTotalAbate, numeroGTAAbate, observacoesAbate, embarqueSelecionadoDoc, documentoSelecionado };
   };
   const aplicarConfiguracaoTipo = (novoTipo) => {
-    const config = configuracoesPorTipoRef.current[novoTipo] || criarConfiguracaoPadraoMovimentacao();
-    setSexo(config.sexo ?? "M"); setRaca(config.raca ?? "Nelore"); setEra(config.era ?? ""); setMarca(config.marca ?? ""); setApartacaoSelecionada(config.apartacaoSelecionada ?? ""); setLoteTransferencia(config.loteTransferencia ?? ""); setMostrarSequenciaBrinco(config.mostrarSequenciaBrinco ?? false); setMostrarDadosCompra(config.mostrarDadosCompra ?? false); setValorPagoCabeca(config.valorPagoCabeca ?? ""); setOrigemAnimal(config.origemAnimal ?? ""); setNumeroGTA(config.numeroGTA ?? ""); setNumeroNFeCompra(config.numeroNFeCompra ?? ""); setValorFreteCompra(config.valorFreteCompra ?? ""); setObservacoesCompra(config.observacoesCompra ?? ""); setMotivoSaida(config.motivoSaida ?? ""); setCausaMorte(config.causaMorte ?? ""); setMostrarDadosVenda(config.mostrarDadosVenda ?? false); setComprador(config.comprador ?? ""); setValorVendaTotal(config.valorVendaTotal ?? ""); setValorArroba(config.valorArroba ?? ""); setRendimentoCarcacaVenda(String(config.rendimentoCarcacaVenda ?? "50")); setDestinoVenda(config.destinoVenda ?? ""); setNumeroGTAVenda(config.numeroGTAVenda ?? ""); setNumeroNFeVenda(config.numeroNFeVenda ?? ""); setValorFreteVenda(config.valorFreteVenda ?? ""); setObservacoesVenda(config.observacoesVenda ?? ""); setMostrarDadosAbate(config.mostrarDadosAbate ?? false); setFrigorifico(config.frigorifico ?? ""); setValorArrobaAbate(config.valorArrobaAbate ?? ""); setRendimentoCarcacaAbate(String(config.rendimentoCarcacaAbate ?? "50")); setValorTotalAbate(config.valorTotalAbate ?? ""); setNumeroGTAAbate(config.numeroGTAAbate ?? ""); setObservacoesAbate(config.observacoesAbate ?? ""); setEmbarqueSelecionadoDoc(config.embarqueSelecionadoDoc ?? ""); setDocumentoSelecionado(config.documentoSelecionado ?? "");
+    const padroes = padroesEmpresaRef.current;
+    const config = configuracoesPorTipoRef.current[novoTipo] || criarConfiguracaoPadraoMovimentacao(padroes);
+    setSexo(config.sexo ?? "M"); setRaca(config.raca ?? padroes.raca); setRacaId(config.racaId ?? padroes.racaId); setEra(config.era ?? ""); setMarca(config.marca ?? padroes.marca); setMarcaId(config.marcaId ?? padroes.marcaId); setCategoriaId(config.categoriaId ?? ""); setCategoriaOrigem(config.categoriaOrigem ?? ""); setNascimento(config.nascimento ?? ""); setNascimentoEstimado(config.nascimentoEstimado ?? false); setApartacaoSelecionada(config.apartacaoSelecionada ?? padroes.apartacaoSelecionada); setLoteTransferencia(config.loteTransferencia ?? ""); setMostrarSequenciaBrinco(config.mostrarSequenciaBrinco ?? false); setMostrarDadosCompra(config.mostrarDadosCompra ?? false); setValorPagoCabeca(config.valorPagoCabeca ?? ""); setOrigemAnimal(config.origemAnimal ?? ""); setNumeroGTA(config.numeroGTA ?? ""); setNumeroNFeCompra(config.numeroNFeCompra ?? ""); setValorFreteCompra(config.valorFreteCompra ?? ""); setObservacoesCompra(config.observacoesCompra ?? ""); setMotivoSaida(config.motivoSaida ?? ""); setCausaMorte(config.causaMorte ?? ""); setMostrarDadosVenda(config.mostrarDadosVenda ?? false); setComprador(config.comprador ?? ""); setValorVendaTotal(config.valorVendaTotal ?? ""); setValorArroba(config.valorArroba ?? ""); setRendimentoCarcacaVenda(String(config.rendimentoCarcacaVenda ?? padroes.rendimento)); setRendimentoOrigemVenda(config.rendimentoOrigemVenda ?? RENDIMENTO_ORIGEM_PADRAO_EMPRESA); setDestinoVenda(config.destinoVenda ?? ""); setNumeroGTAVenda(config.numeroGTAVenda ?? ""); setNumeroNFeVenda(config.numeroNFeVenda ?? ""); setValorFreteVenda(config.valorFreteVenda ?? ""); setObservacoesVenda(config.observacoesVenda ?? ""); setMostrarDadosAbate(config.mostrarDadosAbate ?? false); setFrigorifico(config.frigorifico ?? ""); setValorArrobaAbate(config.valorArrobaAbate ?? ""); setRendimentoCarcacaAbate(String(config.rendimentoCarcacaAbate ?? padroes.rendimento)); setRendimentoOrigemAbate(config.rendimentoOrigemAbate ?? RENDIMENTO_ORIGEM_PADRAO_EMPRESA); setValorTotalAbate(config.valorTotalAbate ?? ""); setNumeroGTAAbate(config.numeroGTAAbate ?? ""); setObservacoesAbate(config.observacoesAbate ?? ""); setEmbarqueSelecionadoDoc(config.embarqueSelecionadoDoc ?? ""); setDocumentoSelecionado(config.documentoSelecionado ?? "");
   };
   const handleTipoManejoChange = (novoTipo) => {
     if (novoTipo === tipoManejo) return;
