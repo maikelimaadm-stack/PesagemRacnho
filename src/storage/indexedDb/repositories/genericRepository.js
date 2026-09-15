@@ -1,6 +1,9 @@
 // Repositório genérico Dexie para stores de domínio (padrão id + soft-delete).
 // A UI acessa somente os serviços; o repositório concentra os verbos de dados.
+// Todo verbo de escrita respeita o bloqueio de migração (ADR-038): enquanto a
+// migração estiver pendente ou com falha, lança MIGRATION_BLOCKED.
 import { ensureStorageReady } from '../db.js';
+import { assertWritable } from '../../migrations/migrationState.js';
 
 function nowIso() {
   return new Date().toISOString();
@@ -63,6 +66,7 @@ export function createRepository(storeName, { generateId } = {}) {
     },
 
     async create(data) {
+      assertWritable(`Gravação em ${storeName}`);
       const t = await table();
       const id = data.id || newId();
       const duplicate = await findRow(t, id);
@@ -76,6 +80,7 @@ export function createRepository(storeName, { generateId } = {}) {
     },
 
     async update(id, patch) {
+      assertWritable(`Atualização em ${storeName}`);
       const t = await table();
       const existing = await findRow(t, id);
       if (!existing) return null;
@@ -86,6 +91,7 @@ export function createRepository(storeName, { generateId } = {}) {
 
     async remove(id) {
       // soft delete (padrão do app)
+      assertWritable(`Exclusão em ${storeName}`);
       const t = await table();
       const existing = await findRow(t, id);
       if (!existing) return false;
@@ -94,6 +100,7 @@ export function createRepository(storeName, { generateId } = {}) {
     },
 
     async bulkCreate(items = []) {
+      assertWritable(`Gravação em lote em ${storeName}`);
       const t = await table();
       const ts = nowIso();
       const ids = new Set();
@@ -115,6 +122,7 @@ export function createRepository(storeName, { generateId } = {}) {
     },
 
     async bulkUpdate(items = []) {
+      assertWritable(`Atualização em lote em ${storeName}`);
       const t = await table();
       const ts = nowIso();
       const operations = [];
@@ -128,6 +136,7 @@ export function createRepository(storeName, { generateId } = {}) {
     },
 
     async bulkRemove(ids = []) {
+      assertWritable(`Exclusão em lote em ${storeName}`);
       const t = await table();
       const ts = nowIso();
       const operations = [];

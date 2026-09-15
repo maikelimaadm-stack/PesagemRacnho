@@ -1,16 +1,29 @@
 // Backup/export/import/restore no modelo IndexedDB/Dexie.
-// Backup completo = todos os stores exportados para JSON. Restore = importar JSON
-// em transação Dexie. Nenhum arquivo .db nativo; portabilidade via JSON.
+// Backup completo = todos os stores exportados para JSON (formato 3, docs 13 §2 e 14 §6).
+// Restore = importar JSON em transação Dexie; backup de esquema anterior dispara o
+// backfill resumível antes de registrar sucesso (ADR-038). Nenhum arquivo .db nativo.
 import { ensureStorageReady, getDbVersion } from '../db.js';
-import { BACKUP_FORMAT, STORE_NAMES } from '../schema.js';
-import { APP_VERSION } from '../../../lib/appVersion.js';
+import { BACKUP_FORMAT, MASTER_REGISTRY_STORES, PROTECTED_STORES, STORE_NAMES } from '../schema.js';
+import {
+  APP_VERSION,
+  BACKUP_FORMAT_VERSION,
+  DATA_CONTRACT_VERSION,
+  DB_SCHEMA_VERSION,
+  UI_BUILD_ID,
+} from '../../../versioning/versionInfo.js';
 
-const BACKUP_FORMAT_VERSION = 2;
+export { BACKUP_FORMAT_VERSION };
 
 async function sha256(text) {
   const bytes = new TextEncoder().encode(text);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+// O backfill vive no coordenador de migração, que importa este módulo; a
+// importação dinâmica evita o ciclo estático entre os dois.
+async function migrationCoordinator() {
+  return import('../../migrations/migrationCoordinator.js');
 }
 
 export async function recordBackupHistory(tipo, detalhes) {
@@ -25,37 +38,53 @@ export async function recordBackupHistory(tipo, detalhes) {
   } catch { /* best-effort */ }
 }
 
-/** Backup completo: exporta todos os stores para um objeto JSON. */
-export async function createFullBackup({ reason = 'manual', automatic = false } = {}) {
-  const db = await ensureStorageReady();
+/**
+ * Backup completo sobre uma instância Dexie qualquer (a vigente ou a dinâmica da
+ * versão de origem, usada pelo backup pré-migração). Formato da versão de origem:
+ * bancos até a v6 geram formato 2; a partir da v7, formato 3 com os campos de
+ * versionamento (schemaVersion, dataContractVersion, uiBuildId, appVersion).
+ */
+export async function createFullBackupFromDb(db, { reason = 'manual', automatic = false, dbVersion = getDbVersion(), storeNames = null } = {}) {
+  const names = storeNames || db.tables.map((table) => table.name);
   const stores = {};
-  for (const name of STORE_NAMES) {
+  for (const name of names) {
     stores[name] = await db.table(name).toArray();
   }
-  const counts = Object.fromEntries(STORE_NAMES.map((n) => [n, stores[n].length]));
+  const counts = Object.fromEntries(names.map((n) => [n, stores[n].length]));
+  const formatVersion = dbVersion <= 6 ? 2 : BACKUP_FORMAT_VERSION;
+  const createdAt = new Date().toISOString();
   const manifest = {
     format: BACKUP_FORMAT,
-    formatVersion: BACKUP_FORMAT_VERSION,
+    formatVersion,
     backupId: crypto.randomUUID(),
     appVersion: APP_VERSION,
-    dbVersion: getDbVersion(),
-    createdAt: new Date().toISOString(),
+    dbVersion,
+    createdAt,
     reason,
     automatic,
     counts,
-    stores: [...STORE_NAMES],
+    stores: [...names],
+    ...(formatVersion >= 3
+      ? { schemaVersion: DB_SCHEMA_VERSION, dataContractVersion: DATA_CONTRACT_VERSION, uiBuildId: UI_BUILD_ID }
+      : {}),
   };
   const unsigned = {
     format: BACKUP_FORMAT,
-    formatVersion: BACKUP_FORMAT_VERSION,
+    formatVersion,
     version: APP_VERSION,
-    dbVersion: getDbVersion(),
-    createdAt: manifest.createdAt,
+    dbVersion,
+    createdAt,
     manifest,
     stores,
   };
   const backup = { ...unsigned, integrity: { algorithm: 'SHA-256', sha256: await sha256(JSON.stringify(unsigned)) } };
   return { ok: true, backup, counts };
+}
+
+/** Backup completo do banco vigente (todos os stores, inclusive usuariosLocais). */
+export async function createFullBackup({ reason = 'manual', automatic = false } = {}) {
+  const db = await ensureStorageReady();
+  return createFullBackupFromDb(db, { reason, automatic, dbVersion: getDbVersion(), storeNames: STORE_NAMES });
 }
 
 function csvEscape(v) {
@@ -117,9 +146,6 @@ async function readBackup(payload, { allowLegacy = true } = {}) {
     err.code = 'DEXIE_BACKUP_002';
     throw err;
   }
-  // Stores acrescentadas por versões posteriores nascem vazias ao restaurar
-  // um backup íntegro de versão anterior. Nenhuma store existente é descartada.
-  for (const name of missingStores) b.stores[name] = [];
   if (b.manifest?.dbVersion > getDbVersion()) {
     const err = new Error(`Backup criado por banco mais novo (versão ${b.manifest.dbVersion}). Atualize o aplicativo antes de restaurar.`);
     err.code = 'DEXIE_BACKUP_005';
@@ -132,7 +158,17 @@ async function readBackup(payload, { allowLegacy = true } = {}) {
       throw err;
     }
   }
-  return b;
+  // Stores acrescentadas por versões posteriores nascem vazias ao restaurar um
+  // backup íntegro de versão anterior (newStores). Stores que deixaram de existir
+  // (ex.: `lotes` da v6) são ignoradas (ignoredStores) — o dry-run lista ambas.
+  // O payload do chamador NÃO é alterado: a UI reutiliza o mesmo objeto entre o
+  // dry-run e o apply, e qualquer mutação invalidaria o SHA-256 na segunda leitura.
+  const newStores = [...missingStores];
+  const ignoredStores = Object.keys(b.stores).filter((name) => !STORE_NAMES.includes(name));
+  const stores = { ...b.stores };
+  for (const name of missingStores) stores[name] = [];
+  const sourceDbVersion = Number(b.manifest?.dbVersion ?? b.dbVersion) || 0;
+  return { backup: { ...b, stores }, newStores, ignoredStores, sourceDbVersion, schemaUpgradeRequired: sourceDbVersion < getDbVersion() };
 }
 
 function requireDurableSafetyEvidence(safetyEvidence, operation) {
@@ -143,9 +179,9 @@ function requireDurableSafetyEvidence(safetyEvidence, operation) {
   if (!valid) throw new Error(`${operation} bloqueada: crie e valide um backup físico antes de continuar.`);
 }
 
-/** Dry-run de restauração: valida formato e conta registros por store. */
+/** Dry-run de restauração: valida formato, conta registros e informa conversão de esquema. */
 export async function dryRunRestore(payload) {
-  const b = await readBackup(payload);
+  const { backup: b, newStores, ignoredStores, sourceDbVersion, schemaUpgradeRequired } = await readBackup(payload);
   const counts = Object.fromEntries(STORE_NAMES.map((n) => [n, Array.isArray(b.stores[n]) ? b.stores[n].length : 0]));
   return {
     ok: true,
@@ -156,12 +192,22 @@ export async function dryRunRestore(payload) {
     manifest: b.manifest || null,
     integrity: b.integrity?.sha256 ? 'SHA-256 válido' : 'backup legado sem SHA-256',
     counts,
+    sourceDbVersion,
+    targetDbVersion: getDbVersion(),
+    schemaUpgradeRequired,
+    ignoredStores,
+    newStores,
+    usuariosLocais: counts.usuariosLocais || 0,
   };
 }
 
-/** Restore: substitui o conteúdo de todos os stores em transação. Cria backup de segurança antes. */
-export async function applyRestore(payload, { safetyEvidence = null } = {}) {
-  const b = await readBackup(payload);
+/**
+ * Restore: substitui o conteúdo de todos os stores em transação. Exige evidência
+ * de backup físico. Backup de esquema anterior (dbVersion < atual): grava e
+ * executa o backfill na sequência; só então registra sucesso.
+ */
+export async function applyRestore(payload, { safetyEvidence = null, files = null } = {}) {
+  const { backup: b, ignoredStores, newStores, sourceDbVersion, schemaUpgradeRequired } = await readBackup(payload);
   const db = await ensureStorageReady();
   requireDurableSafetyEvidence(safetyEvidence, 'Restauração');
   await db.transaction('rw', STORE_NAMES.map((n) => db.table(n)), async () => {
@@ -175,24 +221,78 @@ export async function applyRestore(payload, { safetyEvidence = null } = {}) {
       if (restoredCount !== b.stores[name].length) throw new Error(`Restauração abortada: contagem divergente em ${name}.`);
     }
   });
+  const { runPendingBackfills } = await migrationCoordinator();
+  const { readMigrationState, writeMigrationState, MIGRATION_STATUS } = await import('../../migrations/migrationState.js');
+  let backfill = null;
+  if (schemaUpgradeRequired) {
+    // O estado restaurado (se houver) pertence ao banco antigo: recomeça o backfill.
+    await writeMigrationState(db, getDbVersion(), {
+      status: MIGRATION_STATUS.PENDENTE, origem: `restore-v${sourceDbVersion}`, started_at: null, finished_at: null,
+      error: null, passos_concluidos: [], processed: 0, total: 0, cursor: null, passo: null, last_checkpoint: null,
+    });
+  }
+  // Backfill quando o backup é de esquema anterior ou quando o estado restaurado
+  // ficou pendente/em andamento/com falha (retomada). Backup da própria versão sem
+  // estado técnico (banco de gate) não dispara nada.
+  const restoredState = await readMigrationState(db, getDbVersion());
+  const pendingRestored = restoredState && restoredState.status !== MIGRATION_STATUS.CONCLUIDA;
+  if (schemaUpgradeRequired || pendingRestored) {
+    backfill = await runPendingBackfills({ files, origem: `restore-v${sourceDbVersion}` });
+  }
   await recordBackupHistory('restore', {
     restoredFormat: b.format,
+    restoredFormatVersion: b.formatVersion || 1,
+    restoredDbVersion: sourceDbVersion,
     restoredBackupId: b.manifest?.backupId || null,
     durableSafetyBackup: safetyEvidence || null,
+    ignoredStores,
+    newStores,
+    backfill: backfill ? { completed: backfill.completed, relatorio: backfill.state?.relatorio || null } : null,
   });
-  return { ok: true, restored: true, preRestoreBackup: safetyEvidence };
+  if (backfill && !backfill.alreadyDone) await recordBackupHistory(`backfill-v${getDbVersion()}`, { origem: 'restore', relatorio: backfill.state?.relatorio || null });
+  return { ok: true, restored: true, preRestoreBackup: safetyEvidence, schemaUpgradeRequired, ignoredStores, newStores, backfill: backfill ? backfill.state : null };
 }
 
-/** Limpa TODOS os dados locais (stores de domínio). Cria backup antes. */
-export async function clearAllData({ safetyEvidence = null } = {}) {
+/**
+ * "Limpar dados operacionais" (ADR-032): preserva usuários, configurações,
+ * histórico de backups e cadastros mestres. Exige evidência de backup físico.
+ */
+export async function clearOperationalData({ safetyEvidence = null } = {}) {
   requireDurableSafetyEvidence(safetyEvidence, 'Limpeza');
   const db = await ensureStorageReady();
-  const domain = STORE_NAMES.filter((n) => n !== 'appSettings' && n !== 'backupHistory');
-  await db.transaction('rw', domain.map((n) => db.table(n)), async () => {
-    for (const name of domain) await db.table(name).clear();
+  const preserved = new Set([...MASTER_REGISTRY_STORES, ...PROTECTED_STORES]);
+  const operational = STORE_NAMES.filter((n) => !preserved.has(n));
+  await db.transaction('rw', operational.map((n) => db.table(n)), async () => {
+    for (const name of operational) await db.table(name).clear();
   });
-  await recordBackupHistory('clear-all', { durableSafetyBackup: safetyEvidence });
-  return { ok: true, cleared: domain, preClearBackup: safetyEvidence };
+  await recordBackupHistory('clear-operational', { durableSafetyBackup: safetyEvidence, cleared: operational });
+  return { ok: true, cleared: operational, preserved: [...preserved], preClearBackup: safetyEvidence };
+}
+
+/** Alias histórico: "limpar tudo" da 1.1.x agora é a limpeza operacional. */
+export const clearAllData = clearOperationalData;
+
+/**
+ * "Reset completo" (ADR-032): apaga tudo exceto backupHistory. Exclusivo do ADMIN
+ * (validado no serviço de manutenção) e exige evidência de backup físico mais a
+ * confirmação explícita. Recria o estado técnico e os seeds da v7 em seguida.
+ */
+export async function resetAllData({ safetyEvidence = null, confirmedByAdmin = false, files = null } = {}) {
+  requireDurableSafetyEvidence(safetyEvidence, 'Reset completo');
+  if (confirmedByAdmin !== true) {
+    const err = new Error('Reset completo bloqueado: exige confirmação explícita do ADMIN.');
+    err.code = 'MAINTENANCE_RESET_NOT_CONFIRMED';
+    throw err;
+  }
+  const db = await ensureStorageReady();
+  const targets = STORE_NAMES.filter((n) => n !== 'backupHistory');
+  await db.transaction('rw', targets.map((n) => db.table(n)), async () => {
+    for (const name of targets) await db.table(name).clear();
+  });
+  const { runPendingBackfills } = await migrationCoordinator();
+  const backfill = await runPendingBackfills({ files, origem: 'reset' });
+  await recordBackupHistory('reset-all', { durableSafetyBackup: safetyEvidence, cleared: targets });
+  return { ok: true, cleared: targets, preserved: ['backupHistory'], preResetBackup: safetyEvidence, backfill: backfill.state };
 }
 
 /** Dry-run de importação de pesagens (JSON export). Detecta duplicados por id. */

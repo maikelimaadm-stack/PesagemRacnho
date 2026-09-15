@@ -1,6 +1,11 @@
 // Repositórios Dexie por entidade com uma interface CRUD comum.
 import { createRepository } from './genericRepository.js';
 import { ensureStorageReady } from '../db.js';
+import { assertWritable } from '../../migrations/migrationState.js';
+import { STORE_NAMES } from '../schema.js';
+
+// Store de usuários locais: `usuarios` (docs 11 rev. 2) ou `usuariosLocais` (rev. 1) — quem decide é o schema.js.
+export const USERS_STORE = STORE_NAMES.includes('usuarios') ? 'usuarios' : 'usuariosLocais';
 
 function matchesWeighingFilters(row, filters) {
   for (const [key, value] of Object.entries(filters)) {
@@ -24,6 +29,17 @@ export const animalLotRepository = createRepository('animalLotes');
 export const weighingSessionRepository = createRepository('sessoesPesagem');
 export const auditRepository = createRepository('auditoria');
 export const importRepository = createRepository('importacoes');
+// v7 (ADR-018/ADR-019/ADR-035): cadastros mestres, estoque de identificadores e usuários locais.
+export const marcaRepository = createRepository('marcas');
+export const racaRepository = createRepository('racas');
+export const categoriaAnimalRepository = createRepository('categoriasAnimal');
+export const parceiroRepository = createRepository('parceiros');
+export const propriedadeRepository = createRepository('propriedades');
+export const causaMorteRepository = createRepository('causasMorte');
+export const faixaIdentificadorRepository = createRepository('faixasIdentificadores');
+export const excecaoIdentificadorRepository = createRepository('excecoesIdentificadores');
+export const usuarioLocalRepository = createRepository(USERS_STORE);
+export const usuarioRepository = usuarioLocalRepository;
 
 // Consultas específicas de pesagens (data range + summary) sobre o repo genérico.
 export const weighing = {
@@ -96,6 +112,7 @@ export async function readAppSetting(key) {
 }
 
 export async function writeAppSetting(key, value) {
+  assertWritable('Gravação de configuração');
   const db = await ensureStorageReady();
   await db.table('appSettings').put({ key, value });
   return true;

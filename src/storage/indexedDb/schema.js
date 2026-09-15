@@ -62,8 +62,8 @@ export const STORES_V7 = {
     '++localId, &id, animal_id, tipo, [tipo+valor_normalizado], [marca_id+valor_normalizado], faixa_id, ativo, created_at, updated_at, deleted_at',
   movimentosAnimais: '++localId, &id, animal_id, tipo, data_evento, lote_origem_id, lote_destino_id, created_at, updated_at, deleted_at',
   animalLotes: '++localId, &id, animal_id, lote_id, inicio, fim, created_at, updated_at, deleted_at',
-  sessoesPesagem: '++localId, &id, data, [data+local], status, operador, operador_user_id, created_at, updated_at, deleted_at',
-  auditoria: '++localId, &id, entidade, entidade_id, acao, actor_user_id, created_at',
+  sessoesPesagem: '++localId, &id, data, [data+local], status, operador, operador_usuario_id, created_at, updated_at, deleted_at',
+  auditoria: '++localId, &id, entidade, entidade_id, acao, usuario_id, created_at',
   importacoes: '++localId, &id, &arquivo_hash, status, created_at, updated_at',
   appSettings: 'key',
   backupHistory: '++localId, id, tipo, created_at',
@@ -77,8 +77,8 @@ export const STORES_V7 = {
   // estoque de identificadores (ADR-019)
   faixasIdentificadores: '++localId, &id, empresa_id, tipo, marca_id, situacao, ativo, created_at, updated_at, deleted_at',
   excecoesIdentificadores: '++localId, &id, faixa_id, [faixa_id+numero], motivo, created_at, updated_at, deleted_at',
-  // autenticação local (ADR-035)
-  usuariosLocais: '++localId, &id, empresa_id, login_normalizado, perfil, ativo, created_at, updated_at, deleted_at',
+  // autenticação local (ADR-043) — hash/salt nunca indexados
+  usuarios: '++localId, &id, empresa_id, &login_normalizado, role, ativo, created_at, updated_at, deleted_at',
 };
 
 export const REMOVED_STORES_V7 = {
@@ -107,7 +107,11 @@ export const MASTER_REGISTRY_STORES = [
 ];
 
 // Stores de segurança/configuração preservadas por qualquer limpeza não destrutiva.
-export const PROTECTED_STORES = ['usuariosLocais', 'appSettings', 'backupHistory'];
+export const PROTECTED_STORES = ['usuarios', 'appSettings', 'backupHistory'];
+
+// Store de usuários locais (ADR-043) e papéis (ADR-042).
+export const USERS_STORE = 'usuarios';
+export const USUARIO_ROLES = ['ADMIN', 'GESTOR', 'OPERADOR', 'CONSULTA'];
 
 // Enumerações do contrato de dados (docs 12 §3).
 export const ANIMAL_SITUACOES = ['ATIVO', 'VENDIDO', 'ABATIDO', 'MORTO', 'DOADO', 'TRANSFERIDO', 'CANCELADO', 'INATIVO'];
@@ -115,7 +119,7 @@ export const IDENTIFICADOR_TIPOS = ['VISUAL', 'RFID', 'SISBOV', 'MANEJO', 'TEMPO
 export const SESSAO_STATUS = ['ABERTA', 'CONFERENCIA', 'FECHADA', 'CANCELADA'];
 export const LOTE_SITUACOES = ['ABERTO', 'FECHADO'];
 export const PARCEIRO_PAPEIS = ['COMPRADOR', 'VENDEDOR', 'FRIGORIFICO', 'TRANSPORTADOR', 'PROPRIETARIO'];
-export const USUARIO_PERFIS = ['ADMIN', 'GESTOR', 'OPERADOR'];
+export const USUARIO_PERFIS = USUARIO_ROLES; // alias legado (revisão 1)
 export const FAIXA_TIPOS = ['VISUAL', 'RFID', 'SISBOV', 'MANEJO'];
 export const FAIXA_SITUACOES = ['ATIVA', 'ESGOTADA', 'BLOQUEADA'];
 export const EXCECAO_MOTIVOS = ['USADO_FORA_DE_ORDEM', 'PERDIDO', 'DANIFICADO', 'RESERVADO', 'DEVOLVIDO'];

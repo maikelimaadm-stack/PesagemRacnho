@@ -9,12 +9,13 @@ function assert(c, m) { if (!c) { console.error('FAIL:', m); process.exit(1); } 
 const imp = (rel) => import(pathToFileURL(join(root, rel)).href);
 
 const { ensureStorageReady, deleteDbForTests } = await imp('src/storage/indexedDb/db.js');
-const { DB_NAME, STORE_NAMES, STORES_V5 } = await imp('src/storage/indexedDb/schema.js');
+const { DB_NAME, DB_VERSION, STORE_NAMES, STORES_V5, STORES_V6, SESSAO_STATUS, LOTE_SITUACOES, MASTER_REGISTRY_STORES } = await imp('src/storage/indexedDb/schema.js');
 const repos = await imp('src/storage/indexedDb/repositories/index.js');
+const { clearWriteBlock, setWriteBlocked, isWriteBlocked } = await imp('src/storage/migrations/migrationState.js');
 
 await deleteDbForTests();
 
-// Migração v5 -> v6: preserva o domínio operacional e elimina integralmente
+// Migração v5 -> v6 -> v7: preserva o domínio operacional e elimina integralmente
 // as três stores da funcionalidade retirada.
 const legacyDb = new Dexie(DB_NAME);
 legacyDb.version(5).stores(STORES_V5);
@@ -35,6 +36,39 @@ for (const removedStore of ['configuracoesSanidade', 'itensSanidade', 'sanidades
 assert(await upgradedDb.table('pesagens').where('id').equals('preservada-v5').count() === 1, 'migração preserva pesagens existentes');
 const preservedEntry = await upgradedDb.table('pesagens').where('id').equals('preservada-v5').first();
 assert(!('sanidade_ids' in preservedEntry.legacy_payload) && !('sanidades' in preservedEntry.legacy_payload), 'migração remove dados sanitários embutidos em pesagens antigas');
+await deleteDbForTests();
+
+// Migração v6 -> v7 (upgrade estrutural do Dexie, sem o coordenador): `lotes`
+// removida, stores novas criadas, enums leves convertidos, dados preservados.
+const v6Db = new Dexie(DB_NAME);
+v6Db.version(6).stores(STORES_V6);
+await v6Db.open();
+assert(v6Db.tables.some((t) => t.name === 'lotes'), 'pré-condição: v6 tem a store lotes');
+await v6Db.table('sessoesPesagem').bulkAdd([
+  { id: 's-aberta', data: '2026-07-01', status: 'Aberta', operador: 'LOCAL', created_at: 'x', updated_at: 'x', deleted_at: null },
+  { id: 's-fechada', data: '2026-07-02', status: 'Fechada', operador: 'LOCAL', created_at: 'x', updated_at: 'x', deleted_at: null },
+]);
+await v6Db.table('loteApartacoes').bulkAdd([
+  { id: 'l-aberto', apartacao_id: 'ap', nome_lote: 'A', fechado: false, created_at: 'x', updated_at: 'x', deleted_at: null },
+  { id: 'l-fechado', apartacao_id: 'ap', nome_lote: 'B', fechado: true, created_at: 'x', updated_at: 'x', deleted_at: null },
+]);
+await v6Db.table('apartacoes').add({ id: 'ap', nome_apartacao: 'Recria', created_at: 'x', updated_at: 'x', deleted_at: null });
+await v6Db.table('animais').add({ id: 'a-v6', numero_animal: '1', identificacao_normalizada: '1', marca: 'ALFA', situacao: 'Ativo', created_at: 'x', updated_at: 'x', deleted_at: null });
+v6Db.close();
+const v7Db = await ensureStorageReady();
+assert(v7Db.verno === DB_VERSION && DB_VERSION === 7, `banco aberto na v7 (verno=${v7Db.verno})`);
+const v7Tables = v7Db.tables.map((t) => t.name);
+assert(!v7Tables.includes('lotes'), 'store lotes removida na v7 (ADR-023)');
+for (const name of [...MASTER_REGISTRY_STORES, 'usuariosLocais']) assert(v7Tables.includes(name), `store nova criada: ${name}`);
+const sessions = await v7Db.table('sessoesPesagem').toArray();
+assert(sessions.find((s) => s.id === 's-aberta').status === 'ABERTA', 'upgrade converte Aberta → ABERTA');
+assert(sessions.find((s) => s.id === 's-fechada').status === 'FECHADA', 'upgrade converte Fechada → FECHADA');
+assert(sessions.every((s) => SESSAO_STATUS.includes(s.status) && s.local === null), 'sessões dentro do enum com local nulo');
+const lots = await v7Db.table('loteApartacoes').toArray();
+assert(lots.find((l) => l.id === 'l-aberto').situacao === 'ABERTO' && lots.find((l) => l.id === 'l-fechado').situacao === 'FECHADO', 'upgrade converte fechado → situacao');
+assert(lots.every((l) => LOTE_SITUACOES.includes(l.situacao) && l.ativo === true), 'lotes dentro do enum e ativos');
+assert((await v7Db.table('apartacoes').toArray()).every((a) => a.ativo === true), 'apartações ganham ativo');
+assert(await v7Db.table('animais').where('id').equals('a-v6').count() === 1, 'animais preservados no upgrade (o backfill pesado fica para o coordenador)');
 await deleteDbForTests();
 
 // Dexie abre automaticamente e cria todos os stores.
@@ -83,5 +117,26 @@ await repos.weighing.bulkCreate([
 const sum = await repos.weighing.summary({ loteId: 'l1' });
 assert(sum.total === 2 && sum.somaPeso === 700, `summary por lote (total ${sum.total}, soma ${sum.somaPeso})`);
 
+// Repositórios v7 (cadastros mestres, estoque, usuários) e bloqueio de escrita (ADR-038).
+for (const repo of ['marcaRepository', 'racaRepository', 'categoriaAnimalRepository', 'parceiroRepository', 'propriedadeRepository', 'causaMorteRepository', 'faixaIdentificadorRepository', 'excecaoIdentificadorRepository', 'usuarioLocalRepository']) {
+  assert(typeof repos[repo]?.create === 'function', `repositório v7 disponível: ${repo}`);
+}
+const marca = await repos.marcaRepository.create({ nome: 'ALFA', nome_normalizado: 'ALFA', ativo: true });
+assert(marca.id, 'repositório de marcas grava');
+setWriteBlocked({ code: 'MIGRATION_FAILED', message: 'teste' });
+assert(isWriteBlocked(), 'bloqueio ativo');
+let blocked = false;
+try { await repos.marcaRepository.create({ nome: 'BETA', nome_normalizado: 'BETA' }); } catch (err) { blocked = err.code === 'MIGRATION_BLOCKED'; }
+assert(blocked, 'teste negativo: create bloqueado durante migração pendente/falha');
+blocked = false;
+try { await repos.marcaRepository.update(marca.id, { nome: 'X' }); } catch (err) { blocked = err.code === 'MIGRATION_BLOCKED'; }
+assert(blocked, 'teste negativo: update bloqueado');
+blocked = false;
+try { await repos.writeAppSetting('k', 1); } catch (err) { blocked = err.code === 'MIGRATION_BLOCKED'; }
+assert(blocked, 'teste negativo: configuração bloqueada');
+assert((await repos.marcaRepository.get(marca.id)).nome === 'ALFA', 'leitura continua liberada e nada foi gravado');
+clearWriteBlock();
+assert((await repos.marcaRepository.update(marca.id, { nome: 'ALFA 2' })).nome === 'ALFA 2', 'escrita liberada após limpar o bloqueio');
+
 console.log('OK verify-dexie-storage');
-console.log(JSON.stringify({ stores: tables.length, crud: 'ok', summary: sum }, null, 2));
+console.log(JSON.stringify({ stores: tables.length, dbVersion: DB_VERSION, upgradeV6ToV7: { lotesRemoved: true, enumsConverted: true }, crud: 'ok', writeBlock: 'ok', summary: sum }, null, 2));

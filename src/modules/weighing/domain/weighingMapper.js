@@ -1,6 +1,41 @@
 import { WeighingError } from './weighingErrors.js';
 import { isFutureCivilDate, parseBrazilianNumber, parseCivilDate } from './brazilianValues.js';
 
+// `legacy_payload` congelado (ADR-027; docs 12 §6). Somente estas chaves são
+// gravadas em novos registros; qualquer outra é descartada pelo mapper.
+export const LEGACY_PAYLOAD_ALLOWLIST = Object.freeze([
+  'id', 'empresa_id', 'tipo_manejo', 'motivo_saida', 'causa_morte', 'data_pesagem', 'animal_id', 'sessao_id',
+  'numero_animal', 'sexo', 'raca', 'era', 'marca', 'peso', 'observacao', 'apartacao_id', 'nome_apartacao',
+  'lote_id', 'nome_lote', 'origem', 'operador', 'id_externo', 'data_anterior', 'peso_anterior', 'dias', 'ganho',
+  'gmd', 'alertas_confirmados', 'justificativa_alerta', 'valor_pago_cabeca', 'origem_animal', 'documentacao',
+  'comprador', 'destino_venda', 'valor_venda_total', 'valor_arroba', 'rendimento_carcaca', 'peso_carcaca_estimado',
+  'quantidade_arrobas', 'frigorifico', 'valor_arroba_abate', 'valor_total_abate', 'embarque_id', 'embarque_nome',
+  'documento_embarque_id', 'documento_tipo', 'documento_numero', 'motorista_nome', 'placa_carreta',
+]);
+
+// Proibidas em gravação nova: redundantes com colunas/timestamps do registro
+// (`status_animal` é legado somente-leitura: o view model o deriva do evento).
+export const LEGACY_PAYLOAD_FORBIDDEN = Object.freeze([
+  '_localId', 'peso_kg', 'created_date', 'updated_date', 'status_animal', 'sanidade_ids', 'sanidades',
+]);
+
+const ALLOWED_KEYS = new Set(LEGACY_PAYLOAD_ALLOWLIST);
+
+/** Mantém somente as chaves permitidas (chave desconhecida ou proibida é descartada). */
+export function filterLegacyPayload(source) {
+  const out = {};
+  for (const [key, value] of Object.entries(source || {})) {
+    if (ALLOWED_KEYS.has(key)) out[key] = value;
+  }
+  return out;
+}
+
+/** Chaves de um payload fora da lista permitida (gates e diagnóstico). */
+export function findDisallowedLegacyKeys(payload) {
+  if (!payload || typeof payload !== 'object') return [];
+  return Object.keys(payload).filter((key) => !ALLOWED_KEYS.has(key));
+}
+
 const pick = (obj, ...keys) => {
   for (const key of keys) {
     if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') return obj[key];
@@ -10,7 +45,9 @@ const pick = (obj, ...keys) => {
 
 export function validateUiPayload(payload, { isUpdate = false } = {}) {
   const dataPesagem = pick(payload, 'data_pesagem', 'dataPesagem', 'data');
-  const pesoRaw = pick(payload, 'peso_kg', 'pesoKg', 'peso');
+  // `peso` é o campo da UI e prevalece: na edição o service mescla o view model
+  // (que traz o peso_kg antigo) com o payload novo (que só traz `peso`).
+  const pesoRaw = pick(payload, 'peso', 'pesoKg', 'peso_kg');
   const peso = parseBrazilianNumber(pesoRaw);
   const movementType = pick(payload, 'tipo_manejo', 'tipo_pesagem', 'tipo');
   const exitReason = pick(payload, 'motivo_saida', 'motivoSaida');
@@ -41,11 +78,11 @@ export function uiToStorageRecord(uiPayload, options = {}) {
   validateUiPayload(uiPayload, { isUpdate });
 
   const dataPesagem = pick(uiPayload, 'data_pesagem', 'dataPesagem', 'data');
-  const pesoKg = parseBrazilianNumber(pick(uiPayload, 'peso_kg', 'pesoKg', 'peso'));
+  const pesoKg = parseBrazilianNumber(pick(uiPayload, 'peso', 'pesoKg', 'peso_kg'));
 
-  const legacySnapshot = { ...uiPayload };
-  delete legacySnapshot.sanidade_ids;
-  delete legacySnapshot.sanidades;
+  // Snapshot de compatibilidade filtrado pela lista permitida (ADR-027).
+  const legacySnapshot = filterLegacyPayload(uiPayload);
+  if (legacySnapshot.peso === undefined && pesoKg !== null) legacySnapshot.peso = pesoKg;
 
   const storageRecord = {
     id: id || uiPayload.id,
@@ -86,6 +123,7 @@ export function storageRecordToViewModel(row) {
     }
   }
 
+  const tipoManejo = legacy.tipo_manejo ?? row.tipo_pesagem ?? null;
   return {
     ...legacy,
     // Chave técnica local, usada somente pelos adapters para atualizações em
@@ -97,8 +135,10 @@ export function storageRecordToViewModel(row) {
     peso_kg: row.peso_kg ?? legacy.peso,
     lote_id: row.lote_id ?? legacy.lote_id ?? null,
     animal_id: row.animal_id ?? legacy.animal_id ?? null,
-    tipo_manejo: legacy.tipo_manejo ?? row.tipo_pesagem ?? null,
+    tipo_manejo: tipoManejo,
     observacao: row.observacao ?? legacy.observacao ?? null,
+    // Projeções (não persistidas): status do evento e timestamps do registro.
+    status_animal: legacy.status_animal ?? (tipoManejo === 'Saída' ? 'Inativo' : 'Ativo'),
     created_date: legacy.created_date ?? row.created_at ?? null,
     updated_date: legacy.updated_date ?? row.updated_at ?? null,
   };

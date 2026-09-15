@@ -3,17 +3,35 @@ import { toast } from "sonner";
 import * as maintenanceService from "@/modules/maintenance/application/maintenanceService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   ModeloBase1ActionBar,
   ModeloBase1PageContainer,
   ModeloBase1PageHeader,
 } from "@/components/modelobase1";
-import { UI_BUILD_ID, UI_MODEL, UI_VERSION } from "@/components/modelobase1/uiBuildInfo";
 import { fmtDateTimeBR, fmtInt } from "@/components/common/formatNumber";
 import ConfirmActionDialog from "@/components/common/ConfirmActionDialog";
 
 function fileLabel(result) {
   return result?.backupPath || result?.filePath || result?.path || result?.fileName || "";
+}
+
+const MIGRATION_LABELS = {
+  CONCLUIDA: "Concluída",
+  EM_ANDAMENTO: "Em andamento",
+  PENDENTE: "Pendente",
+  FALHOU: "Falhou",
+  SEM_REGISTRO: "Sem registro",
+};
+
+function migrationLabel(status) {
+  return MIGRATION_LABELS[status] || status || "—";
+}
+
+function migrationTone(status) {
+  if (status === "CONCLUIDA") return "font-semibold text-emerald-700";
+  if (status === "FALHOU") return "font-semibold text-red-700";
+  return "font-semibold text-amber-700";
 }
 
 export default function ManutencaoSistema() {
@@ -31,6 +49,12 @@ export default function ManutencaoSistema() {
   const [diag, setDiag] = useState(null);
   const [backups, setBackups] = useState([]);
   const [confirmation, setConfirmation] = useState(null);
+  const [versions, setVersions] = useState(null);
+  const [migration, setMigration] = useState(null);
+  const [migrationDry, setMigrationDry] = useState(null);
+  const [migrationProgress, setMigrationProgress] = useState("");
+  const [clearText, setClearText] = useState("");
+  const [resetText, setResetText] = useState("");
 
   const refreshStatus = useCallback(async () => {
     try {
@@ -40,13 +64,15 @@ export default function ManutencaoSistema() {
         setDiagText("Manutenção disponível apenas no app desktop.");
         return;
       }
-      const [s, integrity, backupList] = await Promise.all([
+      const [s, integrity, backupList, migrationStatus] = await Promise.all([
         maintenanceService.getDatabaseStats(),
         maintenanceService.runIntegrityCheck().catch((err) => ({ ok: false, error: err.message })),
         maintenanceService.listBackups().catch(() => ({ full: [] })),
+        maintenanceService.getMigrationStatus().catch(() => null),
       ]);
       setStats(s);
       setBackups(backupList?.full || []);
+      setMigration(migrationStatus);
       const ok = integrity?.ok !== false && integrity?.result === "ok";
       setStatusLabel(ok ? "OK" : "Erro");
       setLastCheckAt(fmtDateTimeBR(new Date()));
@@ -67,6 +93,11 @@ export default function ManutencaoSistema() {
   }, [refreshStatus]);
 
   useEffect(() => {
+    try {
+      setVersions(maintenanceService.getVersionInfo());
+    } catch {
+      setVersions(null);
+    }
     let active = true;
     (async () => {
       try {
@@ -133,10 +164,10 @@ export default function ManutencaoSistema() {
       "integrity",
       async () => {
         const r = await maintenanceService.runIntegrityCheck();
-        setDiagText("Banco íntegro.");
+        setDiagText(r?.ok ? "Banco íntegro." : `Problemas encontrados: ${fmtInt(r?.issues?.length || 0)}.`);
         return r;
       },
-      "Banco íntegro.",
+      "Verificação de integridade concluída.",
       "Foi encontrado um problema. Faça backup e envie o relatório técnico."
     );
 
@@ -231,17 +262,85 @@ export default function ManutencaoSistema() {
     );
   };
 
+  const onMigrationDryRun = () =>
+    run(
+      "mig-dry",
+      async () => {
+        const report = await maintenanceService.dryRunMigration();
+        setMigrationDry(report);
+        return report;
+      },
+      "Simulação da migração concluída (nada foi gravado).",
+      "Não foi possível simular a migração."
+    );
+
+  const onResumeMigration = () =>
+    run(
+      "mig-resume",
+      async () => {
+        setMigrationProgress("");
+        const result = await maintenanceService.resumeMigration({
+          onProgress: (p) => setMigrationProgress(`${p.passo}: ${p.message} (${fmtInt(p.processed || 0)}/${fmtInt(p.total || 0)})`),
+        });
+        setMigrationDry(null);
+        return result;
+      },
+      "Migração continuada com sucesso.",
+      "A migração não pôde ser concluída. Veja o diagnóstico."
+    );
+
+  const onClearOperational = () =>
+    run(
+      "clear-op",
+      async () => {
+        const result = await maintenanceService.clearOperationalData({ confirmationText: clearText });
+        setClearText("");
+        return result;
+      },
+      "Dados operacionais limpos. Usuários, configurações e cadastros foram preservados.",
+      "Não foi possível limpar os dados operacionais."
+    );
+
+  const onResetAll = () =>
+    run(
+      "reset-all",
+      async () => {
+        const result = await maintenanceService.resetAllData({ confirmationText: resetText });
+        setResetText("");
+        return result;
+      },
+      "Reset completo concluído. O sistema voltou ao estado inicial.",
+      "Não foi possível executar o reset completo."
+    );
+
   const copyDiag = async () => {
+    let snapshot = null;
+    try {
+      snapshot = await maintenanceService.getDiagnosticSnapshot();
+    } catch {
+      snapshot = null;
+    }
+    const v = snapshot?.versoes || versions || {};
+    const m = snapshot?.migracao || null;
     const text = [
-      diag ? `Versão: ${diag.version}` : "",
+      `Aplicativo: ${v.app ?? diag?.version ?? "—"}`,
+      `Banco (schema): ${v.dbSchema ?? stats?.dbVersion ?? "—"}`,
+      `Backup (formato): ${v.backupFormat ?? "—"}`,
+      `Build UI: ${v.uiBuildId ?? "—"}`,
+      `Build dados: ${v.dataBuildId ?? "—"}`,
+      `Contrato UI: ${v.uiContract ?? "—"}`,
+      `Contrato dados: ${v.dataContract ?? "—"}`,
       diag ? `Empacotado: ${diag.isPackaged ? "sim" : "não (dev)"}` : "",
-      `Interface: ${UI_VERSION} · ${UI_MODEL} · ${UI_BUILD_ID}`,
-      `Armazenamento: ${stats?.dbType || "IndexedDB local (Dexie)"} · versão ${stats?.dbVersion ?? 1}`,
+      `Armazenamento: ${stats?.dbType || "IndexedDB local (Dexie)"} · versão ${stats?.dbVersion ?? v.dbSchema ?? "—"}`,
       `Status do banco: ${statusLabel}`,
+      m ? `Migração v${m.versao ?? v.dbSchema}: ${migrationLabel(m.status)}${m.last_checkpoint ? ` · checkpoint ${m.last_checkpoint}` : ""}${m.processed != null ? ` · ${fmtInt(m.processed)}/${fmtInt(m.total || 0)}` : ""}` : "",
+      m?.error ? `Erro da migração: ${m.error.code || ""} ${m.error.message || ""}`.trim() : "",
+      m?.writeBlocked ? "Escrita bloqueada: sim" : "",
+      m?.backup?.path ? `Backup pré-migração: ${m.backup.path}` : "",
       diag ? `Caminho do log: ${diag.logPath || "—"}` : "",
       `Última verificação: ${lastCheckAt}`,
       diagText,
-      stats ? JSON.stringify(stats, null, 2) : "",
+      snapshot ? JSON.stringify({ migracao: snapshot.migracao, armazenamento: snapshot.armazenamento, integridade: snapshot.integridade }, null, 2) : (stats ? JSON.stringify(stats, null, 2) : ""),
     ]
       .filter(Boolean)
       .join("\n");
@@ -253,6 +352,11 @@ export default function ManutencaoSistema() {
     }
   };
 
+  const migrationState = migration?.state || null;
+  const migrationStatus = migrationState?.status || "SEM_REGISTRO";
+  const canResume = ["PENDENTE", "EM_ANDAMENTO", "FALHOU"].includes(migrationStatus) || Boolean(migration?.blocked);
+  const relatorio = migrationState?.relatorio || null;
+
   return (
     <ModeloBase1PageContainer
       variant="maintenance"
@@ -261,7 +365,7 @@ export default function ManutencaoSistema() {
       <ModeloBase1PageHeader
         visuallyHidden
         title="Backup e Manutenção"
-        description="Proteja seus dados: backup, exportação, restauração e verificação do banco."
+        description="Proteja seus dados: backup, exportação, restauração, migração e verificação do banco."
       />
       <ModeloBase1ActionBar
         className="mb1-operational-actionbar"
@@ -298,10 +402,109 @@ export default function ManutencaoSistema() {
             <li>Pesagens: {stats?.weighingEntries != null ? fmtInt(stats.weighingEntries) : "—"}</li>
             <li>Apartações: {stats?.apartacoes != null ? fmtInt(stats.apartacoes) : "—"}</li>
             <li>Embarques: {stats?.shipments != null ? fmtInt(stats.shipments) : "—"}</li>
+            <li>Animais: {stats?.counts?.animais != null ? fmtInt(stats.counts.animais) : "—"}</li>
             <li className="col-span-2">
               Armazenamento: {stats?.dbType || "IndexedDB local (Dexie)"}
             </li>
           </ul>
+          <div className="pt-2 mt-1 border-t border-slate-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Versões</p>
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600 text-xs">
+              <li>Aplicativo: {versions?.app ?? diag?.version ?? "—"}</li>
+              <li>Banco: {versions?.dbSchema ?? stats?.dbVersion ?? "—"}</li>
+              <li>Backup: {versions?.backupFormat ?? "—"}</li>
+              <li>Build UI: {versions?.uiBuildId ?? "—"}</li>
+              <li>Build dados: {versions?.dataBuildId ?? "—"}</li>
+              <li>Contrato UI: {versions?.uiContract ?? "—"}</li>
+              <li>Contrato dados: {versions?.dataContract ?? "—"}</li>
+              <li>
+                Migração:{" "}
+                <span className={migrationTone(migrationStatus)}>{migrationLabel(migrationStatus)}</span>
+                {migration?.blocked ? " · escrita bloqueada" : ""}
+              </li>
+            </ul>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="emp-content-card">
+        <CardHeader className="emp-form-section-panel--corp">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Migração</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm text-slate-700">
+          <div className="space-y-1">
+            <p>
+              Migração v{migration?.versao ?? versions?.dbSchema ?? "—"}:{" "}
+              <span className={migrationTone(migrationStatus)}>{migrationLabel(migrationStatus)}</span>
+            </p>
+            {migrationState?.last_checkpoint && <p className="text-xs text-slate-500">Checkpoint: {migrationState.last_checkpoint}</p>}
+            {migrationState?.processed != null && migrationState?.total > 0 && (
+              <p className="text-xs text-slate-500">Progresso: {fmtInt(migrationState.processed)} de {fmtInt(migrationState.total)} registros</p>
+            )}
+            {migrationState?.backup?.path && <p className="text-xs text-slate-500 break-all">Backup pré-migração: {migrationState.backup.path}</p>}
+            {migrationState?.error && (
+              <p className="text-xs text-red-700">Erro: {migrationState.error.code ? `${migrationState.error.code} — ` : ""}{migrationState.error.message}</p>
+            )}
+            {migration?.blocked && (
+              <p className="text-xs text-red-700">A escrita está bloqueada até a migração ser concluída. Os dados e o backup pré-migração estão preservados.</p>
+            )}
+            {migrationProgress && <p className="text-xs text-slate-500">{migrationProgress}</p>}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" className="emp-toolbar-btn px-4" onClick={onMigrationDryRun} disabled={!!busy}>
+              {busy === "mig-dry" ? "Simulando…" : "Simular migração (dry-run)"}
+            </Button>
+            <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={onResumeMigration} disabled={!!busy || !canResume}>
+              {busy === "mig-resume" ? "Migrando…" : "Continuar migração"}
+            </Button>
+          </div>
+          {relatorio && (
+            <div className="border border-slate-200 rounded-md p-3 bg-slate-50 text-xs text-slate-600 space-y-1">
+              <p className="font-semibold text-slate-700">Relatório da migração</p>
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                <li>Marcas criadas: {fmtInt(relatorio.marcas || 0)}</li>
+                <li>Raças criadas: {fmtInt(relatorio.racas || 0)}</li>
+                <li>Categorias: {fmtInt(relatorio.categorias || 0)}</li>
+                <li>Parceiros: {fmtInt(relatorio.parceiros || 0)}</li>
+                <li>Propriedades: {fmtInt(relatorio.propriedades || 0)}</li>
+                <li>Causas de morte: {fmtInt(relatorio.causasMorte || 0)}</li>
+                <li>Animais atualizados: {fmtInt(relatorio.animaisAtualizados || 0)}</li>
+                <li>Identificadores: {fmtInt(relatorio.identificadores || 0)}</li>
+                <li>Saídas sem motivo: {fmtInt(relatorio.saidasSemMotivo || 0)}</li>
+                <li>Colisões de marca: {fmtInt((relatorio.colisoesMarca || []).length)}</li>
+                <li className="col-span-2">Chaves legadas removidas: {fmtInt((relatorio.chavesLegadasRemovidas || []).length)}</li>
+              </ul>
+              {(relatorio.colisoesMarca || []).length > 0 && (
+                <div className="pt-1">
+                  <p className="font-semibold text-amber-700">Grafias de marca mantidas separadas (revisar no cadastro de marcas):</p>
+                  <ul className="list-disc pl-4">
+                    {relatorio.colisoesMarca.map((c) => (
+                      <li key={c.nome_normalizado}>{c.nome_normalizado}: {(c.grafias || []).join(" · ")} — números em conflito: {(c.numeros || []).map((n) => n.numero).join(", ")}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+          {migrationDry && (
+            <div className="border border-slate-200 rounded-md p-3 bg-slate-50 text-xs text-slate-600 space-y-1">
+              <p className="font-semibold text-slate-700">Simulação (nada foi gravado) — pendente: {migrationDry.pendente ? "sim" : "não"}</p>
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                <li>Marcas a criar: {fmtInt(migrationDry.marcas?.novas || 0)}</li>
+                <li>Colisões de marca: {fmtInt((migrationDry.marcas?.colisoes || []).length)}</li>
+                <li>Raças a criar: {fmtInt(migrationDry.racas?.novas || 0)}</li>
+                <li>Categorias faltantes: {fmtInt((migrationDry.categorias?.faltantes || []).length)}</li>
+                <li>Parceiros a criar: {fmtInt(migrationDry.parceiros?.novos || 0)}</li>
+                <li>Causas de morte a criar: {fmtInt(migrationDry.causasMorte?.novas || 0)}</li>
+                <li>Animais pendentes: {fmtInt(migrationDry.animais?.pendentes || 0)} de {fmtInt(migrationDry.animais?.total || 0)}</li>
+                <li>Identificadores pendentes: {fmtInt(migrationDry.identificadores?.pendentes || 0)} de {fmtInt(migrationDry.identificadores?.total || 0)}</li>
+                <li>Pesagens com payload a limpar: {fmtInt(migrationDry.pesagens?.payloadsPendentes || 0)}</li>
+                <li>Sessões a converter: {fmtInt(migrationDry.sessoes?.pendentes || 0)}</li>
+                <li>Saídas sem motivo: {fmtInt(migrationDry.animais?.saidasSemMotivo || 0)}</li>
+                <li>Chaves legadas: {fmtInt((migrationDry.chavesLegadas || []).length)}</li>
+              </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -387,6 +590,16 @@ export default function ManutencaoSistema() {
               <p className="font-medium">Arquivo: {restoreFileName}</p>
               <p>Backup válido: {restoreDry.restorable ? "sim" : "não"}</p>
               <p>Integridade: {restoreDry.integrity || "—"}</p>
+              <p>Formato: {restoreDry.formatVersion ?? "—"} · Banco de origem: {restoreDry.sourceDbVersion ?? "—"}</p>
+              {restoreDry.schemaUpgradeRequired && (
+                <p className="text-amber-700">Backup de esquema anterior: será convertido automaticamente após a restauração.</p>
+              )}
+              {(restoreDry.ignoredStores || []).length > 0 && (
+                <p className="text-xs text-slate-500">Stores ignoradas (removidas do esquema): {restoreDry.ignoredStores.join(", ")}</p>
+              )}
+              {(restoreDry.newStores || []).length > 0 && (
+                <p className="text-xs text-slate-500">Stores novas (nascem vazias): {restoreDry.newStores.join(", ")}</p>
+              )}
               <p>
                 Data:{" "}
                 {restoreDry.manifest?.createdAt || restoreDry.createdAt
@@ -403,6 +616,60 @@ export default function ManutencaoSistema() {
               </Button>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="emp-content-card">
+        <CardHeader className="emp-form-section-panel--corp">
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Limpeza de dados</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4 text-sm text-slate-700">
+          <div className="space-y-2 border border-slate-200 rounded-md p-3">
+            <p className="font-medium">Limpar dados operacionais</p>
+            <p className="text-xs text-slate-500">
+              Apaga pesagens, animais, sessões, lotes e embarques. Preserva usuários, configurações, histórico de backups e os cadastros (marcas, raças, categorias, parceiros, propriedades, causas de morte). Um backup físico é criado e validado antes.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={clearText}
+                onChange={(event) => setClearText(event.target.value)}
+                placeholder={`Digite ${maintenanceService.CLEAR_CONFIRMATION_TEXT} para confirmar`}
+                className="max-w-xs"
+                aria-label="Confirmação da limpeza de dados operacionais"
+              />
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={onClearOperational}
+                disabled={!!busy || clearText.trim().toUpperCase() !== maintenanceService.CLEAR_CONFIRMATION_TEXT}
+              >
+                {busy === "clear-op" ? "Limpando…" : "Limpar dados operacionais"}
+              </Button>
+            </div>
+          </div>
+          <div className="space-y-2 border border-red-200 rounded-md p-3">
+            <p className="font-medium text-red-700">Reset completo (ADMIN)</p>
+            <p className="text-xs text-slate-500">
+              Apaga tudo — inclusive usuários, configurações e cadastros — e mantém apenas o histórico de backups. Exclusivo do perfil ADMIN. Um backup físico é criado e validado antes; ao terminar o sistema volta à configuração inicial.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Input
+                value={resetText}
+                onChange={(event) => setResetText(event.target.value)}
+                placeholder={`Digite ${maintenanceService.RESET_CONFIRMATION_TEXT} para confirmar`}
+                className="max-w-xs"
+                aria-label="Confirmação do reset completo"
+              />
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={onResetAll}
+                disabled={!!busy || resetText.trim().toUpperCase() !== maintenanceService.RESET_CONFIRMATION_TEXT}
+              >
+                {busy === "reset-all" ? "Executando…" : "Reset completo (ADMIN)"}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
@@ -426,10 +693,11 @@ export default function ManutencaoSistema() {
             </Button>
           </div>
           <p className="text-sm text-slate-600">{diagText || "—"}</p>
+          <p className="text-xs text-slate-400">O diagnóstico copiado inclui versões, estado da migração, contagens e integridade — nunca dados de usuários.</p>
           {diag && (
             <div className="pt-2 mt-1 border-t border-slate-100 text-xs text-slate-500 space-y-0.5">
               <p>Versão: {diag.version}</p>
-              <p>Armazenamento: {stats?.dbType || "IndexedDB local (Dexie)"} · versão {stats?.dbVersion ?? 1}</p>
+              <p>Armazenamento: {stats?.dbType || "IndexedDB local (Dexie)"} · versão {stats?.dbVersion ?? versions?.dbSchema ?? 1}</p>
               <p>Banco: {statusLabel === "OK" ? "OK" : "verificar"}</p>
               <p className="break-all">Log: {diag.logPath || "—"}</p>
             </div>
@@ -441,7 +709,7 @@ export default function ManutencaoSistema() {
         onOpenChange={(nextOpen) => { if (!nextOpen) setConfirmation(null); }}
         title={confirmation === 'restore' ? 'Restaurar backup' : 'Importar dados'}
         description={confirmation === 'restore'
-          ? 'O banco atual será substituído somente depois que um backup físico de segurança for criado e validado. Deseja continuar?'
+          ? 'O banco atual será substituído somente depois que um backup físico de segurança for criado e validado. Backups de esquema anterior são convertidos automaticamente. Deseja continuar?'
           : 'Antes da importação, o sistema criará e validará um backup físico automático. Deseja continuar?'}
         confirmLabel={confirmation === 'restore' ? 'Restaurar' : 'Importar'}
         destructive={confirmation === 'restore'}

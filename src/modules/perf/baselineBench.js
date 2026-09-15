@@ -3,7 +3,11 @@
 //   - busca indexada (Dexie) por animal e por período;
 //   - troca identificação → peso (índice em memória + histórico + ganho/GMD);
 //   - salvamento local (createEntry: validação, transação, projeções, recálculo);
-//   - carga inicial da tela (listEntries completo) e reconstrução do índice.
+//   - carga inicial da tela (listEntries completo) e reconstrução do índice;
+//   - abertura simulada do Lançamento (listEntries + getRegisteredAnimals +
+//     buildAnimalLookupIndex encadeados: o custo real de abrir a tela).
+// A massa é semeada no esquema "v7" por padrão (cadastros mestres e ids —
+// Programa 2.0); "v6" continua disponível para comparar com a F0/F1.
 // O mesmo módulo roda em Node (fake-indexeddb) e no navegador (IndexedDB real)
 // para que o baseline seja reproduzível em desenvolvimento e no pacote.
 import storage from '../../storage/storageAdapter.js';
@@ -16,15 +20,18 @@ import {
   getRegisteredAnimals,
   normalizeAnimalText,
 } from '../animals/domain/animalHistory.js';
-import { createRandom, generateTestMass, seedTestMass, TEST_MASSES } from './testMass.js';
+import { createRandom, DEFAULT_MASS_SCHEMA, generateTestMass, MASS_SCHEMAS, seedTestMass, TEST_MASSES } from './testMass.js';
 
-export const BASELINE_VERSION = 1;
+// 2: relatório ganha `schema`, a métrica `abertura_lancamento_simulada` e o orçamento correspondente.
+export const BASELINE_VERSION = 2;
 
-// Orçamentos do documento 00-VISAO-E-PRINCIPIOS §5 e 07-ROADMAP §4 (F1).
+// Orçamentos do documento 00-VISAO-E-PRINCIPIOS §5, 07-ROADMAP §4 (F1) e
+// TARGET-PERFORMANCE-RISKS §4 / phase-00 PERFORMANCE §5 (abrir Lançamento < 1 s em 36 mil).
 export const BUDGETS_MS = Object.freeze({
   busca_indexada_animal: { p95: 100 },
   identificacao_para_peso: { p95: 100 },
   salvamento_local: { p95: 250 },
+  abertura_lancamento_simulada: { p95: 1000 },
 });
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -68,11 +75,12 @@ export function describeRuntime() {
   };
 }
 
-/** Semeia uma massa no banco atual (apaga o banco antes). */
-export async function seedMass(massKey, { seed, onProgress } = {}) {
+/** Semeia uma massa no banco atual (apaga o banco antes). `schema` padrão "v7". */
+export async function seedMass(massKey, { seed, schema = DEFAULT_MASS_SCHEMA, onProgress } = {}) {
+  if (!MASS_SCHEMAS.includes(schema)) throw new Error(`Esquema desconhecido: ${schema}. Use: ${MASS_SCHEMAS.join(', ')}`);
   await deleteDbForTests();
   const db = await storage.ensureReady();
-  const mass = generateTestMass(massKey, { seed });
+  const mass = generateTestMass(massKey, { seed, schema });
   const seeding = await timed(() => seedTestMass(db, mass, { onProgress }));
   return { summary: mass.summary, seedMs: Number(seeding.ms.toFixed(1)), mass };
 }
@@ -87,14 +95,16 @@ export async function clearMass() {
  * Executa o baseline completo para uma massa e devolve um relatório JSON.
  * `samples` controla as amostras das operações unitárias; `saves` as gravações.
  */
-export async function runBaseline({ massKey = 'pequena', samples = 200, saves = 30, seed = 20260908, log = () => {} } = {}) {
+export async function runBaseline({ massKey = 'pequena', samples = 200, saves = 30, seed = 20260908, schema = DEFAULT_MASS_SCHEMA, log = () => {} } = {}) {
   if (!TEST_MASSES[massKey]) throw new Error(`Massa desconhecida: ${massKey}`);
+  if (!MASS_SCHEMAS.includes(schema)) throw new Error(`Esquema desconhecido: ${schema}. Use: ${MASS_SCHEMAS.join(', ')}`);
   const random = createRandom(seed + 7);
   const report = {
     baselineVersion: BASELINE_VERSION,
     massKey,
     label: TEST_MASSES[massKey].label,
     seed,
+    schema,
     startedAt: new Date().toISOString(),
     runtime: describeRuntime(),
     dbVersion: storage.getDbVersion(),
@@ -105,8 +115,8 @@ export async function runBaseline({ massKey = 'pequena', samples = 200, saves = 
     notes: [],
   };
 
-  log(`[${massKey}] gerando e semeando massa…`);
-  const seeded = await seedMass(massKey, { seed, onProgress: (p) => log(`[${massKey}] ${p.store} ${p.written}/${p.total}`) });
+  log(`[${massKey}] gerando e semeando massa (${schema})…`);
+  const seeded = await seedMass(massKey, { seed, schema, onProgress: (p) => log(`[${massKey}] ${p.store} ${p.written}/${p.total}`) });
   report.dataset = seeded.summary;
   report.seedMs = seeded.seedMs;
   const mass = seeded.mass;
@@ -131,6 +141,21 @@ export async function runBaseline({ massKey = 'pequena', samples = 200, saves = 
     index = buildAnimalLookupIndex(animals);
   });
   report.metrics.indice_animais_rebuild.animais = animals.length;
+
+  // 3) Abertura simulada do Lançamento: os três passos encadeados, como a tela faz
+  //    ao montar (carga completa → animais cadastrados → índice de busca).
+  log(`[${massKey}] abertura simulada do Lançamento (${loadRuns}x)…`);
+  let openedEntries = 0;
+  let openedAnimals = 0;
+  report.metrics.abertura_lancamento_simulada = await series(loadRuns, async () => {
+    const loaded = await weighingService.listEntries({ empresaId });
+    const registered = getRegisteredAnimals(loaded);
+    buildAnimalLookupIndex(registered);
+    openedEntries = loaded.length;
+    openedAnimals = registered.length;
+  });
+  report.metrics.abertura_lancamento_simulada.registros = openedEntries;
+  report.metrics.abertura_lancamento_simulada.animais = openedAnimals;
 
   const activeAnimals = mass.stores.animais;
   const pickAnimal = () => activeAnimals[random.int(0, Math.max(0, activeAnimals.length - 1))];
@@ -233,7 +258,7 @@ export function evaluateBudgets(metrics) {
 
 export function formatReportTable(report) {
   const lines = [];
-  lines.push(`Massa ${report.label} (${report.massKey}) — ${report.runtime.kind} — ${report.runtime.indexedDb}`);
+  lines.push(`Massa ${report.label} (${report.massKey}, esquema ${report.schema || 'v6'}) — ${report.runtime.kind} — ${report.runtime.indexedDb}`);
   lines.push(`Registros: ${JSON.stringify(report.dataset)} — semeadura ${report.seedMs} ms`);
   lines.push('métrica | n | p50 | p95 | p99 | max');
   for (const [name, metric] of Object.entries(report.metrics)) {

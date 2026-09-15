@@ -1,10 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Columns3, FileText, Filter, LayoutDashboard, ListFilter, MoreVertical, RefreshCw, Search, TableProperties, Trash2 } from 'lucide-react';
+// Página genérica dos cadastros mestres (Tela Mãe + registro do ModeloBase1).
+// Cada aba recebe { id, definition, persistence }: a definição vem de
+// src/modules/catalog/domain/registryDefinitions.js e a porta de persistência é
+// o serviço do cadastro (list/get/create/update/deactivate/activate/remove/
+// setDefault?/countUsage?). A página não conhece stores nem chaves de configuração.
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Check, ChevronDown, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Columns3, FileText, Filter, LayoutDashboard, ListFilter, RefreshCw, Star, TableProperties, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ensureEmpresaId } from '@/api/db';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import MakFilterPill from '@/components/mak/MakFilterPill';
@@ -19,10 +23,33 @@ import MgTablePanelStrip from '@/components/mak/MgTablePanelStrip';
 import { normalizeSearchQuery } from '@/components/mak/mgSearchHighlight';
 import { isMakColumnFilterActive, matchesMakColumnFilter } from '@/components/mak/MakColumnMenu';
 import { ModeloBase1ActionBar, ModeloBase1PageContainer, ModeloBase1PageHeader } from '@/components/modelobase1';
-import { loadRegistryGroup, saveRegistryGroup } from '@/modules/auxiliary/application/registryService';
+import { AccessDenied } from '@/components/auth/RequirePermission';
+import { useAuth } from '@/components/auth/useAuth';
+import { getRegistryService } from '@/modules/catalog/application/index';
+import {
+  NONE_OPTION,
+  OBSERVATION_FIELD_IDS,
+  USAGE_IN_LIST_LIMIT,
+  USAGE_IN_LIST_STORES,
+  capitalize,
+  describeError,
+  emptyFor,
+  formFromRecord,
+  formatCellValue,
+  groupFields,
+  hasFieldValue,
+  multiLabels,
+  payloadFromForm,
+  referenceOptionsFor,
+} from './registryFormModel.js';
 import '@/styles/auxiliary-registries.css';
+import './cadastro-mestre.css';
 
-const emptyFor = (tab) => Object.fromEntries(tab.fields.map((field) => [field.id, field.defaultValue ?? (field.type === 'boolean' ? true : '')]));
+export const REGISTRY_READ_PERMISSION = 'registry.read';
+export const REGISTRY_WRITE_PERMISSION = 'registry.write';
+
+const TYPE_COLUMN = { id: '_typeLabel', label: 'Tipo de cadastro', default: true };
+const USAGE_COLUMN = { id: '_uso', label: 'Em uso', default: true, filterType: 'number' };
 
 const FIELD_WIDTH_PRESETS = {
   CAMPO_PRINCIPAL: { min: 260, grow: 3 },
@@ -32,36 +59,41 @@ const FIELD_WIDTH_PRESETS = {
   NUMERO: { min: 120, grow: 1 },
 };
 
-function resolveFieldWidthType(definition) {
-  if (definition.widthType && FIELD_WIDTH_PRESETS[definition.widthType]) return definition.widthType;
-  if (definition.type === 'boolean') return 'SIM_NAO';
-  if (definition.type === 'number') return 'NUMERO';
-  if (definition.type === 'code') return 'CODIGO';
-  if (definition.compact || ['telefone', 'unidade'].includes(definition.id)) return 'TEXTO_CURTO';
+function resolveFieldWidthType(campo) {
+  if (campo.widthType && FIELD_WIDTH_PRESETS[campo.widthType]) return campo.widthType;
+  if (campo.tipo === 'booleano') return 'SIM_NAO';
+  if (campo.tipo === 'numero') return 'NUMERO';
+  if (campo.compacto) return 'TEXTO_CURTO';
   return 'CAMPO_PRINCIPAL';
 }
 
-function Field({ definition, value, onChange }) {
-  const hasValue = String(value ?? '').trim() !== '';
-  const widthType = resolveFieldWidthType(definition);
-  const fieldClass = `fg mg-prototype-field aux-model-field${definition.wide ? ' is-wide' : ''}${hasValue ? ' mg-has-value' : ''}`;
-  if (definition.type === 'select' || definition.type === 'boolean') {
-    const options = definition.type === 'boolean'
-      ? [{ value: 'true', label: 'Ativo' }, { value: 'false', label: 'Inativo' }]
-      : definition.options;
+// Campo por tipo da definição: texto, número (pt-BR), booleano, select (enum ou
+// referência a outro cadastro) e multiselect (chips).
+function Field({ campo, value, onChange, options, disabled }) {
+  const hasValue = hasFieldValue(value);
+  const widthType = resolveFieldWidthType(campo);
+  const fieldClass = `fg mg-prototype-field aux-model-field${campo.largo ? ' is-wide' : ''}${hasValue ? ' mg-has-value' : ''}`;
+  const labelClass = `fg-label${campo.obrigatorio ? ' required' : ''}`;
+  if (campo.tipo === 'select' || campo.tipo === 'booleano') {
+    const isBoolean = campo.tipo === 'booleano';
+    const selectOptions = isBoolean
+      ? (campo.id === 'ativo' ? [{ value: 'true', label: 'Ativo' }, { value: 'false', label: 'Inativo' }] : [{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }])
+      : [...(campo.obrigatorio ? [] : [{ value: NONE_OPTION, label: 'Nenhum' }]), ...(options ?? campo.opcoes ?? [])];
+    const current = isBoolean ? String(Boolean(value)) : String(value ?? '');
     return (
-      <div className={`mg-prototype-composite mg-prototype-field aux-model-field aux-model-field--select${definition.wide ? ' is-wide' : ''}${hasValue ? ' mg-has-value' : ''}`} data-field={definition.id} data-width-type={widthType}>
-        <div className={`cmd-select aux-model-cmd-select${hasValue ? ' mg-has-value' : ''}`}>
-          <span id={`aux-label-${definition.id}`} className={`cmd-label${definition.required ? ' req' : ''}`}>{definition.label}</span>
+      <div className={`mg-prototype-composite mg-prototype-field aux-model-field aux-model-field--select${campo.largo ? ' is-wide' : ''}${hasValue || isBoolean ? ' mg-has-value' : ''}`} data-field={campo.id} data-width-type={widthType} title={campo.ajuda || undefined}>
+        <div className={`cmd-select aux-model-cmd-select${hasValue || isBoolean ? ' mg-has-value' : ''}`}>
+          <span id={`aux-label-${campo.id}`} className={`cmd-label${campo.obrigatorio ? ' req' : ''}`}>{campo.label}</span>
           <Select
-            value={String(value ?? '') || undefined}
-            onValueChange={(nextValue) => onChange(definition.type === 'boolean' ? nextValue === 'true' : nextValue)}
+            value={current}
+            disabled={disabled}
+            onValueChange={(next) => onChange(isBoolean ? next === 'true' : (next === NONE_OPTION ? '' : next))}
           >
-            <SelectTrigger id={`aux-${definition.id}`} className="cmd-display aux-model-cmd-display" aria-labelledby={`aux-label-${definition.id}`}>
+            <SelectTrigger id={`aux-${campo.id}`} className="cmd-display aux-model-cmd-display" aria-labelledby={`aux-label-${campo.id}`}>
               <SelectValue placeholder="" />
             </SelectTrigger>
             <SelectContent position="popper" className="aux-model-cmd-panel">
-              {options.map((option) => <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>)}
+              {selectOptions.map((option) => <SelectItem key={String(option.value)} value={String(option.value)}>{option.label}</SelectItem>)}
             </SelectContent>
           </Select>
           <ChevronDown className="cmd-chevron" aria-hidden="true" />
@@ -69,35 +101,52 @@ function Field({ definition, value, onChange }) {
       </div>
     );
   }
-  if (definition.type === 'textarea' || ['observacoes', 'orientacao', 'descricao'].includes(definition.id)) {
+  if (campo.tipo === 'multiselect') {
+    const selected = Array.isArray(value) ? value : [];
+    const toggle = (option) => onChange(selected.includes(option.value) ? selected.filter((item) => item !== option.value) : [...selected, option.value]);
     return (
-      <div className={`${fieldClass} aux-model-field--textarea`} data-field={definition.id} data-width-type={widthType}>
-        <label className={`fg-label${definition.required ? ' required' : ''}`} htmlFor={`aux-${definition.id}`}>{definition.label}</label>
-        <textarea id={`aux-${definition.id}`} value={value ?? ''} onChange={(event) => onChange(event.target.value)} placeholder=" " rows={4} />
+      <div className={`${fieldClass} aux-model-field--chips`} data-field={campo.id} data-width-type={widthType} title={campo.ajuda || undefined}>
+        <span id={`aux-label-${campo.id}`} className={labelClass}>{campo.label}</span>
+        <div className="aux-chip-group" role="group" aria-labelledby={`aux-label-${campo.id}`}>
+          {(campo.opcoes ?? []).map((option) => {
+            const active = selected.includes(option.value);
+            return (
+              <button key={String(option.value)} type="button" className={`aux-chip${active ? ' is-selected' : ''}`} aria-pressed={active} disabled={disabled} onClick={() => toggle(option)}>
+                {active ? <Check aria-hidden="true" /> : null}
+                {option.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
     );
   }
+  if (OBSERVATION_FIELD_IDS.has(campo.id)) {
+    return (
+      <div className={`${fieldClass} aux-model-field--textarea`} data-field={campo.id} data-width-type={widthType} title={campo.ajuda || undefined}>
+        <label className={labelClass} htmlFor={`aux-${campo.id}`}>{campo.label}</label>
+        <textarea id={`aux-${campo.id}`} value={value ?? ''} onChange={(event) => onChange(event.target.value)} placeholder=" " rows={4} disabled={disabled} />
+      </div>
+    );
+  }
+  const isNumber = campo.tipo === 'numero';
   return (
-    <div className={fieldClass} data-field={definition.id} data-width-type={widthType}>
-      <label className={`fg-label${definition.required ? ' required' : ''}`} htmlFor={`aux-${definition.id}`}>{definition.label}</label>
+    <div className={fieldClass} data-field={campo.id} data-width-type={widthType} title={campo.ajuda || undefined}>
+      <label className={labelClass} htmlFor={`aux-${campo.id}`}>{campo.label}</label>
       <input
-        id={`aux-${definition.id}`}
+        id={`aux-${campo.id}`}
         value={value ?? ''}
         onChange={(event) => onChange(event.target.value)}
-        type={definition.type === 'number' ? 'number' : 'text'}
-        inputMode={definition.type === 'number' ? 'decimal' : undefined}
-        maxLength={definition.maxLength}
+        type="text"
+        inputMode={isNumber ? 'decimal' : undefined}
+        disabled={disabled}
         placeholder=" "
       />
     </div>
   );
 }
 
-const OBSERVATION_FIELD_IDS = new Set(['observacoes', 'orientacao', 'descricao']);
-const CONTACT_FIELD_IDS = new Set(['telefone', 'email']);
-const ADDITIONAL_FIELD_IDS = new Set(['cidade', 'propriedade', 'sif', 'principioAtivo', 'fabricante', 'unidade', 'dosePadrao', 'carenciaDias', 'viaAplicacao']);
-
-function FormCard({ title, fields, form, setField, full = false }) {
+function FormCard({ title, fields, form, setField, options, disabled, full = false }) {
   if (!fields.length) return null;
   const rowDensityClass = fields.length === 1 ? 'emp-form-card-row-grid--single' : 'emp-form-card-row-grid--pair';
   return (
@@ -108,7 +157,7 @@ function FormCard({ title, fields, form, setField, full = false }) {
           <div className="emp-form-card-rows">
             <div className="emp-form-card-row">
               <div className={`emp-form-card-row-grid emp-form-card-row-grid--flex ${rowDensityClass} aux-model-card-grid`}>
-                {fields.map((field) => <Field key={field.id} definition={field} value={form[field.id]} onChange={(value) => setField(field.id, value)} />)}
+                {fields.map((campo) => <Field key={campo.id} campo={campo} value={form[campo.id]} options={options?.[campo.id]} disabled={disabled} onChange={(value) => setField(campo.id, value)} />)}
               </div>
             </div>
           </div>
@@ -204,12 +253,34 @@ function getRecordInitials(record) {
   return source.split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toLocaleUpperCase('pt-BR');
 }
 
-export default function CadastroAuxiliarPage({ title, description, group, tabs }) {
+// Normaliza as abas: rótulos derivados da definição quando não informados.
+function normalizeTabs(tabs) {
+  return tabs.map((tab) => {
+    const { definition } = tab;
+    return {
+      ...tab,
+      label: tab.label ?? definition.rotulo,
+      singular: definition.singular,
+      newLabel: tab.newLabel ?? `${/a$/.test(definition.singular) ? 'Nova' : 'Novo'} ${definition.singular}`,
+      editLabel: tab.editLabel ?? `Editar ${definition.singular}`,
+      usageInList: tab.usageInList ?? (USAGE_IN_LIST_STORES.has(definition.store) && typeof tab.persistence.countUsage === 'function'),
+    };
+  });
+}
+
+export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs, prefsKey }) {
+  const auth = useAuth();
+  // Sem AuthGate (desenvolvimento/gates) tudo é permitido; o serviço valida de novo.
+  const canRead = auth ? Boolean(auth.can?.(REGISTRY_READ_PERMISSION)) : true;
+  const canWrite = auth ? Boolean(auth.can?.(REGISTRY_WRITE_PERMISSION)) : true;
+  const actor = auth?.user ?? null;
   const empresaId = ensureEmpresaId();
+  const tabs = useMemo(() => normalizeTabs(rawTabs), [rawTabs]);
   const [activeTabId, setActiveTabId] = useState(tabs[0].id);
   const [catalog, setCatalog] = useState({});
+  const [references, setReferences] = useState({});
+  const [usage, setUsage] = useState({});
   const [search, setSearch] = useState('');
-  const [showQuickSearch, setShowQuickSearch] = useState(false);
   const [typeFilter, setTypeFilter] = useState(null);
   const [filterOpenRequest, setFilterOpenRequest] = useState(0);
   const [columnFilters, setColumnFilters] = useState({});
@@ -221,47 +292,52 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
   const [formOpen, setFormOpen] = useState(false);
   const [formPanel, setFormPanel] = useState('principais');
   const [editingId, setEditingId] = useState(null);
-  const [form, setForm] = useState(() => emptyFor(tabs[0]));
+  const [form, setForm] = useState(() => emptyFor(tabs[0].definition));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [deleteRequest, setDeleteRequest] = useState([]);
   // Tela Mãe do ModeloBase1: painel lateral de filtros, pesquisa expansível,
-  // "Mais opções" e configuração de colunas (preferência local por grupo).
+  // "Mais opções" e configuração de colunas (preferência local por página).
   const [showFilters, setShowFilters] = useState(false);
   const [filterDraft, setFilterDraft] = useState({});
   const [panelFilters, setPanelFilters] = useState({});
   const [searchInput, setSearchInput] = useState('');
   const [moreOpen, setMoreOpen] = useState(false);
   const [showColumnConfig, setShowColumnConfig] = useState(false);
-  const columnPrefsKey = `aux-colunas:${group}`;
+  const columnPrefsKey = `aux-colunas:${prefsKey ?? tabs.map((item) => item.definition.store).join('+')}`;
   const readColumnPref = (suffix) => { try { return JSON.parse(localStorage.getItem(`${columnPrefsKey}:${suffix}`)) || null; } catch { return null; } };
   const [columnOrder, setColumnOrder] = useState(() => readColumnPref('ordem'));
   const [visibleColumnIds, setVisibleColumnIds] = useState(() => readColumnPref('visiveis'));
   const tab = tabs.find((item) => item.id === activeTabId) || tabs[0];
-  const tabRecords = catalog[tab.bucket] || [];
-  const records = useMemo(() => tabs.flatMap((item) => (catalog[item.bucket] || []).map((record) => ({
+  const { definition, persistence } = tab;
+  const tabRecords = catalog[tab.id] || [];
+  const records = useMemo(() => tabs.flatMap((item) => (catalog[item.id] || []).map((record) => ({
     ...record,
-    _bucket: item.bucket,
     _tabId: item.id,
     _typeLabel: item.label,
-    _key: `${item.bucket}:${record.id}`,
+    _key: `${item.definition.store}:${record.id}`,
   }))), [catalog, tabs]);
+  // Campos por id (todas as abas) para renderizar colunas e filtros por tipo.
+  const fieldsById = useMemo(() => {
+    const map = new Map();
+    tabs.forEach((item) => item.definition.campos.forEach((campo) => { if (!map.has(campo.id)) map.set(campo.id, campo); }));
+    return map;
+  }, [tabs]);
   const listColumns = useMemo(() => {
     const available = new Map();
-    tabs.forEach((item) => item.columns.forEach((column) => {
+    tabs.forEach((item) => item.definition.colunas.forEach((column) => {
       if (!available.has(column.id)) available.set(column.id, column);
     }));
-    const nameColumn = available.get('nome');
-    const statusColumn = available.get('ativo');
-    const middleColumns = [...available.values()].filter((column) => !['nome', 'ativo'].includes(column.id)).slice(0, 3);
-    return [nameColumn, ...middleColumns, statusColumn].filter(Boolean);
+    return [...available.values()];
   }, [tabs]);
-  const TYPE_COLUMN = useMemo(() => ({ id: '_typeLabel', label: 'Tipo de cadastro', default: true }), []);
+  const usageInList = tabs.length === 1 && tab.usageInList;
   const configurableColumns = useMemo(() => [
     { id: 'selecao', label: 'Seleção', default: true, fixo: true },
-    TYPE_COLUMN,
+    ...(tabs.length > 1 ? [TYPE_COLUMN] : []),
     ...listColumns.map((column) => ({ id: column.id, label: column.label, default: true })),
-  ], [TYPE_COLUMN, listColumns]);
+    ...(usageInList ? [USAGE_COLUMN] : []),
+  ], [tabs.length, listColumns, usageInList]);
   const tableColumns = useMemo(() => {
     const byId = new Map(configurableColumns.map((column) => [column.id, column]));
     const order = (columnOrder || []).filter((id) => byId.has(id));
@@ -269,58 +345,120 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
     const visible = visibleColumnIds ? new Set(visibleColumnIds) : null;
     return ordered
       .filter((id) => id !== 'selecao' && (!visible || visible.has(id)))
-      .map((id) => (id === '_typeLabel' ? TYPE_COLUMN : listColumns.find((column) => column.id === id)))
+      .map((id) => (id === '_typeLabel' ? TYPE_COLUMN : id === '_uso' ? USAGE_COLUMN : listColumns.find((column) => column.id === id)))
       .filter(Boolean);
-  }, [configurableColumns, columnOrder, visibleColumnIds, listColumns, TYPE_COLUMN]);
+  }, [configurableColumns, columnOrder, visibleColumnIds, listColumns]);
   const applyColumnConfig = ({ order, visible }) => {
     setColumnOrder(order);
     setVisibleColumnIds(visible);
     localStorage.setItem(`${columnPrefsKey}:ordem`, JSON.stringify(order));
     localStorage.setItem(`${columnPrefsKey}:visiveis`, JSON.stringify(visible));
   };
-  const panelTextFields = useMemo(() => listColumns.filter((column) => column.id !== 'ativo').map((column) => ({ key: column.id, label: column.label })), [listColumns]);
+  const referenceStores = useMemo(() => {
+    const stores = new Set();
+    tabs.forEach((item) => {
+      item.definition.campos.forEach((campo) => { if (campo.referencia?.store) stores.add(campo.referencia.store); });
+      item.definition.colunas.forEach((column) => { if (column.referencia?.store) stores.add(column.referencia.store); });
+    });
+    return [...stores];
+  }, [tabs]);
+  const referenceName = useCallback((store, id) => {
+    if (!id) return '';
+    const row = (references[store] || []).find((item) => item.id === id);
+    return row ? row.nome : 'Registro não encontrado';
+  }, [references]);
+
+  // Texto de célula (tabela, cartões, filtros e pesquisa) a partir da definição.
+  const cellText = useCallback((column, record) => formatCellValue(column, record, { campo: fieldsById.get(column.id), referenceName, usage }), [usage, referenceName, fieldsById]);
+  const columnListOptions = useCallback((column) => {
+    const campo = fieldsById.get(column.id);
+    if (campo?.tipo === 'multiselect') return (campo.opcoes ?? []).map((option) => option.label);
+    return [...new Set(records.map((record) => cellText(column, record)).filter(Boolean))];
+  }, [fieldsById, records, cellText]);
+  // Coluna multiselect (papéis): a lista da pílula oferece um papel por vez.
+  const matchesColumnFilter = useCallback((column, record, filter) => {
+    const campo = fieldsById.get(column.id);
+    if (campo?.tipo === 'multiselect' && Array.isArray(filter?.values) && filter.values.length) {
+      return multiLabels(campo, record[column.id]).some((label) => filter.values.includes(label));
+    }
+    return matchesMakColumnFilter(cellText(column, record), filter, column.filterType || 'text');
+  }, [fieldsById, cellText]);
+
+  const panelTextFields = useMemo(() => listColumns
+    .filter((column) => { const campo = fieldsById.get(column.id); return !campo || campo.tipo === 'texto' || Boolean(column.referencia) || Boolean(campo.referencia); })
+    .map((column) => ({ key: column.id, label: column.label })), [listColumns, fieldsById]);
   const panelSelectFields = useMemo(() => [
     ...(tabs.length > 1 ? [{ key: '_typeLabel', label: 'Tipo de cadastro', options: [{ value: 'Todos', label: 'Todos' }, ...tabs.map((item) => ({ value: item.label, label: item.label }))] }] : []),
-    ...(listColumns.some((column) => column.id === 'ativo') ? [{ key: 'ativo', label: 'Situação', options: [{ value: 'Todos', label: 'Todos' }, { value: 'Ativo', label: 'Ativo' }, { value: 'Inativo', label: 'Inativo' }] }] : []),
-  ], [tabs, listColumns]);
+    ...listColumns.flatMap((column) => {
+      const campo = fieldsById.get(column.id);
+      if (!campo || column.referencia || campo.referencia) return [];
+      if (campo.tipo === 'booleano') {
+        const labels = campo.id === 'ativo' ? ['Ativo', 'Inativo'] : ['Sim', 'Não'];
+        return [{ key: column.id, label: column.label, options: [{ value: 'Todos', label: 'Todos' }, ...labels.map((label) => ({ value: label, label }))] }];
+      }
+      if ((campo.tipo === 'select' || campo.tipo === 'multiselect') && campo.opcoes?.length) {
+        return [{ key: column.id, label: column.label, options: [{ value: 'Todos', label: 'Todos' }, ...campo.opcoes.map((option) => ({ value: option.label, label: option.label }))] }];
+      }
+      return [];
+    }),
+  ], [tabs, listColumns, fieldsById]);
   const panelFiltersActive = Object.values(panelFilters).some((value) => Array.isArray(value) && value.length > 0);
   const applyPanelFilters = () => { setPanelFilters({ ...filterDraft }); setCurrentPage(1); };
   const clearPanelFilters = () => { setFilterDraft({}); setPanelFilters({}); setCurrentPage(1); };
 
-  const refresh = async () => {
-    setLoading(true);
-    try { setCatalog(await loadRegistryGroup(group, empresaId)); }
-    catch (error) { toast.error(error.message || 'Não foi possível carregar os cadastros.'); }
-    finally { setLoading(false); }
-  };
-  useEffect(() => { refresh(); }, [group, empresaId]);
+  // Contagem de uso da lista em lotes (só para stores com contagem por índice).
+  const loadUsage = useCallback(async (item, rows) => {
+    if (!item.usageInList || rows.length > USAGE_IN_LIST_LIMIT) return;
+    const chunk = 25;
+    for (let index = 0; index < rows.length; index += chunk) {
+      const slice = rows.slice(index, index + chunk);
+      const counts = await Promise.all(slice.map((row) => item.persistence.countUsage(row.id).catch(() => null)));
+      setUsage((current) => ({ ...current, ...Object.fromEntries(slice.map((row, position) => [row.id, counts[position]])) }));
+    }
+  }, []);
+  const loadUsageFor = useCallback(async (item, id) => {
+    if (typeof item.persistence.countUsage !== 'function') return;
+    try {
+      const count = await item.persistence.countUsage(id);
+      setUsage((current) => ({ ...current, [id]: count }));
+    } catch { /* contagem é informativa; o serviço recusa a exclusão de qualquer forma */ }
+  }, []);
 
-  const cellText = (column, record) => {
-    const value = record[column.id];
-    if (column.render) return String(column.render(value, record) ?? '');
-    if (value === true) return 'Ativo';
-    if (value === false) return 'Inativo';
-    return String(value ?? '');
-  };
-  const matchesSearch = (record, term) => {
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const entries = await Promise.all(tabs.map(async (item) => [item.id, await item.persistence.list({ empresaId, incluirInativos: true })]));
+      const refEntries = await Promise.all(referenceStores.map(async (store) => [store, await getRegistryService(store).list({ empresaId, incluirInativos: true })]));
+      setCatalog(Object.fromEntries(entries));
+      setReferences(Object.fromEntries(refEntries));
+      setUsage({});
+      entries.forEach(([id, rows]) => { const item = tabs.find((candidate) => candidate.id === id); if (item) loadUsage(item, rows); });
+    } catch (error) { toast.error(error?.message || 'Não foi possível carregar os cadastros.'); }
+    finally { setLoading(false); }
+  }, [tabs, empresaId, referenceStores, loadUsage]);
+  useEffect(() => { refresh(); }, [refresh]);
+
+  const matchesSearch = useCallback((record, term) => {
     const normalized = normalizeSearchQuery(term);
     if (!normalized) return true;
-    return Object.entries(record).some(([key, value]) => (!key.startsWith('_') || key === '_typeLabel') && normalizeSearchQuery(String(value ?? '')).includes(normalized));
-  };
+    const haystack = [record._typeLabel, ...listColumns.map((column) => cellText(column, record)), ...definition.campos.filter((campo) => campo.tipo === 'texto').map((campo) => record[campo.id])];
+    return haystack.some((value) => normalizeSearchQuery(String(value ?? '')).includes(normalized));
+  }, [listColumns, cellText, definition]);
   const filtered = useMemo(() => records.filter((record) => {
     if (isMakColumnFilterActive(typeFilter) && !matchesMakColumnFilter(record._typeLabel, typeFilter, 'text')) return false;
-    if (listColumns.some((column) => isMakColumnFilterActive(columnFilters[column.id]) && !matchesMakColumnFilter(cellText(column, record), columnFilters[column.id], 'text'))) return false;
+    if ([...listColumns, ...(usageInList ? [USAGE_COLUMN] : [])].some((column) => isMakColumnFilterActive(columnFilters[column.id]) && !matchesColumnFilter(column, record, columnFilters[column.id]))) return false;
     for (const [key, values] of Object.entries(panelFilters)) {
       if (!Array.isArray(values) || !values.length) continue;
       const wanted = values[0];
       if (key === '_typeLabel') { if (record._typeLabel !== wanted) return false; continue; }
-      if (key === 'ativo') { if ((record.ativo === false ? 'Inativo' : 'Ativo') !== wanted) return false; continue; }
       const column = listColumns.find((item) => item.id === key);
+      const campo = fieldsById.get(key);
       const text = column ? cellText(column, record) : String(record[key] ?? '');
+      if (campo && (campo.tipo === 'booleano' || campo.tipo === 'select') && !campo.referencia) { if (text !== wanted) return false; continue; }
       if (!normalizeSearchQuery(text).includes(normalizeSearchQuery(wanted))) return false;
     }
     return matchesSearch(record, search);
-  }), [records, search, typeFilter, listColumns, columnFilters, panelFilters]);
+  }), [records, search, typeFilter, listColumns, columnFilters, panelFilters, usageInList, matchesColumnFilter, matchesSearch, fieldsById, cellText]);
   const searchResults = useMemo(() => {
     const term = searchInput.trim();
     if (!term) return { items: [], total: 0 };
@@ -333,7 +471,7 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
       ...Object.fromEntries(listColumns.filter((column) => column.id !== 'nome').map((column) => [column.id, cellText(column, record) || '—'])),
     }));
     return { items, total: matches.length };
-  }, [records, searchInput, listColumns]);
+  }, [records, searchInput, listColumns, cellText, matchesSearch]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / itemsPerPage));
   const paginated = filtered.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const pageKeys = paginated.map((item) => item._key);
@@ -345,10 +483,11 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
   }, [filtered.length, itemsPerPage]);
 
   const openNew = (tabId = tabs[0].id) => {
+    if (!canWrite) return;
     const next = tabs.find((item) => item.id === tabId) || tabs[0];
     setActiveTabId(next.id);
     setEditingId(null);
-    setForm(emptyFor(next));
+    setForm(emptyFor(next.definition));
     setFormPanel('principais');
     setFormOpen(true);
   };
@@ -356,85 +495,114 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
     const next = tabs.find((item) => item.id === tabId) || tabs[0];
     setActiveTabId(next.id);
     setEditingId(null);
-    setForm(emptyFor(next));
+    setForm(emptyFor(next.definition));
     setFormPanel('principais');
   };
   const openEdit = (record) => {
     const next = tabs.find((item) => item.id === record._tabId) || tabs[0];
     setActiveTabId(next.id);
     setEditingId(record.id);
-    setForm({ ...emptyFor(next), ...record });
+    setForm(formFromRecord(next.definition, record));
     setFormPanel('principais');
     setFormOpen(true);
+    if (usage[record.id] == null) loadUsageFor(next, record.id);
   };
+  const closeForm = () => { setFormOpen(false); setEditingId(null); };
   const setField = (id, value) => setForm((current) => ({ ...current, [id]: value }));
+
+  const notifyError = (error, fallback) => {
+    const { message, description } = describeError(error, fallback);
+    toast.error(message, description ? { description } : undefined);
+  };
 
   const save = async (event) => {
     event?.preventDefault?.();
-    const missing = tab.fields.find((field) => field.required && !String(form[field.id] ?? '').trim());
-    if (missing) return toast.error(`Informe ${missing.label.toLocaleLowerCase('pt-BR')}.`);
+    if (!canWrite || saving) return;
+    const payload = payloadFromForm(definition, form);
+    const erros = definition.validar(payload);
+    if (erros.length) return toast.error(erros.join(' '));
     setSaving(true);
     try {
-      const record = { ...form, id: editingId || globalThis.crypto.randomUUID(), nome: String(form.nome || '').trim(), updatedAt: new Date().toISOString() };
-      if (!editingId) record.createdAt = record.updatedAt;
-      const nextRecords = editingId ? tabRecords.map((item) => item.id === editingId ? { ...item, ...record } : item) : [...tabRecords, record];
-      const next = await saveRegistryGroup(group, { ...catalog, [tab.bucket]: nextRecords }, empresaId);
-      setCatalog(next);
-      setFormOpen(false);
-      setEditingId(null);
-      toast.success(editingId ? 'Cadastro atualizado.' : 'Cadastro adicionado.');
-    } catch (error) { toast.error(error.message || 'Não foi possível salvar o cadastro.'); }
+      if (editingId) await persistence.update(actor, editingId, payload);
+      else await persistence.create(actor, { ...payload, empresa_id: empresaId });
+      closeForm();
+      toast.success(editingId ? `${capitalize(definition.singular)} atualizado(a).` : `${capitalize(definition.singular)} adicionado(a).`);
+      await refresh();
+    } catch (error) { notifyError(error, 'Não foi possível salvar o cadastro.'); }
     finally { setSaving(false); }
   };
 
-  const remove = async () => {
-    const keys = new Set(deleteRequest.map((item) => item._key || `${item._bucket}:${item.id}`));
+  // Ações em lote da barra: cada registro passa pelo serviço; erros por registro
+  // não interrompem os demais.
+  const runOnSelection = async (items, action, successLabel) => {
+    if (busy) return;
+    setBusy(true);
+    let ok = 0;
     try {
-      const changedCatalog = { ...catalog };
-      tabs.forEach((item) => {
-        changedCatalog[item.bucket] = (catalog[item.bucket] || []).filter((record) => !keys.has(`${item.bucket}:${record.id}`));
-      });
-      const next = await saveRegistryGroup(group, changedCatalog, empresaId);
-      setCatalog(next);
+      for (const record of items) {
+        const owner = tabs.find((item) => item.id === record._tabId) || tab;
+        try { await action(owner, record); ok += 1; }
+        catch (error) { notifyError(error, 'A operação não pôde ser concluída.'); }
+      }
+      if (ok) toast.success(ok === 1 ? successLabel.one(items[0]) : successLabel.many(ok));
       setSelected([]);
-      setDeleteRequest([]);
-      toast.success(keys.size === 1 ? 'Cadastro excluído.' : `${keys.size} cadastros excluídos.`);
-    } catch (error) { toast.error(error.message || 'Não foi possível excluir o cadastro.'); }
+      await refresh();
+    } finally { setBusy(false); }
   };
 
+  const remove = async () => {
+    const items = deleteRequest;
+    setDeleteRequest([]);
+    await runOnSelection(items, (owner, record) => owner.persistence.remove(actor, record.id), {
+      one: () => 'Cadastro excluído.',
+      many: (n) => `${n} cadastros excluídos.`,
+    });
+  };
+  const toggleActive = async (items, activate) => runOnSelection(items, (owner, record) => (activate ? owner.persistence.activate(actor, record.id) : owner.persistence.deactivate(actor, record.id)), {
+    one: () => (activate ? 'Cadastro ativado.' : 'Cadastro inativado.'),
+    many: (n) => (activate ? `${n} cadastros ativados.` : `${n} cadastros inativados.`),
+  });
+  const setDefault = async (record) => runOnSelection([record], (owner) => owner.persistence.setDefault(actor, record.id), {
+    one: (item) => `“${item.nome}” definido(a) como padrão.`,
+    many: () => 'Padrão definido.',
+  });
+
   const selectedRecords = records.filter((record) => selected.includes(record._key));
-  const observationFields = tab.fields.filter((field) => OBSERVATION_FIELD_IDS.has(field.id));
-  const contactFields = tab.fields.filter((field) => CONTACT_FIELD_IDS.has(field.id));
-  const additionalFields = tab.fields.filter((field) => ADDITIONAL_FIELD_IDS.has(field.id));
-  const classifiedIds = new Set([...observationFields, ...contactFields, ...additionalFields].map((field) => field.id));
-  const primaryFields = tab.fields.filter((field) => !classifiedIds.has(field.id));
+  const selectedAllActive = selectedRecords.length > 0 && selectedRecords.every((record) => record.ativo !== false);
+  const selectedAllInactive = selectedRecords.length > 0 && selectedRecords.every((record) => record.ativo === false);
+  const selectedTab = selectedRecords.length === 1 ? (tabs.find((item) => item.id === selectedRecords[0]._tabId) || tab) : tab;
+  const canSetDefault = canWrite && selectedRecords.length === 1 && selectedTab.definition.temPadrao && typeof selectedTab.persistence.setDefault === 'function' && selectedRecords[0].ativo !== false && !selectedRecords[0].padrao;
+  const { primary: primaryFields, additional: additionalFields, contact: contactFields, observation: observationFields } = groupFields(definition);
   const typeField = {
     id: '__type',
     label: 'Tipo de cadastro',
-    type: 'select',
+    tipo: 'select',
     widthType: 'CAMPO_PRINCIPAL',
-    required: true,
-    options: tabs.map((item) => ({ value: item.id, label: item.singular.charAt(0).toLocaleUpperCase('pt-BR') + item.singular.slice(1) })),
+    obrigatorio: true,
+    opcoes: tabs.map((item) => ({ value: item.id, label: capitalize(item.singular) })),
   };
   const formPrimaryFields = !editingId && tabs.length > 1 ? [typeField, ...primaryFields] : primaryFields;
   const formValues = { ...form, __type: activeTabId };
-  const requiredFormFields = formPrimaryFields.filter((field) => field.required);
-  const filledRequiredFields = requiredFormFields.filter((field) => String(formValues[field.id] ?? '').trim()).length;
+  const requiredFormFields = formPrimaryFields.filter((campo) => campo.obrigatorio);
+  const filledRequiredFields = requiredFormFields.filter((campo) => hasFieldValue(formValues[campo.id])).length;
   const updateFormField = (id, value) => id === '__type' ? changeNewRecordType(value) : setField(id, value);
-  const newRecordLabel = tab.newLabel || `Novo ${tab.singular}`;
-  const editRecordLabel = tab.editLabel || `Editar ${tab.singular}`;
+  // Opções dos campos com referência (ativos + o valor já gravado, mesmo inativo).
+  const referenceOptions = useMemo(() => Object.fromEntries(definition.campos
+    .filter((campo) => campo.referencia)
+    .map((campo) => [campo.id, referenceOptionsFor(campo, references[campo.referencia.store], form[campo.id])])), [definition, references, form]);
+  const editingRecord = editingId ? tabRecords.find((record) => record.id === editingId) : null;
   const editingIndex = editingId ? tabRecords.findIndex((record) => record.id === editingId) : -1;
   const openRelativeRecord = (index) => {
     const record = tabRecords[index];
     if (record) openEdit({ ...record, _tabId: tab.id });
   };
-  const formatCell = (column, record) => {
-    const value = record[column.id];
-    if (column.render) return column.render(value, record);
-    if (value === true) return 'Ativo';
-    if (value === false) return 'Inativo';
-    return value || '—';
-  };
+  const recordCode = editingRecord ? (editingRecord.documento || editingRecord.abreviacao || editingRecord.codigo_oficial || definition.singular) : definition.singular;
+  const formatCell = (column, record) => cellText(column, record) || '—';
+  const readOnly = !canWrite;
+  const editActionLabel = canWrite ? 'Editar' : 'Consultar';
+
+  if (!canRead) return <AccessDenied profile={auth?.user?.perfil} permission={REGISTRY_READ_PERMISSION} />;
+
   return (
     <ModeloBase1PageContainer variant="table" className={`d17b-page d17b-list-page cadastro-emp-scope mg-empresas-scope aux-registry-page${formOpen ? '' : ' d17b-list-page--mother'} ${formOpen ? 'aux-registry-page--record' : 'aux-registry-page--table'}`}>
       <ModeloBase1PageHeader title={title} description={description} visuallyHidden />
@@ -460,14 +628,26 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
                     </button>
                   </div>
                 </div>
-                <div className="mg-action-slot is-visible" style={{ '--slot-width': '64px' }}>
-                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green aux-new-button" onClick={() => openNew()} title="Novo">Novo</button>
+                <div className={`mg-action-slot${canWrite ? ' is-visible' : ''}`} style={{ '--slot-width': '64px' }} aria-hidden={!canWrite}>
+                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green aux-new-button" onClick={() => openNew()} title="Novo" tabIndex={canWrite ? 0 : -1}>Novo</button>
                 </div>
-                <div className={`mg-action-slot${selected.length === 1 ? ' is-visible' : ''}`} style={{ '--slot-width': '66px' }} aria-hidden={selected.length !== 1}>
-                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => openEdit(selectedRecords[0])} title="Editar" tabIndex={selected.length === 1 ? 0 : -1}>Editar</button>
+                <div className={`mg-action-slot${selected.length === 1 ? ' is-visible' : ''}`} style={{ '--slot-width': canWrite ? '66px' : '90px' }} aria-hidden={selected.length !== 1}>
+                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => openEdit(selectedRecords[0])} title={editActionLabel} tabIndex={selected.length === 1 ? 0 : -1}>{editActionLabel}</button>
                 </div>
-                <div className={`mg-action-slot${selected.length ? ' is-visible' : ''}`} style={{ '--slot-width': '84px' }} aria-hidden={selected.length === 0}>
-                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost tb-btn-danger" onClick={() => setDeleteRequest(selectedRecords)} title="Excluir" tabIndex={selected.length ? 0 : -1}>
+                <div className={`mg-action-slot${canWrite && selectedAllActive ? ' is-visible' : ''}`} style={{ '--slot-width': '78px' }} aria-hidden={!(canWrite && selectedAllActive)}>
+                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => toggleActive(selectedRecords, false)} title="Inativar" disabled={busy} tabIndex={canWrite && selectedAllActive ? 0 : -1}>Inativar</button>
+                </div>
+                <div className={`mg-action-slot${canWrite && selectedAllInactive ? ' is-visible' : ''}`} style={{ '--slot-width': '68px' }} aria-hidden={!(canWrite && selectedAllInactive)}>
+                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => toggleActive(selectedRecords, true)} title="Ativar" disabled={busy} tabIndex={canWrite && selectedAllInactive ? 0 : -1}>Ativar</button>
+                </div>
+                <div className={`mg-action-slot${canSetDefault ? ' is-visible' : ''}`} style={{ '--slot-width': '118px' }} aria-hidden={!canSetDefault}>
+                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => setDefault(selectedRecords[0])} title="Definir como padrão" disabled={busy} tabIndex={canSetDefault ? 0 : -1}>
+                    <Star className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    Definir padrão
+                  </button>
+                </div>
+                <div className={`mg-action-slot${canWrite && selected.length ? ' is-visible' : ''}`} style={{ '--slot-width': '84px' }} aria-hidden={!(canWrite && selected.length)}>
+                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost tb-btn-danger" onClick={() => setDeleteRequest(selectedRecords)} title="Excluir" disabled={busy} tabIndex={canWrite && selected.length ? 0 : -1}>
                     <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     Excluir
                   </button>
@@ -504,7 +684,7 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
                     items={[
                       { id: 'atualizar', label: 'Atualizar', icon: RefreshCw, onClick: refresh },
                       { id: 'colunas', label: 'Configurar colunas', icon: Columns3, onClick: () => setShowColumnConfig(true) },
-                      { id: 'tipos', label: 'Mostrar todos os tipos', icon: ListFilter, onClick: () => { setTypeFilter(null); clearPanelFilters(); } },
+                      { id: 'tipos', label: 'Mostrar todos os tipos', icon: ListFilter, onClick: () => { setTypeFilter(null); setColumnFilters({}); clearPanelFilters(); } },
                     ]}
                   />
                 </div>
@@ -534,86 +714,53 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
                     label={column.label}
                     value={columnFilters[column.id] || null}
                     filterType="text"
-                    listOptions={[...new Set(records.map((record) => cellText(column, record)).filter(Boolean))]}
+                    listOptions={columnListOptions(column)}
+                    openRequest={tabs.length === 1 && column.id === listColumns[0]?.id ? filterOpenRequest : 0}
                     onChange={(value) => { setColumnFilters((current) => ({ ...current, [column.id]: value })); setCurrentPage(1); }}
                   />
                 ))}
+                {usageInList ? (
+                  <MakFilterPill
+                    label={USAGE_COLUMN.label}
+                    value={columnFilters._uso || null}
+                    filterType="number"
+                    onChange={(value) => { setColumnFilters((current) => ({ ...current, _uso: value })); setCurrentPage(1); }}
+                  />
+                ) : null}
               </MakFilterRail>
             </MgTablePanelStrip>
           </div>
         </>
       ) : null}
-      {formOpen ? <div className={`aux-toolbar-stack${formOpen ? ' is-form-open' : ''}`}>
-      <ModeloBase1ActionBar className={`d17b-page-actionbar d17c-table-toolbar aux-registry-toolbar${formOpen ? ' aux-launch-toolbar' : ''}`} aria-label={`Ações de ${title}`}>
+      {formOpen ? <div className="aux-toolbar-stack is-form-open">
+      <ModeloBase1ActionBar className="d17b-page-actionbar d17c-table-toolbar aux-registry-toolbar aux-launch-toolbar" aria-label={`Ações de ${title}`}>
         <div className="d17c-table-toolbar__primary">
           <div className="d17c-table-toolbar__left">
-            {formOpen ? (
-              <div className="aux-form-toolbar-actions">
-                <div className="aux-form-toolbar-commands">
-                  <Button size="sm" className="emp-toolbar-btn emp-toolbar-btn-save d17c-launch-button aux-form-action" onClick={save} disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</Button>
-                  <Button size="sm" variant="outline" className="emp-toolbar-btn d17c-launch-button aux-cancel-button aux-form-action" onClick={() => setFormOpen(false)}>Cancelar</Button>
-                </div>
+            <div className="aux-form-toolbar-actions">
+              <div className="aux-form-toolbar-commands">
+                {canWrite ? <Button size="sm" className="emp-toolbar-btn emp-toolbar-btn-save d17c-launch-button aux-form-action" onClick={save} disabled={saving} title="Salvar (Enter)">{saving ? 'Salvando...' : 'Salvar'}</Button> : null}
+                <Button size="sm" variant="outline" className="emp-toolbar-btn d17c-launch-button aux-cancel-button aux-form-action" onClick={closeForm} title={canWrite ? 'Cancelar (Esc)' : 'Voltar (Esc)'}>{canWrite ? 'Cancelar' : 'Voltar'}</Button>
               </div>
-            ) : (
-              <>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="d17c-round-action"
-                  onClick={() => setFilterOpenRequest((request) => request + 1)}
-                  aria-label="Filtros dos cadastros"
-                  title="Filtros dos cadastros"
-                  aria-pressed={isMakColumnFilterActive(typeFilter)}
-                >
-                  <Filter aria-hidden="true" />
-                </Button>
-                <Button size="sm" className="emp-toolbar-btn emp-toolbar-btn-save d17c-launch-button aux-new-button" onClick={() => openNew()}>Novo</Button>
-                <div className={`d17e-selection-actions${selected.length ? ' is-visible' : ''}`}>
-                  {selected.length === 1 ? <Button size="sm" className="emp-toolbar-btn d17e-selection-action d17e-selection-action--edit" onClick={() => openEdit(selectedRecords[0])}>Editar</Button> : null}
-                  {selected.length ? <Button size="sm" className="emp-toolbar-btn emp-toolbar-btn-delete d17e-selection-action" onClick={() => setDeleteRequest(selectedRecords)}>Excluir</Button> : null}
-                </div>
-              </>
-            )}
+            </div>
           </div>
-          {!formOpen ? <div className="d17c-table-toolbar__actions">
-            {showQuickSearch ? <label className="d17c-quick-search d17c-quick-search--actions aux-search"><Search aria-hidden="true" /><input autoFocus value={search} onChange={(event) => { setSearch(event.target.value); setCurrentPage(1); }} placeholder="Nome, documento ou contato" /></label> : null}
-            <Button type="button" variant="ghost" size="icon" className="d17c-round-action" onClick={() => setShowQuickSearch((visible) => !visible)} aria-pressed={showQuickSearch || Boolean(search)} aria-label="Pesquisar" title="Pesquisar"><Search aria-hidden="true" /></Button>
-            <Button type="button" variant="ghost" size="icon" className="d17c-round-action" onClick={refresh} aria-label="Atualizar" title="Atualizar"><RefreshCw aria-hidden="true" /></Button>
-            <ModeloBase1ViewSeg
-              mode={listViewMode}
-              canOpenRecord={selected.length === 1}
-              onTable={() => setListViewMode('tabela')}
-              onRecord={() => selected.length === 1 && openEdit(selectedRecords[0])}
-              onCards={() => setListViewMode('cards')}
-            />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon" className="d17c-round-action" aria-label="Mais ações" title="Mais ações"><MoreVertical aria-hidden="true" /></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end"><DropdownMenuItem onClick={() => setTypeFilter(null)}>Mostrar todos os tipos</DropdownMenuItem></DropdownMenuContent>
-            </DropdownMenu>
-          </div> : <div className="d17c-table-toolbar__actions aux-form-toolbar-end"><div className="aux-required-status">Campos obrigatórios <strong>{filledRequiredFields}/{requiredFormFields.length}</strong></div><ModeloBase1ViewSeg mode="registro" canOpenRecord onTable={() => { setFormOpen(false); setListViewMode('tabela'); }} onRecord={() => {}} onCards={() => { setFormOpen(false); setListViewMode('cards'); }} /></div>}
+          <div className="d17c-table-toolbar__actions aux-form-toolbar-end"><div className="aux-required-status">Campos obrigatórios <strong>{filledRequiredFields}/{requiredFormFields.length}</strong></div><ModeloBase1ViewSeg mode="registro" canOpenRecord onTable={() => { closeForm(); setListViewMode('tabela'); }} onRecord={() => {}} onCards={() => { closeForm(); setListViewMode('cards'); }} /></div>
         </div>
-        {!formOpen ? <div className="d17c-table-toolbar__filters">
-          <MakFilterRail hasActiveFilters={isMakColumnFilterActive(typeFilter)} onClear={() => { setTypeFilter(null); setCurrentPage(1); }} onConfigureFilters={() => setFilterOpenRequest((request) => request + 1)}>
-            <MakFilterPill
-              label="Tipo de cadastro"
-              value={typeFilter}
-              filterType="text"
-              listOptions={tabs.map((item) => item.label)}
-              openRequest={filterOpenRequest}
-              onChange={(value) => { setTypeFilter(value); setCurrentPage(1); }}
-            />
-          </MakFilterRail>
-        </div> : null}
       </ModeloBase1ActionBar>
-      {formOpen ? <div className="mg-context-panel-wrap is-visible aux-context-panel-wrap">
+      <div className="mg-context-panel-wrap is-visible aux-context-panel-wrap">
         <div className="mg-context-panel aux-context-panel" data-template-id="context-panel">
           <div className="mg-context-panel__meta">
             <div className="mg-context-panel__meta-row">
               <div className="mg-context-panel__swap-slot min-w-0 flex-1">
                 <span key={`${activeTabId}:${editingId || 'novo'}`} className="mg-context-panel__meta-text mg-motion-swap mg-motion-swap--text aux-record-identity">
-                  {editingId ? <><span className="mg-context-panel__code">{form.codigo || form.documento || tab.singular}</span><span className="mg-context-panel__sep"> • </span></> : null}
-                  <span className="mg-context-panel__title">{editingId ? (form.nome || editRecordLabel) : newRecordLabel}</span>
+                  {editingId ? <><span className="mg-context-panel__code">{recordCode}</span><span className="mg-context-panel__sep"> • </span></> : null}
+                  <span className="mg-context-panel__title">{editingId ? (form.nome || tab.editLabel) : tab.newLabel}</span>
+                  {editingRecord ? (
+                    <span className="aux-context-badges">
+                      {editingRecord.padrao ? <span className="aux-context-badge aux-context-badge--default" title="Pré-selecionado no cadastro rápido"><Star aria-hidden="true" />Padrão</span> : null}
+                      {editingRecord.ativo === false ? <span className="aux-context-badge aux-context-badge--inactive">Inativo</span> : null}
+                      {usage[editingRecord.id] != null ? <span className="aux-context-badge" title="Registros que usam este cadastro">Em uso: {usage[editingRecord.id]}</span> : null}
+                    </span>
+                  ) : null}
                 </span>
               </div>
             </div>
@@ -626,13 +773,14 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
             <button type="button" className="mg-nav-btn ios-btn" onClick={() => openRelativeRecord(tabRecords.length - 1)} disabled={editingIndex < 0 || editingIndex >= tabRecords.length - 1} title="Último"><ChevronLast aria-hidden="true" /></button>
           </div>
         </div>
-      </div> : null}
+      </div>
       </div> : null}
 
       {formOpen ? (
-        <section className="mg-view-panel emp-form-panel aux-launch-panel" aria-label={editingId ? editRecordLabel : newRecordLabel}>
-          <form className="aux-modelobase1-form" onSubmit={save}>
-            <div id="mode-registro" className="aux-record-mode">
+        <section className="mg-view-panel emp-form-panel aux-launch-panel" aria-label={editingId ? tab.editLabel : tab.newLabel}>
+          {/* Enter salva (submit do formulário); Esc cancela, exceto quando a tecla fecha uma lista suspensa aberta. */}
+          <form className="aux-modelobase1-form" onSubmit={save} onKeyDown={(event) => { if (event.key === 'Escape' && !event.defaultPrevented && !event.target.closest?.('[data-radix-select-content], [role="listbox"]')) { event.preventDefault(); closeForm(); } }}>
+            <div id="mode-registro" className={`aux-record-mode${readOnly ? ' is-readonly' : ''}`}>
               <div className="mg-panel-tabs-strip mg-panel-tabs-strip--no-bg aux-record-tabs">
                 <ModeloBase1PanelTabs activePanel={formPanel} hasObservations={observationFields.length > 0} onChange={setFormPanel} />
               </div>
@@ -645,13 +793,13 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
                           <div className="emp-form-cards-layout cad-form-cards-layout mg-prototype-cards-layout">
                             {formPanel === 'principais' ? <>
                               <div className="emp-form-cards-row">
-                                <FormCard title="Dados principais" fields={formPrimaryFields} form={formValues} setField={updateFormField} full />
+                                <FormCard title="Dados principais" fields={formPrimaryFields} form={formValues} setField={updateFormField} options={referenceOptions} disabled={readOnly} full />
                               </div>
                               <div className="emp-form-cards-row">
-                                <FormCard title="Informações adicionais" fields={additionalFields} form={form} setField={setField} full={!contactFields.length} />
-                                <FormCard title="Contato" fields={contactFields} form={form} setField={setField} full={!additionalFields.length} />
+                                <FormCard title="Informações adicionais" fields={additionalFields} form={form} setField={setField} options={referenceOptions} disabled={readOnly} full={!contactFields.length} />
+                                <FormCard title="Contato" fields={contactFields} form={form} setField={setField} options={referenceOptions} disabled={readOnly} full={!additionalFields.length} />
                               </div>
-                            </> : <div className="emp-form-cards-row"><FormCard title="Observações" fields={observationFields} form={form} setField={setField} full /></div>}
+                            </> : <div className="emp-form-cards-row"><FormCard title="Observações" fields={observationFields} form={form} setField={setField} options={referenceOptions} disabled={readOnly} full /></div>}
                           </div>
                         </div>
                       </fieldset>
@@ -660,7 +808,7 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
                 </div>
               </div>
             </div>
-            <button type="submit" className="sr-only">Salvar cadastro</button>
+            <button type="submit" className="sr-only" disabled={readOnly}>Salvar cadastro</button>
           </form>
         </section>
       ) : <div className="d17b-list-body">
@@ -727,7 +875,7 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
           <Table className="emp-table-pro d17c-data-table aux-data-table">
             <colgroup>
               <col style={{ width: '36px' }} />
-              {tableColumns.map((column) => <col key={column.id} style={{ width: column.id === 'nome' ? '260px' : column.id === '_typeLabel' ? '160px' : '180px' }} />)}
+              {tableColumns.map((column) => <col key={column.id} style={{ width: column.id === 'nome' ? '260px' : column.id === '_typeLabel' ? '160px' : column.id === '_uso' ? '90px' : '180px' }} />)}
             </colgroup>
             <TableHeader><TableRow>
               <TableHead className="emp-th-select aux-check-cell"><div className="emp-table-select-wrap"><MakTableSelectCheck checked={allPageSelected} indeterminate={somePageSelected && !allPageSelected} onChange={(checked) => setSelected((current) => checked ? [...new Set([...current, ...pageKeys])] : current.filter((key) => !pageKeys.includes(key)))} ariaLabel="Selecionar todos os registros listados" /></div></TableHead>
@@ -751,18 +899,20 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
                 menu={{
                   onFechar: () => setColumnMenuOpen(null),
                   valorFiltro: columnFilters[column.id],
-                  filterType: 'text',
-                  listOptions: [...new Set(records.map((record) => formatCell(column, record)).filter((value) => value !== '—'))],
+                  filterType: column.filterType || 'text',
+                  listOptions: column.id === '_uso' ? [] : columnListOptions(column),
                   onFiltrar: (value) => { setColumnFilters((current) => ({ ...current, [column.id]: value })); setCurrentPage(1); },
                 }}
               />)}
             </TableRow></TableHeader>
             <TableBody>
-              {paginated.map((record, index) => <TableRow key={record._key} className={`${index % 2 ? 'emp-row-odd' : 'emp-row-even'} emp-table-data-row${selected.includes(record._key) ? ' emp-row-selected' : ''}`} onClick={() => setSelected((current) => current.includes(record._key) ? current.filter((key) => key !== record._key) : [...current, record._key])}>
+              {paginated.map((record, index) => <TableRow key={record._key} className={`${index % 2 ? 'emp-row-odd' : 'emp-row-even'} emp-table-data-row${selected.includes(record._key) ? ' emp-row-selected' : ''}`} onClick={() => setSelected((current) => current.includes(record._key) ? current.filter((key) => key !== record._key) : [...current, record._key])} onDoubleClick={() => openEdit(record)}>
                 <TableCell className="emp-td-select aux-check-cell" onClick={(event) => event.stopPropagation()}><div className="emp-table-select-wrap"><MakTableSelectCheck checked={selected.includes(record._key)} onChange={(checked) => setSelected((current) => checked ? [...new Set([...current, record._key])] : current.filter((key) => key !== record._key))} ariaLabel={`Selecionar ${record.nome}`} /></div></TableCell>
                 {tableColumns.map((column) => column.id === '_typeLabel'
                   ? <TableCell key="_typeLabel">{record._typeLabel}</TableCell>
-                  : <TableCell key={column.id} className={column.id === 'nome' ? 'font-semibold' : ''}>{formatCell(column, record)}</TableCell>)}
+                  : column.id === '_uso'
+                    ? <TableCell key="_uso" className={`aux-usage-cell${usage[record.id] == null ? ' is-pending' : ''}`}>{usage[record.id] == null ? '…' : usage[record.id]}</TableCell>
+                    : <TableCell key={column.id} className={column.id === 'nome' ? 'font-semibold' : ''}>{formatCell(column, record)}</TableCell>)}
               </TableRow>)}
               {!loading && !filtered.length ? <TableRow><TableCell colSpan={tableColumns.length + 1} className="d17d-empty-row">Nenhum cadastro encontrado.</TableCell></TableRow> : null}
               {loading ? <TableRow><TableCell colSpan={tableColumns.length + 1} className="d17d-empty-row">Carregando cadastros...</TableCell></TableRow> : null}
@@ -798,8 +948,8 @@ export default function CadastroAuxiliarPage({ title, description, group, tabs }
 
       <Dialog open={deleteRequest.length > 0} onOpenChange={(open) => { if (!open) setDeleteRequest([]); }}>
         <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact">
-          <DialogHeader><DialogTitle>Excluir cadastro</DialogTitle><DialogDescription>{deleteRequest.length === 1 ? `O cadastro “${deleteRequest[0]?.nome}” será excluído.` : `${deleteRequest.length} cadastros serão excluídos.`}</DialogDescription></DialogHeader>
-          <DialogFooter><Button variant="outline" onClick={() => setDeleteRequest([])}>Cancelar</Button><Button variant="destructive" onClick={remove}>Excluir</Button></DialogFooter>
+          <DialogHeader><DialogTitle>Excluir cadastro</DialogTitle><DialogDescription>{deleteRequest.length === 1 ? `O cadastro “${deleteRequest[0]?.nome}” será excluído. Cadastros em uso não são excluídos: inative-os.` : `${deleteRequest.length} cadastros serão excluídos. Cadastros em uso não são excluídos: inative-os.`}</DialogDescription></DialogHeader>
+          <DialogFooter><Button variant="outline" onClick={() => setDeleteRequest([])}>Cancelar</Button><Button variant="destructive" onClick={remove} disabled={busy}>Excluir</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </ModeloBase1PageContainer>

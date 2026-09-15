@@ -2,7 +2,11 @@
 // Backup/export são gerados no renderer (Dexie) e persistidos em disco via IPC
 // de arquivo (app:writeUserFile). Import/restore leem JSON via dialog e aplicam
 // em transação Dexie. Nenhum CRUD de banco passa por IPC.
+//
+// Programa 2.0: versões em cinco eixos (ADR-037), estado da migração (ADR-038),
+// limpeza em dois níveis (ADR-032) e diagnóstico sem credenciais (ADR-035).
 import storage from '../../../storage/storageAdapter.js';
+import { describeVersions } from '../../../versioning/versionInfo.js';
 
 function files() {
   return window.pesagemApp?.files || null;
@@ -47,6 +51,10 @@ async function persistFullBackup({ reason, automatic = false } = {}) {
     counts,
   });
   return { backup, counts, ...saved };
+}
+
+function safetyEvidenceOf(saved) {
+  return { path: saved.path, size: saved.size, sha256: saved.sha256 };
 }
 
 export async function isMaintenanceAvailable() {
@@ -103,9 +111,8 @@ export async function dryRunImportWeighingJson(payload) {
 }
 export async function applyImportWeighingJson(payload) {
   const safety = await persistFullBackup({ reason: 'pre-import', automatic: true });
-  const safetyEvidence = { path: safety.path, size: safety.size, sha256: safety.sha256 };
-  const result = await storage.applyImportPesagens(payload, { safetyEvidence });
-  return { ...result, safetyBackup: { path: safety.path, size: safety.size, sha256: safety.sha256 } };
+  const result = await storage.applyImportPesagens(payload, { safetyEvidence: safetyEvidenceOf(safety) });
+  return { ...result, safetyBackup: safetyEvidenceOf(safety) };
 }
 
 // Restore — seleção do backup JSON via dialog; dry-run/apply em Dexie.
@@ -120,7 +127,84 @@ export async function dryRunRestoreBackup(backup) {
 }
 export async function applyRestoreBackup(backup) {
   const safety = await persistFullBackup({ reason: 'pre-restore', automatic: true });
-  return storage.applyRestore(backup, {
-    safetyEvidence: { path: safety.path, size: safety.size, sha256: safety.sha256 },
-  });
+  return storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+}
+
+// --- Versões, migração, limpeza em dois níveis, diagnóstico ---
+
+export function getVersionInfo() {
+  return describeVersions();
+}
+
+export async function getMigrationStatus() {
+  return storage.migration.getMigrationState();
+}
+
+export async function dryRunMigration() {
+  return storage.migration.dryRunBackfill();
+}
+
+export async function resumeMigration({ onProgress } = {}) {
+  return storage.migration.runPendingBackfills({ files: files(), onProgress });
+}
+
+export async function clearOperationalData() {
+  const safety = await persistFullBackup({ reason: 'pre-clear-operational', automatic: true });
+  const result = await storage.clearOperationalData({ safetyEvidence: safetyEvidenceOf(safety) });
+  return { ...result, backupPath: safety.path, safetyBackup: safetyEvidenceOf(safety) };
+}
+
+export async function resetAllData({ confirmedByAdmin = false } = {}) {
+  const safety = await persistFullBackup({ reason: 'pre-reset-all', automatic: true });
+  const result = await storage.resetAllData({ safetyEvidence: safetyEvidenceOf(safety), confirmedByAdmin, files: files() });
+  return { ...result, backupPath: safety.path, safetyBackup: safetyEvidenceOf(safety) };
+}
+
+// Resumo do estado da migração sem dados de usuário.
+function migrationSummary(status) {
+  const state = status?.state || null;
+  return {
+    versao: status?.versao ?? null,
+    status: state?.status || 'SEM_REGISTRO',
+    origem: state?.origem || null,
+    started_at: state?.started_at || null,
+    finished_at: state?.finished_at || null,
+    last_checkpoint: state?.last_checkpoint || null,
+    processed: state?.processed ?? null,
+    total: state?.total ?? null,
+    error: state?.error || null,
+    backup: state?.backup ? { path: state.backup.path || null, size: state.backup.size ?? null, sha256: state.backup.sha256 || null, skipped: Boolean(state.backup.skipped) } : null,
+    relatorio: state?.relatorio ? {
+      marcas: state.relatorio.marcas, racas: state.relatorio.racas, categorias: state.relatorio.categorias,
+      causasMorte: state.relatorio.causasMorte, parceiros: state.relatorio.parceiros, propriedades: state.relatorio.propriedades,
+      animaisAtualizados: state.relatorio.animaisAtualizados, identificadores: state.relatorio.identificadores,
+      payloadsLimpos: state.relatorio.payloadsLimpos, colisoesMarca: (state.relatorio.colisoesMarca || []).length,
+      saidasSemMotivo: state.relatorio.saidasSemMotivo, chavesLegadasRemovidas: (state.relatorio.chavesLegadasRemovidas || []).length,
+      integridade: state.relatorio.integridade ? { ok: state.relatorio.integridade.ok, total: state.relatorio.integridade.total } : null,
+    } : null,
+    writeBlocked: Boolean(status?.blocked),
+    writeBlock: status?.writeBlock || null,
+  };
+}
+
+/**
+ * Diagnóstico para "Copiar diagnóstico": versões (cinco eixos), estado da
+ * migração, estatísticas por store e integridade. Nunca inclui usuários locais,
+ * hash ou salt — só contagens.
+ */
+export async function getDiagnosticSnapshot() {
+  const versions = describeVersions();
+  const [stats, integrity, migration] = await Promise.all([
+    storage.databaseStats().catch((err) => ({ error: err.message })),
+    storage.logicalIntegrity().catch((err) => ({ ok: false, result: 'erro', issues: [err.message] })),
+    storage.migration.getMigrationState().catch((err) => ({ state: null, blocked: false, error: err.message })),
+  ]);
+  return {
+    geradoEm: new Date().toISOString(),
+    versoes: versions,
+    migracao: migrationSummary(migration),
+    armazenamento: { tipo: stats?.dbType || 'IndexedDB/Dexie', versao: stats?.dbVersion ?? versions.dbSchema, contagens: stats?.counts || null },
+    integridade: { ok: integrity?.ok !== false, resultado: integrity?.result || 'desconhecido', problemas: (integrity?.issues || []).slice(0, 50), total: (integrity?.issues || []).length },
+    escritaBloqueada: storage.isWriteBlocked(),
+  };
 }

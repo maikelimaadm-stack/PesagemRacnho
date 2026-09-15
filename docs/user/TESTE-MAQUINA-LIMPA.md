@@ -1,35 +1,72 @@
 # Teste em máquina limpa
 
-Este roteiro valida o pacote Windows oficial em um computador ou usuário sem uma
-instalação anterior. Use somente um instalador assinado e acompanhado de SHA-256.
+Este roteiro valida o pacote Windows da versão **1.2.0** em um computador ou
+usuário sem uma instalação anterior, e também a atualização a partir da 1.1.17.
+Use somente um instalador acompanhado de `release-manifest.json` e SHA-256.
+Se o instalador não tiver assinatura Authenticode, o resultado vale apenas como
+diagnóstico, nunca como release oficial.
 
 ## Instalação e segurança
 
-- [ ] Conferir nome, versão e SHA-256 publicados para o instalador.
+- [ ] Conferir nome (`Pesagens Individuais Setup 1.2.0.exe`), tamanho e SHA-256
+      contra `release-manifest.json` (`installer.sha256`, `installer.sizeBytes`).
 - [ ] Em **Propriedades > Assinaturas Digitais**, validar assinatura Authenticode,
-      cadeia confiável e carimbo de tempo.
+      cadeia confiável e carimbo de tempo (ou registrar `signed: false`).
 - [ ] Instalar sem desativar Defender, SmartScreen, WDAC ou App Control.
 - [ ] Abrir pelo atalho e confirmar **Pesagens Individuais**.
-- [ ] Em **Manutenção**, confirmar versão **1.1.16** e armazenamento
-      **IndexedDB local (Dexie)**.
 - [ ] Confirmar que não há erro no `app.log` informado no diagnóstico.
+
+## Primeira execução e login
+
+- [ ] A primeira tela é a **Configuração Inicial** (nenhuma tela de dados aparece antes).
+- [ ] Senha fraca (`123456`) e senha igual ao login são recusadas.
+- [ ] Criar o administrador; a tela de **login** aparece com a versão **1.2.0** no rodapé.
+- [ ] Login com senha errada mostra "Login ou senha inválidos"; 5 erros seguidos bloqueiam por 30 s.
+- [ ] Login correto abre o sistema com nome, perfil ADMIN e versão na barra superior.
+- [ ] **Bloquear** pede a senha do mesmo usuário; **Trocar usuário** volta ao login; **Sair** encerra.
+- [ ] Em **Sistema › Usuários**, criar um GESTOR e um OPERADOR; cada um deve trocar a senha na primeira entrada.
+- [ ] Como OPERADOR, o menu não mostra Usuários, Backup e Manutenção nem os botões de editar cadastros.
+- [ ] Tentar desativar o único ADMIN é recusado.
+- [ ] Em **Backup e Manutenção › Status**, confirmar versão **1.2.0**, banco **7**,
+      backup formato **3**, build UI e build de dados (`schema-v7`) e armazenamento
+      **IndexedDB local (Dexie)**.
+
+## Cadastros
+
+- [ ] Cadastrar uma marca, uma raça e um parceiro; marcar marca e raça como padrão.
+- [ ] Nome repetido (mesmo nome com maiúsculas/espaços diferentes) é recusado.
+- [ ] Categorias iniciais existem (Bezerro, Bezerra, Garrote, Novilha, Boi, Vaca, Touro).
+- [ ] Propriedade "Propriedade principal" existe como própria e padrão.
+- [ ] Inativar uma marca usada por um animal: some da seleção, animal continua exibindo a marca.
+- [ ] Excluir só é permitido para item sem uso.
 
 ## Persistência na primeira execução
 
-- [ ] Criar um animal e uma pesagem de teste.
+- [ ] Lançar um cadastro de animal (marca e raça escolhidas da lista) e uma pesagem.
 - [ ] Fechar completamente o aplicativo.
-- [ ] Abrir novamente e confirmar que ambos permanecem.
-- [ ] Confirmar que nenhum SQLite, servidor ou configuração manual foi solicitado.
+- [ ] Abrir novamente, fazer login e confirmar que animal, pesagem e cadastros permanecem.
+- [ ] Confirmar que nenhum SQLite, servidor, internet ou configuração manual foi solicitado.
 
 ## Backup e restauração
 
-- [ ] Criar um backup completo JSON logo após a abertura.
-- [ ] Conferir o arquivo no catálogo com tamanho e data.
-- [ ] Guardar o SHA-256 apresentado.
+- [ ] Criar um backup completo JSON logo após a abertura; conferir formato 3 e usuários incluídos.
+- [ ] Conferir o arquivo no catálogo com tamanho, data e SHA-256.
 - [ ] Exportar CSV e JSON e abrir os arquivos.
 - [ ] Executar **Verificar integridade**.
-- [ ] Em uma base isolada, analisar e restaurar o backup.
+- [ ] Em uma base isolada, analisar e restaurar o backup; o programa pede login de novo.
+- [ ] Restaurar um backup da **1.1.17** (formato 2): a análise avisa a conversão, a
+      restauração converte e o programa volta para a Configuração Inicial.
 - [ ] Reabrir e comparar contagens e somas.
+- [ ] **Limpar dados operacionais**: pesagens somem, cadastros e usuários permanecem.
+- [ ] **Reset completo**: exige backup validado, senha e confirmação; volta à Configuração Inicial.
+
+## Atualização 1.1.17 → 1.2.0 (segunda máquina ou usuário)
+
+- [ ] Instalar a 1.1.17, lançar dados de teste (marcas com grafias diferentes, uma morte, um comprador) e criar backup.
+- [ ] Instalar a 1.2.0 por cima e abrir: backup pré-migração gravado e conferido; migração concluída sem erro.
+- [ ] Fechar o programa no meio da migração e reabrir: continua de onde parou, sem duplicar.
+- [ ] Configuração Inicial após a migração; cadastros montados a partir dos dados; relatório da migração legível.
+- [ ] Verificar integridade verde; contagens iguais às da 1.1.17.
 
 ## Fluxos funcionais mínimos
 
@@ -37,15 +74,14 @@ instalação anterior. Use somente um instalador assinado e acompanhado de SHA-2
 - [ ] Mesmo número em duas marcas, com escolha explícita.
 - [ ] Pesagem retroativa e recálculo da cadeia de ganho/GMD.
 - [ ] Saída por venda e por abate.
-- [ ] Morte sem peso.
+- [ ] Morte sem peso, com causa que exige observação.
 - [ ] Apartação e transferência de lote.
 - [ ] Importação CSV com `1.000,00`, data brasileira e campo entre aspas.
 - [ ] Tema claro/escuro, filtros, modais e rolagem horizontal.
 
 ## Atualização e reinstalação
 
-- [ ] Instalar a mesma versão por cima e confirmar a preservação dos dados.
-- [ ] Se houver uma versão anterior suportada, atualizar e revalidar os dados.
+- [ ] Instalar a mesma versão por cima e confirmar a preservação de dados e usuários.
 - [ ] Desinstalar e confirmar a política esperada para os dados do usuário.
 
 ## Resultado
@@ -54,6 +90,6 @@ instalação anterior. Use somente um instalador assinado e acompanhado de SHA-2
 - Computador/Windows: _______________
 - Versão do instalador: _______________
 - SHA-256: _______________
-- Signatário: _______________
-- Resultado: [ ] aprovado  [ ] reprovado
+- Signatário (ou "sem assinatura — diagnóstico"): _______________
+- Resultado: [ ] aprovado  [ ] reprovado  [ ] MANUAL PENDENTE
 - Evidências/observações: _______________

@@ -1,6 +1,8 @@
 // Programa 2.0 — Fase 0: medição do tamanho de legacy_payload e da auditoria.
-// Uso: node scripts/measure-payload-size.mjs [--mass=36k] [--out=docs/evidence/program-2.0/phase-00]
+// Uso: node scripts/measure-payload-size.mjs [--mass=36k] [--schema=v6|v7] [--out=docs/evidence/program-2.0/phase-00]
 // Roda em Node com fake-indexeddb. Não altera código de produto.
+// Esquema padrão "v6": mede o payload legado que a migração recebe (evidência da
+// fase 0). Use --schema=v7 para medir o estado pós-backfill (chaves da ADR-027 removidas).
 import 'fake-indexeddb/auto';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -15,6 +17,7 @@ const args = Object.fromEntries(process.argv.slice(2).map((arg) => {
   return [key, value];
 }));
 const massKey = args.mass || '36k';
+const schema = args.schema || 'v6';
 const outDir = join(root, args.out || 'docs/evidence/program-2.0/phase-00');
 mkdirSync(outDir, { recursive: true });
 
@@ -26,7 +29,7 @@ const stats = (values) => {
   return { n: sorted.length, min: sorted[0] ?? 0, mean: sorted.length ? Math.round(sum / sorted.length) : 0, p50: pick(0.5), p95: pick(0.95), max: sorted.at(-1) ?? 0, total: sum };
 };
 
-await seedMass(massKey, { onProgress: () => {} });
+await seedMass(massKey, { schema, onProgress: () => {} });
 const db = await ensureStorageReady();
 const rows = await db.table('pesagens').toArray();
 const rowBytes = rows.map((row) => bytes(row));
@@ -49,6 +52,7 @@ const auditBytes = audits.map((row) => bytes(row));
 
 const report = {
   massKey,
+  schema,
   measuredAt: new Date().toISOString(),
   pesagens: {
     rows: rows.length,
@@ -73,7 +77,8 @@ const report = {
   },
 };
 
-const file = join(outDir, `payload-size-${massKey}.json`);
+// O esquema v6 mantém o nome histórico do arquivo (evidência da fase 0); v7 ganha sufixo.
+const file = join(outDir, `payload-size-${massKey}${schema === 'v6' ? '' : `-${schema}`}.json`);
 writeFileSync(file, JSON.stringify(report, null, 2), 'utf8');
 console.log(JSON.stringify(report, null, 2));
 console.log(`→ ${file}`);

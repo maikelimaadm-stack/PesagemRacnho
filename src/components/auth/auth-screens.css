@@ -1,0 +1,127 @@
+/* Telas de autenticação local (ADR-035) sobre os tokens do ModeloBase1.
+   Cartão centralizado, campos de 38 px e botões em pílula, como nos cadastros. */
+.auth-root { min-height: 100dvh; background: var(--mb1-bg-page); color: var(--mb1-text-1); }
+.auth-screen { display: grid; place-items: center; min-height: 100dvh; padding: 24px 16px; }
+.auth-card {
+  display: grid;
+  gap: 16px;
+  width: min(100%, 400px);
+  padding: 22px 26px 18px;
+  border: 1px solid var(--mb1-border);
+  border-top: 3px solid var(--mb1-green);
+  border-radius: var(--mb1-radius-card);
+  background: var(--mb1-bg-card);
+  box-shadow: var(--mb1-container-shadow);
+}
+.auth-brand { display: flex; align-items: center; gap: 10px; }
+.auth-brand__icon {
+  display: grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 10px;
+  background: var(--mb1-green-soft); color: #15953a;
+}
+.auth-brand__icon svg { width: 18px; height: 18px; }
+.auth-brand strong { display: block; font-size: 14px; font-weight: 700; line-height: 17px; color: var(--mb1-text-1); }
+.auth-brand span { display: block; font-size: 10px; line-height: 13px; color: var(--mb1-text-2); }
+.auth-heading h1 { margin: 0; font-size: 17px; font-weight: 700; line-height: 22px; color: var(--mb1-text-1); }
+.auth-heading p { margin: 3px 0 0; font-size: 12px; line-height: 1.45; color: var(--mb1-text-2); }
+
+/* Campos: mesma altura, raio, fundo e foco dos campos dos cadastros (d17b/mg-layout). */
+.auth-form { display: grid; gap: 11px; }
+.auth-field { display: grid; gap: 4px; }
+.auth-field label { font-size: 11px; font-weight: 600; color: var(--mb1-text-2); }
+.auth-field input {
+  width: 100%;
+  height: var(--mb1-field-height);
+  min-height: var(--mb1-field-height);
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: var(--mb1-radius-control);
+  background: var(--mb1-bg-field);
+  color: var(--mb1-text-1);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--mb1-field-edge);
+  transition: background var(--mb1-motion), border-color var(--mb1-motion), box-shadow var(--mb1-motion);
+}
+.auth-field input:focus,
+.auth-field input:focus-visible {
+  outline: none;
+  border-color: rgba(64, 222, 99, .42);
+  background: var(--mb1-bg-card);
+  box-shadow: inset 0 0 0 1px rgba(64, 222, 99, .12), 0 0 0 3px rgba(64, 222, 99, .08);
+}
+.auth-field input[aria-invalid="true"] { border-color: rgba(220, 38, 38, .45); }
+.auth-field input:disabled { opacity: .6; cursor: not-allowed; }
+.auth-hint { margin: 0; font-size: 11px; line-height: 1.4; color: var(--mb1-text-2); }
+
+/* Faixas de mensagem: erro (vermelho) e informação (âmbar). */
+.auth-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--mb1-radius-control);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.auth-banner svg { flex: 0 0 14px; width: 14px; height: 14px; margin-top: 1px; }
+.auth-banner--error { border-color: rgba(220, 38, 38, .22); background: rgba(220, 38, 38, .08); color: #b91c1c; }
+.auth-banner--info { border-color: rgba(217, 119, 6, .24); background: rgba(217, 119, 6, .09); color: #b45309; }
+
+/* Botões: pílula verde com texto branco (tb-btn-green) e variante neutra. */
+.auth-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 2px; }
+.auth-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 34px; min-width: 112px; padding: 0 18px;
+  border: 1px solid var(--mb1-green); border-radius: var(--mb1-radius-pill);
+  background: var(--mb1-green); color: #fff;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: background var(--mb1-motion), transform 100ms ease;
+}
+.auth-button:hover:not(:disabled) { border-color: var(--mb1-green-hover); background: var(--mb1-green-hover); }
+.auth-button:active:not(:disabled) { transform: scale(.98); }
+.auth-button:focus-visible { outline: 2px solid rgba(64, 222, 99, .45); outline-offset: 2px; }
+.auth-button:disabled { opacity: .55; cursor: not-allowed; }
+.auth-button--ghost { border-color: var(--mb1-border); background: var(--mb1-bg-field); color: var(--mb1-text-1); }
+.auth-button--ghost:hover:not(:disabled) { border-color: var(--mb1-border); background: var(--mb1-bg-field-hover); }
+.auth-version { margin: 0; text-align: center; font-size: 10px; color: var(--mb1-text-3); }
+
+/* Identificação do usuário na tela de bloqueio. */
+.auth-user-chip { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: var(--mb1-radius-control); background: var(--mb1-bg-field); }
+.auth-user-chip__avatar { display: grid; flex: 0 0 32px; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: var(--mb1-green-soft); color: #1f5130; font-weight: 800; font-size: 12px; }
+.auth-user-chip > div { min-width: 0; }
+.auth-user-chip strong { display: block; overflow: hidden; font-size: 13px; color: var(--mb1-text-1); text-overflow: ellipsis; white-space: nowrap; }
+.auth-user-chip span { display: block; overflow: hidden; font-size: 11px; color: var(--mb1-text-2); text-overflow: ellipsis; white-space: nowrap; }
+
+/* Acesso não permitido (RequirePermission); renderiza dentro do shell. */
+.auth-denied { display: grid; place-items: center; min-height: 60vh; padding: 24px; text-align: center; }
+.auth-denied__card { display: grid; gap: 8px; justify-items: center; max-width: 420px; padding: 28px; border: 1px solid var(--mb1-border, #e7eaee); border-radius: 12px; background: var(--mb1-bg-card, #fff); box-shadow: var(--mb1-container-shadow, none); }
+.auth-denied__card svg { width: 32px; height: 32px; color: var(--mb1-amber, #d97706); }
+.auth-denied__card h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--mb1-text-1, #111827); }
+.auth-denied__card p { margin: 0; font-size: 12px; color: var(--mb1-text-2, #6b7280); }
+
+/* Tema escuro: as faixas ganham contraste; o resto vem dos tokens. */
+html.dark .auth-brand__icon,
+html.tema-escuro .auth-brand__icon { color: #70e889; }
+html.dark .auth-banner--error,
+html.tema-escuro .auth-banner--error { border-color: rgba(248, 113, 113, .3); background: rgba(248, 113, 113, .12); color: #fca5a5; }
+html.dark .auth-banner--info,
+html.tema-escuro .auth-banner--info { border-color: rgba(251, 191, 36, .28); background: rgba(251, 191, 36, .1); color: #fcd34d; }
+html.dark .auth-user-chip__avatar,
+html.tema-escuro .auth-user-chip__avatar { color: #70e889; }
+
+/* Página Usuários (diálogos e tabela). */
+.auth-users__status { display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; background: #f1f3f4; color: #6b7280; }
+.auth-users__status.is-active { background: var(--mb1-green-soft, rgba(64, 222, 99, .12)); color: #1f5130; }
+.auth-users__flag { margin-left: 6px; font-size: 10px; font-weight: 600; color: var(--mb1-amber, #d97706); }
+.auth-users__self { margin-left: 6px; font-size: 10px; font-weight: 600; color: var(--mb1-text-3, #9ca3af); }
+.auth-users__form { display: grid; gap: 10px; }
+.auth-users__form .auth-field label { font-size: 11px; }
+.auth-users__form .auth-field input { height: 32px; min-height: 32px; font-size: 13px; }
+.auth-users__hint { margin: 0; font-size: 11px; color: var(--mb1-text-2, #6b7280); }
+html.dark .auth-users__status,
+html.tema-escuro .auth-users__status { background: var(--mb1-bg-field, #21262d); color: var(--mb1-text-2, #848d97); }
+html.dark .auth-users__status.is-active,
+html.tema-escuro .auth-users__status.is-active { color: #70e889; }

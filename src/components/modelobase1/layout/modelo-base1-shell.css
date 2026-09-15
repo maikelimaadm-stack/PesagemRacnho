@@ -299,3 +299,97 @@ html.escuro .mb1-app-shell .mb1-shell-nav__link:hover { background: var(--mb1-bg
 html.dark .mb1-app-shell .mb1-mobile-bottom-nav,
 html.tema-escuro .mb1-app-shell .mb1-mobile-bottom-nav,
 html.escuro .mb1-app-shell .mb1-mobile-bottom-nav { background: rgba(22, 27, 34, .98); }
+
+/* ---------------------------------------------------------------------------
+   Menu do usuário (UserMenu) — topbar do desktop e painel do menu no celular.
+   Doc 10 §3 / doc 11 §2: usuário, perfil, versão, Bloquear, Trocar usuário, Sair.
+   --------------------------------------------------------------------------- */
+.mb1-app-shell .mb1-shell-topbar-button.mb1-user-menu__trigger {
+  width: auto;
+  min-width: 26px;
+  max-width: 220px;
+  padding: 0 8px 0 5px;
+  gap: 5px;
+  color: #1f5130;
+  font-size: 11px;
+  font-weight: 650;
+}
+.mb1-app-shell .mb1-user-menu__trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mb1-app-shell .mb1-user-menu__trigger .mb1-user-menu__role { color: rgba(31, 81, 48, .72); font-weight: 550; }
+.mb1-app-shell .mb1-user-menu__trigger .mb1-user-menu__role::before { content: "· "; }
+.mb1-app-shell .mb1-user-menu__trigger .mb1-user-menu__chevron { flex: 0 0 auto; width: 11px; height: 11px; opacity: .6; }
+.mb1-app-shell .mb1-user-menu__trigger[data-state="open"] { background: rgba(232, 237, 241, .94); }
+
+@media (max-width: 1100px) {
+  .mb1-app-shell .mb1-user-menu__trigger .mb1-user-menu__role { display: none; }
+  .mb1-app-shell .mb1-shell-topbar-button.mb1-user-menu__trigger { max-width: 140px; }
+}
+
+/* Conteúdo do menu: renderizado em portal (fora do .mb1-scope, sem tokens --mb1-*),
+   por isso as cores são explícitas e o tema escuro tem regra própria. */
+[data-radix-menu-content].mb1-user-menu { min-width: 232px; }
+.mb1-user-menu__identity { display: grid; gap: 2px; min-width: 0; padding: 7px 10px 8px; }
+.mb1-user-menu__identity strong { overflow: hidden; color: #111827; font-size: 13px; font-weight: 700; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.mb1-user-menu__identity span { overflow: hidden; color: #6b7280; font-size: 11px; line-height: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.mb1-user-menu__identity .mb1-user-menu__version { color: #9ca3af; font-size: 10px; }
+[data-radix-menu-content].mb1-user-menu [role="menuitem"] { gap: 8px; }
+[data-radix-menu-content].mb1-user-menu [role="menuitem"] svg { width: 14px; height: 14px; color: #5b6b80; }
+[data-radix-menu-content].mb1-user-menu [role="menuitem"].is-exit { color: #b91c1c !important; }
+[data-radix-menu-content].mb1-user-menu [role="menuitem"].is-exit svg { color: #b91c1c; }
+
+html.dark [data-radix-menu-content].mb1-user-menu,
+html.tema-escuro [data-radix-menu-content].mb1-user-menu {
+  border-color: #484f58 !important;
+  background: #161b22 !important;
+  background-color: #161b22 !important;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, .45) !important;
+}
+html.dark .mb1-user-menu__identity strong,
+html.tema-escuro .mb1-user-menu__identity strong { color: #e6edf3; }
+html.dark .mb1-user-menu__identity span,
+html.tema-escuro .mb1-user-menu__identity span { color: #848d97; }
+html.dark .mb1-user-menu__identity .mb1-user-menu__version,
+html.tema-escuro .mb1-user-menu__identity .mb1-user-menu__version { color: #6e7681; }
+html.dark [data-radix-menu-content].mb1-user-menu [role="menuitem"],
+html.tema-escuro [data-radix-menu-content].mb1-user-menu [role="menuitem"] { color: #e6edf3 !important; }
+html.dark [data-radix-menu-content].mb1-user-menu [role="menuitem"] svg,
+html.tema-escuro [data-radix-menu-content].mb1-user-menu [role="menuitem"] svg { color: #848d97; }
+html.dark [data-radix-menu-content].mb1-user-menu [role="menuitem"]:hover,
+html.dark [data-radix-menu-content].mb1-user-menu [role="menuitem"][data-highlighted],
+html.tema-escuro [data-radix-menu-content].mb1-user-menu [role="menuitem"]:hover,
+html.tema-escuro [data-radix-menu-content].mb1-user-menu [role="menuitem"][data-highlighted] { background: #21262d !important; }
+html.dark [data-radix-menu-content].mb1-user-menu [role="menuitem"].is-exit,
+html.tema-escuro [data-radix-menu-content].mb1-user-menu [role="menuitem"].is-exit { color: #f87171 !important; }
+html.dark [data-radix-menu-content].mb1-user-menu [role="separator"],
+html.tema-escuro [data-radix-menu-content].mb1-user-menu [role="separator"] { background: #30363d; }
+
+/* Painel do usuário dentro do menu lateral (celular, < 768 px). */
+.mb1-app-shell .mb1-user-panel { display: grid; flex: 0 0 auto; gap: 8px; margin-top: auto; padding: 10px; border-top: 1px solid var(--mb1-border); background: var(--mb1-bg-card); }
+.mb1-app-shell .mb1-user-panel__identity { display: flex; align-items: center; min-width: 0; gap: 9px; }
+.mb1-app-shell .mb1-user-panel__avatar { display: grid; flex: 0 0 32px; place-items: center; width: 32px; height: 32px; border-radius: 999px; background: var(--mb1-green-soft); color: #1f5130; font-size: 11px; font-weight: 800; }
+.mb1-app-shell .mb1-user-panel__identity > div { display: flex; flex-direction: column; min-width: 0; }
+.mb1-app-shell .mb1-user-panel__identity strong { overflow: hidden; color: var(--mb1-text-1); font-size: 12px; font-weight: 700; line-height: 15px; text-overflow: ellipsis; white-space: nowrap; }
+.mb1-app-shell .mb1-user-panel__identity span { overflow: hidden; color: var(--mb1-text-2); font-size: 10px; line-height: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.mb1-app-shell .mb1-user-panel__actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.mb1-app-shell .mb1-user-panel__actions button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 8px;
+  gap: 6px;
+  border: 0;
+  border-radius: var(--mb1-radius-control);
+  background: var(--mb1-bg-field);
+  color: var(--mb1-text-1);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--mb1-motion);
+}
+.mb1-app-shell .mb1-user-panel__actions button:hover { background: var(--mb1-bg-field-hover); }
+.mb1-app-shell .mb1-user-panel__actions button svg { width: 14px; height: 14px; color: var(--mb1-icon); }
+.mb1-app-shell .mb1-user-panel__actions button.is-exit { color: var(--mb1-red); }
+.mb1-app-shell .mb1-user-panel__actions button.is-exit svg { color: var(--mb1-red); }
+html.dark .mb1-app-shell .mb1-user-panel__avatar,
+html.tema-escuro .mb1-app-shell .mb1-user-panel__avatar { color: #70e889; }

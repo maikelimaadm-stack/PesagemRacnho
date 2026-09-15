@@ -1,0 +1,75 @@
+/* Complementos da página genérica de cadastros mestres (Agente F1). O contrato
+   visual principal continua em src/styles/auxiliary-registries.css (coordenador);
+   aqui ficam só os controles novos: chips de multisseleção, distintivos do
+   painel de contexto e a coluna "Em uso". */
+
+/* Campo de multisseleção (papéis do parceiro): chips com estado pressionado. */
+.mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field.aux-model-field--chips {
+  flex: 1 0 100% !important;
+  min-width: 100% !important;
+  height: auto !important;
+  min-height: 38px;
+}
+.aux-model-field--chips > .fg-label { display: block; margin-bottom: 4px; }
+.aux-chip-group { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+.aux-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid #d8dde5;
+  border-radius: 999px;
+  background: #fff;
+  color: #46566c;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.aux-chip:hover:not(:disabled) { background: #e8edf1; }
+.aux-chip.is-selected {
+  border-color: var(--d17b-accent, #40de63);
+  background: rgba(64, 222, 99, .14);
+  color: #1f3045;
+}
+.aux-chip:disabled { cursor: not-allowed; opacity: .6; }
+.aux-chip svg { width: 12px; height: 12px; }
+.aux-chip:focus-visible { outline: 2px solid var(--d17b-accent, #40de63); outline-offset: 1px; }
+
+/* Distintivos do painel de contexto: padrão, inativo e contagem de uso. */
+.aux-context-badges { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }
+.aux-context-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid #d8dde5;
+  border-radius: 999px;
+  background: #f1f3f4;
+  color: #46566c;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.aux-context-badge svg { width: 11px; height: 11px; }
+.aux-context-badge--default { border-color: rgba(64, 222, 99, .42); background: rgba(64, 222, 99, .12); color: #1f3045; }
+.aux-context-badge--inactive { border-color: #f3c6c6; background: #fdf2f2; color: #9f2d2d; }
+
+/* Coluna "Em uso": número alinhado à direita, "…" enquanto conta. */
+.aux-data-table td.aux-usage-cell { text-align: right; font-variant-numeric: tabular-nums; }
+.aux-data-table td.aux-usage-cell.is-pending { color: #9aa7b6; }
+
+/* Modo consulta (sem registry.write): campos desabilitados mantêm leitura. */
+.aux-record-mode.is-readonly :is(input, textarea):disabled,
+.aux-record-mode.is-readonly .aux-model-cmd-display[data-disabled] { opacity: 1; cursor: default; }
+
+html:is(.dark, .tema-escuro, .escuro) .aux-chip { border-color: var(--mb1-border); background: var(--mb1-bg-field); color: var(--mb1-text-2); }
+html:is(.dark, .tema-escuro, .escuro) .aux-chip:hover:not(:disabled) { background: var(--mb1-bg-subtle); }
+html:is(.dark, .tema-escuro, .escuro) .aux-chip.is-selected { border-color: #40de63; background: rgba(64, 222, 99, .18); color: var(--mb1-text-1); }
+html:is(.dark, .tema-escuro, .escuro) .aux-context-badge { border-color: var(--mb1-border); background: var(--mb1-bg-field); color: var(--mb1-text-2); }
+html:is(.dark, .tema-escuro, .escuro) .aux-context-badge--default { border-color: rgba(64, 222, 99, .5); background: rgba(64, 222, 99, .16); color: var(--mb1-text-1); }
+html:is(.dark, .tema-escuro, .escuro) .aux-context-badge--inactive { border-color: rgba(220, 38, 38, .45); background: rgba(220, 38, 38, .14); color: #f3a4a4; }
+html:is(.dark, .tema-escuro, .escuro) .aux-data-table td.aux-usage-cell.is-pending { color: var(--mb1-text-2); }

@@ -1,7 +1,9 @@
-// Integridade lógica do modelo Dexie: IDs, duplicidades, datas e referências.
+// Integridade lógica do modelo Dexie: IDs, duplicidades, datas, referências e
+// contrato v7 (enums, ids de cadastro, unicidade VISUAL por marca, usuários).
 import { ensureStorageReady, getDbVersion } from '../db.js';
-import { DOMAIN_STORES, STORE_NAMES } from '../schema.js';
+import { ANIMAL_SITUACOES, DOMAIN_STORES, IDENTIFICADOR_TIPOS, SESSAO_STATUS, STORE_NAMES } from '../schema.js';
 import { parseCivilDate } from '../../../modules/weighing/domain/brazilianValues.js';
+import { MIGRATION_STATUS, readMigrationState } from '../../migrations/migrationState.js';
 
 function payload(row) {
   if (!row?.legacy_payload) return row || {};
@@ -9,9 +11,17 @@ function payload(row) {
   try { return { ...row, ...JSON.parse(row.legacy_payload) }; } catch { return row; }
 }
 
-export async function logicalIntegrity() {
+/**
+ * `enforceV7`: força (true) ou desliga (false) as regras do contrato v7 (marca_id
+ * obrigatório, enums, tipos de identificador). Por padrão elas valem quando
+ * appSettings['migration:v7'] está CONCLUIDA — antes disso os valores legados
+ * são esperados e o backfill é quem os converte.
+ */
+export async function logicalIntegrity({ enforceV7 = null } = {}) {
   const db = await ensureStorageReady();
   const issues = [];
+  const migration = await readMigrationState(db, 7);
+  const v7Contract = enforceV7 ?? migration?.status === MIGRATION_STATUS.CONCLUIDA;
 
   for (const name of DOMAIN_STORES) {
     const rows = await db.table(name).toArray();
@@ -32,13 +42,15 @@ export async function logicalIntegrity() {
   }
 
   const active = async (name) => (await db.table(name).toArray()).filter((row) => !row.deleted_at);
-  const animalIds = new Set((await active('animais')).map((row) => row.id));
+  const animals = await active('animais');
+  const animalIds = new Set(animals.map((row) => row.id));
   // v7 (ADR-023): `loteApartacoes` é a única store de lote.
   const lotIds = new Set((await active('loteApartacoes')).map((row) => row.id));
   const shipmentIds = new Set((await active('embarques')).map((row) => row.id));
   const documentIds = new Set((await active('documentosEmbarque')).map((row) => row.id));
   const weighingIds = new Set((await active('pesagens')).map((row) => row.id));
-  const sessionIds = new Set((await active('sessoesPesagem')).map((row) => row.id));
+  const sessions = await active('sessoesPesagem');
+  const sessionIds = new Set(sessions.map((row) => row.id));
 
   for (const raw of await active('pesagens')) {
     const row = payload(raw);
@@ -57,17 +69,37 @@ export async function logicalIntegrity() {
     if (document.embarque_id && !shipmentIds.has(document.embarque_id)) issues.push(`documentosEmbarque ${document.id}: embarque_id órfão ${document.embarque_id}`);
   }
 
-  for (const identifier of await active('animalIdentificadores')) {
-    if (identifier.animal_id && !animalIds.has(identifier.animal_id)) issues.push(`animalIdentificadores ${identifier.id}: animal_id órfão ${identifier.animal_id}`);
+  // Contrato v7 em animais: marca_id obrigatório e situacao dentro do enum.
+  if (v7Contract) {
+    for (const animal of animals) {
+      if (!animal.marca_id) issues.push(`animais ${animal.id}: sem marca_id (contrato v7)`);
+      if (!ANIMAL_SITUACOES.includes(animal.situacao)) issues.push(`animais ${animal.id}: situacao fora do enum (${animal.situacao ?? 'vazia'})`);
+    }
   }
 
+  const identifiers = await active('animalIdentificadores');
+  for (const identifier of identifiers) {
+    if (identifier.animal_id && !animalIds.has(identifier.animal_id)) issues.push(`animalIdentificadores ${identifier.id}: animal_id órfão ${identifier.animal_id}`);
+    if (v7Contract && !IDENTIFICADOR_TIPOS.includes(identifier.tipo)) issues.push(`animalIdentificadores ${identifier.id}: tipo fora do enum (${identifier.tipo ?? 'vazio'})`);
+  }
+
+  // Unicidade de identificador ativo: VISUAL por (marca_id, valor_normalizado)
+  // (ADR-020); demais tipos — e VISUAL legado sem marca_id — por (tipo, valor).
   const identifierOwners = new Map();
-  for (const identifier of await active('animalIdentificadores')) {
+  for (const identifier of identifiers) {
     if (identifier.ativo === false || !identifier.valor_normalizado) continue;
-    const key = `${identifier.tipo || ''}::${identifier.valor_normalizado}`;
+    const isVisualByBrand = identifier.tipo === 'VISUAL' && identifier.marca_id;
+    const key = isVisualByBrand
+      ? `VISUAL::${identifier.marca_id}::${identifier.valor_normalizado}`
+      : `${identifier.tipo || ''}::${identifier.valor_normalizado}`;
     const owner = identifierOwners.get(key);
-    if (owner && owner !== identifier.animal_id) issues.push(`animalIdentificadores ${identifier.id}: identificação ativa duplicada entre animais`);
-    else identifierOwners.set(key, identifier.animal_id);
+    if (owner && owner !== identifier.animal_id) {
+      issues.push(isVisualByBrand
+        ? `animalIdentificadores ${identifier.id}: identificador VISUAL ativo duplicado na mesma marca (${identifier.valor_normalizado})`
+        : `animalIdentificadores ${identifier.id}: identificação ativa duplicada entre animais`);
+    } else {
+      identifierOwners.set(key, identifier.animal_id);
+    }
   }
 
   for (const movement of await active('movimentosAnimais')) {
@@ -83,11 +115,23 @@ export async function logicalIntegrity() {
     if (link.fim && (!parseCivilDate(link.fim) || link.fim < link.inicio)) issues.push(`animalLotes ${link.id}: fim inválido ou anterior ao início`);
   }
 
-  for (const session of await active('sessoesPesagem')) {
+  for (const session of sessions) {
     if (!parseCivilDate(session.data)) issues.push(`sessoesPesagem ${session.id}: data inválida`);
+    if (v7Contract && !SESSAO_STATUS.includes(session.status)) issues.push(`sessoesPesagem ${session.id}: status fora do enum (${session.status ?? 'vazio'})`);
   }
 
-  return { ok: issues.length === 0, result: issues.length === 0 ? 'ok' : 'issues', issues };
+  // Usuários locais (ADR-035/043): todo usuário ativo precisa de hash e salt
+  // (`password_*` na rev. 2 do documento 11, `senha_*` na rev. 1). O diagnóstico
+  // cita somente id e login — nunca o conteúdo das credenciais.
+  const usersStore = STORE_NAMES.includes('usuarios') ? 'usuarios' : 'usuariosLocais';
+  for (const user of await active(usersStore)) {
+    if (user.ativo === false) continue;
+    const hash = user.password_hash ?? user.senha_hash;
+    const salt = user.password_salt ?? user.senha_salt;
+    if (!hash || !salt) issues.push(`${usersStore} ${user.id}: usuário ativo sem credencial completa (${user.login || 'sem login'})`);
+  }
+
+  return { ok: issues.length === 0, result: issues.length === 0 ? 'ok' : 'issues', issues, v7Contract };
 }
 
 export async function databaseStats() {

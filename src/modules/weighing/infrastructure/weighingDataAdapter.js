@@ -1,7 +1,27 @@
 // Fluxo operacional IndexedDB/Dexie. O adapter preserva o contrato da UI e
 // concentra transações, projeções e auditoria do domínio de pesagens.
-import { storageRecordToViewModel } from '../domain/weighingMapper.js';
+//
+// v7 (docs 12 §3.2): animais nascem com marca_id/raca_id/propriedade_id e
+// situacao em enum; identificadores VISUAL guardam só o número em
+// valor_normalizado e a marca em marca_id; sessões nascem ABERTA; toda linha de
+// auditoria carrega o ator (auditActor) e ATUALIZAR em massa grava resumo +
+// campos_alterados em vez de antes/depois completos.
+import { filterLegacyPayload, storageRecordToViewModel } from '../domain/weighingMapper.js';
 import storage from '../../../storage/storageAdapter.js';
+import { getActor } from '../../../storage/indexedDb/auditActor.js';
+import { estimateBirth, isOpenSessionStatus, normalizeName, situacaoFromExitReason } from '../../../storage/indexedDb/normalize.js';
+import { STORES } from '../../../storage/indexedDb/schema.js';
+
+const EMPRESA_ID = 'local';
+// Nome do campo do operador da sessão segue o índice declarado no esquema
+// (`operador_usuario_id` na rev. 2 do documento 12; `operador_user_id` na rev. 1).
+const SESSION_OPERATOR_FIELD = String(STORES.sessoesPesagem).includes('operador_usuario_id') ? 'operador_usuario_id' : 'operador_user_id';
+
+// Id do usuário autenticado (`actor_user_id` no auditActor atual; `usuario_id` na rev. 2).
+function actorUserId() {
+  const actor = getActor();
+  return actor.actor_user_id ?? actor.usuario_id ?? null;
+}
 
 const eventOrder = (left, right) =>
   String(left.data_pesagem || '').localeCompare(String(right.data_pesagem || ''))
@@ -10,6 +30,126 @@ const eventOrder = (left, right) =>
 
 function weighingUi(row) {
   return typeof row?.legacy_payload === 'object' ? row.legacy_payload : {};
+}
+
+const normalized = (value) => String(value || '').trim().toUpperCase();
+
+// Registro base de cadastro mestre criado "de passagem" pelo lançamento
+// (marca/raça digitadas que ainda não existem na store).
+function registryRecord(storeName, nome, ts) {
+  const extra = storeName === 'marcas'
+    ? { abreviacao: null, proprietario_parceiro_id: null, propriedade_id: null, padrao: false, observacao: null }
+    : { abreviacao: null, grupo: null, padrao: false, ordem: null };
+  return { id: crypto.randomUUID(), empresa_id: EMPRESA_ID, nome, nome_normalizado: normalizeName(nome), ativo: true, ...extra, created_at: ts, updated_at: ts, deleted_at: null };
+}
+
+async function findDefaultRegistryId(db, storeName) {
+  const rows = await db.table(storeName).toArray();
+  return rows.find((row) => !row.deleted_at && row.padrao === true)?.id || null;
+}
+
+// Texto → id na store de cadastro; cria a entrada quando não existe. Sem texto,
+// devolve o padrão da store (marca/propriedade padrão) ou null.
+async function resolveRegistryId(db, storeName, text, ts, { fallbackToDefault = false } = {}) {
+  const nome = String(text ?? '').trim();
+  const norm = normalizeName(nome);
+  if (!norm) return fallbackToDefault ? findDefaultRegistryId(db, storeName) : null;
+  const existing = (await db.table(storeName).where('nome_normalizado').equals(norm).toArray()).find((row) => !row.deleted_at);
+  if (existing) return existing.id;
+  const record = registryRecord(storeName, nome, ts);
+  await db.table(storeName).add(record);
+  return record.id;
+}
+
+function auditRow(fields) {
+  return { id: crypto.randomUUID(), ...fields, ...getActor() };
+}
+
+// Campos alterados entre duas versões do registro (auditoria resumida).
+function changedFields(before, after) {
+  const fields = new Set();
+  const keys = new Set([...Object.keys(before || {}), ...Object.keys(after || {})]);
+  for (const key of keys) {
+    if (key === 'updated_at' || key === 'localId') continue;
+    if (key === 'legacy_payload') {
+      const b = before?.legacy_payload || {};
+      const a = after?.legacy_payload || {};
+      for (const inner of new Set([...Object.keys(b), ...Object.keys(a)])) {
+        if (JSON.stringify(b[inner]) !== JSON.stringify(a[inner])) fields.add(`legacy_payload.${inner}`);
+      }
+      continue;
+    }
+    if (JSON.stringify(before?.[key]) !== JSON.stringify(after?.[key])) fields.add(key);
+  }
+  return [...fields].sort();
+}
+
+function newSession({ data, operador, ts }) {
+  return {
+    id: crypto.randomUUID(),
+    data,
+    local: null,
+    status: 'ABERTA',
+    operador: operador || 'LOCAL',
+    [SESSION_OPERATOR_FIELD]: actorUserId(),
+    marca_padrao_id: null,
+    apartacao_padrao_id: null,
+    tipo_manejo_padrao: null,
+    snapshot: null,
+    motivo_reabertura: null,
+    inicio: ts,
+    created_at: ts,
+    updated_at: ts,
+    deleted_at: null,
+  };
+}
+
+function newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao, dataCadastro, origem, ts }) {
+  const nascimento = estimateBirth(dataCadastro, ui.era);
+  return {
+    id: animalId,
+    empresa_id: ui.empresa_id || EMPRESA_ID,
+    identificacao_normalizada: normalized(ui.numero_animal),
+    numero_animal: ui.numero_animal || null,
+    nome: ui.nome_animal || null,
+    sexo: ui.sexo || null,
+    // Texto legado somente-leitura (docs 12 §3.2); a referência vive nos ids.
+    raca: ui.raca || null,
+    era: ui.era || null,
+    marca: ui.marca || null,
+    marca_id: marcaId,
+    raca_id: racaId,
+    categoria_id: null,
+    propriedade_id: propriedadeId,
+    nascimento,
+    nascimento_estimado: Boolean(nascimento),
+    situacao,
+    ...(origem ? { origem } : {}),
+    created_at: ts,
+    updated_at: ts,
+    deleted_at: null,
+  };
+}
+
+function newVisualIdentifier({ animalId, ui, marcaId, inicio, ts }) {
+  return {
+    id: crypto.randomUUID(),
+    animal_id: animalId,
+    tipo: 'VISUAL',
+    valor: ui.numero_animal || null,
+    valor_normalizado: normalized(ui.numero_animal),
+    marca_id: marcaId,
+    marca: ui.marca || null,
+    faixa_id: null,
+    inicio,
+    fim: null,
+    motivo_troca: null,
+    principal: true,
+    ativo: true,
+    created_at: ts,
+    updated_at: ts,
+    deleted_at: null,
+  };
 }
 
 async function validateAnimalChronology(db, { animalId, data, ui, ignoredEntryId = null }) {
@@ -57,7 +197,8 @@ async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date()
   const currentLot = openLots.at(-1) || null;
   const inactive = Boolean(latestExit);
   const changes = {
-    situacao: inactive ? 'Inativo' : 'Ativo',
+    // Enum v7 (ADR-028): derivado do motivo da saída definitiva; sem motivo mapeável → INATIVO.
+    situacao: inactive ? situacaoFromExitReason(exitUi.motivo_saida) : 'ATIVO',
     data_saida: inactive ? latestExit.data_pesagem : null,
     motivo_saida: inactive ? exitUi.motivo_saida || 'Saída' : null,
     ultima_pesagem_data: latest?.data_pesagem || null,
@@ -108,13 +249,14 @@ export async function isStorageAvailable() {
 }
 
 export async function createEntry(payload) {
+  storage.assertWritable('Lançamento de pesagem');
   const db = await storage.ensureReady();
   const ui = typeof payload.legacy_payload === 'object' ? payload.legacy_payload : {};
   const ts = new Date().toISOString();
   const entryId = payload.id || crypto.randomUUID();
   const animalId = payload.animal_id || ui.animal_id || (ui.tipo_manejo === 'Cadastro' ? crypto.randomUUID() : null);
   let sessionId = ui.sessao_id || null;
-  const entry = { ...payload, id: entryId, animal_id: animalId, sessao_id: sessionId, created_at: payload.created_at || ts, updated_at: ts, deleted_at: null };
+  const entry = { ...payload, id: entryId, animal_id: animalId, sessao_id: sessionId, created_by_user_id: actorUserId(), updated_by_user_id: actorUserId(), created_at: payload.created_at || ts, updated_at: ts, deleted_at: null };
   const isRegistration = ui.tipo_manejo === 'Cadastro';
   let movementType = isRegistration ? 'Entrada' : ui.tipo_manejo === 'Saída' ? ui.motivo_saida || 'Saída' : null;
 
@@ -122,54 +264,33 @@ export async function createEntry(payload) {
 
   const tableNames = ['pesagens', 'auditoria', 'sessoesPesagem', 'animalLotes'];
   if (animalId) tableNames.push('animais', 'movimentosAnimais');
-  if (isRegistration) tableNames.push('animalIdentificadores');
+  if (isRegistration) tableNames.push('animalIdentificadores', 'marcas', 'racas', 'propriedades');
   if (movementType) tableNames.push('movimentosAnimais');
   const tables = [...new Set(tableNames)].map((name) => db.table(name));
 
   await db.transaction('rw', tables, async () => {
     if (!sessionId) {
       const session = (await db.table('sessoesPesagem').where('data').equals(payload.data_pesagem).toArray())
-        .find((candidate) => !candidate.deleted_at && candidate.status === 'Aberta');
-      sessionId = session?.id || crypto.randomUUID();
-      if (!session) {
-        await db.table('sessoesPesagem').add({ id: sessionId, data: payload.data_pesagem, status: 'Aberta', operador: ui.operador || 'LOCAL', inicio: ts, created_at: ts, updated_at: ts, deleted_at: null });
+        .find((candidate) => !candidate.deleted_at && isOpenSessionStatus(candidate.status));
+      if (session) {
+        sessionId = session.id;
+      } else {
+        const created = newSession({ data: payload.data_pesagem, operador: ui.operador, ts });
+        await db.table('sessoesPesagem').add(created);
+        sessionId = created.id;
       }
       entry.sessao_id = sessionId;
     }
     if (await db.table('pesagens').where('id').equals(entryId).first()) throw new Error(`Pesagem duplicada (${entryId})`);
     await db.table('pesagens').add(entry);
     if (isRegistration) {
-      const normalized = String(ui.numero_animal || '').trim().toUpperCase();
       const existingAnimal = await db.table('animais').where('id').equals(animalId).first();
       if (!existingAnimal) {
-        await db.table('animais').add({
-          id: animalId,
-          empresa_id: ui.empresa_id || null,
-          identificacao_normalizada: normalized,
-          numero_animal: ui.numero_animal || null,
-          nome: ui.nome_animal || null,
-          sexo: ui.sexo || null,
-          raca: ui.raca || null,
-          era: ui.era || null,
-          marca: ui.marca || null,
-          situacao: ui.status_animal || 'Ativo',
-          created_at: ts,
-          updated_at: ts,
-          deleted_at: null,
-        });
-        await db.table('animalIdentificadores').add({
-          id: crypto.randomUUID(),
-          animal_id: animalId,
-          tipo: 'visual_marca',
-          valor: ui.numero_animal || null,
-          valor_normalizado: `${normalized}::${String(ui.marca || '').trim().toUpperCase()}`,
-          marca: ui.marca || null,
-          principal: true,
-          ativo: true,
-          created_at: ts,
-          updated_at: ts,
-          deleted_at: null,
-        });
+        const marcaId = await resolveRegistryId(db, 'marcas', ui.marca, ts, { fallbackToDefault: true });
+        const racaId = await resolveRegistryId(db, 'racas', ui.raca, ts);
+        const propriedadeId = await findDefaultRegistryId(db, 'propriedades');
+        await db.table('animais').add(newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao: 'ATIVO', dataCadastro: payload.data_pesagem, origem: null, ts }));
+        await db.table('animalIdentificadores').add(newVisualIdentifier({ animalId, ui, marcaId, inicio: payload.data_pesagem, ts }));
       }
     }
     const currentLots = animalId
@@ -190,7 +311,7 @@ export async function createEntry(payload) {
         pesagem_id: entryId,
         tipo: movementType,
         data_evento: payload.data_pesagem,
-        lote_origem_id: null,
+        lote_origem_id: currentLot?.lote_id || null,
         lote_destino_id: payload.lote_id || null,
         motivo: ui.motivo_saida || null,
         created_at: ts,
@@ -198,8 +319,7 @@ export async function createEntry(payload) {
         deleted_at: null,
       });
     }
-    await db.table('auditoria').add({
-      id: crypto.randomUUID(),
+    await db.table('auditoria').add(auditRow({
       entidade: 'pesagens',
       entidade_id: entryId,
       acao: 'CRIAR',
@@ -207,26 +327,30 @@ export async function createEntry(payload) {
       origem: ui.origem || 'manual',
       operador: ui.operador || null,
       created_at: ts,
-    });
+    }));
     await rebuildAnimalStateProjection(db, animalId, ts);
   });
   return storageRecordToViewModel(entry);
 }
 
 export async function updateEntry(id, payload) {
+  storage.assertWritable('Edição de pesagem');
   const db = await storage.ensureReady();
   const rows = await db.table('pesagens').where('id').equals(id).toArray();
   const existing = [...rows].reverse().find((row) => !row.deleted_at);
   if (!existing) return null;
   const ts = new Date().toISOString();
-  const updated = { ...existing, ...payload, id, updated_at: ts };
+  const updated = { ...existing, ...payload, id, updated_by_user_id: actorUserId(), updated_at: ts };
   const ui = typeof updated.legacy_payload === 'object' ? updated.legacy_payload : {};
   await validateAnimalChronology(db, { animalId: updated.animal_id, data: updated.data_pesagem, ui, ignoredEntryId: id });
-  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalLotes'), db.table('auditoria'), async () => {
+  const tables = ['pesagens', 'animais', 'animalLotes', 'auditoria', 'marcas', 'racas'].map((name) => db.table(name));
+  await db.transaction('rw', tables, async () => {
     await db.table('pesagens').update(existing.localId, updated);
     if (ui.tipo_manejo === 'Cadastro' && updated.animal_id) {
       const animal = await db.table('animais').where('id').equals(updated.animal_id).first();
       if (animal) {
+        const marcaId = ui.marca ? await resolveRegistryId(db, 'marcas', ui.marca, ts) : animal.marca_id ?? null;
+        const racaId = ui.raca ? await resolveRegistryId(db, 'racas', ui.raca, ts) : animal.raca_id ?? null;
         await db.table('animais').update(animal.localId, {
           numero_animal: ui.numero_animal || animal.numero_animal,
           identificacao_normalizada: String(ui.numero_animal || animal.numero_animal || '').trim().toUpperCase(),
@@ -234,12 +358,14 @@ export async function updateEntry(id, payload) {
           raca: ui.raca ?? animal.raca,
           era: ui.era ?? animal.era,
           marca: ui.marca ?? animal.marca,
+          marca_id: marcaId,
+          raca_id: racaId,
           updated_at: ts,
         });
       }
     }
     await rebuildAnimalLotProjection(db, updated.animal_id, ts);
-    await db.table('auditoria').add({ id: crypto.randomUUID(), entidade: 'pesagens', entidade_id: id, acao: 'ATUALIZAR', antes: existing, depois: updated, operador: ui.operador || null, created_at: ts });
+    await db.table('auditoria').add(auditRow({ entidade: 'pesagens', entidade_id: id, acao: 'ATUALIZAR', antes: existing, depois: updated, origem: 'manual', operador: ui.operador || null, created_at: ts }));
     await rebuildAnimalStateProjection(db, updated.animal_id, ts);
   });
   return storageRecordToViewModel(updated);
@@ -253,11 +379,12 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
   if ((!Array.isArray(payloads) || payloads.length === 0) && !importMetadata?.hash) {
     return { registros_criados: 0, animais_criados: 0, movimentos_criados: 0, animais_afetados: 0 };
   }
+  storage.assertWritable('Importação de pesagens');
   const db = await storage.ensureReady();
   const ts = new Date().toISOString();
-  const tables = ['pesagens', 'animais', 'animalIdentificadores', 'movimentosAnimais', 'animalLotes', 'sessoesPesagem', 'auditoria', 'importacoes'].map((name) => db.table(name));
-  const [weighingTable, animalTable, identifierTable, movementTable, animalLotTable, sessionTable, auditTable, importTable] = tables;
-  const normalized = (value) => String(value || '').trim().toUpperCase();
+  const tableNames = ['pesagens', 'animais', 'animalIdentificadores', 'movimentosAnimais', 'animalLotes', 'sessoesPesagem', 'auditoria', 'importacoes', 'marcas', 'racas', 'propriedades'];
+  const tables = tableNames.map((name) => db.table(name));
+  const [weighingTable, animalTable, identifierTable, movementTable, animalLotTable, sessionTable, auditTable, importTable, marcaTable, racaTable, propriedadeTable] = tables;
   const identityKey = (ui) => `${normalized(ui.numero_animal)}::${normalized(ui.marca)}`;
   let report = null;
 
@@ -291,19 +418,46 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
       payload.id = id;
     }
 
+    // Cadastros mestres: mapa nome_normalizado → id (existentes + criados no lote).
+    const marcas = (await marcaTable.toArray()).filter((row) => !row.deleted_at);
+    const racas = (await racaTable.toArray()).filter((row) => !row.deleted_at);
+    const marcaIdByNorm = new Map(marcas.map((row) => [row.nome_normalizado, row.id]));
+    const marcaNomeById = new Map(marcas.map((row) => [row.id, row.nome]));
+    const racaIdByNorm = new Map(racas.map((row) => [row.nome_normalizado, row.id]));
+    const marcaPadraoId = marcas.find((row) => row.padrao === true)?.id || null;
+    const propriedadePadraoId = (await propriedadeTable.toArray()).find((row) => !row.deleted_at && row.padrao === true)?.id || null;
+    const newMarcas = [];
+    const newRacas = [];
+    const resolveInBatch = (storeName, text, map, pending) => {
+      const nome = String(text ?? '').trim();
+      const norm = normalizeName(nome);
+      if (!norm) return null;
+      if (map.has(norm)) return map.get(norm);
+      const record = registryRecord(storeName, nome, ts);
+      map.set(norm, record.id);
+      pending.push(record);
+      if (storeName === 'marcas') marcaNomeById.set(record.id, record.nome);
+      return record.id;
+    };
+
     const animals = await animalTable.toArray();
     const identifiers = await identifierTable.toArray();
     const existingWeighings = (await weighingTable.toArray()).filter((row) => !row.deleted_at);
     const animalsById = new Map(animals.filter((row) => !row.deleted_at).map((row) => [String(row.id), row]));
     const identifierByIdentity = new Map();
     for (const identifier of identifiers.filter((row) => !row.deleted_at && row.ativo !== false)) {
-      if (identifier.valor_normalizado) identifierByIdentity.set(normalized(identifier.valor_normalizado), identifier.animal_id);
+      if (!identifier.valor_normalizado) continue;
+      // v7: VISUAL guarda só o número; a marca vem de marca_id. Legado: NÚMERO::MARCA.
+      const key = identifier.tipo === 'VISUAL' && identifier.marca_id
+        ? `${normalized(identifier.valor_normalizado)}::${normalized(marcaNomeById.get(identifier.marca_id) ?? identifier.marca)}`
+        : normalized(identifier.valor_normalizado);
+      identifierByIdentity.set(key, identifier.animal_id);
     }
     for (const animal of animals.filter((row) => !row.deleted_at)) {
       identifierByIdentity.set(`${normalized(animal.numero_animal || animal.identificacao_normalizada)}::${normalized(animal.marca)}`, animal.id);
     }
 
-    const openSessions = (await sessionTable.toArray()).filter((row) => !row.deleted_at && row.status === 'Aberta');
+    const openSessions = (await sessionTable.toArray()).filter((row) => !row.deleted_at && isOpenSessionStatus(row.status));
     const sessionsByDate = new Map(openSessions.map((row) => [row.data, row]));
     const existingLotHistory = (await animalLotTable.toArray()).filter((row) => !row.deleted_at);
     const currentLotByAnimal = new Map(existingLotHistory.filter((row) => !row.fim).map((row) => [String(row.animal_id), row]));
@@ -336,30 +490,23 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
       let animal = animalId ? animalsById.get(String(animalId)) : null;
       if (!animal) {
         animalId = animalId || crypto.randomUUID();
-        animal = {
-          id: animalId,
-          empresa_id: ui.empresa_id || null,
-          identificacao_normalizada: normalized(ui.numero_animal),
-          numero_animal: ui.numero_animal || null,
-          nome: ui.nome_animal || null,
-          sexo: ui.sexo || null,
-          raca: ui.raca || null,
-          era: ui.era || null,
-          marca: ui.marca || null,
-          situacao: ui.tipo_manejo === 'Saída' ? 'Inativo' : ui.status_animal || 'Ativo',
+        const marcaId = resolveInBatch('marcas', ui.marca, marcaIdByNorm, newMarcas) ?? marcaPadraoId;
+        const racaId = resolveInBatch('racas', ui.raca, racaIdByNorm, newRacas);
+        animal = newAnimal({
+          animalId,
+          ui,
+          marcaId,
+          racaId,
+          propriedadeId: propriedadePadraoId,
+          situacao: ui.tipo_manejo === 'Saída' ? situacaoFromExitReason(ui.motivo_saida) : 'ATIVO',
+          dataCadastro: payload.data_pesagem,
           origem: 'importacao',
-          created_at: ts,
-          updated_at: ts,
-          deleted_at: null,
-        };
+          ts,
+        });
         newAnimals.push(animal);
         animalsById.set(String(animalId), animal);
         identifierByIdentity.set(key, animalId);
-        newIdentifiers.push({
-          id: crypto.randomUUID(), animal_id: animalId, tipo: 'visual_marca', valor: ui.numero_animal || null,
-          valor_normalizado: key, marca: ui.marca || null, principal: true, ativo: true,
-          created_at: ts, updated_at: ts, deleted_at: null,
-        });
+        newIdentifiers.push(newVisualIdentifier({ animalId, ui, marcaId, inicio: payload.data_pesagem, ts }));
       }
       affectedAnimals.add(animalId);
 
@@ -385,7 +532,7 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
 
       let session = sessionsByDate.get(payload.data_pesagem);
       if (!session) {
-        session = { id: crypto.randomUUID(), data: payload.data_pesagem, status: 'Aberta', operador: importMetadata?.operador || 'IMPORTACAO', inicio: ts, created_at: ts, updated_at: ts, deleted_at: null };
+        session = newSession({ data: payload.data_pesagem, operador: importMetadata?.operador || 'IMPORTACAO', ts });
         sessionsByDate.set(payload.data_pesagem, session);
         newSessions.push(session);
       }
@@ -393,7 +540,9 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
         ...payload,
         animal_id: animalId,
         sessao_id: session.id,
-        legacy_payload: { ...ui, animal_id: animalId, sessao_id: session.id, origem: 'importacao' },
+        legacy_payload: filterLegacyPayload({ ...ui, animal_id: animalId, sessao_id: session.id, origem: 'importacao' }),
+        created_by_user_id: actorUserId(),
+        updated_by_user_id: actorUserId(),
         created_at: payload.created_at || ts,
         updated_at: ts,
         deleted_at: null,
@@ -418,12 +567,14 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
       }
       if (movementType) movements.push({
         id: crypto.randomUUID(), animal_id: animalId, pesagem_id: entry.id, tipo: movementType,
-        data_evento: payload.data_pesagem, lote_origem_id: null, lote_destino_id: payload.lote_id || null,
+        data_evento: payload.data_pesagem, lote_origem_id: currentLot?.lote_id || null, lote_destino_id: payload.lote_id || null,
         motivo: ui.motivo_saida || null, origem: 'importacao', created_at: ts, updated_at: ts, deleted_at: null,
       });
-      audits.push({ id: crypto.randomUUID(), entidade: 'pesagens', entidade_id: entry.id, acao: 'CRIAR', depois: entry, origem: 'importacao', operador: importMetadata?.operador || null, created_at: ts });
+      audits.push(auditRow({ entidade: 'pesagens', entidade_id: entry.id, acao: 'CRIAR', depois: entry, origem: 'importacao', operador: importMetadata?.operador || null, created_at: ts }));
     }
 
+    if (newMarcas.length) await marcaTable.bulkAdd(newMarcas);
+    if (newRacas.length) await racaTable.bulkAdd(newRacas);
     if (newAnimals.length) await animalTable.bulkAdd(newAnimals);
     if (newIdentifiers.length) await identifierTable.bulkAdd(newIdentifiers);
     if (newSessions.length) await sessionTable.bulkAdd(newSessions);
@@ -452,6 +603,7 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
 
 export async function bulkUpdateEntries(items, { audit = true, origin = 'edicao-coletiva', systemDerived = false } = {}) {
   if (!Array.isArray(items) || items.length === 0) return 0;
+  storage.assertWritable('Atualização de pesagens');
   const db = await storage.ensureReady();
   const ts = new Date().toISOString();
   if (systemDerived) {
@@ -467,12 +619,14 @@ export async function bulkUpdateEntries(items, { audit = true, origin = 'edicao-
       const existing = item.localId == null ? activeById.get(item.id) : null;
       const localId = item.localId ?? existing?.localId;
       if (localId == null) throw new Error(`pesagens: registro não encontrado (${item.id})`);
-      const { _localId: _ignoredLocalId, ...legacyPayload } = item.legacyPayload || {};
+      // O recálculo recebe o view model inteiro (_localId, status_animal, created_date…):
+      // só a lista permitida entra no snapshot (ADR-027).
+      const legacyPayload = item.legacyPayload ? filterLegacyPayload(item.legacyPayload) : null;
       return {
         key: localId,
         changes: {
           ...item.patch,
-          ...(item.legacyPayload ? { legacy_payload: legacyPayload } : {}),
+          ...(legacyPayload ? { legacy_payload: legacyPayload } : {}),
           id: item.id,
           updated_at: ts,
         },
@@ -497,7 +651,7 @@ export async function bulkUpdateEntries(items, { audit = true, origin = 'edicao-
       const rows = await db.table('pesagens').where('id').equals(item.id).toArray();
       const existing = [...rows].reverse().find((row) => !row.deleted_at);
       if (!existing) throw new Error(`pesagens: registro não encontrado (${item.id})`);
-      const updated = { ...existing, ...item.patch, id: existing.id, updated_at: ts };
+      const updated = { ...existing, ...item.patch, id: existing.id, updated_by_user_id: actorUserId(), updated_at: ts };
       const ui = weighingUi(updated);
       await validateAnimalChronology(db, { animalId: updated.animal_id, data: updated.data_pesagem, ui, ignoredEntryId: existing.id });
       await db.table('pesagens').update(existing.localId, updated);
@@ -514,11 +668,15 @@ export async function bulkUpdateEntries(items, { audit = true, origin = 'edicao-
         if (updated.animal_id) projectionAnimals.add(updated.animal_id);
       }
       if (audit) {
-        await db.table('auditoria').add({
-          id: crypto.randomUUID(), entidade: 'pesagens', entidade_id: existing.id,
-          acao: 'ATUALIZAR', antes: existing, depois: updated, origem: origin,
+        // ATUALIZAR em massa: resumo + campos alterados (docs 12 §3.2), sem antes/depois completos.
+        const campos = changedFields(existing, updated);
+        await db.table('auditoria').add(auditRow({
+          entidade: 'pesagens', entidade_id: existing.id,
+          acao: 'ATUALIZAR', origem: origin,
+          resumo: `${origin === 'edicao-coletiva' ? 'Edição coletiva' : 'Atualização em massa'}: ${campos.length} campo(s) alterado(s)`,
+          campos_alterados: campos,
           operador: ui.operador || null, created_at: ts,
-        });
+        }));
       }
       updatedCount += 1;
     }
@@ -529,6 +687,7 @@ export async function bulkUpdateEntries(items, { audit = true, origin = 'edicao-
 }
 
 export async function bulkDeleteEntries(ids) {
+  storage.assertWritable('Exclusão de pesagens');
   const db = await storage.ensureReady();
   const ts = new Date().toISOString();
   let removed = 0;
@@ -540,7 +699,7 @@ export async function bulkDeleteEntries(ids) {
       if (!existing) continue;
       if (existing.animal_id) affectedAnimals.add(existing.animal_id);
       await db.table('pesagens').update(existing.localId, { deleted_at: ts, updated_at: ts });
-      await db.table('auditoria').add({ id: crypto.randomUUID(), entidade: 'pesagens', entidade_id: id, acao: 'CANCELAR', antes: existing, motivo: 'Exclusão lógica pela interface', created_at: ts });
+      await db.table('auditoria').add(auditRow({ entidade: 'pesagens', entidade_id: id, acao: 'CANCELAR', antes: existing, motivo: 'Exclusão lógica pela interface', created_at: ts }));
       removed += 1;
     }
     for (const animalId of affectedAnimals) {
