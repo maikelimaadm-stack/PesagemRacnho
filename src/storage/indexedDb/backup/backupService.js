@@ -4,8 +4,8 @@
 import { ensureStorageReady, getDbVersion } from '../db.js';
 import { BACKUP_FORMAT, STORE_NAMES } from '../schema.js';
 import { APP_VERSION } from '../../../lib/appVersion.js';
-
-const BACKUP_FORMAT_VERSION = 2;
+// Formato do backup declarado em um único lugar (ADR-047): versionInfo.js. Valor 2 neste marco.
+import { BACKUP_FORMAT_VERSION } from '../../../versioning/versionInfo.js';
 
 async function sha256(text) {
   const bytes = new TextEncoder().encode(text);

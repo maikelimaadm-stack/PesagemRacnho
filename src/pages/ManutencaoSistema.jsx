@@ -9,12 +9,29 @@ import {
   ModeloBase1PageHeader,
 } from "@/components/modelobase1";
 import { UI_BUILD_ID, UI_MODEL, UI_VERSION } from "@/components/modelobase1/uiBuildInfo";
+import { BUILD_INFO, describeVersions } from "@/versioning/versionInfo";
 import { fmtDateTimeBR, fmtInt } from "@/components/common/formatNumber";
 import ConfirmActionDialog from "@/components/common/ConfirmActionDialog";
 
 function fileLabel(result) {
   return result?.backupPath || result?.filePath || result?.path || result?.fileName || "";
 }
+
+// Quatro eixos de versão + marcadores de build (ADR-047). Fixos por build; exibidos em
+// Status do banco › Versões e incluídos em "Copiar diagnóstico".
+const VERSIONS = describeVersions();
+const BUILD_LABEL = `${BUILD_INFO.gitCommit || "—"} · ${
+  BUILD_INFO.buildTimestamp ? fmtDateTimeBR(BUILD_INFO.buildTimestamp) : "—"
+}`;
+const CONTRACT_LABEL = `${VERSIONS.uiContract} / dados ${VERSIONS.dataContract} · ${VERSIONS.uiBuildId} · ${VERSIONS.dataBuildId}`;
+const VERSION_LINES = [
+  ["Aplicativo", VERSIONS.app],
+  ["Esquema do banco", String(VERSIONS.dbSchema)],
+  ["Formato do backup", String(VERSIONS.backupFormat)],
+  ["Manifesto", String(VERSIONS.releaseManifest)],
+  ["Build", BUILD_LABEL],
+  ["Contrato UI/dados", CONTRACT_LABEL],
+];
 
 export default function ManutencaoSistema() {
   const [statusLabel, setStatusLabel] = useState("—");
@@ -236,6 +253,7 @@ export default function ManutencaoSistema() {
       diag ? `Versão: ${diag.version}` : "",
       diag ? `Empacotado: ${diag.isPackaged ? "sim" : "não (dev)"}` : "",
       `Interface: ${UI_VERSION} · ${UI_MODEL} · ${UI_BUILD_ID}`,
+      ...VERSION_LINES.map(([label, value]) => `${label}: ${value}`),
       `Armazenamento: ${stats?.dbType || "IndexedDB local (Dexie)"} · versão ${stats?.dbVersion ?? 1}`,
       `Status do banco: ${statusLabel}`,
       diag ? `Caminho do log: ${diag.logPath || "—"}` : "",
@@ -302,6 +320,16 @@ export default function ManutencaoSistema() {
               Armazenamento: {stats?.dbType || "IndexedDB local (Dexie)"}
             </li>
           </ul>
+          <div className="pt-2 mt-1 border-t border-slate-100">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Versões</p>
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
+              {VERSION_LINES.map(([label, value]) => (
+                <li key={label} className={label === "Build" || label === "Contrato UI/dados" ? "col-span-2 break-all" : ""}>
+                  {label}: {value}
+                </li>
+              ))}
+            </ul>
+          </div>
         </CardContent>
       </Card>
 

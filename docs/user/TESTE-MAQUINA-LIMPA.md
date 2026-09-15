@@ -3,6 +3,11 @@
 Este roteiro valida o pacote Windows oficial em um computador ou usuário sem uma
 instalação anterior. Use somente um instalador assinado e acompanhado de SHA-256.
 
+Versão de referência deste roteiro: **1.1.18**. O instalador 1.1.18 **não foi gerado**
+e este teste está registrado como **NÃO EXECUTADO** para essa versão
+(`docs/release/1.1.18/RELEASE-CHECKLIST.md`). Quando o pacote existir, execute o roteiro
+e preencha o bloco Resultado no final.
+
 ## Instalação e segurança
 
 - [ ] Conferir nome, versão e SHA-256 publicados para o instalador.
@@ -10,7 +15,8 @@ instalação anterior. Use somente um instalador assinado e acompanhado de SHA-2
       cadeia confiável e carimbo de tempo.
 - [ ] Instalar sem desativar Defender, SmartScreen, WDAC ou App Control.
 - [ ] Abrir pelo atalho e confirmar **Pesagens Individuais**.
-- [ ] Em **Manutenção**, confirmar versão **1.1.16** e armazenamento
+- [ ] Em **Manutenção › Status do banco › Versões**, confirmar aplicativo **1.1.18**,
+      esquema do banco **6**, formato do backup **2**, manifesto **2** e armazenamento
       **IndexedDB local (Dexie)**.
 - [ ] Confirmar que não há erro no `app.log` informado no diagnóstico.
 

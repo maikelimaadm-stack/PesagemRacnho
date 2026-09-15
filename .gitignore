@@ -1,8 +1,9 @@
 # Dependências e saídas de build
 node_modules/
 dist/
-release/
-release-unsigned/
+# Saídas do electron-builder, ancoradas na raiz: docs/release/ é documentação versionada
+/release/
+/release-unsigned/
 coverage/
 
 # Ambiente e segredos
