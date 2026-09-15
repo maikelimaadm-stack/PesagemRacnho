@@ -31,6 +31,9 @@ import {
   OBSERVATION_FIELD_IDS,
   USAGE_IN_LIST_LIMIT,
   USAGE_IN_LIST_STORES,
+  USAGE_UNAVAILABLE_TEXT,
+  USAGE_UNAVAILABLE_TITLE,
+  usageAvailableFor,
   capitalize,
   describeError,
   emptyFor,
@@ -332,6 +335,8 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
     return [...available.values()];
   }, [tabs]);
   const usageInList = tabs.length === 1 && tab.usageInList;
+  // Acima de USAGE_IN_LIST_LIMIT a coluna existe mas não é calculada (mostra "—", sem pílula).
+  const usageAvailable = usageAvailableFor(usageInList, (catalog[tab.id] || []).length);
   const configurableColumns = useMemo(() => [
     { id: 'selecao', label: 'Seleção', default: true, fixo: true },
     ...(tabs.length > 1 ? [TYPE_COLUMN] : []),
@@ -446,7 +451,7 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
   }, [listColumns, cellText, definition]);
   const filtered = useMemo(() => records.filter((record) => {
     if (isMakColumnFilterActive(typeFilter) && !matchesMakColumnFilter(record._typeLabel, typeFilter, 'text')) return false;
-    if ([...listColumns, ...(usageInList ? [USAGE_COLUMN] : [])].some((column) => isMakColumnFilterActive(columnFilters[column.id]) && !matchesColumnFilter(column, record, columnFilters[column.id]))) return false;
+    if ([...listColumns, ...(usageAvailable ? [USAGE_COLUMN] : [])].some((column) => isMakColumnFilterActive(columnFilters[column.id]) && !matchesColumnFilter(column, record, columnFilters[column.id]))) return false;
     for (const [key, values] of Object.entries(panelFilters)) {
       if (!Array.isArray(values) || !values.length) continue;
       const wanted = values[0];
@@ -458,7 +463,7 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
       if (!normalizeSearchQuery(text).includes(normalizeSearchQuery(wanted))) return false;
     }
     return matchesSearch(record, search);
-  }), [records, search, typeFilter, listColumns, columnFilters, panelFilters, usageInList, matchesColumnFilter, matchesSearch, fieldsById, cellText]);
+  }), [records, search, typeFilter, listColumns, columnFilters, panelFilters, usageAvailable, matchesColumnFilter, matchesSearch, fieldsById, cellText]);
   const searchResults = useMemo(() => {
     const term = searchInput.trim();
     if (!term) return { items: [], total: 0 };
@@ -558,7 +563,13 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
       many: (n) => `${n} cadastros excluídos.`,
     });
   };
-  const toggleActive = async (items, activate) => runOnSelection(items, (owner, record) => (activate ? owner.persistence.activate(actor, record.id) : owner.persistence.deactivate(actor, record.id)), {
+  // Inativar um padrão limpa o padrão: o serviço devolve `aviso` e a tela o mostra.
+  const toggleActive = async (items, activate) => runOnSelection(items, async (owner, record) => {
+    if (activate) return owner.persistence.activate(actor, record.id);
+    const result = await owner.persistence.deactivate(actor, record.id);
+    if (result?.aviso) toast.warning(result.aviso);
+    return result;
+  }, {
     one: () => (activate ? 'Cadastro ativado.' : 'Cadastro inativado.'),
     many: (n) => (activate ? `${n} cadastros ativados.` : `${n} cadastros inativados.`),
   });
@@ -719,7 +730,7 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
                     onChange={(value) => { setColumnFilters((current) => ({ ...current, [column.id]: value })); setCurrentPage(1); }}
                   />
                 ))}
-                {usageInList ? (
+                {usageAvailable ? (
                   <MakFilterPill
                     label={USAGE_COLUMN.label}
                     value={columnFilters._uso || null}
@@ -911,7 +922,7 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
                 {tableColumns.map((column) => column.id === '_typeLabel'
                   ? <TableCell key="_typeLabel">{record._typeLabel}</TableCell>
                   : column.id === '_uso'
-                    ? <TableCell key="_uso" className={`aux-usage-cell${usage[record.id] == null ? ' is-pending' : ''}`}>{usage[record.id] == null ? '…' : usage[record.id]}</TableCell>
+                    ? <TableCell key="_uso" className={`aux-usage-cell${usage[record.id] == null ? ' is-pending' : ''}`} title={!usageAvailable ? USAGE_UNAVAILABLE_TITLE : undefined}>{!usageAvailable ? USAGE_UNAVAILABLE_TEXT : usage[record.id] == null ? '…' : usage[record.id]}</TableCell>
                     : <TableCell key={column.id} className={column.id === 'nome' ? 'font-semibold' : ''}>{formatCell(column, record)}</TableCell>)}
               </TableRow>)}
               {!loading && !filtered.length ? <TableRow><TableCell colSpan={tableColumns.length + 1} className="d17d-empty-row">Nenhum cadastro encontrado.</TableCell></TableRow> : null}

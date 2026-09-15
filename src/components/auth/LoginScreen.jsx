@@ -29,7 +29,7 @@ export function useLockCountdown(lockedUntil, onRelease) {
   return remaining;
 }
 
-export default function LoginScreen({ onLogin }) {
+export default function LoginScreen({ onLogin, onForgotPassword }) {
   const [login, setLogin] = useState('');
   const [senha, setSenha] = useState('');
   const [busy, setBusy] = useState(false);
@@ -64,6 +64,11 @@ export default function LoginScreen({ onLogin }) {
         <div className="auth-actions">
           <button type="submit" className="auth-button" disabled={busy || Boolean(lockedUntil)}>{busy ? 'Entrando…' : 'Entrar'}</button>
         </div>
+        {onForgotPassword ? (
+          <p className="auth-links">
+            <button type="button" className="auth-link" onClick={onForgotPassword} disabled={busy}>Esqueci a senha do administrador</button>
+          </p>
+        ) : null}
       </form>
     </AuthScreenShell>
   );

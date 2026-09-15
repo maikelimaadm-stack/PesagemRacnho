@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, HardDriveDownload, RefreshCw, ShieldCheck } from 'lucide-react';
+import { ChevronDown, HardDriveDownload, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { createPageUrl } from '@/utils';
 import { Button } from '@/components/ui/button';
@@ -11,70 +11,76 @@ import { useAuth } from '@/components/auth/useAuth';
 import { brandService, breedService, propertyService } from '@/modules/catalog/application/index';
 import { listApartacoes } from '@/modules/auxiliary/application/apartacaoService';
 import { DEFAULT_EMPRESA_ID, getAppConfig, updateAppConfig } from '@/modules/settings/application/appConfigService';
+import { parseBrazilianNumber } from '@/modules/weighing/domain/brazilianValues';
 import { describeVersions } from '@/versioning/versionInfo';
 import '@/styles/auxiliary-registries.css';
 
 // Sentinela do select para "nenhum padrão" (o Radix Select não aceita valor vazio).
 const NONE = '__nenhuma__';
 
-// Seções e campos da configuração da empresa (appSettings 'config:<empresa>', doc 11/ADR-025/033/035).
-// `kind`: ref (id de cadastro), integer, decimal, boolean. `width` segue os presets do FormCard.
+// Seções e campos da configuração da empresa: quatro chaves versionadas de appSettings
+// (operational-defaults, weight-warning-policy, sales-policy, auth-policy — doc 11 §8, ADR-025/033/045),
+// lidas/gravadas pela visão mesclada do appConfigService. `kind`: ref (id de cadastro), integer,
+// decimal, boolean. `width` segue os presets do FormCard. `permission`: quem pode ver/gravar a seção.
 const SECTIONS = [
   {
     id: 'geral',
     title: 'Geral',
-    description: 'Padrões pré-selecionados no cadastro rápido e no curral. Só cadastros ativos aparecem.',
+    permission: 'settings.operational',
+    description: 'Padrões pré-selecionados no Lançamento (cadastro rápido de animal). Só cadastros ativos aparecem.',
     fields: [
-      { id: 'marca_padrao_id', label: 'Marca padrão', kind: 'ref', source: 'marcas', width: 'CAMPO_PRINCIPAL' },
-      { id: 'raca_padrao_id', label: 'Raça padrão', kind: 'ref', source: 'racas', width: 'CAMPO_PRINCIPAL' },
-      { id: 'propriedade_padrao_id', label: 'Propriedade padrão', kind: 'ref', source: 'propriedades', width: 'CAMPO_PRINCIPAL' },
+      { id: 'marca_padrao_id', label: 'Marca padrão', kind: 'ref', source: 'marcas', width: 'CAMPO_PRINCIPAL', help: 'Marca já selecionada ao cadastrar um animal no Lançamento.' },
+      { id: 'raca_padrao_id', label: 'Raça padrão', kind: 'ref', source: 'racas', width: 'CAMPO_PRINCIPAL', help: 'Raça já selecionada ao cadastrar um animal no Lançamento.' },
+      { id: 'propriedade_padrao_id', label: 'Propriedade padrão', kind: 'ref', source: 'propriedades', width: 'CAMPO_PRINCIPAL', help: 'Propriedade já selecionada ao cadastrar um animal no Lançamento.' },
     ],
   },
   {
     id: 'curral',
     title: 'Curral',
-    description: 'Apartação sugerida na sessão, faixa de peso aceita e limites que geram alerta de conferência.',
+    permission: 'settings.operational',
+    description: 'Apartação sugerida no Lançamento e limites que geram os avisos de conferência do Lançamento.',
     fields: [
-      { id: 'apartacao_padrao_id', label: 'Apartação padrão', kind: 'ref', source: 'apartacoes', width: 'CAMPO_PRINCIPAL' },
-      { id: 'intervalo_pesagem_dias', label: 'Intervalo de pesagem (dias)', kind: 'integer', width: 'NUMERO', help: 'Animal sem pesagem há mais dias que isso aparece como pesagem vencida.' },
-      { id: 'faixa_peso_min', label: 'Peso mínimo aceito (kg)', kind: 'decimal', width: 'NUMERO', help: 'Abaixo disso o lançamento pede conferência.' },
-      { id: 'faixa_peso_max', label: 'Peso máximo aceito (kg)', kind: 'decimal', width: 'NUMERO', help: 'Acima disso o lançamento pede conferência.' },
-      { id: 'limite_gmd_alerta', label: 'Limite de GMD para alerta (kg/dia)', kind: 'decimal', width: 'NUMERO', help: 'Ganho médio diário acima deste valor gera alerta.' },
+      { id: 'apartacao_padrao_id', label: 'Apartação padrão', kind: 'ref', source: 'apartacoes', width: 'CAMPO_PRINCIPAL', help: 'Apartação já selecionada ao abrir o Lançamento.' },
+      { id: 'intervalo_pesagem_dias', label: 'Intervalo de pesagem (dias)', kind: 'integer', width: 'NUMERO', help: 'Reservado para os relatórios de pesagens vencidas (animal sem pesagem há mais dias que isso).' },
+      { id: 'faixa_peso_min', label: 'Peso mínimo aceito (kg)', kind: 'decimal', width: 'NUMERO', help: 'Abaixo disso o Lançamento mostra aviso de conferência.' },
+      { id: 'faixa_peso_max', label: 'Peso máximo aceito (kg)', kind: 'decimal', width: 'NUMERO', help: 'Acima disso o Lançamento mostra aviso de conferência.' },
+      { id: 'limite_gmd_alerta', label: 'Limite de GMD para alerta (kg/dia)', kind: 'decimal', width: 'NUMERO', help: 'Ganho médio diário acima deste valor gera aviso no Lançamento.' },
+      { id: 'variacao_max_percent', label: 'Variação máxima de peso (%)', kind: 'decimal', width: 'NUMERO', help: 'Variação acima deste percentual em relação à pesagem anterior gera aviso no Lançamento.' },
     ],
   },
   {
     id: 'comercial',
     title: 'Comercial',
-    description: 'Políticas aplicadas nas operações de venda e abate (ADR-025, ADR-033).',
+    permission: 'settings.operational',
+    description: 'Políticas aplicadas nas saídas por venda e abate (ADR-025, ADR-033).',
     fields: [
-      { id: 'exigir_documento_venda', label: 'Exigir documento na venda', kind: 'boolean', width: 'SIM_NAO', help: 'Com "Sim", a venda só fecha com documento vinculado.' },
-      { id: 'rendimento_padrao', label: 'Rendimento de carcaça padrão (%)', kind: 'decimal', width: 'NUMERO', help: 'Usado só quando a operação não informa o rendimento; a origem fica registrada como padrão da empresa.' },
+      { id: 'exigir_documento_venda', label: 'Exigir documento na venda', kind: 'boolean', width: 'SIM_NAO', help: 'Com "Sim", o Lançamento e o Fechamento só concluem uma venda com documento vinculado.' },
+      { id: 'rendimento_padrao', label: 'Rendimento de carcaça padrão (%)', kind: 'decimal', width: 'NUMERO', help: 'Usado pelo Lançamento só quando a operação não informa o rendimento; a origem fica registrada como padrão da empresa.' },
     ],
   },
   {
     id: 'seguranca',
     title: 'Segurança',
-    description: 'Bloqueio automático da sessão. A tela de bloqueio pede a senha do mesmo usuário.',
+    permission: 'settings.auth',
+    description: 'Política de sessão e de tentativas de login (somente administrador). A tela de bloqueio pede a senha do mesmo usuário.',
     fields: [
-      { id: 'bloqueio_inatividade_minutos', label: 'Bloqueio por inatividade (minutos)', kind: 'integer', width: 'NUMERO', help: '0 desliga o bloqueio automático.' },
+      { id: 'inactivity_lock_minutes', label: 'Bloqueio por inatividade (minutos)', kind: 'integer', width: 'NUMERO', help: 'Sem atividade por este tempo a sessão é bloqueada. 0 desliga o bloqueio automático.' },
+      { id: 'failed_attempt_limit', label: 'Tentativas incorretas até bloquear', kind: 'integer', width: 'NUMERO', help: 'Ao atingir este número de senhas erradas o login fica bloqueado temporariamente.' },
+      { id: 'lock_minutes', label: 'Duração do bloqueio (minutos)', kind: 'decimal', width: 'NUMERO', help: 'Tempo de espera após atingir o limite de tentativas (aceita fração, ex.: 0,5).' },
     ],
   },
 ];
-const FIELDS = SECTIONS.flatMap((section) => section.fields);
+const ALL_FIELDS = SECTIONS.flatMap((section) => section.fields);
 
-// Números em pt-BR: vírgula decimal; "1.500,5" → 1500.5; "52.5" (sem vírgula) → 52.5.
-function parseDecimal(text) {
-  let normalized = String(text ?? '').trim();
-  if (!normalized) return Number.NaN;
-  if (normalized.includes(',')) normalized = normalized.replace(/\./g, '').replace(',', '.');
-  return Number(normalized);
-}
-const formatDecimal = (value) => (value == null ? '' : String(value).replace('.', ','));
+// Números em pt-BR pelo mesmo parser do Lançamento: vírgula decimal; "1.500" = 1500; "52,5" = 52.5.
+const parseDecimal = (text) => parseBrazilianNumber(text);
+const decimalFormatter = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
+const formatDecimal = (value) => (value == null || value === '' ? '' : decimalFormatter.format(Number(value)));
 
 // Config (tipada) → valores de formulário (texto); e o caminho inverso, só com o que mudou.
-function toForm(config) {
+function toForm(config, fields) {
   const form = {};
-  for (const field of FIELDS) {
+  for (const field of fields) {
     const value = config[field.id];
     if (field.kind === 'ref') form[field.id] = value || NONE;
     else if (field.kind === 'boolean') form[field.id] = value ? 'true' : 'false';
@@ -90,16 +96,16 @@ function invalid(field, message) {
   return error;
 }
 
-function toPatch(form, config) {
+function toPatch(form, config, fields) {
   const patch = {};
-  for (const field of FIELDS) {
+  for (const field of fields) {
     const raw = form[field.id];
     let value;
     if (field.kind === 'ref') value = raw === NONE || !raw ? null : raw;
     else if (field.kind === 'boolean') value = raw === 'true';
     else {
       value = parseDecimal(raw);
-      if (!Number.isFinite(value)) throw invalid(field, `Informe um número válido em "${field.label}".`);
+      if (value === null || !Number.isFinite(value)) throw invalid(field, `Informe um número válido em "${field.label}".`);
       if (field.kind === 'integer' && !Number.isInteger(value)) throw invalid(field, `"${field.label}" deve ser um número inteiro.`);
     }
     if (value !== config[field.id]) patch[field.id] = value;
@@ -107,7 +113,7 @@ function toPatch(form, config) {
   return patch;
 }
 
-const labelOf = (fieldId) => FIELDS.find((field) => field.id === fieldId)?.label || fieldId;
+const labelOf = (fieldId) => ALL_FIELDS.find((field) => field.id === fieldId)?.label || fieldId;
 
 function focusField(fieldId) {
   window.setTimeout(() => document.getElementById(`config-${fieldId}`)?.focus(), 0);
@@ -183,9 +189,13 @@ function refOptions(rows, currentId, none) {
 }
 
 function ConfiguracoesContent() {
-  const { user: actor } = useAuth();
+  const auth = useAuth();
+  const actor = auth?.user;
   const navigate = useNavigate();
   const empresaId = DEFAULT_EMPRESA_ID;
+  // Seções visíveis/editáveis conforme a permissão do papel (settings.operational ou settings.auth).
+  const sections = useMemo(() => SECTIONS.filter((section) => auth?.can?.(section.permission)), [auth]);
+  const fields = useMemo(() => sections.flatMap((section) => section.fields), [sections]);
   const [config, setConfig] = useState(null);
   const [form, setForm] = useState({});
   const [baseline, setBaseline] = useState({});
@@ -205,7 +215,7 @@ function ConfiguracoesContent() {
         propertyService.list({ empresaId, incluirInativos: true }),
         listApartacoes({ empresaId }),
       ]);
-      const values = toForm(current);
+      const values = toForm(current, fields);
       setConfig(current);
       setForm(values);
       setBaseline(values);
@@ -216,11 +226,11 @@ function ConfiguracoesContent() {
     } finally {
       setLoading(false);
     }
-  }, [empresaId]);
+  }, [empresaId, fields]);
 
   useEffect(() => { load(); }, [load]);
 
-  const dirty = useMemo(() => FIELDS.some((field) => form[field.id] !== baseline[field.id]), [form, baseline]);
+  const dirty = useMemo(() => fields.some((field) => form[field.id] !== baseline[field.id]), [fields, form, baseline]);
   const setField = (id) => (value) => {
     setForm((current) => ({ ...current, [id]: value }));
     if (errorField === id) setErrorField(null);
@@ -245,7 +255,7 @@ function ConfiguracoesContent() {
     if (saving || loading || !config) return;
     let patch;
     try {
-      patch = toPatch(form, config);
+      patch = toPatch(form, config, fields);
     } catch (err) {
       setErrorField(err.field);
       focusField(err.field);
@@ -259,7 +269,7 @@ function ConfiguracoesContent() {
     setSaving(true);
     try {
       const saved = await updateAppConfig(actor, patch, empresaId);
-      const values = toForm(saved);
+      const values = toForm(saved, fields);
       setConfig(saved);
       setForm(values);
       setBaseline(values);
@@ -286,7 +296,8 @@ function ConfiguracoesContent() {
     cancel();
   };
 
-  const goToMaintenance = (secao) => navigate(createPageUrl(`ManutencaoSistema?secao=${secao}`));
+  // Deep link por seção (?secao=) é responsabilidade da tela de Backup e Manutenção.
+  const goToMaintenance = () => navigate(createPageUrl('ManutencaoSistema'));
 
   const renderField = (field) => {
     const error = errorField === field.id;
@@ -298,9 +309,10 @@ function ConfiguracoesContent() {
     }
     return <TextField key={field.id} field={field} value={form[field.id]} onChange={setField(field.id)} error={error} />;
   };
-  const sectionById = (id) => SECTIONS.find((section) => section.id === id);
+  const sectionById = (id) => sections.find((section) => section.id === id);
   const renderSection = (id) => {
     const section = sectionById(id);
+    if (!section) return null;
     return (
       <FormCard title={section.title} description={section.description}>
         {section.fields.map(renderField)}
@@ -377,13 +389,10 @@ function ConfiguracoesContent() {
                             {renderSection('seguranca')}
                           </div>
                           <div className="emp-form-cards-row">
-                            <FormCard title="Dados" description="Backup, restauração, importação e verificação de integridade ficam em Backup e Manutenção." full>
+                            <FormCard title="Dados" description="Backup, restauração, importação, migração e verificação de integridade ficam em Backup e Manutenção." full>
                               <div className="app-config__actions flex flex-wrap items-center gap-2" data-width-type="CAMPO_PRINCIPAL" style={{ flex: '1 1 100%' }}>
-                                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => goToMaintenance('backup')} title="Abrir Backup e Manutenção na área de backup">
-                                  <HardDriveDownload className="h-3.5 w-3.5" aria-hidden="true" />Backup e restauração
-                                </button>
-                                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => goToMaintenance('integridade')} title="Abrir Backup e Manutenção na verificação de integridade">
-                                  <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />Verificar integridade
+                                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={goToMaintenance} title="Abrir Backup e Manutenção">
+                                  <HardDriveDownload className="h-3.5 w-3.5" aria-hidden="true" />Abrir Backup e Manutenção
                                 </button>
                                 <span className="app-config__meta ml-auto text-[10px]" style={{ color: 'var(--mb1-text-3)' }}>
                                   Aplicativo {versions.app} · Banco v{versions.dbSchema} · Backup formato {versions.backupFormat}
@@ -406,10 +415,11 @@ function ConfiguracoesContent() {
   );
 }
 
-// Somente ADMIN (settings.manage). O serviço valida de novo ao gravar.
+// ADMIN e GESTOR (settings.operational); a seção Segurança só aparece com settings.auth (ADMIN).
+// O serviço valida de novo, por grupo, ao gravar.
 export default function Configuracoes() {
   return (
-    <RequirePermission permission="settings.manage">
+    <RequirePermission permission="settings.operational">
       <ConfiguracoesContent />
     </RequirePermission>
   );

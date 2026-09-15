@@ -56,7 +56,7 @@ import { buildWeightPreview } from "@/components/pesagens/weightPreview";
 import { loadAuxiliaryCatalogs } from "@/modules/auxiliary/application/legacyCatalogBridge";
 import { brandService, breedService, categoryService } from "@/modules/catalog/application/index";
 import { normalizeName } from "@/modules/catalog/domain/normalize";
-import { RENDIMENTO_ORIGEM_INFORMADO, RENDIMENTO_ORIGEM_PADRAO_EMPRESA, formatRendimento, loadOperationalPolicies, resolveDefaultRegistry } from "@/modules/operations/application/operationalPolicies";
+import { RENDIMENTO_ORIGEM_INFORMADO, RENDIMENTO_ORIGEM_PADRAO_EMPRESA, exitRequiresDocument, formatRendimento, loadOperationalPolicies, resolveDefaultRegistry } from "@/modules/operations/application/operationalPolicies";
 import { getAnimalRecord } from "@/modules/operations/application/operationalInsightsService";
 import { suggestCategory } from "@/modules/operations/domain/categorySuggestion";
 const formatarData = fmtDateBR;
@@ -229,7 +229,6 @@ export default function LancamentoPesagensIndividuais() {
   );
   // Política de avisos de conferência carregada uma vez com a configuração da empresa.
   const weightWarningPolicy = politicas.weightWarningPolicy || DEFAULT_WEIGHT_WARNING_POLICY;
-  const exigirDocumentoVenda = politicas.sales.exigir_documento_venda === true;
   const avisosPesoVisual = useMemo(() => {
     if (!animalSelecionado || !Number.isFinite(parseBrazilianNumber(peso))) return [];
     return evaluateWeighingWarnings({ weight: peso, date: dataPesagem, history: historicoAnimalSelecionado, policy: weightWarningPolicy });
@@ -335,6 +334,22 @@ export default function LancamentoPesagensIndividuais() {
     getAnimalRecord(animalIdSelecionado).then((registro) => { if (ativo) setAnimalRegistro(registro || null); });
     return () => { ativo = false; };
   }, [animalIdSelecionado]);
+
+  // Edição de um Cadastro: categoria e nascimento vêm do registro v7 do animal
+  // (a categoria gravada conta como escolha manual; a sugestão não a sobrescreve).
+  const registroRestauradoRef = useRef('');
+  useEffect(() => {
+    if (!editingId || tipoManejo !== 'Cadastro' || !animalRegistro) return;
+    const chave = `${editingId}:${animalRegistro.id}`;
+    if (registroRestauradoRef.current === chave) return;
+    registroRestauradoRef.current = chave;
+    if (animalRegistro.marca_id) { setMarcaId(animalRegistro.marca_id); }
+    if (animalRegistro.raca_id) { setRacaId(animalRegistro.raca_id); }
+    setNascimento(animalRegistro.nascimento || '');
+    setNascimentoEstimado(Boolean(animalRegistro.nascimento) && animalRegistro.nascimento_estimado === true);
+    setCategoriaId(animalRegistro.categoria_id || '');
+    setCategoriaOrigem(animalRegistro.categoria_id ? 'manual' : '');
+  }, [editingId, tipoManejo, animalRegistro]);
 
   // Sugestão de categoria por sexo + nascimento; a escolha manual nunca é sobrescrita.
   useEffect(() => {
@@ -657,16 +672,8 @@ export default function LancamentoPesagensIndividuais() {
     <ArrowDown className="w-3 h-3 ml-1 text-emerald-600" />;
   };
 
-  // ========== VALORES ÚNICOS PARA AUTOCOMPLETE ==========
-  const marcasExistentes = useMemo(() =>
-  [...new Set(pesagens.map((p) => p.marca).filter(Boolean))].sort(),
-  [pesagens]
-  );
-  const racasExistentes = useMemo(() =>
-  [...new Set(pesagens.map((p) => p.raca).filter(Boolean))].sort(),
-  [pesagens]
-  );
-  const erasExistentes = useMemo(() => [...new Set(pesagens.map((p) => p.era).filter(Boolean))].sort(), [pesagens]);
+  // Marca, raça e categoria vêm dos cadastros mestres (catalogos); não há mais
+  // autocomplete por texto livre a partir dos lançamentos (S-01.5).
   const numerosUsados = useMemo(() => { const s = new Set(); pesagens.forEach((p) => { if (p.numero_animal && String(p.marca || '').trim().toUpperCase() === String(marca || '').trim().toUpperCase()) s.add(p.numero_animal); }); return s; }, [pesagens, marca]);
   const lotesApartacaoAtual = useMemo(() => { if (!apartacaoSelecionada) return []; return lotesApartacao.filter((l) => l.apartacao_id === apartacaoSelecionada); }, [apartacaoSelecionada, lotesApartacao]);
 
@@ -809,9 +816,13 @@ export default function LancamentoPesagensIndividuais() {
       toast.error("⚠️ Campo obrigatório: Causa da Morte");
       return;
     }
-    if (tipoManejo === 'Saída' && motivoSaida === 'Abate') {
+    // Abate exige sempre embarque + documento; Venda só quando a política da
+    // empresa (`exigir_documento_venda`) estiver ligada (ADR-033).
+    if (tipoManejo === 'Saída' && exitRequiresDocument(motivoSaida, politicas.sales)) {
       if (!embarqueSelecionadoDoc || !documentoSelecionado) {
-        toast.error("Selecione o Embarque e o Documento (GTA/NF-e)");
+        toast.error(motivoSaida === 'Venda'
+          ? "A empresa exige documento na venda: selecione o Embarque e o Documento (GTA/NF-e)"
+          : "Selecione o Embarque e o Documento (GTA/NF-e)");
         return;
       }
     }
@@ -820,16 +831,18 @@ export default function LancamentoPesagensIndividuais() {
     const numeroDigitado = normalizeAnimalIdentifier(numeroAnimal).trim();
     const numeroNorm = normalizeAnimalText(numeroDigitado);
     if (isSN && !skipSnConfirmation) {
+      // O último SN traz só os textos (snapshot); os ids são resolvidos pelo
+      // nome normalizado nos cadastros ativos — sem cadastro, fica em branco.
       const inheritedProfile = ultimoPerfilSn
-        ? ultimoPerfilSn
-        : { sexo, raca, era, marca };
+        ? { sexo: ultimoPerfilSn.sexo, marca: ultimoPerfilSn.marca, marcaId: marcaIdPorNome(ultimoPerfilSn.marca), raca: ultimoPerfilSn.raca, racaId: racaIdPorNome(ultimoPerfilSn.raca) }
+        : { sexo, raca, racaId, marca, marcaId, categoriaId, categoriaOrigem, nascimento, nascimentoEstimado };
       setSnDialogInitialValue(inheritedProfile);
       setSnDialogInherited(Boolean(ultimoPerfilSn));
       setSnDialogOpen(true);
       return;
     }
-    if (tipoManejo === 'Cadastro' && !isSN && !marca.trim()) {
-      toast.error('Informe a marca. A identidade do animal é formada pelo número e pela marca.');
+    if (tipoManejo === 'Cadastro' && !isSN && !marcaId) {
+      toast.error('Selecione a marca cadastrada. A identidade do animal é formada pelo número e pela marca.');
       return;
     }
     if (tipoManejo !== 'Cadastro' && !isSN && !animalIdSelecionado) {
@@ -867,7 +880,7 @@ export default function LancamentoPesagensIndividuais() {
       toast.error(`Animal ${numeroDigitado} / Marca ${marcaComparacao} já cadastrado. Use Manejo para um novo lançamento.`);
       return;
     }
-    const outlierWarnings = evaluateWeighingWarnings({ weight: pesoInformado, date: dataPesagem, history: registrosMesmaIdentidade });
+    const outlierWarnings = evaluateWeighingWarnings({ weight: pesoInformado, date: dataPesagem, history: registrosMesmaIdentidade, policy: weightWarningPolicy });
     if (outlierWarnings.length > 0 && options?.skipOutlierConfirmation !== true) {
       setOutlierJustification("");
       setOutlierDialog({ open: true, warnings: outlierWarnings, options: { ...options, skipOutlierConfirmation: true } });
@@ -938,11 +951,29 @@ export default function LancamentoPesagensIndividuais() {
     const animalIdAtual = isSN ? (registroOriginal?.animal_id || createAnimalId()) : tipoManejo === 'Cadastro'
       ? (registroOriginal?.animal_id || registroOriginal?.id || createAnimalId())
       : animalIdSelecionado;
+    // Perfil do animal: ids dos cadastros mestres + nomes (snapshot) + era
+    // legada somente-leitura. Em Manejo/Saída tudo vem do Cadastro escolhido
+    // (registro v7 `animais` quando existe, senão o snapshot do lançamento).
     const perfilAnimal = isSN
-      ? { numero_animal: numeroDigitado, sexo: snProfile?.sexo || sexo, raca: snProfile?.raca || raca, era: snProfile?.era || era, marca: snProfile?.marca || marca }
+      ? { numero_animal: numeroDigitado, sexo: snProfile?.sexo || sexo, raca: snProfile?.raca || '', raca_id: snProfile?.racaId || null, era: null, marca: snProfile?.marca || '', marca_id: snProfile?.marcaId || null, categoria_id: snProfile?.categoriaId || null, nascimento: snProfile?.nascimento || null, nascimento_estimado: Boolean(snProfile?.nascimento) && Boolean(snProfile?.nascimentoEstimado) }
       : tipoManejo === 'Cadastro'
-        ? { numero_animal: numeroDigitado, sexo, raca, era, marca }
-        : (animalSelecionado || { numero_animal: numeroDigitado, sexo, raca, era, marca });
+        ? { numero_animal: numeroDigitado, sexo, raca, raca_id: racaId || null, era: era || null, marca, marca_id: marcaId || null, categoria_id: categoriaId || null, nascimento: nascimento || null, nascimento_estimado: Boolean(nascimento) && nascimentoEstimado }
+        : {
+          numero_animal: animalSelecionado?.numero_animal || numeroDigitado,
+          sexo: animalSelecionado?.sexo || sexo,
+          raca: animalSelecionado?.raca || '',
+          raca_id: animalRegistro?.raca_id || racaIdPorNome(animalSelecionado?.raca) || null,
+          era: animalSelecionado?.era || null,
+          marca: animalSelecionado?.marca || '',
+          marca_id: animalRegistro?.marca_id || marcaIdPorNome(animalSelecionado?.marca) || null,
+          categoria_id: animalRegistro?.categoria_id || null,
+          nascimento: animalRegistro?.nascimento || null,
+          nascimento_estimado: Boolean(animalRegistro?.nascimento) && animalRegistro?.nascimento_estimado === true,
+        };
+    // Origem do rendimento (docs 12 §4): INFORMADO quando digitado, senão o padrão da empresa.
+    const rendimentoOrigem = tipoManejo === 'Saída' && ['Venda', 'Abate'].includes(motivoSaida)
+      ? (motivoSaida === 'Abate' ? rendimentoOrigemAbate : rendimentoOrigemVenda) || RENDIMENTO_ORIGEM_PADRAO_EMPRESA
+      : null;
 
     const data = {
     empresa_id: empresaSelecionadaId,
@@ -958,6 +989,13 @@ export default function LancamentoPesagensIndividuais() {
     raca: perfilAnimal.raca || null,
     era: perfilAnimal.era || null,
     marca: perfilAnimal.marca || null,
+    // Referências aos cadastros mestres (v7): o adapter usa os ids e recusa
+    // marca/raça não cadastradas (MARCA_NAO_CADASTRADA/RACA_NAO_CADASTRADA).
+    marca_id: perfilAnimal.marca_id || null,
+    raca_id: perfilAnimal.raca_id || null,
+    categoria_id: perfilAnimal.categoria_id || null,
+    nascimento: perfilAnimal.nascimento || null,
+    nascimento_estimado: perfilAnimal.nascimento_estimado === true,
       peso: pesoNum,
       observacao: observacao || null,
       alertas_confirmados: outlierWarnings.map((warning) => warning.code),
@@ -981,6 +1019,7 @@ export default function LancamentoPesagensIndividuais() {
       valor_venda_total: tipoManejo === 'Saída' && motivoSaida === 'Venda' && valorVendaTotal ? parseBrazilianNumber(valorVendaTotal) : null,
       valor_arroba: tipoManejo === 'Saída' && motivoSaida === 'Venda' && valorArroba ? parseBrazilianNumber(valorArroba) : null,
       rendimento_carcaca: calculoComercial?.yieldPercent ?? null,
+      rendimento_origem: calculoComercial ? rendimentoOrigem : null,
       peso_carcaca_estimado: calculoComercial?.carcassWeightKg ?? null,
       quantidade_arrobas: calculoComercial?.arrobas ?? null,
       // Dados de Saída (Abate)
@@ -1023,6 +1062,9 @@ export default function LancamentoPesagensIndividuais() {
       }
 
       setEditingId(null); setAnimalIdSelecionado(""); setPeso("");
+      // Nascimento, categoria e era legada pertencem ao animal salvo: o próximo
+      // Cadastro começa sem eles (marca/raça padrão continuam por tipo).
+      if (tipoManejo === 'Cadastro') { setNascimento(''); setNascimentoEstimado(false); setCategoriaId(''); setCategoriaOrigem(''); setEra(''); }
       if (window.__sequenciaBrincos && tipoManejo === 'Cadastro') { const usadosAtualizados = new Set(numerosUsados); usadosAtualizados.add(numeroAnimal.trim()); const r = window.__sequenciaBrincos.avancar(usadosAtualizados); if (!r.ok) { toast.info("✅ Sequência finalizada!"); setNumeroAnimal(""); } else if (r.pulos > 0) toast.info(`⏭️ ${r.pulos} pulado(s)`); } else { setNumeroAnimal(""); }
       setObservacao("");
       setDocumentacao("");
@@ -1065,9 +1107,15 @@ export default function LancamentoPesagensIndividuais() {
     setAnimalIdSelecionado(p.animal_id || cadastroRelacionado?.animal_id || (p.tipo_manejo === 'Cadastro' ? p.id : ''));
     setPeso(String(p.peso ?? ""));
     setSexo(p.sexo || "M");
-    setRaca(p.raca || "Nelore");
+    // Marca/raça do registro: ids do cadastro resolvidos pelo nome normalizado;
+    // a era legada é preservada somente-leitura. Categoria e nascimento vêm do
+    // registro v7 do animal (efeito sobre animalRegistro).
+    setRaca(p.raca || "");
+    setRacaId(p.raca_id || racaIdPorNome(p.raca));
     setEra(p.era || "");
     setMarca(p.marca || "");
+    setMarcaId(p.marca_id || marcaIdPorNome(p.marca));
+    setCategoriaId(""); setCategoriaOrigem(""); setNascimento(""); setNascimentoEstimado(false);
     setObservacao(p.observacao || "");
     setTipoManejo(p.tipo_manejo || 'Manejo');
     setMotivoSaida(p.motivo_saida || "");
@@ -1090,11 +1138,15 @@ export default function LancamentoPesagensIndividuais() {
     setDestinoVenda(p.destino_venda || "");
     setValorVendaTotal(p.valor_venda_total != null ? String(p.valor_venda_total) : "");
     setValorArroba(p.valor_arroba != null ? String(p.valor_arroba) : "");
-    setRendimentoCarcacaVenda(String(p.rendimento_carcaca ?? 50));
+    // Rendimento gravado no registro (origem informada ou, sem origem gravada,
+    // INFORMADO); sem rendimento no registro vale o padrão da empresa.
+    const rendimentoRegistro = p.rendimento_carcaca != null ? formatRendimento(p.rendimento_carcaca) : padroesEmpresaRef.current.rendimento;
+    const rendimentoOrigemRegistro = p.rendimento_carcaca != null ? (p.rendimento_origem || RENDIMENTO_ORIGEM_INFORMADO) : RENDIMENTO_ORIGEM_PADRAO_EMPRESA;
+    setRendimentoCarcacaVenda(rendimentoRegistro); setRendimentoOrigemVenda(rendimentoOrigemRegistro);
     setFrigorifico(p.frigorifico || "");
     setValorArrobaAbate(p.valor_arroba_abate != null ? String(p.valor_arroba_abate) : "");
     setValorTotalAbate(p.valor_total_abate != null ? String(p.valor_total_abate) : "");
-    setRendimentoCarcacaAbate(String(p.rendimento_carcaca ?? 50));
+    setRendimentoCarcacaAbate(rendimentoRegistro); setRendimentoOrigemAbate(rendimentoOrigemRegistro);
     setEmbarqueSelecionadoDoc(p.embarque_id || "");
     setDocumentoSelecionado(p.documento_embarque_id || "");
     numeroInputRef.current?.focus();
@@ -1381,9 +1433,44 @@ export default function LancamentoPesagensIndividuais() {
             <div className="space-y-1 d17d-field d17d-field--date"><Label className="text-xs font-medium">Data <span className="text-red-500">*</span></Label><MakDateControl value={dataPesagem} onChange={(e) => setDataPesagem(e.target.value)} ariaLabel="Data da pesagem" /></div>
             {tipoManejo === 'Cadastro' && <>
               <div className="space-y-1 d17d-field d17d-field--short d17d-field--sex"><Label className="text-xs font-medium">Sexo</Label><Select value={sexo} onValueChange={setSexo}><SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="M">M</SelectItem><SelectItem value="F">F</SelectItem></SelectContent></Select></div>
-              <div className="space-y-1 d17d-field d17d-field--medium"><Label className="text-xs font-medium">Raça</Label><ComboboxComNovo value={raca} onChange={setRaca} options={racasExistentes} placeholder="Nelore" className="h-9 text-sm" /></div>
-              <div className="space-y-1 d17d-field d17d-field--short d17d-field--era"><Label className="text-xs font-medium">Era</Label><ComboboxComNovo value={era} onChange={setEra} options={erasExistentes} placeholder="Ex: 14" className="h-9 text-sm" /></div>
-              <div className="space-y-1 d17d-field d17d-field--short d17d-field--brand"><Label className="text-xs font-medium">Marca</Label><ComboboxComNovo value={marca} onChange={(v) => { setMarca(v); setAvisoTela(null); }} onConfirm={() => setTimeout(() => numeroInputRef.current?.focus(), 0)} options={marcasExistentes} placeholder="Ex: ABC" className="h-9 text-sm" /></div>
+              {/* Marca, raça e categoria são SELECIONADAS dos cadastros mestres (S-01.5): nunca texto livre, nunca criação a partir da tela. */}
+              <div className="space-y-1 d17d-field d17d-field--short d17d-field--brand"><Label className="text-xs font-medium">Marca <span className="text-red-500">*</span></Label>
+                <Select value={marcaId || SEM_SELECAO} onValueChange={(value) => { selecionarMarca(value === SEM_SELECAO ? '' : value); setTimeout(() => numeroInputRef.current?.focus(), 0); }}>
+                  <SelectTrigger className="h-9 text-sm" aria-label="Marca do animal"><SelectValue placeholder="Selecione a marca" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SEM_SELECAO}>Selecione a marca</SelectItem>
+                    {marcasAtivas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1 d17d-field d17d-field--medium"><Label className="text-xs font-medium">Raça</Label>
+                <Select value={racaId || SEM_SELECAO} onValueChange={(value) => selecionarRaca(value === SEM_SELECAO ? '' : value)}>
+                  <SelectTrigger className="h-9 text-sm" aria-label="Raça do animal"><SelectValue placeholder="Selecione a raça" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SEM_SELECAO}>Não informada</SelectItem>
+                    {racasAtivas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1 d17d-field d17d-field--date d17d-field--birth"><Label className="text-xs font-medium">Nascimento</Label>
+                <MakDateControl value={nascimento} onChange={(e) => { setNascimento(e.target.value || ''); if (!e.target.value) setNascimentoEstimado(false); }} ariaLabel="Data de nascimento (opcional)" />
+              </div>
+              <div className="space-y-1 d17d-field d17d-field--medium d17d-field--category">
+                <Label className="text-xs font-medium">Categoria {categoriaOrigem === 'sugerida' ? <span className="text-emerald-700 font-normal">(sugerida)</span> : categoriaOrigem === 'manual' ? <span className="text-slate-500 font-normal">(manual)</span> : null}</Label>
+                <Select value={categoriaId || SEM_SELECAO} onValueChange={(value) => { if (value === SEM_SELECAO) { setCategoriaId(''); setCategoriaOrigem(''); } else { setCategoriaId(value); setCategoriaOrigem('manual'); } }}>
+                  <SelectTrigger className="h-9 text-sm" aria-label="Categoria do animal"><SelectValue placeholder="Automática" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SEM_SELECAO}>Automática (sexo e nascimento)</SelectItem>
+                    {categoriasAtivas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {nascimento ? (
+                <label className="d17d-field d17d-field--short flex items-center gap-1 text-xs text-slate-600 pb-2">
+                  <input type="checkbox" checked={nascimentoEstimado} onChange={(e) => setNascimentoEstimado(e.target.checked)} aria-label="Nascimento estimado" />
+                  Estimado
+                </label>
+              ) : null}
             </>}
             <div className="space-y-1 d17d-field d17d-field--animal">
               <Label className="text-xs font-medium">Nº Ident./Nome <span className="text-red-500">*</span></Label>
@@ -1464,9 +1551,9 @@ export default function LancamentoPesagensIndividuais() {
                   setCausaMorte("");
                   setAvisoTela(null);
                   setSexo("M");
-                  setRaca("Nelore");
-                  setEra("");
-                  setMarca("");
+                  // Limpar volta aos padrões da empresa (marca/raça/apartação/rendimento).
+                  aplicarPadroesEmpresa();
+                  if (padroesEmpresaRef.current.apartacaoSelecionada) setApartacaoSelecionada(padroesEmpresaRef.current.apartacaoSelecionada);
                   setTimeout(() => numeroInputRef.current?.focus(), 50);
                 }}
                 size="sm"
@@ -1485,7 +1572,7 @@ export default function LancamentoPesagensIndividuais() {
                 <span>{avisoTela.mensagem}</span>
                 <div className="d17d-launch-message__actions">
                   {avisoTela.opcoes?.map((opcao) => (
-                    <button key={opcao.marca} type="button" onClick={() => { const d = opcao.dados; setSexo(d?.sexo || "M"); setRaca(d?.raca || "Nelore"); setEra(d?.era || ""); setMarca(d?.marca || opcao.marca); setAvisoTela(criarMensagemAnimal({ numero: numeroAnimal.trim(), dadosCadastro: d, ultimo: opcao.ultimo, tipoManejo, editingId, formatarData })); setTimeout(() => pesoInputRef.current?.focus(), 0); }}>
+                    <button key={opcao.marca} type="button" onClick={() => { const d = opcao.dados; setSexo(d?.sexo || "M"); setRaca(d?.raca || ""); setRacaId(racaIdPorNome(d?.raca)); setEra(d?.era || ""); setMarca(d?.marca || opcao.marca); setMarcaId(marcaIdPorNome(d?.marca || opcao.marca)); setAvisoTela(criarMensagemAnimal({ numero: numeroAnimal.trim(), dadosCadastro: d, ultimo: opcao.ultimo, tipoManejo, editingId, formatarData })); setTimeout(() => pesoInputRef.current?.focus(), 0); }}>
                       {opcao.marca}
                     </button>
                   ))}
@@ -1500,7 +1587,7 @@ export default function LancamentoPesagensIndividuais() {
               <div className="d17d-animal-performance" aria-label="Informações do animal e ganho de peso">
                 <section className="d17d-animal-performance__group d17d-animal-performance__animal">
                   <span className="d17d-animal-performance__title">Animal</span>
-                  <span><strong>{animalSelecionado.numero_animal || '-'}</strong> · {animalSelecionado.marca || 'Sem marca'} · {animalSelecionado.raca || '-'} · {animalSelecionado.era || '-'} · {animalSelecionado.sexo || '-'}</span>
+                  <span><strong>{animalSelecionado.numero_animal || '-'}</strong> · {descricaoCadastroAnimal}</span>
                 </section>
                 <section className="d17d-animal-performance__group d17d-animal-performance__previous">
                   <span className="d17d-animal-performance__title">Última</span>
@@ -1665,8 +1752,8 @@ export default function LancamentoPesagensIndividuais() {
 
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Rendimento de carcaça (%)</Label>
-                  <Input type="text" inputMode="decimal" value={rendimentoCarcacaVenda} onChange={(e) => setRendimentoCarcacaVenda(e.target.value)} className="h-8 text-xs" placeholder="50,00" />
+                  <Label className="text-xs">Rendimento de carcaça (%) <span className="font-normal text-slate-500">{rendimentoOrigemVenda === RENDIMENTO_ORIGEM_INFORMADO ? '(informado)' : '(padrão da empresa)'}</span></Label>
+                  <Input type="text" inputMode="decimal" value={rendimentoCarcacaVenda} onChange={(e) => { setRendimentoCarcacaVenda(e.target.value); setRendimentoOrigemVenda(RENDIMENTO_ORIGEM_INFORMADO); }} className="h-8 text-xs" placeholder={padroesEmpresaRef.current.rendimento ? `Padrão ${padroesEmpresaRef.current.rendimento}` : 'Informe o rendimento'} aria-label="Rendimento de carcaça da venda" />
                 </div>
                 {peso && valorArroba &&
               <div className="space-y-1 col-span-4">
@@ -1810,8 +1897,8 @@ export default function LancamentoPesagensIndividuais() {
 
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs">Rendimento de carcaça (%)</Label>
-                  <Input type="text" inputMode="decimal" value={rendimentoCarcacaAbate} onChange={(e) => setRendimentoCarcacaAbate(e.target.value)} className="h-8 text-xs" placeholder="50,00" />
+                  <Label className="text-xs">Rendimento de carcaça (%) <span className="font-normal text-slate-500">{rendimentoOrigemAbate === RENDIMENTO_ORIGEM_INFORMADO ? '(informado)' : '(padrão da empresa)'}</span></Label>
+                  <Input type="text" inputMode="decimal" value={rendimentoCarcacaAbate} onChange={(e) => { setRendimentoCarcacaAbate(e.target.value); setRendimentoOrigemAbate(RENDIMENTO_ORIGEM_INFORMADO); }} className="h-8 text-xs" placeholder={padroesEmpresaRef.current.rendimento ? `Padrão ${padroesEmpresaRef.current.rendimento}` : 'Informe o rendimento'} aria-label="Rendimento de carcaça do abate" />
                 </div>
                 {peso && valorArrobaAbate &&
               <div className="space-y-1">
@@ -2295,14 +2382,17 @@ export default function LancamentoPesagensIndividuais() {
         onOpenChange={setSnDialogOpen}
         initialValue={snDialogInitialValue}
         inherited={snDialogInherited}
-        racas={racasExistentes}
-        eras={erasExistentes}
-        marcas={marcasExistentes}
+        marcas={marcasAtivas}
+        racas={racasAtivas}
+        categorias={categoriasAtivas}
+        referenceDate={dataPesagem}
         onConfirm={(profile) => {
           setSexo(profile.sexo);
-          setRaca(profile.raca);
-          setEra(profile.era);
-          setMarca(profile.marca);
+          setRaca(profile.raca); setRacaId(profile.racaId || '');
+          setMarca(profile.marca); setMarcaId(profile.marcaId || '');
+          setCategoriaId(profile.categoriaId || ''); setCategoriaOrigem(profile.categoriaOrigem || '');
+          setNascimento(profile.nascimento || ''); setNascimentoEstimado(Boolean(profile.nascimentoEstimado));
+          setEra('');
           setSnDialogOpen(false);
           void handleSalvar({ skipSnConfirmation: true, snProfile: profile });
         }}

@@ -77,7 +77,14 @@ export async function writeMigrationState(db, version, patch) {
 // ---------------------------------------------------------------------------
 // Bloqueio de escrita (flag de processo). Ativado quando a migração falha ou é
 // bloqueada; os repositórios e adapters de escrita lançam MIGRATION_BLOCKED.
+//
+// Isenção (docs 11 §5, ADR-045): a store `usuarios` e a `auditoria` continuam
+// graváveis sob bloqueio — sem isso o ADMIN não consegue autenticar (o login
+// grava last_login_at/failed_login_count) nem registrar o evento de acesso, e
+// nunca chegaria a "Continuar migração". Dados operacionais permanecem bloqueados.
 // ---------------------------------------------------------------------------
+export const WRITE_BLOCK_EXEMPT_STORES = Object.freeze(['usuarios', 'auditoria']);
+
 let writeBlock = null;
 
 export function isWriteBlocked() {
@@ -97,9 +104,20 @@ export function clearWriteBlock() {
   writeBlock = null;
 }
 
-/** Lança MIGRATION_BLOCKED enquanto a escrita estiver bloqueada. */
-export function assertWritable(operation = 'Gravação') {
+/** true quando a store pode ser gravada mesmo com o bloqueio ativo (usuarios, auditoria). */
+export function isWriteBlockExempt(storeName) {
+  return WRITE_BLOCK_EXEMPT_STORES.includes(String(storeName || ''));
+}
+
+/**
+ * Lança MIGRATION_BLOCKED enquanto a escrita estiver bloqueada.
+ * `options.store` (ou uma string no segundo argumento) identifica a store: as
+ * isentas (usuarios, auditoria) nunca lançam.
+ */
+export function assertWritable(operation = 'Gravação', options = {}) {
   if (!writeBlock) return;
+  const store = typeof options === 'string' ? options : options?.store;
+  if (store && isWriteBlockExempt(store)) return;
   throw new MigrationError(
     'MIGRATION_BLOCKED',
     `${operation} bloqueada: a migração do banco está pendente ou falhou (${writeBlock.message}). Abra Backup e Manutenção › Migração e use "Continuar migração".`,

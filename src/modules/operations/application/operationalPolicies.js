@@ -87,7 +87,10 @@ export async function loadOperationalPolicies(empresaId = DEFAULT_EMPRESA_ID) {
   ]);
   const flat = defaultsGroup && salesGroup && warningsGroup ? {} : await readFlatConfig(empresaId);
   const defaults = normalizeOperationalDefaults(defaultsGroup ?? flat);
-  const sales = normalizeSalesPolicy(salesGroup ?? flat);
+  // `exigir_documento_venda` vive em sales-policy; `rendimento_padrao` e a sua
+  // origem vivem em operational-defaults (appConfigService.CONFIG_GROUPS). A
+  // política comercial consumida pelas telas junta os dois grupos.
+  const sales = normalizeSalesPolicy({ ...(defaultsGroup ?? flat), ...(salesGroup ?? flat) });
   const weightWarnings = normalizeWeightWarningPolicy(warningsGroup ?? flat);
   return { defaults, sales, weightWarnings, weightWarningPolicy: buildWeightWarningPolicy(weightWarnings) };
 }
@@ -103,6 +106,18 @@ export function resolveDefaultRegistry(rows = [], preferredId = null) {
     if (preferido) return preferido;
   }
   return ativos.find((row) => row.padrao === true) ?? null;
+}
+
+/**
+ * Documento de saída obrigatório (ADR-033): Abate exige sempre embarque +
+ * documento; Venda só quando a política `exigir_documento_venda` está ligada.
+ * Demais motivos (Morte, Doação, Transferência, Outros) nunca exigem.
+ */
+export function exitRequiresDocument(motivoSaida, salesPolicy = {}) {
+  const motivo = String(motivoSaida ?? '').trim();
+  if (motivo === 'Abate') return true;
+  if (motivo === 'Venda') return salesPolicy?.exigir_documento_venda === true;
+  return false;
 }
 
 /** Texto do rendimento para o campo (pt-BR): 52.5 → "52,5"; null → "". */

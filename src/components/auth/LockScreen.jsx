@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { profileLabel } from '@/modules/auth/domain/accessPolicy';
+import { roleLabel } from '@/modules/auth/domain/permissionService';
 import AuthScreenShell, { AuthError, AuthField, AuthInfo } from './AuthScreenShell';
 import { GENERIC_LOGIN_ERROR, useLockCountdown } from './LoginScreen';
 
@@ -12,7 +12,8 @@ function initials(nome) {
     .join('') || '?';
 }
 
-// Bloqueio por inatividade ou manual: pede a senha do mesmo usuário; "Trocar usuário" volta ao login.
+// Bloqueio por inatividade ou manual (ADR-045): CAMADA sobre o app (a tela do operador continua
+// montada e inerte); pede a senha do mesmo usuário; "Trocar usuário" encerra a sessão.
 export default function LockScreen({ user, onUnlock, onSwitchUser }) {
   const [senha, setSenha] = useState('');
   const [busy, setBusy] = useState(false);
@@ -42,7 +43,7 @@ export default function LockScreen({ user, onUnlock, onSwitchUser }) {
         <span className="auth-user-chip__avatar" aria-hidden="true">{initials(user?.nome)}</span>
         <div>
           <strong>{user?.nome}</strong>
-          <span>{user?.login} · {profileLabel(user?.perfil)}</span>
+          <span>{user?.login} · {roleLabel(user?.role)}</span>
         </div>
       </div>
       <form className="auth-form" onSubmit={submit}>

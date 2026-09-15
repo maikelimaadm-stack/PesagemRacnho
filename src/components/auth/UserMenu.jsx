@@ -6,7 +6,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { profileLabel } from '@/modules/auth/domain/accessPolicy';
+import { roleLabel } from '@/modules/auth/domain/permissionService';
 import { APP_VERSION } from '@/versioning/versionInfo';
 import { useAuth } from './useAuth';
 
@@ -32,7 +32,7 @@ function UserPanel({ user, role, lock, logout, switchUser, changePassword }) {
       </div>
       <div className="mb1-user-panel__actions">
         <button type="button" onClick={() => lock()}><LockKeyhole aria-hidden="true" />Bloquear</button>
-        <button type="button" onClick={() => changePassword()}><KeyRound aria-hidden="true" />Alterar senha</button>
+        <button type="button" onClick={() => changePassword()}><KeyRound aria-hidden="true" />Trocar senha</button>
         <button type="button" onClick={() => switchUser()}><Users aria-hidden="true" />Trocar usuário</button>
         <button type="button" className="is-exit" onClick={() => logout()}><LogOut aria-hidden="true" />Sair</button>
       </div>
@@ -41,7 +41,7 @@ function UserPanel({ user, role, lock, logout, switchUser, changePassword }) {
 }
 
 /**
- * Topbar: usuário, perfil, versão, Bloquear, Trocar usuário, Sair (doc 11 §2).
+ * Topbar: usuário, papel, versão, Bloquear, Trocar senha, Trocar usuário, Sair (doc 11 §5, ADR-045).
  * `variant="panel"` renderiza o bloco inline do menu lateral (celular).
  * Renderiza nada fora do AuthGate (ex.: capturas sem sessão).
  */
@@ -49,7 +49,7 @@ export default function UserMenu({ variant = 'dropdown' }) {
   const auth = useAuth();
   if (!auth?.user) return null;
   const { user, lock, logout, switchUser, changePassword } = auth;
-  const role = profileLabel(user.perfil);
+  const role = roleLabel(user.role);
   const firstName = String(user.nome || user.login || '').trim().split(/\s+/)[0];
 
   if (variant === 'panel') {
@@ -79,7 +79,7 @@ export default function UserMenu({ variant = 'dropdown' }) {
         </div>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => lock()}><LockKeyhole aria-hidden="true" />Bloquear</DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => changePassword()}><KeyRound aria-hidden="true" />Alterar minha senha</DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => changePassword()}><KeyRound aria-hidden="true" />Trocar senha</DropdownMenuItem>
         <DropdownMenuItem onSelect={() => switchUser()}><Users aria-hidden="true" />Trocar usuário</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="is-exit" onSelect={() => logout()}><LogOut aria-hidden="true" />Sair</DropdownMenuItem>

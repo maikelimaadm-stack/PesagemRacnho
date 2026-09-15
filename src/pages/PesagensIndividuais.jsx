@@ -53,6 +53,16 @@ import { parseCsv } from "@/modules/weighing/domain/csvParser";
 import { parseBrazilianNumber, parseCivilDate } from "@/modules/weighing/domain/brazilianValues";
 import { isSnIdentifier, normalizeAnimalIdentifier } from "@/modules/animals/domain/snAnimal";
 import { sha256Hex } from "@/lib/sha256";
+import { useAuth } from "@/components/auth/useAuth";
+import { REGISTRY_WRITE_PERMISSION, brandService, breedService, resolveMany } from "@/modules/catalog/application/index";
+import { collectRegistryTexts, countUnknownRegistries, splitImportRowsByRegistry } from "@/modules/operations/domain/importRegistryResolution";
+
+// Importação (S-01.5 / IMPORT-TARGET-MODEL §2.2): marca e raça das linhas são
+// resolvidas por nome normalizado contra os cadastros mestres no dry-run. Texto
+// sem cadastro fica como erro por linha; só a opção explícita "Criar estes
+// cadastros ao importar" (exige registry.write) cria marcas/raças — e antes da
+// gravação das pesagens. Nenhuma criação silenciosa.
+const RESOLUCAO_CADASTROS_VAZIA = Object.freeze({ resolved: {}, desconhecidos: { marcas: [], racas: [] }, rejeitadas: [] });
 
 const COLUNAS_DISPONIVEIS = [
   { id: "selecao", label: "Seleção", default: true, fixo: true },
@@ -206,6 +216,19 @@ export default function PesagensIndividuais() {
   const [tipoManejoImport, setTipoManejoImport] = useState('Manejo');
   const [motivoSaidaImport, setMotivoSaidaImport] = useState('');
   const [destinoVendaImport, setDestinoVendaImport] = useState('');
+  // Cadastros (marca/raça) não encontrados no dry-run e a opção de criá-los.
+  const [importResolucaoCadastros, setImportResolucaoCadastros] = useState(RESOLUCAO_CADASTROS_VAZIA);
+  const [criarCadastrosNaImportacao, setCriarCadastrosNaImportacao] = useState(false);
+  const auth = useAuth();
+  const podeCriarCadastros = Boolean(auth?.can?.(REGISTRY_WRITE_PERMISSION));
+  const totalCadastrosDesconhecidos = countUnknownRegistries(importResolucaoCadastros.desconhecidos);
+  // Linhas que dependem de cadastros ainda inexistentes: só entram com a opção ligada.
+  const linhasPendentesCadastro = useMemo(() => importResolucaoCadastros.rejeitadas.map((item) => item.row), [importResolucaoCadastros]);
+  const importErrosExibidos = useMemo(
+    () => (criarCadastrosNaImportacao ? importErrors : [...importErrors, ...importResolucaoCadastros.rejeitadas.map(({ linha, erro }) => ({ linha, erro }))]),
+    [criarCadastrosNaImportacao, importErrors, importResolucaoCadastros],
+  );
+  const totalLinhasImportaveis = importData.length + (criarCadastrosNaImportacao ? linhasPendentesCadastro.length : 0);
   
   // Estado para vinculação de lotes
   const [showVincularLotes, setShowVincularLotes] = useState(false);
@@ -529,6 +552,7 @@ export default function PesagensIndividuais() {
           const valores = rows[i];
           
           const registro = {
+            linha: i + 1,
             id_externo: colMap.id_externo >= 0 ? valores[colMap.id_externo] : null,
             data_pesagem: colMap.data >= 0 ? parseCivilDate(valores[colMap.data]) : null,
             numero_animal: colMap.numero_animal >= 0 ? normalizeAnimalIdentifier(valores[colMap.numero_animal]) : null,
@@ -576,6 +600,15 @@ export default function PesagensIndividuais() {
           dados.push(registro);
         }
 
+        // Dry-run de cadastros: marca/raça resolvidas por nome normalizado
+        // (resolvedor único). Texto não cadastrado sai da lista elegível e vira
+        // erro por linha até o responsável optar por criar os cadastros.
+        const resolucao = await resolveMany(collectRegistryTexts(dados), { empresaId: empresaSelecionadaId });
+        const { elegiveis, rejeitadas, desconhecidos } = splitImportRowsByRegistry(dados, resolucao, { criarDesconhecidos: false });
+        setImportResolucaoCadastros({ resolved: resolucao, desconhecidos, rejeitadas });
+        setCriarCadastrosNaImportacao(false);
+        const dadosElegiveis = elegiveis;
+
         // Verificar se há lotes/apartações no arquivo que existem no sistema
         const lotesNoArquivo = [...new Set(dados.filter(d => d.nome_lote && d.nome_apartacao).map(d => `${d.nome_lote}|${d.nome_apartacao}`))];
         const lotesEncontrados = [];
@@ -603,7 +636,7 @@ export default function PesagensIndividuais() {
           }
         }
 
-        setImportData(dados);
+        setImportData(dadosElegiveis);
         setImportErrors(erros);
         
         if (lotesEncontrados.length > 0) {
@@ -629,6 +662,11 @@ export default function PesagensIndividuais() {
     const removidos = importData.length - dadosAtualizados.length;
     if (removidos > 0) toast.info(`${fmtInt(removidos)} registro(s) removido(s) por não vincular aos lotes existentes.`);
     setImportData(dadosAtualizados);
+    // As linhas pendentes de cadastro seguem a mesma decisão de lotes.
+    setImportResolucaoCadastros((atual) => {
+      const linhasMantidas = new Set(applyImportLotSelection(atual.rejeitadas.map((item) => item.row), lotesParaVincular, vincularLotesSelecionados).map((row) => row.linha));
+      return { ...atual, rejeitadas: atual.rejeitadas.filter((item) => linhasMantidas.has(item.row.linha)) };
+    });
     setShowVincularLotes(false);
     setShowImportDialog(true);
   };
@@ -636,9 +674,29 @@ export default function PesagensIndividuais() {
   // Estado para texto de progresso detalhado
   const [importProgressText, setImportProgressText] = useState("");
 
+  // Cria as marcas/raças desconhecidas (opção explícita, registry.write) e
+  // devolve TODAS as linhas com os ids resolvidos — sempre antes de bulkCreateEntries.
+  const criarCadastrosDesconhecidos = async () => {
+    if (!podeCriarCadastros) throw new Error('Seu perfil não pode criar cadastros. Peça a um gestor para cadastrar as marcas/raças antes de importar.');
+    const actor = auth?.user || null;
+    const { marcas = [], racas = [] } = importResolucaoCadastros.desconhecidos;
+    setImportProgressText(`Criando ${fmtInt(marcas.length + racas.length)} cadastro(s) informado(s) no arquivo...`);
+    for (const nome of marcas) await brandService.create(actor, { nome, empresa_id: empresaSelecionadaId });
+    for (const nome of racas) await breedService.create(actor, { nome, empresa_id: empresaSelecionadaId });
+    const todas = [...importData, ...linhasPendentesCadastro];
+    const resolucao = await resolveMany(collectRegistryTexts(todas), { empresaId: empresaSelecionadaId });
+    const { elegiveis, rejeitadas } = splitImportRowsByRegistry(todas, resolucao, { criarDesconhecidos: false });
+    if (rejeitadas.length) throw new Error(`Cadastros ainda não encontrados após a criação: ${rejeitadas[0].erro}`);
+    return elegiveis;
+  };
+
   const confirmarImportacao = async () => {
-    if (importData.length === 0) {
+    if (totalLinhasImportaveis === 0) {
       toast.error('Nenhum dado válido para importar');
+      return;
+    }
+    if (criarCadastrosNaImportacao && !podeCriarCadastros) {
+      toast.error('Seu perfil não pode criar cadastros. Desmarque a opção ou peça a um gestor.');
       return;
     }
 
@@ -647,7 +705,11 @@ export default function PesagensIndividuais() {
     setImportProgressText("Iniciando importação...");
 
     try {
-      const registros = importData.map(item => ({
+      // Sem a opção, só as linhas com marca/raça cadastradas (ou em branco) entram.
+      const linhasParaImportar = criarCadastrosNaImportacao && totalCadastrosDesconhecidos > 0
+        ? await criarCadastrosDesconhecidos()
+        : importData;
+      const registros = linhasParaImportar.map(({ linha: _linha, ...item }) => ({
           ...item,
           empresa_id: empresaSelecionadaId,
           tipo_manejo: tipoManejoImport,
@@ -657,7 +719,7 @@ export default function PesagensIndividuais() {
         }));
       setImportProgressText(`Validando e gravando ${fmtInt(registros.length)} registros em uma única transação...`);
       const importReport = await weighingService.bulkCreateEntries(registros, {
-        importMetadata: { ...importFileInfo, totalRows: importData.length + importErrors.length, operador: 'LOCAL' },
+        importMetadata: { ...importFileInfo, totalRows: registros.length + importErrosExibidos.length, operador: 'LOCAL' },
       });
       const importados = registros.length;
       setImportProgress(100);
@@ -670,6 +732,8 @@ export default function PesagensIndividuais() {
       setImportFileInfo(null);
       setLotesParaVincular([]);
       setVincularLotesSelecionados({});
+      setImportResolucaoCadastros(RESOLUCAO_CADASTROS_VAZIA);
+      setCriarCadastrosNaImportacao(false);
       setTipoManejoImport('Manejo');
       setMotivoSaidaImport('');
       setDestinoVendaImport('');
@@ -1539,6 +1603,8 @@ export default function PesagensIndividuais() {
                 setShowVincularLotes(false);
                 setImportData([]);
                 setLotesParaVincular([]);
+                setImportResolucaoCadastros(RESOLUCAO_CADASTROS_VAZIA);
+                setCriarCadastrosNaImportacao(false);
                 toast.info('Importação cancelada');
               }}
             >
@@ -1635,37 +1701,70 @@ export default function PesagensIndividuais() {
                   <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                   <div>
                     <div className="text-xs text-emerald-600">Registros Válidos</div>
-                    <div className="text-lg font-bold text-emerald-800">{fmtInt(importData.length)}</div>
+                    <div className="text-lg font-bold text-emerald-800">{fmtInt(totalLinhasImportaveis)}</div>
                   </div>
                 </CardContent>
               </Card>
-              {importErrors.length > 0 && (
+              {importErrosExibidos.length > 0 && (
                 <Card className="bg-red-50">
                   <CardContent className="p-3 flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5 text-red-600" />
                     <div>
                       <div className="text-xs text-red-600">Erros</div>
-                      <div className="text-lg font-bold text-red-800">{fmtInt(importErrors.length)}</div>
+                      <div className="text-lg font-bold text-red-800">{fmtInt(importErrosExibidos.length)}</div>
                     </div>
                   </CardContent>
                 </Card>
               )}
             </div>
 
+            {/* Cadastros não encontrados (marca/raça): nunca criados em silêncio */}
+            {totalCadastrosDesconhecidos > 0 && (
+              <Card className="border-amber-200" data-import-unknown-registries>
+                <CardHeader className="py-2 px-3 bg-amber-50">
+                  <CardTitle className="text-sm text-amber-800">Cadastros não encontrados ({fmtInt(totalCadastrosDesconhecidos)})</CardTitle>
+                </CardHeader>
+                <CardContent className="p-3 space-y-2">
+                  <p className="text-xs text-slate-600">
+                    Estes valores do arquivo não existem nos cadastros mestres. As {fmtInt(linhasPendentesCadastro.length)} linha(s) que os usam só entram na importação se você optar por criá-los.
+                  </p>
+                  {importResolucaoCadastros.desconhecidos.marcas.length > 0 && (
+                    <div className="text-xs"><strong>Marcas:</strong> {importResolucaoCadastros.desconhecidos.marcas.join(', ')}</div>
+                  )}
+                  {importResolucaoCadastros.desconhecidos.racas.length > 0 && (
+                    <div className="text-xs"><strong>Raças:</strong> {importResolucaoCadastros.desconhecidos.racas.join(', ')}</div>
+                  )}
+                  <label className="flex items-center gap-2 text-xs font-medium text-slate-800">
+                    <input
+                      type="checkbox"
+                      checked={criarCadastrosNaImportacao}
+                      disabled={!podeCriarCadastros || isImporting}
+                      onChange={(e) => setCriarCadastrosNaImportacao(e.target.checked)}
+                      aria-label="Criar estes cadastros ao importar"
+                    />
+                    Criar estes cadastros ao importar
+                  </label>
+                  {!podeCriarCadastros && (
+                    <p className="text-xs text-amber-700">Seu perfil não pode criar cadastros (permissão registry.write). Peça a um gestor para cadastrá-los antes de importar.</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Erros */}
-            {importErrors.length > 0 && (
+            {importErrosExibidos.length > 0 && (
               <Card className="border-red-200">
                 <CardHeader className="py-2 px-3 bg-red-50">
                   <CardTitle className="text-sm text-red-700">Erros na Importação</CardTitle>
                 </CardHeader>
                 <CardContent className="p-2 max-h-32 overflow-auto">
-                  {importErrors.slice(0, 10).map((err, idx) => (
+                  {importErrosExibidos.slice(0, 10).map((err, idx) => (
                     <div key={idx} className="text-xs text-red-600 py-1">
                       Linha {err.linha}: {err.erro}
                     </div>
                   ))}
-                  {importErrors.length > 10 && (
-                    <div className="text-xs text-red-500 font-semibold">... e mais {importErrors.length - 10} erros</div>
+                  {importErrosExibidos.length > 10 && (
+                    <div className="text-xs text-red-500 font-semibold">... e mais {importErrosExibidos.length - 10} erros</div>
                   )}
                 </CardContent>
               </Card>
@@ -1682,6 +1781,7 @@ export default function PesagensIndividuais() {
                         <TableHead className="text-xs">Data</TableHead>
                         <TableHead className="text-xs">Animal</TableHead>
                         <TableHead className="text-xs">Sexo</TableHead>
+                        <TableHead className="text-xs">Marca</TableHead>
                         <TableHead className="text-xs">Raça</TableHead>
                         <TableHead className="text-xs text-right">Peso</TableHead>
                         <TableHead className="text-xs">Lote</TableHead>
@@ -1695,7 +1795,8 @@ export default function PesagensIndividuais() {
                           <TableCell className="text-xs">{fmtDateBR(item.data_pesagem)}</TableCell>
                           <TableCell className="text-xs font-medium">{item.numero_animal}</TableCell>
                           <TableCell className="text-xs">{item.sexo}</TableCell>
-                          <TableCell className="text-xs">{item.raca}</TableCell>
+                          <TableCell className="text-xs">{item.marca || '-'}</TableCell>
+                          <TableCell className="text-xs">{item.raca || '-'}</TableCell>
                           <TableCell className="text-xs text-right font-mono">{fmtNum(item.peso)}</TableCell>
                           <TableCell className="text-xs">{item.nome_lote}</TableCell>
                           <TableCell className="text-xs">{item.nome_apartacao}</TableCell>
@@ -1734,12 +1835,12 @@ export default function PesagensIndividuais() {
             }} disabled={isImporting}>
               Cancelar
             </Button>
-            <Button 
-              onClick={confirmarImportacao} 
-              disabled={isImporting || importData.length === 0 || (tipoManejoImport === 'Saída' && !motivoSaidaImport)} 
+            <Button
+              onClick={confirmarImportacao}
+              disabled={isImporting || totalLinhasImportaveis === 0 || (tipoManejoImport === 'Saída' && !motivoSaidaImport) || (criarCadastrosNaImportacao && !podeCriarCadastros)}
               className="emp-toolbar-btn emp-toolbar-btn-save"
             >
-              {isImporting ? 'Importando...' : `Importar ${fmtInt(importData.length)} Registros`}
+              {isImporting ? 'Importando...' : `Importar ${fmtInt(totalLinhasImportaveis)} Registros`}
             </Button>
           </DialogFooter>
         </DialogContent>

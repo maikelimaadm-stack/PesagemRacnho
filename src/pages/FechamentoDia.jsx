@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import MakDateControl from '@/components/mak/MakDateControl';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { closeWeighingDay, loadOperationalCatalog, reopenWeighingDay } from '@/modules/operations/application/operationalInsightsService';
+import { exitRequiresDocument, loadOperationalPolicies, normalizeSalesPolicy } from '@/modules/operations/application/operationalPolicies';
 import '@/styles/operational-insights.css';
 
 const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -32,6 +33,17 @@ export default function FechamentoDia() {
   const [apartacaoId, setApartacaoId] = useState('');
   const [loading, setLoading] = useState(true);
   const [justified, setJustified] = useState(() => new Set());
+  // Política comercial da empresa (documento na venda, rendimento padrão): lida
+  // uma vez; sem configuração vale o padrão (venda sem exigência, rendimento nulo).
+  const [salesPolicy, setSalesPolicy] = useState(() => normalizeSalesPolicy({}));
+
+  useEffect(() => {
+    let active = true;
+    loadOperationalPolicies()
+      .then((policies) => { if (active) setSalesPolicy(policies.sales); })
+      .catch(() => { /* mantém o padrão sem exigência */ });
+    return () => { active = false; };
+  }, []);
 
   const refresh = async ({ chooseLatest = false } = {}) => {
     try {
@@ -70,10 +82,12 @@ export default function FechamentoDia() {
     for (const row of rows) {
       if (hasNumber(row.gmd) && Number(row.gmd) < 0) result.push({ key: `peso:${row.id}`, type: 'Peso', danger: false, title: `Animal ${row.numero_animal || 'sem identificação'} · GMD negativo (${n3.format(row.gmd)})`, detail: `Peso ${nf.format(Number(row.peso) || 0)} abaixo da série anterior.`, action: 'Reconferir' });
       if (row.tipo_manejo !== 'Saída' && !row.lote_id && !row.nome_lote) result.push({ key: `lote:${row.id}`, type: 'Lote', danger: false, title: `Animal ${row.numero_animal || 'sem identificação'} sem lote`, detail: 'O lançamento não possui lote de destino definido.', action: 'Vincular' });
-      if (row.tipo_manejo === 'Saída' && row.motivo_saida === 'Venda' && !row.embarque_id && !row.documento_embarque_id) result.push({ key: `doc:${row.id}`, type: 'Doc', danger: true, title: `Venda do animal ${row.numero_animal || 'sem identificação'} sem documentação`, detail: 'Vincule o embarque e a GTA/NF-e antes de fechar.', action: 'Vincular' });
+      // Doc: Abate sempre exige embarque + documento; Venda só quando a política
+      // `exigir_documento_venda` da empresa estiver ligada (ADR-033).
+      if (row.tipo_manejo === 'Saída' && exitRequiresDocument(row.motivo_saida, salesPolicy) && !row.embarque_id && !row.documento_embarque_id) result.push({ key: `doc:${row.id}`, type: 'Doc', danger: true, title: `${row.motivo_saida} do animal ${row.numero_animal || 'sem identificação'} sem documentação`, detail: 'Vincule o embarque e a GTA/NF-e antes de fechar.', action: 'Vincular' });
     }
     return result;
-  }, [rows]);
+  }, [rows, salesPolicy]);
   const pending = useMemo(() => pendingAll.filter((item) => !justified.has(item.key)), [pendingAll, justified]);
 
   const lots = useMemo(() => catalog.lotes
@@ -175,7 +189,7 @@ export default function FechamentoDia() {
 
       <div className="op-grid-two">
         <section className="op-card"><header className="op-card__header"><h2>Conferência por lote</h2><span>Contado × capacidade</span></header><div className="op-table-scroll"><table className="op-table"><thead><tr><th>Lote</th><th className="is-number">Lançado</th><th className="is-number">Capacidade</th><th className="is-number">Peso médio</th><th>Ocupação</th></tr></thead><tbody>{lots.map((lot) => <tr key={lot.id} className={lot.pct >= 100 ? 'is-danger' : ''}><td><strong>{lot.nome_lote}</strong></td><td className="is-number">{ni.format(lot.linked)}</td><td className="is-number">{lot.capacity ? ni.format(lot.capacity) : '—'}</td><td className="is-number">{lot.linked ? nf.format(lot.average) : '—'}</td><td><div className="op-progress-cell"><span className={`op-progress ${lot.pct >= 100 ? 'is-full' : ''}`}><span style={{ width: `${lot.pct}%` }} /></span><small>{ni.format(lot.pct)}%</small></div></td></tr>)}</tbody></table>{!lots.length && <div className="op-empty">Nenhum lote configurado para a seleção.</div>}</div></section>
-        <section className="op-card"><header className="op-card__header"><h2>Conferência por marca</h2><span>{ni.format(rows.length)} lançamentos</span></header><div className="op-brand-list">{brands.map((brand) => <div className="op-brand-row" key={brand.name}><span className="op-pill">{brand.name}</span><span className="op-brand-row__bar"><span style={{ width: `${brand.pct}%` }} /></span><strong>{ni.format(brand.count)}</strong><small>{nf.format(brand.average)} kg</small></div>)}{!brands.length && <div className="op-empty">Sem lançamentos nesta data.</div>}<div className="op-totals"><span>Peso total do dia</span><strong>{nf.format(totalWeight)} kg</strong></div><div className="op-totals"><span>@ carcaça estimada</span><strong>{nf.format(totalWeight * 0.5 / 15)} @</strong></div></div></section>
+        <section className="op-card"><header className="op-card__header"><h2>Conferência por marca</h2><span>{ni.format(rows.length)} lançamentos</span></header><div className="op-brand-list">{brands.map((brand) => <div className="op-brand-row" key={brand.name}><span className="op-pill">{brand.name}</span><span className="op-brand-row__bar"><span style={{ width: `${brand.pct}%` }} /></span><strong>{ni.format(brand.count)}</strong><small>{nf.format(brand.average)} kg</small></div>)}{!brands.length && <div className="op-empty">Sem lançamentos nesta data.</div>}<div className="op-totals"><span>Peso total do dia</span><strong>{nf.format(totalWeight)} kg</strong></div><div className="op-totals"><span>@ carcaça estimada{salesPolicy.rendimento_padrao ? ` (${nf.format(salesPolicy.rendimento_padrao)}% padrão da empresa)` : ''}</span><strong>{salesPolicy.rendimento_padrao ? `${nf.format(totalWeight * (salesPolicy.rendimento_padrao / 100) / 15)} @` : 'sem rendimento padrão'}</strong></div></div></section>
       </div>
 
       <section className="op-card"><header className="op-card__header"><h2>O que será gravado no fechamento</h2><span>{isClosed ? `Fechado em ${dateBr(date)}` : 'Sessão aberta'}</span></header><div className="op-steps">{[['Backup operacional disponível', 'Os registros do dia podem ser exportados em JSON antes da conclusão.'], ['Série de desempenho calculada', 'Dias, ganho e GMD utilizam os valores persistidos de cada animal.'], ['Ocupação de lotes conferida', 'Contagem, capacidade e status são apresentados por lote.'], ['Sessão diária persistida', 'O estado aberto ou fechado é gravado no IndexedDB.']].map(([title, detail]) => <div className="op-step" key={title}><Check /><div><strong>{title}</strong><span>{detail}</span></div></div>)}</div></section>

@@ -1,9 +1,21 @@
 // Ponte de compatibilidade: entrega ao Lançamento o mesmo shape que
 // registryService.loadAuxiliaryCatalogs devolvia ({ compradores, vendedores,
 // frigorificos, causasMorte }), agora lido das stores `parceiros` (por papel) e
-// `causasMorte` (ADR-018/ADR-024). Inclui inativos: a tela filtra `ativo !== false`.
+// `causasMorte` (ADR-018/ADR-024). Parceiros e causas incluem inativos: a tela
+// filtra `ativo !== false`. Acrescenta `marcas`, `racas` e `categorias` (só
+// ATIVOS, { id, nome, padrao }) para o Lançamento montar os seletores numa única
+// chamada; quem preferir pode usar brandService/breedService/categoryService
+// diretamente (catalog/application/index.js) — o resultado é o mesmo.
 // Some quando o Lançamento passar a selecionar parceiro_id (Fase 3).
-import { DEFAULT_EMPRESA_ID, deathCauseService, partnerService, propertyService } from '../../catalog/application/index.js';
+import {
+  DEFAULT_EMPRESA_ID,
+  brandService,
+  breedService,
+  categoryService,
+  deathCauseService,
+  partnerService,
+  propertyService,
+} from '../../catalog/application/index.js';
 
 const comPapel = (parceiros, papel) => parceiros.filter((p) => Array.isArray(p.papeis) && p.papeis.includes(papel));
 
@@ -16,12 +28,18 @@ const itemBase = (p) => ({
   cidade: p.cidade ?? null,
 });
 
+const seletor = (r) => ({ id: r.id, nome: r.nome, padrao: r.padrao === true });
+
 export async function loadAuxiliaryCatalogs(empresaId = DEFAULT_EMPRESA_ID) {
   const opts = { empresaId, incluirInativos: true };
-  const [parceiros, propriedades, causas] = await Promise.all([
+  const ativos = { empresaId };
+  const [parceiros, propriedades, causas, marcas, racas, categorias] = await Promise.all([
     partnerService.list(opts),
     propertyService.list(opts),
     deathCauseService.list(opts),
+    brandService.list(ativos),
+    breedService.list(ativos),
+    categoryService.list(ativos),
   ]);
 
   // Vendedor mostra a propriedade de origem (primeira propriedade ativa ligada a ele).
@@ -42,5 +60,8 @@ export async function loadAuxiliaryCatalogs(empresaId = DEFAULT_EMPRESA_ID) {
       categoria: c.categoria ?? null,
       exigeObservacao: c.exige_observacao === true,
     })),
+    marcas: marcas.map(seletor),
+    racas: racas.map(seletor),
+    categorias: categorias.map(seletor),
   };
 }

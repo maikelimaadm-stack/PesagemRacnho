@@ -1,7 +1,9 @@
 // Repositório genérico Dexie para stores de domínio (padrão id + soft-delete).
 // A UI acessa somente os serviços; o repositório concentra os verbos de dados.
 // Todo verbo de escrita respeita o bloqueio de migração (ADR-038): enquanto a
-// migração estiver pendente ou com falha, lança MIGRATION_BLOCKED.
+// migração estiver pendente ou com falha, lança MIGRATION_BLOCKED — exceto nas
+// stores isentas (`usuarios`, `auditoria`; migrationState.WRITE_BLOCK_EXEMPT_STORES),
+// para que o login e a auditoria de acesso funcionem até "Continuar migração".
 import { ensureStorageReady } from '../db.js';
 import { assertWritable } from '../../migrations/migrationState.js';
 
@@ -32,6 +34,8 @@ export function createRepository(storeName, { generateId } = {}) {
     const db = await ensureStorageReady();
     return db.table(storeName);
   }
+
+  const writable = (operation) => assertWritable(operation, { store: storeName });
 
   // A chave primária é o localId; `id` é só um índice, então o mesmo id de
   // domínio pode ter mais de uma linha (restauração de backup, importação,
@@ -66,7 +70,7 @@ export function createRepository(storeName, { generateId } = {}) {
     },
 
     async create(data) {
-      assertWritable(`Gravação em ${storeName}`);
+      writable(`Gravação em ${storeName}`);
       const t = await table();
       const id = data.id || newId();
       const duplicate = await findRow(t, id);
@@ -80,7 +84,7 @@ export function createRepository(storeName, { generateId } = {}) {
     },
 
     async update(id, patch) {
-      assertWritable(`Atualização em ${storeName}`);
+      writable(`Atualização em ${storeName}`);
       const t = await table();
       const existing = await findRow(t, id);
       if (!existing) return null;
@@ -91,7 +95,7 @@ export function createRepository(storeName, { generateId } = {}) {
 
     async remove(id) {
       // soft delete (padrão do app)
-      assertWritable(`Exclusão em ${storeName}`);
+      writable(`Exclusão em ${storeName}`);
       const t = await table();
       const existing = await findRow(t, id);
       if (!existing) return false;
@@ -100,7 +104,7 @@ export function createRepository(storeName, { generateId } = {}) {
     },
 
     async bulkCreate(items = []) {
-      assertWritable(`Gravação em lote em ${storeName}`);
+      writable(`Gravação em lote em ${storeName}`);
       const t = await table();
       const ts = nowIso();
       const ids = new Set();
@@ -122,7 +126,7 @@ export function createRepository(storeName, { generateId } = {}) {
     },
 
     async bulkUpdate(items = []) {
-      assertWritable(`Atualização em lote em ${storeName}`);
+      writable(`Atualização em lote em ${storeName}`);
       const t = await table();
       const ts = nowIso();
       const operations = [];
@@ -136,7 +140,7 @@ export function createRepository(storeName, { generateId } = {}) {
     },
 
     async bulkRemove(ids = []) {
-      assertWritable(`Exclusão em lote em ${storeName}`);
+      writable(`Exclusão em lote em ${storeName}`);
       const t = await table();
       const ts = nowIso();
       const operations = [];

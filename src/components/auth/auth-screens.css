@@ -125,3 +125,23 @@ html.dark .auth-users__status,
 html.tema-escuro .auth-users__status { background: var(--mb1-bg-field, #21262d); color: var(--mb1-text-2, #848d97); }
 html.dark .auth-users__status.is-active,
 html.tema-escuro .auth-users__status.is-active { color: #70e889; }
+
+/* Camadas sobre o app (ADR-045): bloqueio e troca voluntária de senha não desmontam a tela do operador. */
+.auth-overlay { position: fixed; inset: 0; z-index: 1200; overflow: auto; }
+.auth-overlay .auth-root { min-height: 100%; }
+.auth-app--under-overlay { filter: blur(3px); pointer-events: none; user-select: none; }
+
+/* Recovery Key (ADR-044): exibida uma única vez, em fonte monoespaçada legível. */
+.auth-recovery { display: grid; gap: 10px; }
+.auth-recovery__title { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; font-weight: 700; color: var(--mb1-text-1); }
+.auth-recovery__title svg { width: 15px; height: 15px; color: var(--mb1-amber, #d97706); }
+.auth-recovery__key { display: block; padding: 12px 14px; border: 1px dashed var(--mb1-border); border-radius: var(--mb1-radius-control); background: var(--mb1-bg-field); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 17px; font-weight: 700; letter-spacing: .08em; text-align: center; color: var(--mb1-text-1); user-select: all; }
+.auth-actions--start { justify-content: flex-start; }
+.auth-button svg { width: 14px; height: 14px; margin-right: 6px; vertical-align: -2px; }
+.auth-check { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--mb1-text-1); cursor: pointer; }
+.auth-check input { width: 15px; height: 15px; accent-color: var(--mb1-green); }
+.auth-links { margin: 2px 0 0; text-align: center; }
+.auth-link { padding: 0; border: 0; background: none; font-size: 11px; color: var(--mb1-text-2); text-decoration: underline; cursor: pointer; }
+.auth-link:hover:not(:disabled) { color: var(--mb1-text-1); }
+.auth-link:disabled { opacity: .55; cursor: not-allowed; }
+.auth-users__secret { display: block; margin: 6px 0; padding: 10px 12px; border: 1px dashed var(--mb1-border, #e7eaee); border-radius: 8px; background: var(--mb1-bg-field, #f6f8fa); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 16px; font-weight: 700; letter-spacing: .06em; text-align: center; user-select: all; }

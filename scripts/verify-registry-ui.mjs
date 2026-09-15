@@ -27,7 +27,11 @@ import {
 } from '../src/modules/catalog/application/index.js';
 import {
   NONE_OPTION,
+  USAGE_IN_LIST_LIMIT,
   USAGE_IN_LIST_STORES,
+  USAGE_UNAVAILABLE_TEXT,
+  USAGE_UNAVAILABLE_TITLE,
+  usageAvailableFor,
   describeError,
   emptyFor,
   formFromRecord,
@@ -105,6 +109,13 @@ assert.match(component, /referenceOptionsFor\(campo, references\[campo\.referenc
 assert.match(component, /USAGE_COLUMN = \{ id: '_uso', label: 'Em uso'/, 'coluna "Em uso" declarada');
 assert.match(component, /usageInList = tabs\.length === 1 && tab\.usageInList/, 'coluna "Em uso" só quando a contagem é por índice');
 assert.match(component, /Em uso: \{usage\[editingRecord\.id\]\}/, 'registro aberto mostra a contagem de uso sob demanda');
+// Acima do limite: célula "—" com title explicativo, sem pílula de filtro e sem "…" permanente.
+assert.match(component, /const usageAvailable = usageAvailableFor\(usageInList, \(catalog\[tab\.id\] \|\| \[\]\)\.length\);/, 'disponibilidade da coluna "Em uso" decidida pelo tamanho da lista');
+assert.match(component, /\{usageAvailable \? \(\s*<MakFilterPill\s*label=\{USAGE_COLUMN\.label\}/, 'pílula "Em uso" só quando a contagem está disponível');
+assert.match(component, /title=\{!usageAvailable \? USAGE_UNAVAILABLE_TITLE : undefined\}>\{!usageAvailable \? USAGE_UNAVAILABLE_TEXT : usage\[record\.id\] == null \? '…' : usage\[record\.id\]\}/, 'célula mostra "—" com title acima do limite; "…" só enquanto conta');
+assert.ok(!/\{usageInList \? \(\s*<MakFilterPill/.test(component), 'NEGATIVO: pílula não depende só de usageInList');
+// Inativar um padrão: o aviso do serviço chega à tela.
+assert.match(component, /const result = await owner\.persistence\.deactivate\(actor, record\.id\);\s*if \(result\?\.aviso\) toast\.warning\(result\.aviso\);/, 'aviso de "deixou de ser padrão" vira notificação');
 assert.match(component, /notifyError\(error, 'Não foi possível salvar o cadastro\.'\)/, 'erro de gravação vai para a notificação com a mensagem do serviço');
 assert.match(component, /const \{ message, description \} = describeError\(error, fallback\);/, 'REGISTRY_IN_USE mostra a mensagem e o detalhe do serviço');
 assert.match(component, /inputMode=\{isNumber \? 'decimal' : undefined\}/, 'campo numérico aceita vírgula decimal (formato brazileiro via parseBrazilianNumber no modelo)');
@@ -256,6 +267,20 @@ ok('erros-na-tela');
 assert.deepEqual([...USAGE_IN_LIST_STORES].sort(), ['categoriasAnimal', 'marcas', 'propriedades', 'racas'], 'coluna "Em uso" só para marcas, raças, categorias e propriedades');
 assert.ok(!USAGE_IN_LIST_STORES.has('parceiros') && !USAGE_IN_LIST_STORES.has('causasMorte'), 'parceiros e causas (varredura de eventos) contam só sob demanda');
 assert.equal(await brandService.countUsage(marca.id), 1, 'contagem que a coluna exibe');
+// Política do limite: até USAGE_IN_LIST_LIMIT conta; acima mostra "—" com explicação (nunca "…" permanente).
+assert.equal(usageAvailableFor(true, USAGE_IN_LIST_LIMIT), true, 'no limite ainda conta');
+assert.equal(usageAvailableFor(true, USAGE_IN_LIST_LIMIT + 1), false, 'NEGATIVO: acima do limite não conta');
+assert.equal(usageAvailableFor(false, 1), false, 'NEGATIVO: store sem contagem por índice nunca conta na lista');
+assert.equal(USAGE_UNAVAILABLE_TEXT, '—');
+assert.match(USAGE_UNAVAILABLE_TITLE, new RegExp(`${USAGE_IN_LIST_LIMIT} registros`), 'title explica o limite');
+// describeError continua entendendo o detalhe histórico (identificadores/sessões com rótulo pt-BR).
+assert.equal(describeError({ code: 'REGISTRY_IN_USE', message: 'm', details: { detalhe: { animais: 0, identificadores: 2, sessoes: 1 } } }, 'f').description, 'Vínculos — identificadores: 2 · sessões: 1.', 'origens novas do vínculo histórico com rótulo');
+// Inativar o padrão devolve aviso; inativar quem não é padrão não devolve.
+const marcaPadrao2 = await brandService.create(GESTOR, { nome: 'Marca padrão dois', padrao: true });
+const inativada = await brandService.deactivate(GESTOR, marcaPadrao2.id);
+assert.match(inativada.aviso, /deixou de ser o padrão/, 'serviço avisa ao inativar o padrão');
+const outraMarca = await brandService.create(GESTOR, { nome: 'Marca comum' });
+assert.equal((await brandService.deactivate(GESTOR, outraMarca.id)).aviso, undefined, 'NEGATIVO: sem padrão não há aviso');
 ok('em-uso');
 
 await deleteDbForTests();

@@ -3,7 +3,7 @@
 // Restore = importar JSON em transação Dexie; backup de esquema anterior dispara o
 // backfill resumível antes de registrar sucesso (ADR-038). Nenhum arquivo .db nativo.
 import { ensureStorageReady, getDbVersion } from '../db.js';
-import { BACKUP_FORMAT, MASTER_REGISTRY_STORES, PROTECTED_STORES, STORE_NAMES } from '../schema.js';
+import { BACKUP_FORMAT, MASTER_REGISTRY_STORES, PROTECTED_STORES, STORE_NAMES, USERS_STORE } from '../schema.js';
 import {
   APP_VERSION,
   BACKUP_FORMAT_VERSION,
@@ -81,7 +81,7 @@ export async function createFullBackupFromDb(db, { reason = 'manual', automatic 
   return { ok: true, backup, counts };
 }
 
-/** Backup completo do banco vigente (todos os stores, inclusive usuariosLocais). */
+/** Backup completo do banco vigente (todos os stores, inclusive `usuarios` — hash/salt, nunca senha). */
 export async function createFullBackup({ reason = 'manual', automatic = false } = {}) {
   const db = await ensureStorageReady();
   return createFullBackupFromDb(db, { reason, automatic, dbVersion: getDbVersion(), storeNames: STORE_NAMES });
@@ -197,14 +197,18 @@ export async function dryRunRestore(payload) {
     schemaUpgradeRequired,
     ignoredStores,
     newStores,
-    usuariosLocais: counts.usuariosLocais || 0,
+    // Usuários trazidos pelo backup (docs 11 §9): > 0 → o restore encerra a sessão.
+    usuarios: counts[USERS_STORE] || 0,
   };
 }
 
 /**
  * Restore: substitui o conteúdo de todos os stores em transação. Exige evidência
  * de backup físico. Backup de esquema anterior (dbVersion < atual): grava e
- * executa o backfill na sequência; só então registra sucesso.
+ * executa o backfill na sequência; só então registra sucesso. Backup da própria
+ * versão com migração CONCLUIDA (ou sem estado técnico) limpa o bloqueio de
+ * escrita ao final — o banco restaurado é íntegro por definição.
+ * Devolve `usuarios` (quantidade restaurada) para o serviço encerrar a sessão.
  */
 export async function applyRestore(payload, { safetyEvidence = null, files = null } = {}) {
   const { backup: b, ignoredStores, newStores, sourceDbVersion, schemaUpgradeRequired } = await readBackup(payload);
@@ -222,7 +226,7 @@ export async function applyRestore(payload, { safetyEvidence = null, files = nul
     }
   });
   const { runPendingBackfills } = await migrationCoordinator();
-  const { readMigrationState, writeMigrationState, MIGRATION_STATUS } = await import('../../migrations/migrationState.js');
+  const { readMigrationState, writeMigrationState, MIGRATION_STATUS, clearWriteBlock } = await import('../../migrations/migrationState.js');
   let backfill = null;
   if (schemaUpgradeRequired) {
     // O estado restaurado (se houver) pertence ao banco antigo: recomeça o backfill.
@@ -238,7 +242,11 @@ export async function applyRestore(payload, { safetyEvidence = null, files = nul
   const pendingRestored = restoredState && restoredState.status !== MIGRATION_STATUS.CONCLUIDA;
   if (schemaUpgradeRequired || pendingRestored) {
     backfill = await runPendingBackfills({ files, origem: `restore-v${sourceDbVersion}` });
+  } else {
+    // Backup v7 CONCLUIDA (ou sem estado técnico): nada a migrar → libera a escrita.
+    clearWriteBlock();
   }
+  const usuariosRestaurados = Array.isArray(b.stores[USERS_STORE]) ? b.stores[USERS_STORE].length : 0;
   await recordBackupHistory('restore', {
     restoredFormat: b.format,
     restoredFormatVersion: b.formatVersion || 1,
@@ -247,10 +255,11 @@ export async function applyRestore(payload, { safetyEvidence = null, files = nul
     durableSafetyBackup: safetyEvidence || null,
     ignoredStores,
     newStores,
+    usuarios: usuariosRestaurados,
     backfill: backfill ? { completed: backfill.completed, relatorio: backfill.state?.relatorio || null } : null,
   });
   if (backfill && !backfill.alreadyDone) await recordBackupHistory(`backfill-v${getDbVersion()}`, { origem: 'restore', relatorio: backfill.state?.relatorio || null });
-  return { ok: true, restored: true, preRestoreBackup: safetyEvidence, schemaUpgradeRequired, ignoredStores, newStores, backfill: backfill ? backfill.state : null };
+  return { ok: true, restored: true, preRestoreBackup: safetyEvidence, schemaUpgradeRequired, ignoredStores, newStores, usuarios: usuariosRestaurados, backfill: backfill ? backfill.state : null };
 }
 
 /**
@@ -273,9 +282,11 @@ export async function clearOperationalData({ safetyEvidence = null } = {}) {
 export const clearAllData = clearOperationalData;
 
 /**
- * "Reset completo" (ADR-032): apaga tudo exceto backupHistory. Exclusivo do ADMIN
- * (validado no serviço de manutenção) e exige evidência de backup físico mais a
- * confirmação explícita. Recria o estado técnico e os seeds da v7 em seguida.
+ * "Reset completo" (ADR-032): apaga tudo exceto backupHistory — inclusive
+ * `usuarios`, por isso o app volta ao FIRST-RUN ADMIN SETUP (ADR-044). Exclusivo
+ * do ADMIN com a senha reverificada (validados no serviço de manutenção); aqui
+ * exige evidência de backup físico mais a confirmação explícita. Recria o estado
+ * técnico e os seeds da v7 em seguida.
  */
 export async function resetAllData({ safetyEvidence = null, confirmedByAdmin = false, files = null } = {}) {
   requireDurableSafetyEvidence(safetyEvidence, 'Reset completo');

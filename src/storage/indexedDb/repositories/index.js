@@ -2,10 +2,10 @@
 import { createRepository } from './genericRepository.js';
 import { ensureStorageReady } from '../db.js';
 import { assertWritable } from '../../migrations/migrationState.js';
-import { STORE_NAMES } from '../schema.js';
+import { USERS_STORE } from '../schema.js';
 
-// Store de usuários locais: `usuarios` (docs 11 rev. 2) ou `usuariosLocais` (rev. 1) — quem decide é o schema.js.
-export const USERS_STORE = STORE_NAMES.includes('usuarios') ? 'usuarios' : 'usuariosLocais';
+// Store de usuários locais: `usuarios` (docs 11 rev. 2; ADR-043) — definida no schema.js.
+export { USERS_STORE };
 
 function matchesWeighingFilters(row, filters) {
   for (const [key, value] of Object.entries(filters)) {
@@ -29,7 +29,7 @@ export const animalLotRepository = createRepository('animalLotes');
 export const weighingSessionRepository = createRepository('sessoesPesagem');
 export const auditRepository = createRepository('auditoria');
 export const importRepository = createRepository('importacoes');
-// v7 (ADR-018/ADR-019/ADR-035): cadastros mestres, estoque de identificadores e usuários locais.
+// v7 (ADR-018/ADR-019/ADR-043): cadastros mestres, estoque de identificadores e usuários locais.
 export const marcaRepository = createRepository('marcas');
 export const racaRepository = createRepository('racas');
 export const categoriaAnimalRepository = createRepository('categoriasAnimal');
@@ -38,8 +38,9 @@ export const propriedadeRepository = createRepository('propriedades');
 export const causaMorteRepository = createRepository('causasMorte');
 export const faixaIdentificadorRepository = createRepository('faixasIdentificadores');
 export const excecaoIdentificadorRepository = createRepository('excecoesIdentificadores');
-export const usuarioLocalRepository = createRepository(USERS_STORE);
-export const usuarioRepository = usuarioLocalRepository;
+export const usuarioRepository = createRepository(USERS_STORE);
+// Alias da revisão 1 (mantido só para importadores antigos; preferir usuarioRepository).
+export const usuarioLocalRepository = usuarioRepository;
 
 // Consultas específicas de pesagens (data range + summary) sobre o repo genérico.
 export const weighing = {

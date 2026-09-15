@@ -84,7 +84,7 @@ export function toPasswordFields(record) {
  * Nunca lança por dado ausente: devolve false.
  */
 export async function verifyPassword(password, record) {
-  if (typeof password !== 'string' || !record) return false;
+  if (typeof password !== 'string' || !password.length || !record) return false; // senha vazia nunca verifica
   const hash = record.hash ?? record.password_hash;
   const salt = record.salt ?? record.password_salt;
   const iterations = Number(record.iterations ?? record.password_iterations);

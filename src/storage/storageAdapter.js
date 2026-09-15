@@ -8,7 +8,7 @@ import * as repos from './indexedDb/repositories/index.js';
 import * as backup from './indexedDb/backup/backupService.js';
 import { logicalIntegrity, databaseStats } from './indexedDb/health/health.js';
 import * as migration from './migrations/migrationCoordinator.js';
-import { assertWritable, getWriteBlock, isWriteBlocked } from './migrations/migrationState.js';
+import { assertWritable, clearWriteBlock, getWriteBlock, isWriteBlockExempt, isWriteBlocked } from './migrations/migrationState.js';
 
 export const storage = {
   // ciclo de vida
@@ -16,10 +16,13 @@ export const storage = {
   getDbVersion,
   getDb,
 
-  // bloqueio de escrita durante migração pendente/falha (ADR-038)
+  // bloqueio de escrita durante migração pendente/falha (ADR-038); `usuarios` e
+  // `auditoria` são isentas (isWriteBlockExempt) para o login funcionar sob bloqueio.
   isWriteBlocked,
   getWriteBlock,
   assertWritable,
+  isWriteBlockExempt,
+  clearWriteBlock,
 
   // migrações (docs 14 §2)
   migration: {
@@ -44,7 +47,7 @@ export const storage = {
   sessoesPesagem: repos.weighingSessionRepository,
   auditoria: repos.auditRepository,
   importacoes: repos.importRepository,
-  // cadastros mestres, estoque de identificadores e usuários locais (v7)
+  // cadastros mestres, estoque de identificadores e usuários locais (v7; store `usuarios`, ADR-043)
   marcas: repos.marcaRepository,
   racas: repos.racaRepository,
   categoriasAnimal: repos.categoriaAnimalRepository,
@@ -53,8 +56,8 @@ export const storage = {
   causasMorte: repos.causaMorteRepository,
   faixasIdentificadores: repos.faixaIdentificadorRepository,
   excecoesIdentificadores: repos.excecaoIdentificadorRepository,
-  usuariosLocais: repos.usuarioLocalRepository,
   usuarios: repos.usuarioRepository,
+  usuariosLocais: repos.usuarioRepository, // alias rev. 1 (mesmo repositório)
   usersStore: repos.USERS_STORE,
   settings: { get: repos.readAppSetting, set: repos.writeAppSetting },
 

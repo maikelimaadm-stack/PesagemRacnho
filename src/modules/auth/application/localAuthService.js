@@ -33,7 +33,7 @@ function normalizeName(nome) {
   return String(nome ?? '').trim().replace(/\s+/g, ' ');
 }
 
-/** Projeção pública: nunca devolve password_*/recovery_*/localId. */
+// Projeção pública: nunca devolve password_*, recovery_* nem localId.
 export function sanitize(row) {
   if (!row) return null;
   const safe = {};

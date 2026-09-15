@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { changeOwnPassword } from '@/modules/auth/application/localAuthService';
 import AuthScreenShell, { AuthError, AuthField, AuthHint } from './AuthScreenShell';
 
-// Troca da própria senha. `mandatory` = deve_trocar_senha (sem Cancelar; só Sair).
+// Troca da própria senha. `mandatory` = must_change_password (tela cheia, sem Cancelar; só Sair);
+// voluntária = camada sobre o app (Cancelar volta ao que estava).
 export default function TrocarSenhaScreen({ user, mandatory = false, onDone, onCancel, onLogout }) {
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');

@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as localAuthService from '@/modules/auth/application/localAuthService';
 import * as authSession from '@/modules/auth/application/authSession';
-import { can } from '@/modules/auth/domain/accessPolicy';
-import { getInactivityMinutes } from '@/modules/settings/application/appConfigService';
+import { can } from '@/modules/auth/domain/permissionService';
+import { getAuthPolicy } from '@/modules/settings/application/appConfigService';
 import { ModeloBase1Tokens } from '@/components/modelobase1';
 import { AuthContext } from './useAuth';
-import ConfiguracaoInicialScreen from './ConfiguracaoInicialScreen';
+import FirstRunAdminSetupScreen from './FirstRunAdminSetupScreen';
 import LoginScreen from './LoginScreen';
+import RecuperarSenhaScreen from './RecuperarSenhaScreen';
 import LockScreen from './LockScreen';
 import TrocarSenhaScreen from './TrocarSenhaScreen';
 import './auth-screens.css';
@@ -34,37 +35,59 @@ function StatusScreen({ children }) {
   );
 }
 
+// Lê a política de sessão (auth-policy.inactivity_lock_minutes; 0 desliga) com fallback no padrão.
+async function applyInactivityPolicy() {
+  try {
+    const policy = await getAuthPolicy();
+    authSession.setInactivityMinutes(policy.inactivity_lock_minutes);
+  } catch {
+    authSession.setInactivityMinutes(authSession.DEFAULT_INACTIVITY_MINUTES);
+  }
+}
+
 /**
- * Decide: carregando → Configuração inicial (sem usuários) → Login → Troca obrigatória →
- * Bloqueio por inatividade → aplicativo. Nenhuma tela de dados é montada antes da autenticação.
+ * Decide: carregando → Configuração inicial (sem usuários) → Login (ou Recuperar senha) →
+ * Troca obrigatória → aplicativo. Nenhuma tela de dados é montada antes da autenticação.
+ * Bloqueio por inatividade e troca voluntária de senha são CAMADAS sobre o app (ADR-045):
+ * a tela do operador continua montada, inerte, e volta exatamente onde estava.
  */
 export default function AuthGate({ children }) {
-  const [phase, setPhase] = useState('loading'); // loading | setup | login | change-password | locked | app | error
+  const [phase, setPhase] = useState('loading'); // loading | setup | login | recover | change-password | app | error
+  const [overlay, setOverlay] = useState(null); // null | 'locked' | 'change-password'
   const [user, setUser] = useState(null);
   const [bootError, setBootError] = useState('');
-  const voluntaryChange = useRef(false);
+  const userRef = useRef(null);
+  userRef.current = user;
+
+  const fail = useCallback((err) => {
+    setBootError(err?.message || 'Falha ao preparar a autenticação.');
+    setPhase('error');
+  }, []);
 
   const goToEntry = useCallback(async () => {
     setUser(null);
+    setOverlay(null);
     const total = await localAuthService.countActiveUsers();
     setPhase(total === 0 ? 'setup' : 'login');
   }, []);
 
-  const enterApp = useCallback(async (authUser) => {
+  const enterApp = useCallback(async (authUser, { locked = false } = {}) => {
     setUser(authUser);
-    try {
-      authSession.setInactivityMinutes(await getInactivityMinutes());
-    } catch {
-      authSession.setInactivityMinutes(authSession.DEFAULT_INACTIVITY_MINUTES);
-    }
-    voluntaryChange.current = false;
-    setPhase(authUser.deve_trocar_senha ? 'change-password' : 'app');
+    await applyInactivityPolicy();
+    setOverlay(locked ? 'locked' : null);
+    setPhase(authUser.must_change_password ? 'change-password' : 'app');
   }, []);
 
   // Sessão encerrada por qualquer caminho (menu, restauração de backup, limpeza) → volta à entrada.
-  useEffect(() => authSession.subscribe((session) => {
-    if (!session) goToEntry().catch((err) => { setBootError(err?.message || 'Falha ao preparar a autenticação.'); setPhase('error'); });
-  }), [goToEntry]);
+  // Bloqueio/desbloqueio vindos do serviço (inatividade) refletem na camada.
+  useEffect(() => authSession.subscribe((session, reason) => {
+    if (!session) {
+      goToEntry().catch(fail);
+      return;
+    }
+    if (reason === 'lock') setOverlay('locked');
+    if (reason === 'unlock') setOverlay((current) => (current === 'locked' ? null : current));
+  }), [goToEntry, fail]);
 
   useEffect(() => {
     applyStoredTheme();
@@ -73,39 +96,38 @@ export default function AuthGate({ children }) {
       try {
         const restored = authSession.restoreSession();
         if (restored) {
+          // Recarga técnica do renderer: ressincroniza com o banco e encerra se inativo/inexistente.
           const found = await localAuthService.findActiveUser(restored.userId);
           if (!active) return;
           if (found) {
-            await enterApp(found);
-            if (restored.locked) setPhase('locked');
+            authSession.updateSessionUser(found);
+            await enterApp(found, { locked: restored.locked });
             return;
           }
-          authSession.logout(); // usuário inativado/excluído: a assinatura acima leva à entrada
+          authSession.logout(); // a assinatura acima leva à entrada
           return;
         }
         await goToEntry();
       } catch (err) {
-        if (!active) return;
-        setBootError(err?.message || 'Falha ao preparar a autenticação.');
-        setPhase('error');
+        if (active) fail(err);
       }
     })();
     return () => { active = false; };
-  }, [enterApp, goToEntry]);
+  }, [enterApp, goToEntry, fail]);
 
   // Atividade (teclado/mouse) com throttle no authSession; verificação periódica de inatividade.
   useEffect(() => {
-    if (phase !== 'app') return undefined;
+    if (phase !== 'app' || overlay) return undefined;
     const onActivity = () => authSession.touch();
     for (const name of ACTIVITY_EVENTS) window.addEventListener(name, onActivity, { passive: true });
     const timer = window.setInterval(() => {
-      if (authSession.checkInactivity()) setPhase('locked');
+      if (authSession.checkInactivity()) setOverlay('locked');
     }, INACTIVITY_POLL_MS);
     return () => {
       for (const name of ACTIVITY_EVENTS) window.removeEventListener(name, onActivity);
       window.clearInterval(timer);
     };
-  }, [phase]);
+  }, [phase, overlay]);
 
   const handleLogin = useCallback(async (login, senha) => {
     const authUser = await localAuthService.authenticate(login, senha);
@@ -115,36 +137,70 @@ export default function AuthGate({ children }) {
 
   const handleUnlock = useCallback(async (senha) => {
     // Mesma regra de tentativas do login; a sessão é a mesma, só muda o estado de bloqueio.
-    await localAuthService.authenticate(user.login, senha);
+    const current = userRef.current;
+    const refreshed = await localAuthService.authenticate(current.login, senha);
     authSession.unlock();
-    setPhase(user.deve_trocar_senha ? 'change-password' : 'app');
-  }, [user]);
+    setUser(refreshed);
+    setOverlay(null);
+    if (refreshed.must_change_password) setPhase('change-password');
+  }, []);
+
+  const endSession = useCallback((motivo) => {
+    const current = userRef.current;
+    localAuthService.registerLogout(current, { motivo }).catch(() => {});
+    if (motivo === 'TROCAR_USUARIO') authSession.switchUser();
+    else authSession.logout();
+  }, []);
 
   const contextValue = useMemo(() => ({
     user,
-    can: (permission) => can(user?.perfil, permission),
-    lock: () => { authSession.lock(); setPhase('locked'); },
-    logout: () => authSession.logout(),
-    switchUser: () => authSession.logout(),
-    changePassword: () => { voluntaryChange.current = true; setPhase('change-password'); },
-  }), [user]);
+    role: user?.role ?? null,
+    can: (action) => can(user?.role, action),
+    lock: () => { authSession.lock(); setOverlay('locked'); },
+    logout: () => endSession('SAIR'),
+    switchUser: () => endSession('TROCAR_USUARIO'),
+    changePassword: () => setOverlay('change-password'),
+  }), [user, endSession]);
 
   if (phase === 'error') return <StatusScreen>Não foi possível preparar a autenticação. {bootError}</StatusScreen>;
   if (phase === 'loading') return <StatusScreen>Preparando o acesso…</StatusScreen>;
-  if (phase === 'setup') return <ConfiguracaoInicialScreen onDone={() => setPhase('login')} />;
-  if (phase === 'login') return <LoginScreen onLogin={handleLogin} />;
+  if (phase === 'setup') return <FirstRunAdminSetupScreen onDone={() => setPhase('login')} />;
+  if (phase === 'recover') return <RecuperarSenhaScreen onDone={() => setPhase('login')} onCancel={() => setPhase('login')} />;
+  if (phase === 'login') return <LoginScreen onLogin={handleLogin} onForgotPassword={() => setPhase('recover')} />;
   if (phase === 'change-password') {
+    // Troca OBRIGATÓRIA (must_change_password): tela cheia, antes de montar qualquer dado.
     return (
       <TrocarSenhaScreen
         user={user}
-        mandatory={!voluntaryChange.current}
-        onDone={(updated) => { setUser(updated); voluntaryChange.current = false; setPhase('app'); }}
-        onCancel={() => { voluntaryChange.current = false; setPhase('app'); }}
-        onLogout={() => authSession.logout()}
+        mandatory
+        onDone={(updated) => { setUser(updated); setPhase('app'); }}
+        onLogout={() => endSession('SAIR')}
       />
     );
   }
-  if (phase === 'locked') return <LockScreen user={user} onUnlock={handleUnlock} onSwitchUser={() => authSession.logout()} />;
 
-  return <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>;
+  const inert = overlay ? '' : undefined; // React 18: atributo booleano `inert` via string vazia
+  return (
+    <AuthContext.Provider value={contextValue}>
+      <div className={`auth-app${overlay ? ' auth-app--under-overlay' : ''}`} inert={inert} aria-hidden={overlay ? true : undefined}>
+        {children}
+      </div>
+      {overlay === 'locked' ? (
+        <div className="auth-overlay" role="dialog" aria-modal="true" aria-label="Sessão bloqueada">
+          <LockScreen user={user} onUnlock={handleUnlock} onSwitchUser={() => endSession('TROCAR_USUARIO')} />
+        </div>
+      ) : null}
+      {overlay === 'change-password' ? (
+        <div className="auth-overlay" role="dialog" aria-modal="true" aria-label="Trocar senha">
+          <TrocarSenhaScreen
+            user={user}
+            mandatory={false}
+            onDone={(updated) => { setUser(updated); setOverlay(null); }}
+            onCancel={() => setOverlay(null)}
+            onLogout={() => endSession('SAIR')}
+          />
+        </div>
+      ) : null}
+    </AuthContext.Provider>
+  );
 }

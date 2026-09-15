@@ -1,47 +1,32 @@
-// Serviços nomeados dos cadastros mestres (ADR-018). A UI, a importação e a
-// migração usam estas instâncias; nunca acessam as stores diretamente.
-import { createMasterRegistryService, DEFAULT_EMPRESA_ID } from './masterRegistryService.js';
-import {
-  CATEGORIAS_ANIMAL,
-  CAUSAS_MORTE,
-  MARCAS,
-  PARCEIROS,
-  PROPRIEDADES,
-  RACAS,
-} from '../domain/registryDefinitions.js';
-import { applySeeds } from '../domain/seeds.js';
-
-export const brandService = createMasterRegistryService(MARCAS);
-export const breedService = createMasterRegistryService(RACAS);
-export const categoryService = createMasterRegistryService(CATEGORIAS_ANIMAL);
-export const partnerService = createMasterRegistryService(PARCEIROS);
-export const propertyService = createMasterRegistryService(PROPRIEDADES);
-export const deathCauseService = createMasterRegistryService(CAUSAS_MORTE);
-
-// Acesso por nome da store (página genérica de cadastro e resolver).
-export const REGISTRY_SERVICES = Object.freeze({
-  marcas: brandService,
-  racas: breedService,
-  categoriasAnimal: categoryService,
-  parceiros: partnerService,
-  propriedades: propertyService,
-  causasMorte: deathCauseService,
-});
-
-export function getRegistryService(store) {
-  const service = REGISTRY_SERVICES[store];
-  if (!service) throw new Error(`Cadastro mestre desconhecido: ${store}`);
-  return service;
-}
-
-// Seeds idempotentes (categorias padrão, raça Nelore, propriedade principal).
-export function ensureSeeds(empresaId = DEFAULT_EMPRESA_ID) {
-  return applySeeds({ categoryService, breedService, propertyService }, empresaId);
-}
-
-export { createMasterRegistryService, DEFAULT_EMPRESA_ID } from './masterRegistryService.js';
+// Índice público dos cadastros mestres (ADR-018). A UI, a importação e a
+// migração importam daqui; nunca acessam as stores diretamente.
+// Um módulo por responsabilidade:
+//   - registryServices.js  → instâncias nomeadas dos serviços (fonte única);
+//   - masterRegistryService.js → fábrica;
+//   - registryAccess.js    → permissão de escrita;
+//   - catalogResolver.js   → resolveMany (serviços) + parte pura do domínio;
+//   - domain/seeds.js      → seeds (fonte única; o backfill v7 importa de lá).
+export {
+  REGISTRY_SERVICES,
+  brandService,
+  breedService,
+  categoryService,
+  deathCauseService,
+  getRegistryService,
+  partnerService,
+  propertyService,
+} from './registryServices.js';
+export { createMasterRegistryService, DEFAULT_EMPRESA_ID, INACTIVE_DEFAULT_MESSAGE } from './masterRegistryService.js';
+export { REGISTRY_WRITE_PERMISSION, assertRegistryWrite, resolveWriterRole } from './registryAccess.js';
+export { RESOLVER_GROUPS, buildNameIndex, resolveMany, resolveNamesAgainst } from './catalogResolver.js';
 export { RegistryError } from '../domain/registryErrors.js';
-export { REGISTRY_WRITE_PERMISSION, assertRegistryWrite } from './registryAccess.js';
+export {
+  CATEGORIAS_SEED,
+  PROPRIEDADE_PADRAO_SEED,
+  RACA_PADRAO_SEED,
+  applySeeds,
+  ensureSeeds,
+} from '../domain/seeds.js';
 export {
   REGISTRY_DEFINITIONS,
   REGISTRY_DEFINITIONS_BY_STORE,

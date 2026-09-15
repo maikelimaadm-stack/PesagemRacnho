@@ -7,8 +7,10 @@
 // na MESMA transação do lote. Fechar o app no meio e reabrir continua do
 // checkpoint sem duplicar nada.
 import { ANIMAL_SITUACOES, IDENTIFICADOR_TIPOS, SESSAO_STATUS, STORE_NAMES } from '../indexedDb/schema.js';
-import { civilDateFromIso, estimateBirth, normalizeName, normalizeSessionStatus, situacaoFromExitReason } from '../indexedDb/normalize.js';
+import { SESSION_OPERATOR_FIELD, civilDateFromIso, estimateBirth, normalizeName, normalizeSessionStatus, situacaoFromExitReason } from '../indexedDb/normalize.js';
 import { LEGACY_PAYLOAD_FORBIDDEN } from '../../modules/weighing/domain/weighingMapper.js';
+// Seeds: FONTE ÚNICA em catalog/domain/seeds.js (B2 raça padrão, B3 categorias, B6 propriedade).
+import { CATEGORIAS_SEED, PROPRIEDADE_PADRAO_SEED, RACA_PADRAO_SEED } from '../../modules/catalog/domain/seeds.js';
 import { logicalIntegrity } from '../indexedDb/health/health.js';
 import {
   MIGRATION_STATUS,
@@ -23,19 +25,9 @@ export { estimateBirth };
 export const V7_VERSION = 7;
 export const BATCH_SIZE = 500;
 export const V7_STEPS = ['B1', 'B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B8', 'B9', 'B10', 'B11', 'B12'];
-export const PROPRIEDADE_PADRAO_NOME = 'Propriedade principal';
-export const RACA_PADRAO_NOME = 'Nelore';
-// Seed fixo (docs 12 §3.1); ids sempre gerados. Sexo aplicável decorre do nome;
-// faixas etárias ficam nulas (não inventar regra de idade na migração).
-export const SEED_CATEGORIAS = Object.freeze([
-  { nome: 'Bezerro', sexo_aplicavel: 'M' },
-  { nome: 'Bezerra', sexo_aplicavel: 'F' },
-  { nome: 'Garrote', sexo_aplicavel: 'M' },
-  { nome: 'Novilha', sexo_aplicavel: 'F' },
-  { nome: 'Boi', sexo_aplicavel: 'M' },
-  { nome: 'Vaca', sexo_aplicavel: 'F' },
-  { nome: 'Touro', sexo_aplicavel: 'M' },
-]);
+// Nomes padrão derivados dos seeds (docs 12 §3.1); ids sempre gerados.
+export const PROPRIEDADE_PADRAO_NOME = PROPRIEDADE_PADRAO_SEED.nome;
+export const RACA_PADRAO_NOME = RACA_PADRAO_SEED.nome;
 export const LEGACY_SETTING_PATTERNS = Object.freeze([/^cadastros-auxiliares:/, /^perfis-saida:/]);
 const SANIDADE_PATTERN = /^cadastros-auxiliares:sanidade:/;
 const MORTALIDADE_PATTERN = /^cadastros-auxiliares:mortalidade:/;
@@ -139,20 +131,47 @@ async function detectBrandCollisions(db, groups) {
   return collisions;
 }
 
+// Grafias em colisão (ADR-021) não são fundidas: cada uma vira uma marca com o
+// texto bruto em `nome` e o `nome_normalizado` desambiguado de forma explícita
+// (a mais usada fica com o normalizado puro; as demais recebem o sufixo " #2",
+// " #3"…), sempre normalizado — nunca um texto cru como chave. `colisao_grafia=true`
+// marca os registros e o relatório lista o grupo para revisão no cadastro.
+export function collisionNormalizedName(base, index, taken = new Set()) {
+  if (index === 0 && !taken.has(base)) return base;
+  let suffix = Math.max(index + 1, 2);
+  let candidate = `${base} #${suffix}`;
+  while (taken.has(candidate)) {
+    suffix += 1;
+    candidate = `${base} #${suffix}`;
+  }
+  return candidate;
+}
+
 export async function planMarcas(db) {
   const raws = await collectBrandTexts(db);
   const groups = groupByNormalized(raws);
   const collisions = await detectBrandCollisions(db, groups);
   const existing = await activeRows(db, 'marcas');
   const existingByNorm = new Map();
-  for (const marca of existing) if (!existingByNorm.has(marca.nome_normalizado)) existingByNorm.set(marca.nome_normalizado, marca);
+  const existingByRaw = new Map();
+  for (const marca of existing) {
+    if (!existingByNorm.has(marca.nome_normalizado)) existingByNorm.set(marca.nome_normalizado, marca);
+    const raw = trimText(marca.nome);
+    if (raw && !existingByRaw.has(raw)) existingByRaw.set(raw, marca);
+  }
+  const takenNorms = new Set(existing.map((marca) => marca.nome_normalizado));
   const items = [];
   for (const group of groups.values()) {
     const uso = (raw) => group.contagem.get(raw) || 0;
     if (collisions.has(group.nome_normalizado)) {
-      for (const raw of group.grafias) {
-        items.push({ nome: raw, nome_normalizado: raw, grafias: [raw], uso: uso(raw), colisao: true, existenteId: existingByNorm.get(raw)?.id || null });
-      }
+      const ordered = [...group.grafias].sort((a, b) => uso(b) - uso(a) || a.localeCompare(b));
+      ordered.forEach((raw, index) => {
+        // Reexecução: a grafia já migrada casa pelo texto bruto (nome), nunca é recriada.
+        const existente = existingByRaw.get(raw) || null;
+        const nomeNormalizado = existente ? existente.nome_normalizado : collisionNormalizedName(group.nome_normalizado, index, takenNorms);
+        takenNorms.add(nomeNormalizado);
+        items.push({ nome: raw, nome_normalizado: nomeNormalizado, grafias: [raw], uso: uso(raw), colisao: true, existenteId: existente?.id || null });
+      });
     } else {
       const nome = [...group.grafias].sort((a, b) => uso(b) - uso(a) || a.localeCompare(b))[0];
       const total = group.grafias.reduce((sum, raw) => sum + uso(raw), 0);
@@ -163,6 +182,7 @@ export async function planMarcas(db) {
     nome_normalizado: norm,
     grafias: groups.get(norm).grafias,
     numeros,
+    marcas: items.filter((item) => item.colisao && normalizeName(item.nome) === norm).map((item) => ({ nome: item.nome, nome_normalizado: item.nome_normalizado })),
   }));
   return { items, novas: items.filter((item) => !item.existenteId).length, existentes: existing.length, colisoes };
 }
@@ -197,6 +217,7 @@ async function runB1(ctx) {
     proprietario_parceiro_id: null,
     propriedade_id: null,
     padrao: !hasPadrao && maisUsada && item.nome_normalizado === maisUsada.nome_normalizado,
+    colisao_grafia: item.colisao === true,
     observacao: item.colisao ? 'Migração v7: grafia mantida separada por colisão de números (ADR-021)' : null,
   }));
   if (records.length) await ctx.db.table('marcas').bulkAdd(records);
@@ -229,24 +250,29 @@ async function runB2(ctx) {
   const plan = await planRacas(ctx.db);
   const ts = nowIso();
   const hasPadrao = (await activeRows(ctx.db, 'racas')).some((row) => row.padrao === true);
-  const records = plan.items.filter((item) => !item.existente).map((item, index) => baseRecord(ts, {
-    nome: item.nome_normalizado === normalizeName(RACA_PADRAO_NOME) ? RACA_PADRAO_NOME : item.nome,
-    nome_normalizado: item.nome_normalizado,
-    abreviacao: null,
-    grupo: null,
-    padrao: !hasPadrao && item.nome_normalizado === normalizeName(RACA_PADRAO_NOME),
-    ordem: index + 1,
-  }));
+  const seedNorm = normalizeName(RACA_PADRAO_SEED.nome);
+  const records = plan.items.filter((item) => !item.existente).map((item, index) => {
+    const isSeed = item.nome_normalizado === seedNorm;
+    return baseRecord(ts, {
+      nome: isSeed ? RACA_PADRAO_SEED.nome : item.nome,
+      nome_normalizado: item.nome_normalizado,
+      abreviacao: null,
+      grupo: isSeed ? RACA_PADRAO_SEED.grupo ?? null : null,
+      padrao: !hasPadrao && isSeed,
+      ordem: isSeed ? RACA_PADRAO_SEED.ordem ?? 1 : index + 1,
+    });
+  });
   if (records.length) await ctx.db.table('racas').bulkAdd(records);
   ctx.report.racas += records.length;
 }
 
 // ---------------------------------------------------------------------------
-// B3 — categorias (seed)
+// B3 — categorias (CATEGORIAS_SEED de catalog/domain/seeds.js; ids gerados)
 // ---------------------------------------------------------------------------
 async function missingCategorias(db) {
-  const existing = new Set((await activeRows(db, 'categoriasAnimal')).map((row) => row.nome_normalizado));
-  return SEED_CATEGORIAS.map((seed, index) => ({ ...seed, ordem: index + 1 })).filter((seed) => !existing.has(normalizeName(seed.nome)));
+  // Inclusive excluídas: o que o responsável removeu de propósito não volta.
+  const existing = new Set((await db.table('categoriasAnimal').toArray()).map((row) => row.nome_normalizado));
+  return CATEGORIAS_SEED.map((seed, index) => ({ ...seed, ordem: seed.ordem ?? index + 1 })).filter((seed) => !existing.has(normalizeName(seed.nome)));
 }
 
 async function runB3(ctx) {
@@ -255,8 +281,8 @@ async function runB3(ctx) {
     nome: seed.nome,
     nome_normalizado: normalizeName(seed.nome),
     sexo_aplicavel: seed.sexo_aplicavel,
-    idade_min_meses: null,
-    idade_max_meses: null,
+    idade_min_meses: seed.idade_min_meses ?? null,
+    idade_max_meses: seed.idade_max_meses ?? null,
     ordem: seed.ordem,
   }));
   if (records.length) await ctx.db.table('categoriasAnimal').bulkAdd(records);
@@ -423,9 +449,9 @@ async function runB6(ctx) {
   const records = [];
   if (plan.criarPropria) {
     records.push(baseRecord(ts, {
-      nome: PROPRIEDADE_PADRAO_NOME,
-      nome_normalizado: normalizeName(PROPRIEDADE_PADRAO_NOME),
-      tipo: 'PROPRIA',
+      nome: PROPRIEDADE_PADRAO_SEED.nome,
+      nome_normalizado: normalizeName(PROPRIEDADE_PADRAO_SEED.nome),
+      tipo: PROPRIEDADE_PADRAO_SEED.tipo || 'PROPRIA',
       parceiro_id: null,
       municipio: null,
       uf: null,
@@ -477,11 +503,33 @@ async function runCursorStep(ctx, step, storeName, prepare) {
   return { done: true };
 }
 
+// Data civil de referência do nascimento estimado (ADR-028): a data_pesagem do
+// evento Cadastro do animal (índice animal_id; a mais antiga quando houver mais
+// de um), só então created_at e, por fim, ultima_pesagem_data.
+export async function collectRegistrationDates(db) {
+  const dates = new Map();
+  await db.table('pesagens').each((row) => {
+    if (row.deleted_at || !row.animal_id) return;
+    const ui = payloadObject(row) || {};
+    if ((ui.tipo_manejo ?? row.tipo_pesagem) !== 'Cadastro') return;
+    const date = civilDateFromIso(row.data_pesagem);
+    if (!date) return;
+    const current = dates.get(row.animal_id);
+    if (!current || date < current) dates.set(row.animal_id, date);
+  });
+  return dates;
+}
+
+export function birthReferenceDate(row, registrationDates) {
+  return registrationDates?.get(row.id) || civilDateFromIso(row.created_at) || civilDateFromIso(row.ultima_pesagem_data) || null;
+}
+
 async function prepareB7(ctx) {
   const resolveMarca = await buildBrandResolver(ctx.db);
   const racas = await activeRows(ctx.db, 'racas');
   const racaByNorm = new Map(racas.map((row) => [row.nome_normalizado, row.id]));
   const propriedadePadrao = (await activeRows(ctx.db, 'propriedades')).find((row) => row.tipo === 'PROPRIA' && row.padrao) || null;
+  const registrationDates = await collectRegistrationDates(ctx.db);
   return (row, counters) => {
     const changes = {};
     if (row.marca_id == null) {
@@ -500,7 +548,7 @@ async function prepareB7(ctx) {
       if (semMotivo) ctx.report.saidasSemMotivo += 1;
     }
     if (row.nascimento === undefined || row.nascimento === null) {
-      const estimated = row.nascimento ? null : estimateBirth(civilDateFromIso(row.created_at) || row.ultima_pesagem_data, row.era);
+      const estimated = estimateBirth(birthReferenceDate(row, registrationDates), row.era);
       if (estimated) {
         changes.nascimento = estimated;
         changes.nascimento_estimado = true;
@@ -590,11 +638,15 @@ async function runB9(ctx) {
   await ctx.db.transaction('rw', ctx.db.table('sessoesPesagem'), ctx.db.table('loteApartacoes'), ctx.db.table('apartacoes'), async () => {
     await ctx.db.table('sessoesPesagem').toCollection().modify((row) => {
       const status = normalizeSessionStatus(row.status);
-      const needs = row.status !== status || row.local === undefined || row.operador_user_id === undefined;
+      const legacyOperatorKey = SESSION_OPERATOR_FIELD !== 'operador_user_id' && 'operador_user_id' in row;
+      const needs = row.status !== status || row.local === undefined || row[SESSION_OPERATOR_FIELD] === undefined || legacyOperatorKey;
       if (!needs) return;
       row.status = SESSAO_STATUS.includes(status) ? status : row.status;
       if (row.local === undefined) row.local = null;
-      if (row.operador_user_id === undefined) row.operador_user_id = null;
+      // Operador autenticado (docs 11 §7): nome do campo segue o índice do esquema;
+      // o nome da revisão 1 (operador_user_id) é convertido e removido.
+      if (row[SESSION_OPERATOR_FIELD] === undefined) row[SESSION_OPERATOR_FIELD] = legacyOperatorKey ? row.operador_user_id ?? null : null;
+      if (legacyOperatorKey) delete row.operador_user_id;
       if (row.marca_padrao_id === undefined) row.marca_padrao_id = null;
       if (row.apartacao_padrao_id === undefined) row.apartacao_padrao_id = null;
       if (row.tipo_manejo_padrao === undefined) row.tipo_manejo_padrao = null;

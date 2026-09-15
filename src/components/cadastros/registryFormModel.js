@@ -13,6 +13,10 @@ export const ADDITIONAL_FIELD_IDS = new Set(['cidade', 'uf', 'municipio', 'regis
 // varrem eventos de saída/cadastro, então só contam sob demanda no registro aberto.
 export const USAGE_IN_LIST_STORES = new Set(['marcas', 'racas', 'categoriasAnimal', 'propriedades']);
 export const USAGE_IN_LIST_LIMIT = 500;
+// Acima do limite a coluna não conta (mostra "—" com explicação) e não vira pílula de filtro.
+export const USAGE_UNAVAILABLE_TEXT = '—';
+export const USAGE_UNAVAILABLE_TITLE = `Contagem de uso não calculada para listas com mais de ${USAGE_IN_LIST_LIMIT} registros; abra o registro para ver o uso.`;
+export const usageAvailableFor = (usageInList, rowCount) => Boolean(usageInList) && rowCount <= USAGE_IN_LIST_LIMIT;
 
 export const capitalize = (text) => text.charAt(0).toLocaleUpperCase('pt-BR') + text.slice(1);
 // Número no campo: vírgula decimal, sem separador de milhar (o operador digita assim).
@@ -84,7 +88,7 @@ export function formatCellValue(column, record, { campo = null, referenceName = 
   return String(value ?? '');
 }
 
-const USAGE_LABELS = { animais: 'animais', faixas: 'faixas', lotes: 'lotes', marcas: 'marcas', embarques: 'embarques', operacoes: 'operações', propriedades: 'propriedades', eventos: 'eventos', mortes: 'mortes' };
+const USAGE_LABELS = { animais: 'animais', identificadores: 'identificadores', faixas: 'faixas', sessoes: 'sessões', lotes: 'lotes', marcas: 'marcas', embarques: 'embarques', operacoes: 'operações', propriedades: 'propriedades', eventos: 'eventos', mortes: 'mortes' };
 // Mensagem + detalhe para as notificações (REGISTRY_IN_USE traz o detalhe por origem).
 export function describeError(error, fallback) {
   const message = error?.message || fallback;

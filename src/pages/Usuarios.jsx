@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { RefreshCw } from 'lucide-react';
+import { ClipboardCopy, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,11 +13,12 @@ import { fmtDateTimeBR } from '@/components/common/formatNumber';
 import { ModeloBase1PageContainer, ModeloBase1PageHeader } from '@/components/modelobase1';
 import RequirePermission from '@/components/auth/RequirePermission';
 import { useAuth } from '@/components/auth/useAuth';
-import { PROFILES, profileLabel } from '@/modules/auth/domain/accessPolicy';
+import { ROLES, roleLabel } from '@/modules/auth/domain/permissionService';
 import * as localAuthService from '@/modules/auth/application/localAuthService';
 import '@/components/auth/auth-screens.css';
 
-const EMPTY_FORM = { nome: '', login: '', perfil: 'OPERADOR', senha: '', confirmar: '' };
+const EMPTY_FORM = { nome: '', login: '', role: 'OPERADOR', senha: '', confirmar: '' };
+const EMPTY_RESET = { modo: 'gerar', senha: '', confirmar: '' }; // modo: gerar (temporária) | definir
 
 function FormField({ id, label, children }) {
   return (
@@ -36,7 +37,9 @@ function UsuariosContent() {
   const [formDialog, setFormDialog] = useState(null); // { mode: 'novo' | 'editar', record }
   const [form, setForm] = useState(EMPTY_FORM);
   const [resetDialog, setResetDialog] = useState(null); // registro alvo
-  const [resetForm, setResetForm] = useState({ senha: '', confirmar: '' });
+  const [resetForm, setResetForm] = useState(EMPTY_RESET);
+  const [temporary, setTemporary] = useState(null); // { nome, login, senha } — exibida uma única vez
+  const [copied, setCopied] = useState(false);
   const [confirm, setConfirm] = useState(null); // { title, description, confirmLabel, destructive, run }
   const [busy, setBusy] = useState(false);
 
@@ -66,21 +69,21 @@ function UsuariosContent() {
 
   const openEdit = (record) => {
     if (!record) return;
-    setForm({ ...EMPTY_FORM, nome: record.nome || '', login: record.login || '', perfil: record.perfil || 'OPERADOR' });
+    setForm({ ...EMPTY_FORM, nome: record.nome || '', login: record.login || '', role: record.role || 'OPERADOR' });
     setFormDialog({ mode: 'editar', record });
   };
 
   const runAction = async (action, successMessage) => {
-    if (busy) return false;
+    if (busy) return null;
     setBusy(true);
     try {
-      await action();
+      const result = await action();
       if (successMessage) toast.success(successMessage);
       await load();
-      return true;
+      return result ?? true;
     } catch (err) {
       toast.error(err?.message || 'A operação não pôde ser concluída.');
-      return false;
+      return null;
     } finally {
       setBusy(false);
     }
@@ -95,14 +98,14 @@ function UsuariosContent() {
         return;
       }
       const ok = await runAction(
-        () => localAuthService.createUser(actor, { nome: form.nome, login: form.login, senha: form.senha, perfil: form.perfil }),
+        () => localAuthService.createUser(actor, { nome: form.nome, login: form.login, senha: form.senha, role: form.role }),
         'Usuário criado. A troca de senha será exigida no primeiro acesso.',
       );
       if (ok) setFormDialog(null);
       return;
     }
     const ok = await runAction(
-      () => localAuthService.updateUser(actor, formDialog.record.id, { nome: form.nome, login: form.login, perfil: form.perfil }),
+      () => localAuthService.updateUser(actor, formDialog.record.id, { nome: form.nome, login: form.login, role: form.role }),
       'Usuário atualizado.',
     );
     if (ok) setFormDialog(null);
@@ -111,17 +114,33 @@ function UsuariosContent() {
   const saveReset = async (event) => {
     event?.preventDefault?.();
     if (!resetDialog) return;
-    if (resetForm.senha !== resetForm.confirmar) {
+    const generate = resetForm.modo === 'gerar';
+    if (!generate && resetForm.senha !== resetForm.confirmar) {
       toast.error('A confirmação não confere com a nova senha.');
       return;
     }
-    const ok = await runAction(
-      () => localAuthService.resetPassword(actor, resetDialog.id, resetForm.senha),
-      'Senha redefinida. O usuário deverá trocá-la no próximo acesso.',
+    const target = resetDialog;
+    const result = await runAction(
+      () => localAuthService.resetPassword(actor, target.id, generate ? null : resetForm.senha),
+      generate ? null : 'Senha redefinida. O usuário deverá trocá-la no próximo acesso.',
     );
-    if (ok) {
+    if (result) {
       setResetDialog(null);
-      setResetForm({ senha: '', confirmar: '' });
+      setResetForm(EMPTY_RESET);
+      if (result.temporaryPassword) {
+        setCopied(false);
+        setTemporary({ nome: target.nome, login: target.login, senha: result.temporaryPassword });
+      }
+    }
+  };
+
+  const copyTemporary = async () => {
+    if (!temporary) return;
+    try {
+      await navigator.clipboard.writeText(temporary.senha);
+      setCopied(true);
+    } catch {
+      toast.error('Não foi possível copiar. Anote a senha temporária.');
     }
   };
 
@@ -164,7 +183,7 @@ function UsuariosContent() {
 
   return (
     <ModeloBase1PageContainer variant="table" className="d17b-page d17b-list-page d17b-list-page--mother cadastro-emp-scope mg-empresas-scope auth-users-page">
-      <ModeloBase1PageHeader title="Usuários" description="Contas locais, perfis de acesso e senhas." visuallyHidden />
+      <ModeloBase1PageHeader title="Usuários" description="Contas locais, papéis de acesso e senhas." visuallyHidden />
 
       {/* Barra de ações da Tela Mãe (ModeloBase1): Novo usuário + ações sobre o usuário selecionado. */}
       <div className="mak-mother-page__toolbar mg-subtoolbar-stack" data-mak-region="toolbar">
@@ -189,9 +208,9 @@ function UsuariosContent() {
               </button>
             </div>
             <div className={`mg-action-slot${selected ? ' is-visible' : ''}`} style={{ '--slot-width': '124px' }} aria-hidden={!selected}>
-              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => { setResetForm({ senha: '', confirmar: '' }); setResetDialog(selected); }} title="Redefinir senha" tabIndex={selected ? 0 : -1}>Redefinir senha</button>
+              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => { setResetForm(EMPTY_RESET); setResetDialog(selected); }} title="Redefinir senha" tabIndex={selected ? 0 : -1}>Redefinir senha</button>
             </div>
-            <div className={`mg-action-slot${selected && !selected.deve_trocar_senha ? ' is-visible' : ''}`} style={{ '--slot-width': '104px' }} aria-hidden={!selected || selected.deve_trocar_senha}>
+            <div className={`mg-action-slot${selected && !selected.must_change_password ? ' is-visible' : ''}`} style={{ '--slot-width': '104px' }} aria-hidden={!selected || selected.must_change_password}>
               <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={askForceChange} title="Forçar troca de senha no próximo acesso" tabIndex={selected ? 0 : -1}>Forçar troca</button>
             </div>
           </div>
@@ -222,7 +241,7 @@ function UsuariosContent() {
                   <TableHead className="emp-th-select"><span className="sr-only">Seleção</span></TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>Login</TableHead>
-                  <TableHead>Perfil</TableHead>
+                  <TableHead>Papel</TableHead>
                   <TableHead>Situação</TableHead>
                   <TableHead>Último acesso</TableHead>
                 </TableRow>
@@ -245,12 +264,13 @@ function UsuariosContent() {
                       {actor && row.id === actor.id ? <span className="auth-users__self">(você)</span> : null}
                     </TableCell>
                     <TableCell>{row.login}</TableCell>
-                    <TableCell>{profileLabel(row.perfil)}</TableCell>
+                    <TableCell>{roleLabel(row.role)}</TableCell>
                     <TableCell>
                       <span className={`auth-users__status${row.ativo ? ' is-active' : ''}`}>{row.ativo ? 'Ativo' : 'Inativo'}</span>
-                      {row.deve_trocar_senha ? <span className="auth-users__flag" title="Troca de senha obrigatória no próximo acesso">troca pendente</span> : null}
+                      {row.must_change_password ? <span className="auth-users__flag" title="Troca de senha obrigatória no próximo acesso">troca pendente</span> : null}
+                      {row.locked_until && Date.parse(row.locked_until) > Date.now() ? <span className="auth-users__flag" title="Bloqueado temporariamente por tentativas incorretas">bloqueado</span> : null}
                     </TableCell>
-                    <TableCell>{fmtDateTimeBR(row.ultimo_login_at, 'Nunca')}</TableCell>
+                    <TableCell>{fmtDateTimeBR(row.last_login_at, 'Nunca')}</TableCell>
                   </TableRow>
                 ))}
                 {!loading && !rows.length ? <TableRow><TableCell colSpan={6} className="d17d-empty-row">Nenhum usuário cadastrado.</TableCell></TableRow> : null}
@@ -273,17 +293,17 @@ function UsuariosContent() {
             <DialogDescription>
               {formDialog?.mode === 'novo'
                 ? 'O usuário deverá trocar a senha inicial no primeiro acesso.'
-                : 'Nome, login e perfil. A senha é alterada por “Redefinir senha”.'}
+                : 'Nome, login e papel. A senha é alterada por “Redefinir senha”.'}
             </DialogDescription>
           </DialogHeader>
           <form className="d17b-standard-dialog__body auth-users__form" onSubmit={saveForm}>
             <FormField id="usuario-nome" label="Nome"><Input id="usuario-nome" value={form.nome} onChange={(event) => setField('nome')(event.target.value)} autoFocus autoComplete="off" /></FormField>
             <FormField id="usuario-login" label="Login"><Input id="usuario-login" value={form.login} onChange={(event) => setField('login')(event.target.value)} autoComplete="off" spellCheck={false} /></FormField>
-            <FormField id="usuario-perfil" label="Perfil">
-              <Select value={form.perfil} onValueChange={setField('perfil')}>
-                <SelectTrigger id="usuario-perfil" aria-label="Perfil"><SelectValue /></SelectTrigger>
+            <FormField id="usuario-papel" label="Papel">
+              <Select value={form.role} onValueChange={setField('role')}>
+                <SelectTrigger id="usuario-papel" aria-label="Papel"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {PROFILES.map((perfil) => <SelectItem key={perfil} value={perfil}>{profileLabel(perfil)}</SelectItem>)}
+                  {ROLES.map((role) => <SelectItem key={role} value={role}>{roleLabel(role)}</SelectItem>)}
                 </SelectContent>
               </Select>
             </FormField>
@@ -307,16 +327,49 @@ function UsuariosContent() {
         <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact">
           <DialogHeader>
             <DialogTitle>Redefinir senha</DialogTitle>
-            <DialogDescription>{resetDialog ? `Nova senha para “${resetDialog.nome}”. A troca será exigida no próximo acesso.` : ''}</DialogDescription>
+            <DialogDescription>{resetDialog ? `Nova senha para “${resetDialog.nome}”. A troca será exigida no próximo acesso e o bloqueio temporário é zerado.` : ''}</DialogDescription>
           </DialogHeader>
           <form className="d17b-standard-dialog__body auth-users__form" onSubmit={saveReset}>
-            <FormField id="reset-senha" label="Nova senha"><Input id="reset-senha" type="password" value={resetForm.senha} onChange={(event) => setResetForm((current) => ({ ...current, senha: event.target.value }))} autoFocus autoComplete="new-password" /></FormField>
-            <FormField id="reset-confirmar" label="Confirmar nova senha"><Input id="reset-confirmar" type="password" value={resetForm.confirmar} onChange={(event) => setResetForm((current) => ({ ...current, confirmar: event.target.value }))} autoComplete="new-password" /></FormField>
+            <FormField id="reset-modo" label="Como redefinir">
+              <Select value={resetForm.modo} onValueChange={(modo) => setResetForm((current) => ({ ...current, modo }))}>
+                <SelectTrigger id="reset-modo" aria-label="Como redefinir"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="gerar">Gerar senha temporária (mostrada uma única vez)</SelectItem>
+                  <SelectItem value="definir">Definir a nova senha agora</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormField>
+            {resetForm.modo === 'definir' ? (
+              <>
+                <FormField id="reset-senha" label="Nova senha"><Input id="reset-senha" type="password" value={resetForm.senha} onChange={(event) => setResetForm((current) => ({ ...current, senha: event.target.value }))} autoFocus autoComplete="new-password" /></FormField>
+                <FormField id="reset-confirmar" label="Confirmar nova senha"><Input id="reset-confirmar" type="password" value={resetForm.confirmar} onChange={(event) => setResetForm((current) => ({ ...current, confirmar: event.target.value }))} autoComplete="new-password" /></FormField>
+              </>
+            ) : (
+              <p className="auth-users__hint">Uma senha temporária legível será gerada e exibida uma única vez para você repassar ao usuário.</p>
+            )}
             <button type="submit" className="sr-only">Redefinir</button>
           </form>
           <DialogFooter className="d17b-standard-dialog__footer">
             <Button type="button" variant="outline" disabled={busy} onClick={() => setResetDialog(null)}>Cancelar</Button>
             <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save" disabled={busy} onClick={saveReset}>{busy ? 'Salvando…' : 'Redefinir'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(temporary)} onOpenChange={(open) => { if (!open) setTemporary(null); }}>
+        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact">
+          <DialogHeader>
+            <DialogTitle>Senha temporária</DialogTitle>
+            <DialogDescription>{temporary ? `Repasse esta senha a “${temporary.nome}” (login ${temporary.login}). Ela é mostrada uma única vez e deverá ser trocada no primeiro acesso.` : ''}</DialogDescription>
+          </DialogHeader>
+          <div className="d17b-standard-dialog__body auth-users__form">
+            <output className="auth-users__secret" aria-label="Senha temporária">{temporary?.senha}</output>
+            <div>
+              <Button type="button" variant="outline" size="sm" onClick={copyTemporary}><ClipboardCopy className="h-3.5 w-3.5" aria-hidden="true" />{copied ? 'Copiada' : 'Copiar'}</Button>
+            </div>
+          </div>
+          <DialogFooter className="d17b-standard-dialog__footer">
+            <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save" onClick={() => setTemporary(null)}>Fechar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -335,7 +388,8 @@ function UsuariosContent() {
   );
 }
 
-// Somente ADMIN (users.manage). O serviço valida de novo cada ação.
+// Somente ADMIN (users.manage): OPERADOR e CONSULTA (e GESTOR) veem "Acesso não permitido".
+// O serviço valida de novo cada ação.
 export default function Usuarios() {
   return (
     <RequirePermission permission="users.manage">

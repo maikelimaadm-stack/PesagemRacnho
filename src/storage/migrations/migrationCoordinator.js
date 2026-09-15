@@ -1,6 +1,7 @@
 // Coordenador de migração (docs/arquitetura-produto/14-MIGRACOES.md §2; ADR-038).
 //
 //   detectar versão atual → backup lógico completo → SHA-256 → gravar → validar
+//   → gravar o estado PENDENTE com a referência do backup (ainda na versão antiga)
 //   → só então abrir na versão nova → backfill resumível → verificar
 //
 // Fail closed: sem backup válido o banco NÃO é aberto na versão nova. Falha no
@@ -22,6 +23,9 @@ import {
   writeMigrationState,
 } from './migrationState.js';
 import { V7_VERSION, dryRunV7, runV7Backfill } from './v7Backfill.js';
+
+// Versão do app que ainda lê a store `lotes` (orientação do bloqueio MIGRATION_BLOCKED_LOTES).
+export const LEGACY_LOTES_APP_VERSION = '1.1.17';
 
 // Backfills por versão alvo. A v8 entra aqui na Fase 3.
 const BACKFILLS = { [V7_VERSION]: { run: runV7Backfill, dryRun: dryRunV7 } };
@@ -48,7 +52,7 @@ export async function inspectDatabase() {
         blockers.push({
           code: 'MIGRATION_BLOCKED_LOTES',
           count,
-          message: `A store legada "lotes" ainda tem ${count} registro(s). Exporte ou limpe esses dados em Backup e Manutenção antes de migrar para a versão ${targetVersion}.`,
+          message: `A store legada "lotes" ainda tem ${count} registro(s) e o banco não foi alterado. Abra a versão anterior do aplicativo (${LEGACY_LOTES_APP_VERSION}), exporte ou limpe esses dados em Backup e Manutenção e só então atualize para a versão ${targetVersion} do banco.`,
         });
       }
     }
@@ -79,6 +83,41 @@ export async function prepareMigration({ files = null, inspection = null } = {})
 }
 
 /**
+ * Grava o estado técnico PENDENTE com a referência do backup ANTES de abrir o
+ * banco na versão nova (a store appSettings já existe na versão de origem). Fecha
+ * a janela de crash entre o backup e a abertura: quem reabrir encontra o estado
+ * e o backup registrados. Estado já existente sem backup é reconciliado.
+ */
+export async function recordPendingMigrationBeforeOpen({ backup, inspection }) {
+  const probe = await openDynamic();
+  try {
+    if (!probe.tables.some((table) => table.name === 'appSettings')) return null;
+    const previous = await readMigrationState(probe, DB_VERSION);
+    if (!previous || previous.status === MIGRATION_STATUS.CONCLUIDA) {
+      // await obrigatório: o finally fecha o probe e a gravação precisa ter terminado.
+      return await writeMigrationState(probe, DB_VERSION, {
+        status: MIGRATION_STATUS.PENDENTE,
+        origem: `upgrade-v${inspection.currentVersion}`,
+        backup,
+        started_at: null,
+        finished_at: null,
+        error: null,
+        passos_concluidos: [],
+        processed: 0,
+        total: 0,
+        cursor: null,
+        passo: null,
+        last_checkpoint: null,
+      });
+    }
+    if (!previous.backup && backup) return await writeMigrationState(probe, DB_VERSION, { backup });
+    return previous;
+  } finally {
+    probe.close();
+  }
+}
+
+/**
  * Reentrante: lê appSettings['migration:vN'] e continua do checkpoint.
  * Em sucesso limpa o bloqueio de escrita; em falha bloqueia e relança MIGRATION_FAILED.
  */
@@ -99,6 +138,21 @@ export async function runPendingBackfills({ onProgress, maxBatches, files = null
   }
 }
 
+// Só é alcançado se a gravação pré-abertura não pôde acontecer (sem appSettings na origem).
+async function recordPendingMigrationBeforeOpenFallback(db, { backup, inspection }) {
+  return writeMigrationState(db, DB_VERSION, {
+    status: MIGRATION_STATUS.PENDENTE,
+    origem: `upgrade-v${inspection.currentVersion}`,
+    backup,
+    started_at: null,
+    finished_at: null,
+    error: null,
+    passos_concluidos: [],
+    processed: 0,
+    total: 0,
+  });
+}
+
 /** Estado técnico + bloqueio de escrita em memória (Manutenção e diagnóstico). */
 export async function getMigrationState(version = DB_VERSION) {
   const db = await ensureStorageReady();
@@ -115,11 +169,14 @@ export async function dryRunBackfill(version = DB_VERSION) {
 }
 
 /**
- * inspect → prepare (se necessário) → open → runPendingBackfills.
+ * inspect → prepare (se necessário) → estado PENDENTE + backup gravados na versão
+ * antiga → open → runPendingBackfills.
  * Devolve { migrated, report, state, blocked, error, inspection, backup }.
  * Lança (fail closed, banco não aberto na versão nova): MIGRATION_BLOCKED_LOTES,
  * MIGRATION_BACKUP_FAILED. Falha no backfill NÃO lança: devolve blocked=true com
  * a escrita bloqueada, para que Manutenção possa continuar a migração.
+ * `hooks.beforeOpen({ inspection, backup })` (gates) roda depois de gravar o
+ * estado e antes de abrir na versão nova.
  */
 export async function openWithMigration({ files = null, onProgress, hooks = null } = {}) {
   const inspection = await inspectDatabase();
@@ -138,23 +195,19 @@ export async function openWithMigration({ files = null, onProgress, hooks = null
       throw err;
     }
   }
+  if (migrated) {
+    await recordPendingMigrationBeforeOpen({ backup, inspection });
+    if (hooks?.beforeOpen) await hooks.beforeOpen({ inspection, backup });
+  }
   const db = await ensureStorageReady();
   if (migrated) {
+    // Reconciliação pós-abertura: o estado já existe (gravado antes do upgrade);
+    // só completa a referência do backup se por algum motivo estiver nula.
     const previous = await readMigrationState(db, DB_VERSION);
     if (!previous || previous.status === MIGRATION_STATUS.CONCLUIDA) {
-      await writeMigrationState(db, DB_VERSION, {
-        status: MIGRATION_STATUS.PENDENTE,
-        origem: `upgrade-v${inspection.currentVersion}`,
-        backup,
-        started_at: null,
-        finished_at: null,
-        error: null,
-        passos_concluidos: [],
-        processed: 0,
-        total: 0,
-      });
-    } else {
-      await writeMigrationState(db, DB_VERSION, { backup: previous.backup || backup });
+      await recordPendingMigrationBeforeOpenFallback(db, { backup, inspection });
+    } else if (!previous.backup && backup) {
+      await writeMigrationState(db, DB_VERSION, { backup });
     }
     if (backup && !backup.skipped) await recordBackupHistory('pre-migration', backup);
   }

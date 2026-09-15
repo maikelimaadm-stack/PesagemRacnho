@@ -1,5 +1,13 @@
 // Regras de normalização compartilhadas por backfill, adapters e integridade
 // (docs/arquitetura-produto/12-MODELO-DADOS-V7-V8.md §1 e §3.2).
+import { STORES } from './schema.js';
+
+// Campo do operador autenticado da sessão de pesagem, derivado do índice declarado
+// no esquema (`operador_usuario_id` na revisão 2 do documento 12; `operador_user_id`
+// na revisão 1). Backfill B9, adapter de pesagens e integridade usam o mesmo nome.
+export const SESSION_OPERATOR_FIELD = String(STORES.sessoesPesagem || '').includes('operador_usuario_id')
+  ? 'operador_usuario_id'
+  : 'operador_user_id';
 
 /** nome_normalizado: trim → maiúsculas pt-BR → espaços internos únicos. */
 export function normalizeName(value) {

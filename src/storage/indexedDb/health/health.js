@@ -1,7 +1,8 @@
 // Integridade lógica do modelo Dexie: IDs, duplicidades, datas, referências e
 // contrato v7 (enums, ids de cadastro, unicidade VISUAL por marca, usuários).
 import { ensureStorageReady, getDbVersion } from '../db.js';
-import { ANIMAL_SITUACOES, DOMAIN_STORES, IDENTIFICADOR_TIPOS, SESSAO_STATUS, STORE_NAMES } from '../schema.js';
+import { ANIMAL_SITUACOES, DOMAIN_STORES, IDENTIFICADOR_TIPOS, SESSAO_STATUS, STORE_NAMES, USERS_STORE } from '../schema.js';
+import { SESSION_OPERATOR_FIELD } from '../normalize.js';
 import { parseCivilDate } from '../../../modules/weighing/domain/brazilianValues.js';
 import { MIGRATION_STATUS, readMigrationState } from '../../migrations/migrationState.js';
 
@@ -115,20 +116,25 @@ export async function logicalIntegrity({ enforceV7 = null } = {}) {
     if (link.fim && (!parseCivilDate(link.fim) || link.fim < link.inicio)) issues.push(`animalLotes ${link.id}: fim inválido ou anterior ao início`);
   }
 
+  // Usuários locais (ADR-043, docs 11 §2): todo usuário ativo precisa de
+  // password_hash e password_salt. O diagnóstico cita somente id e login — nunca
+  // o conteúdo das credenciais. Usuários excluídos também contam como referência
+  // válida (nunca se apaga usuário citado em auditoria/sessões).
+  const allUsers = await db.table(USERS_STORE).toArray();
+  const userIds = new Set(allUsers.map((user) => String(user.id)));
+  for (const user of allUsers) {
+    if (user.deleted_at || user.ativo === false) continue;
+    if (!user.password_hash || !user.password_salt) issues.push(`${USERS_STORE} ${user.id}: usuário ativo sem credencial completa (${user.login || 'sem login'})`);
+  }
+
   for (const session of sessions) {
     if (!parseCivilDate(session.data)) issues.push(`sessoesPesagem ${session.id}: data inválida`);
     if (v7Contract && !SESSAO_STATUS.includes(session.status)) issues.push(`sessoesPesagem ${session.id}: status fora do enum (${session.status ?? 'vazio'})`);
-  }
-
-  // Usuários locais (ADR-035/043): todo usuário ativo precisa de hash e salt
-  // (`password_*` na rev. 2 do documento 11, `senha_*` na rev. 1). O diagnóstico
-  // cita somente id e login — nunca o conteúdo das credenciais.
-  const usersStore = STORE_NAMES.includes('usuarios') ? 'usuarios' : 'usuariosLocais';
-  for (const user of await active(usersStore)) {
-    if (user.ativo === false) continue;
-    const hash = user.password_hash ?? user.senha_hash;
-    const salt = user.password_salt ?? user.senha_salt;
-    if (!hash || !salt) issues.push(`${usersStore} ${user.id}: usuário ativo sem credencial completa (${user.login || 'sem login'})`);
+    // Operador autenticado (docs 11 §7): quando informado, precisa existir em `usuarios`.
+    const operatorId = session[SESSION_OPERATOR_FIELD];
+    if (v7Contract && operatorId != null && !userIds.has(String(operatorId))) {
+      issues.push(`sessoesPesagem ${session.id}: ${SESSION_OPERATOR_FIELD} órfão ${operatorId}`);
+    }
   }
 
   return { ok: issues.length === 0, result: issues.length === 0 ? 'ok' : 'issues', issues, v7Contract };

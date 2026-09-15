@@ -1,7 +1,8 @@
-// Gate dos cadastros mestres (ADR-018, docs 12 §3.1): unicidade normalizada,
-// inativação com vínculo, resolução por nome, padrão único, permissão, seeds
-// idempotentes e resolvedor. Cada regra tem o caso negativo (o comportamento
-// incorreto deve falhar).
+// Gate dos cadastros mestres (ADR-018, docs 12 §3.1; contrato rev. 2): unicidade
+// normalizada, referências, padrão só em ativo, vínculo HISTÓRICO bloqueia a
+// exclusão, resolução por nome, permissão pela sessão (ADR-042/046), auditoria
+// com usuario_id/usuario_nome_snapshot, seeds idempotentes (fonte única em
+// domain/seeds.js) e resolvedor. Cada regra tem o caso negativo.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -9,7 +10,9 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deleteDbForTests, ensureStorageReady } from '../src/storage/indexedDb/db.js';
 import { PARCEIRO_PAPEIS } from '../src/storage/indexedDb/schema.js';
+import { setActorProvider } from '../src/storage/indexedDb/auditActor.js';
 import {
+  INACTIVE_DEFAULT_MESSAGE,
   REGISTRY_DEFINITIONS,
   brandService,
   breedService,
@@ -19,9 +22,14 @@ import {
   getRegistryService,
   partnerService,
   propertyService,
+  resolveMany,
+  resolveNamesAgainst,
 } from '../src/modules/catalog/application/index.js';
+import * as registryServices from '../src/modules/catalog/application/registryServices.js';
 import { normalizeDocument, normalizeName } from '../src/modules/catalog/domain/normalize.js';
-import { resolveMany, resolveNamesAgainst } from '../src/modules/catalog/domain/catalogResolver.js';
+import * as domainResolver from '../src/modules/catalog/domain/catalogResolver.js';
+import * as applicationResolver from '../src/modules/catalog/application/catalogResolver.js';
+import { CATEGORIAS_SEED, PROPRIEDADE_PADRAO_SEED, RACA_PADRAO_SEED, applySeeds, ensureSeeds as ensureSeedsFromDomain } from '../src/modules/catalog/domain/seeds.js';
 import { loadAuxiliaryCatalogs } from '../src/modules/auxiliary/application/legacyCatalogBridge.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -67,6 +75,14 @@ for (const def of REGISTRY_DEFINITIONS) {
 const papeisCampo = REGISTRY_DEFINITIONS.find((d) => d.store === 'parceiros').campos.find((c) => c.id === 'papeis');
 assert.deepEqual(papeisCampo.opcoes.map((o) => o.value), PARCEIRO_PAPEIS, 'papéis vêm exatamente de schema.js');
 assert.throws(() => getRegistryService('inexistente'), /desconhecido/);
+// Um módulo por responsabilidade: o índice reexporta as MESMAS instâncias e funções.
+assert.equal(brandService, registryServices.brandService, 'índice reexporta a instância única de registryServices.js');
+assert.equal(getRegistryService, registryServices.getRegistryService);
+assert.equal(resolveMany, applicationResolver.resolveMany, 'resolveMany vive em application/catalogResolver.js');
+assert.equal(resolveNamesAgainst, domainResolver.resolveNamesAgainst, 'parte pura vive em domain/catalogResolver.js');
+assert.equal(typeof domainResolver.buildNameIndex, 'function');
+assert.ok(!('resolveMany' in domainResolver), 'domínio não conhece serviços (sem resolveMany)');
+assert.equal(ensureSeeds, ensureSeedsFromDomain, 'ensureSeeds é o de domain/seeds.js (fonte única do backfill)');
 ok('definicoes');
 
 // ---------------------------------------------------------------------------
@@ -144,9 +160,16 @@ for (const caso of casos) {
   const acoes = new Set(trilha.map((a) => a.acao));
   for (const acao of ['CRIAR', 'ATUALIZAR', 'INATIVAR', 'CANCELAR']) assert.ok(acoes.has(acao), `${store}: auditoria ${acao}`);
   assert.ok(trilha.every((a) => a.entidade_id && a.resumo && a.created_at), `${store}: auditoria com resumo`);
-  assert.ok(trilha.every((a) => a.actor_user_id === GESTOR.id && a.actor_user_profile === 'GESTOR'), `${store}: auditoria com ator`);
+  assert.ok(trilha.every((a) => a.usuario_id === GESTOR.id && a.usuario_nome_snapshot === GESTOR.nome), `${store}: auditoria com usuario_id/usuario_nome_snapshot (rev. 2)`);
+  assert.ok(trilha.every((a) => !('actor_user_id' in a) && !('actor_user_profile' in a)), `${store}: sem campos actor_user_* (rev. 1)`);
   const alteracao = trilha.find((a) => a.acao === 'ATUALIZAR' && a.campos_alterados.includes(Object.keys(caso.patch)[0]));
   assert.ok(alteracao, `${store}: campos_alterados registrados`);
+  // CRIAR: resumo + campos, sem `depois` completo; CANCELAR: `antes` só com id/nome (ADR-046).
+  const criar = trilha.find((a) => a.acao === 'CRIAR' && a.entidade_id === created.id);
+  assert.ok(criar && !('depois' in criar) && criar.campos_alterados.includes('nome'), `${store}: CRIAR sem depois completo, com campos`);
+  assert.match(criar.resumo, /^Criou .*"/, `${store}: CRIAR com resumo`);
+  const cancelar = trilha.find((a) => a.acao === 'CANCELAR' && a.entidade_id === outro.id);
+  assert.deepEqual(cancelar.antes, { id: outro.id, nome: outro.nome }, `${store}: CANCELAR guarda antes só com o essencial`);
 
   resumo.cadastros[store] = { crud: true, duplicado: true, auditoria: trilha.length };
   caso.id = created.id;
@@ -154,9 +177,12 @@ for (const caso of casos) {
 ok('crud-por-cadastro');
 
 // ---------------------------------------------------------------------------
-// Permissão: OPERADOR recusado (fallback local ou assertCan oficial); sem ator permitido.
+// Permissão (ADR-042/046): OPERADOR/CONSULTA recusados com AUTH_FORBIDDEN; papel da
+// sessão quando o chamador não informa; só sem sessão E sem ator é liberado.
 // ---------------------------------------------------------------------------
-const FORBIDDEN = /^(REGISTRY_FORBIDDEN|AUTH_FORBIDDEN)$/;
+const FORBIDDEN = /^AUTH_FORBIDDEN$/;
+await rejects(brandService.create({ id: 'u-consulta', perfil: 'CONSULTA' }, { nome: 'Marca da consulta' }), FORBIDDEN, 'CONSULTA não cria');
+await rejects(brandService.create({ id: 'u-sem-papel' }, { nome: 'Marca sem papel' }), FORBIDDEN, 'ator identificado sem papel é recusado');
 await rejects(brandService.create(OPERADOR, { nome: 'Marca do operador' }), FORBIDDEN, 'OPERADOR não cria');
 await rejects(brandService.update(OPERADOR, casos[0].id, { abreviacao: 'X' }), FORBIDDEN, 'OPERADOR não altera');
 await rejects(brandService.deactivate(OPERADOR, casos[0].id), FORBIDDEN, 'OPERADOR não inativa');
@@ -169,11 +195,26 @@ assert.ok(semAtor.id, 'sem ator (gates/migração) é permitido');
 const admin = await breedService.create({ id: 'u-admin', perfil: 'ADMIN' }, { nome: 'Por admin' });
 assert.ok(admin.id, 'ADMIN permitido');
 const auditSemAtor = await db.table('auditoria').where('entidade_id').equals(semAtor.id).first();
-assert.equal(auditSemAtor.actor_user_id, null, 'auditoria sem sessão fica com ator nulo');
+assert.equal(auditSemAtor.usuario_id, null, 'auditoria sem sessão fica com ator nulo');
+assert.equal(auditSemAtor.usuario_nome_snapshot, null);
 await breedService.remove(GESTOR, semAtor.id);
 await breedService.remove(GESTOR, admin.id);
-const accessPolicyExists = existsSync(join(root, 'src/modules/auth/domain/accessPolicy.js'));
-ok(`permissao(${accessPolicyExists ? 'accessPolicy presente' : 'fallback local'})`);
+// Sessão OPERADOR sem ator na chamada → recusado; sessão GESTOR → permitido e auditado com a sessão.
+setActorProvider(() => ({ id: 'u-sessao-op', nome: 'Operador Sessão', role: 'OPERADOR' }));
+await rejects(brandService.create(null, { nome: 'Marca sessão operador' }), FORBIDDEN, 'papel da sessão (OPERADOR) recusa sem ator explícito');
+setActorProvider(() => ({ id: 'u-sessao-gestor', nome: 'Gestora Sessão', role: 'GESTOR' }));
+const porSessao = await breedService.create(null, { nome: 'Por sessão' });
+const auditSessao = await db.table('auditoria').where('entidade_id').equals(porSessao.id).first();
+assert.equal(auditSessao.usuario_id, 'u-sessao-gestor', 'auditoria usa o usuário da sessão');
+assert.equal(auditSessao.usuario_nome_snapshot, 'Gestora Sessão');
+const porSessaoComAtor = await breedService.create(GESTOR, { nome: 'Por sessão com ator' });
+const auditSessao2 = await db.table('auditoria').where('entidade_id').equals(porSessaoComAtor.id).first();
+assert.equal(auditSessao2.usuario_id, 'u-sessao-gestor', 'com sessão, a auditoria grava a sessão (ator da chamada é só fallback)');
+setActorProvider(null);
+await breedService.remove(GESTOR, porSessao.id);
+await breedService.remove(GESTOR, porSessaoComAtor.id);
+assert.ok(existsSync(join(root, 'src/modules/auth/domain/accessPolicy.js')), 'fachada accessPolicy.js presente (assertCan)');
+ok('permissao');
 
 // ---------------------------------------------------------------------------
 // Validações específicas (todas NEGATIVAS)
@@ -226,11 +267,27 @@ for (const service of [brandService, breedService, propertyService]) {
   await service.update(GESTOR, b.id, { padrao: true });
   padroes = (await service.list()).filter((r) => r.padrao === true);
   assert.deepEqual(padroes.map((r) => r.id), [b.id], `${service.store}: update padrao=true desmarca o outro`);
-  await service.deactivate(GESTOR, b.id);
+  const inativadoPadrao = await service.deactivate(GESTOR, b.id);
   assert.equal(await service.getDefault(), null, `${service.store}: inativar o padrão limpa o padrão`);
-  // NEGATIVO: inativo não pode ser padrão
+  assert.equal(inativadoPadrao.padrao, false);
+  assert.match(inativadoPadrao.aviso ?? '', /deixou de ser o padrão/, `${service.store}: inativar o padrão avisa`);
+  assert.ok(!('aviso' in (await service.get(b.id))), `${service.store}: aviso não é persistido`);
+  const semAviso = await service.deactivate(GESTOR, a.id);
+  assert.ok(!('aviso' in semAviso), `${service.store}: inativar quem não é padrão não avisa`);
+  await service.activate(GESTOR, a.id);
+  // NEGATIVO: inativo não pode ser padrão (setDefault, update, create)
   await rejects(service.setDefault(GESTOR, b.id), 'REGISTRY_INVALID', `${service.store}: inativo não vira padrão`);
+  await rejects(service.update(GESTOR, b.id, { padrao: true }), 'REGISTRY_INVALID', `${service.store}: update padrao=true em inativo`);
+  await assert.rejects(service.create(GESTOR, { nome: `${service.store} inativo padrão`, ativo: false, padrao: true }), (err) => {
+    assert.equal(err.code, 'REGISTRY_INVALID');
+    assert.equal(err.message, INACTIVE_DEFAULT_MESSAGE, `${service.store}: mensagem do contrato`);
+    return true;
+  }, `${service.store}: create inativo com padrao=true`);
+  await rejects(service.update(GESTOR, a.id, { ativo: false, padrao: true }), 'REGISTRY_INVALID', `${service.store}: update inativando e marcando padrão`);
+  assert.equal(await service.getDefault(), null, `${service.store}: recusas não gravam padrão`);
   await service.activate(GESTOR, b.id);
+  await service.setDefault(GESTOR, b.id);
+  assert.equal((await service.getDefault()).id, b.id, `${service.store}: reativado pode voltar a ser padrão`);
   await service.remove(GESTOR, a.id);
   await service.remove(GESTOR, b.id);
 }
@@ -241,7 +298,40 @@ for (const service of [categoryService, partnerService, deathCauseService]) {
 ok('padrao-unico');
 
 // ---------------------------------------------------------------------------
-// Vínculo: remover com uso falha (REGISTRY_IN_USE com contagem); inativar é o caminho.
+// Referências: id inexistente, inativo (salvo já gravado) e papel errado são recusados.
+// ---------------------------------------------------------------------------
+{
+  const donoOk = await partnerService.create(GESTOR, { nome: 'Dono Ok', papeis: ['PROPRIETARIO'] });
+  const semPapel = await partnerService.create(GESTOR, { nome: 'Sem Papel Proprietário', papeis: ['COMPRADOR'] });
+  const donoInativo = await partnerService.create(GESTOR, { nome: 'Dono Inativo', papeis: ['PROPRIETARIO'] });
+  const propOk = await propertyService.create(GESTOR, { nome: 'Propriedade Ref' });
+  await rejects(brandService.create(GESTOR, { nome: 'Marca ref inexistente', proprietario_parceiro_id: 'nao-existe' }), 'REGISTRY_INVALID', 'referência inexistente (parceiro)');
+  await rejects(brandService.create(GESTOR, { nome: 'Marca prop inexistente', propriedade_id: 'nao-existe' }), 'REGISTRY_INVALID', 'referência inexistente (propriedade)');
+  await rejects(brandService.create(GESTOR, { nome: 'Marca papel errado', proprietario_parceiro_id: semPapel.id }), 'REGISTRY_INVALID', 'parceiro sem papel PROPRIETARIO');
+  await rejects(propertyService.create(GESTOR, { nome: 'Prop dono inexistente', tipo: 'TERCEIRO', parceiro_id: 'nao-existe' }), 'REGISTRY_INVALID', 'propriedade com parceiro inexistente');
+  const marcaRef = await brandService.create(GESTOR, { nome: 'Marca ref ok', proprietario_parceiro_id: donoInativo.id, propriedade_id: propOk.id });
+  assert.equal(marcaRef.proprietario_parceiro_id, donoInativo.id, 'referência ativa com papel certo é aceita');
+  await partnerService.deactivate(GESTOR, donoInativo.id);
+  await rejects(brandService.create(GESTOR, { nome: 'Marca dono inativo', proprietario_parceiro_id: donoInativo.id }), 'REGISTRY_INVALID', 'referência inativa recusada em registro novo');
+  const mantida = await brandService.update(GESTOR, marcaRef.id, { abreviacao: 'MR' });
+  assert.equal(mantida.proprietario_parceiro_id, donoInativo.id, 'valor já gravado (agora inativo) continua aceito no update');
+  await rejects(brandService.update(GESTOR, marcaRef.id, { proprietario_parceiro_id: donoOk.id, propriedade_id: 'nao-existe' }), 'REGISTRY_INVALID', 'update com nova referência inexistente');
+  const trocada = await brandService.update(GESTOR, marcaRef.id, { proprietario_parceiro_id: donoOk.id });
+  assert.equal(trocada.proprietario_parceiro_id, donoOk.id, 'trocar para referência ativa passa');
+  await partnerService.activate(GESTOR, donoInativo.id);
+  // Excluir referenciado é bloqueado (vínculo por marca) — o caminho é inativar.
+  await rejects(partnerService.remove(GESTOR, donoOk.id), 'REGISTRY_IN_USE', 'parceiro proprietário de marca não é excluído');
+  await rejects(propertyService.remove(GESTOR, propOk.id), 'REGISTRY_IN_USE', 'propriedade ligada à marca não é excluída');
+  await brandService.remove(GESTOR, marcaRef.id);
+  for (const id of [donoOk.id, semPapel.id, donoInativo.id]) await partnerService.remove(GESTOR, id);
+  await propertyService.remove(GESTOR, propOk.id);
+  ok('referencias');
+}
+
+// ---------------------------------------------------------------------------
+// Vínculo HISTÓRICO: remover com qualquer registro não excluído citando o cadastro
+// falha (REGISTRY_IN_USE); countUsage (coluna "Em uso") conta só o uso atual;
+// describeUsage informa ambos. Inativar é o caminho.
 // ---------------------------------------------------------------------------
 const [marca, raca, categoria, parceiro, propriedade, causa] = casos.map((c) => c.id);
 const ts = new Date().toISOString();
@@ -266,20 +356,30 @@ await db.table('pesagens').add({
   created_at: ts, updated_at: ts, deleted_at: null,
 });
 await db.table('embarques').add({ id: 'embarque-vinculo', data: '2026-09-02', status: 'PLANEJADO', parceiro_id: parceiro, created_at: ts, updated_at: ts, deleted_at: null });
+// Vínculos exclusivos de marca: identificador por marca, faixa (inativa) e sessão com marca padrão.
+await db.table('animalIdentificadores').add({ id: 'ident-marca', animal_id: 'animal-vinculo', tipo: 'VISUAL', valor: '1', valor_normalizado: '1', marca_id: marca, ativo: true, created_at: ts, updated_at: ts, deleted_at: null });
+await db.table('animalIdentificadores').add({ id: 'ident-marca-excluido', animal_id: 'animal-vinculo', tipo: 'VISUAL', valor: '2', valor_normalizado: '2', marca_id: marca, ativo: true, created_at: ts, updated_at: ts, deleted_at: ts });
+await db.table('faixasIdentificadores').add({ id: 'faixa-marca', empresa_id: 'local', tipo: 'VISUAL', marca_id: marca, situacao: 'ESGOTADA', ativo: false, created_at: ts, updated_at: ts, deleted_at: null });
+await db.table('sessoesPesagem').add({ id: 'sessao-marca', data: '2026-09-02', status: 'FECHADA', operador: 'LOCAL', marca_padrao_id: marca, created_at: ts, updated_at: ts, deleted_at: null });
 
+// [service, id, uso atual (coluna), uso histórico (bloqueia exclusão)]
 const vinculos = [
-  [brandService, marca, 2],
-  [breedService, raca, 1],
-  [categoryService, categoria, 1],
-  [propertyService, propriedade, 1],
-  [partnerService, parceiro, 2],
-  [deathCauseService, causa, 1],
+  [brandService, marca, 2, 5],
+  [breedService, raca, 1, 1],
+  [categoryService, categoria, 1, 1],
+  [propertyService, propriedade, 1, 1],
+  [partnerService, parceiro, 2, 2],
+  [deathCauseService, causa, 1, 1],
 ];
-for (const [service, id, esperado] of vinculos) {
-  assert.equal(await service.countUsage(id), esperado, `${service.store}: countUsage`);
+for (const [service, id, atual, historico] of vinculos) {
+  assert.equal(await service.countUsage(id), atual, `${service.store}: countUsage (uso atual)`);
+  const descricao = await service.describeUsage(id);
+  assert.equal(descricao.total_atual, atual, `${service.store}: describeUsage.total_atual`);
+  assert.equal(descricao.total_historico, historico, `${service.store}: describeUsage.total_historico`);
+  assert.ok(descricao.atual && descricao.historico, `${service.store}: describeUsage informa atual e histórico`);
   await assert.rejects(service.remove(GESTOR, id), (err) => {
     assert.equal(err.code, 'REGISTRY_IN_USE', `${service.store}: remove com vínculo`);
-    assert.equal(err.details.uso, esperado, `${service.store}: erro traz a contagem`);
+    assert.equal(err.details.uso, historico, `${service.store}: erro traz a contagem histórica`);
     assert.match(err.message, /inative/i, `${service.store}: mensagem orienta a inativar`);
     return true;
   });
@@ -288,24 +388,41 @@ for (const [service, id, esperado] of vinculos) {
   assert.equal(inativado.ativo, false, `${service.store}: inativar com vínculo é permitido`);
   await service.activate(GESTOR, id);
 }
-// Vínculo desfeito → exclusão passa (animal deixou de ser ativo; evento excluído logicamente).
+assert.deepEqual((await brandService.describeUsage(marca)).historico, { animais: 2, identificadores: 1, faixas: 1, sessoes: 1 }, 'marca: histórico por origem (identificador excluído não conta)');
+// Animal que deixou de ser ATIVO sai da coluna "Em uso" mas segue bloqueando a exclusão (histórico).
 await db.table('animais').where('id').equals('animal-vinculo').modify({ situacao: 'VENDIDO' });
 await db.table('animais').where('id').equals('animal-legado').modify({ deleted_at: ts });
 await db.table('pesagens').where('id').equals('pesagem-morte').modify({ deleted_at: ts });
-assert.equal(await brandService.countUsage(marca), 0, 'animal vendido/excluído não conta como vínculo');
+assert.equal(await brandService.countUsage(marca), 0, 'animal vendido/excluído não conta como uso atual');
+assert.equal((await brandService.describeUsage(marca)).total_historico, 4, 'animal vendido continua no histórico da marca');
+assert.equal(await breedService.countUsage(raca), 0, 'raça sem animal ativo');
+await rejects(breedService.remove(GESTOR, raca), 'REGISTRY_IN_USE', 'NEGATIVO: animal VENDIDO ainda bloqueia a exclusão da raça');
+await rejects(brandService.remove(GESTOR, marca), 'REGISTRY_IN_USE', 'NEGATIVO: identificador/faixa/sessão ainda bloqueiam a marca');
 assert.equal(await deathCauseService.countUsage(causa), 0, 'evento excluído não conta');
 assert.equal(await partnerService.countUsage(parceiro), 2, 'embarque + evento de abate ainda contam');
-assert.equal(await breedService.remove(GESTOR, raca), true, 'remove após desfazer vínculo');
+// Só a exclusão lógica do que cita o cadastro libera a exclusão.
+await db.table('animais').where('id').equals('animal-vinculo').modify({ deleted_at: ts });
+assert.equal((await breedService.describeUsage(raca)).total_historico, 0, 'animal excluído não conta no histórico');
+assert.equal(await breedService.remove(GESTOR, raca), true, 'remove após excluir o vínculo');
 await breedService.create(GESTOR, casos[1].dados); // repõe a raça para o resolver
-ok('vinculo-in-use');
+ok('vinculo-historico');
 
 // ---------------------------------------------------------------------------
 // Seeds idempotentes
 // ---------------------------------------------------------------------------
 await deleteDbForTests();
 db = await ensureStorageReady();
+assert.deepEqual(CATEGORIAS_SEED.map((c) => [c.nome, c.sexo_aplicavel, c.idade_min_meses, c.idade_max_meses]), [
+  ['Bezerro', 'M', 0, 12], ['Bezerra', 'F', 0, 12], ['Garrote', 'M', 13, 24], ['Novilha', 'F', 13, 36],
+  ['Boi', 'M', 25, null], ['Vaca', 'F', 37, null], ['Touro', 'M', 25, null],
+], 'CATEGORIAS_SEED com sexo e faixas do contrato (docs 12 §3.1)');
+assert.deepEqual(RACA_PADRAO_SEED, { nome: 'Nelore', grupo: 'ZEBUINO', ordem: 1 });
+assert.equal(PROPRIEDADE_PADRAO_SEED.tipo, 'PROPRIA');
+assert.ok(Object.isFrozen(CATEGORIAS_SEED) && CATEGORIAS_SEED.every((c) => Object.isFrozen(c)), 'seeds imutáveis');
+assert.equal(typeof applySeeds, 'function');
 const seed1 = await ensureSeeds('local');
 assert.deepEqual(seed1, { categoriasAnimal: 7, racas: 1, propriedades: 1 }, 'primeira execução semeia tudo');
+assert.ok(CATEGORIAS_SEED.every((c) => !('id' in c)), 'seed não carrega id fixo');
 const seed2 = await ensureSeeds('local');
 assert.deepEqual(seed2, { categoriasAnimal: 0, racas: 0, propriedades: 0 }, 'segunda execução não cria nada');
 const categorias = await categoryService.list();
@@ -376,7 +493,15 @@ const puro = resolveNamesAgainst([
 assert.deepEqual(puro, { ids: { x: 'a' }, desconhecidos: ['y'] }, 'prefere ativo; desconhecidos sem repetição');
 
 const legado = await loadAuxiliaryCatalogs('local');
-assert.deepEqual(Object.keys(legado).sort(), ['causasMorte', 'compradores', 'frigorificos', 'vendedores'], 'shape do Lançamento');
+assert.deepEqual(Object.keys(legado).sort(), ['categorias', 'causasMorte', 'compradores', 'frigorificos', 'marcas', 'racas', 'vendedores'], 'shape do Lançamento (+ seletores marcas/racas/categorias)');
+assert.deepEqual(legado.marcas, [{ id: marcaR.id, nome: 'ABC', padrao: false }], 'marcas: só ativas, { id, nome, padrao } (a inativa "Antiga" foi excluída; excluída não entra)');
+assert.ok(legado.racas.some((r) => r.id === nelore.id && r.padrao === true), 'racas: Nelore padrão');
+assert.ok(legado.racas.every((r) => Object.keys(r).sort().join() === 'id,nome,padrao'), 'seletor enxuto');
+assert.deepEqual(legado.categorias.map((c) => c.nome), (await categoryService.list()).map((c) => c.nome), 'categorias ativas na ordem do serviço');
+const marcaInativaBridge = await brandService.create(GESTOR, { nome: 'Marca inativa bridge' });
+await brandService.deactivate(GESTOR, marcaInativaBridge.id);
+assert.ok(!(await loadAuxiliaryCatalogs('local')).marcas.some((m) => m.id === marcaInativaBridge.id), 'NEGATIVO: marca inativa não entra nos seletores');
+await brandService.remove(GESTOR, marcaInativaBridge.id);
 assert.deepEqual(legado.compradores.map((i) => [i.nome, i.ativo]), [['Comprador Antigo', false], ['João Comprador', true]], 'compradores por papel, inativos incluídos');
 assert.equal(legado.vendedores[0].nome, 'Maria Vendedora');
 assert.equal(legado.vendedores[0].propriedade, 'Fazenda da Maria', 'vendedor traz a propriedade ligada');
