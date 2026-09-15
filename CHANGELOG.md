@@ -132,6 +132,33 @@ Instalador não gerado neste marco; teste físico NÃO EXECUTADO.
   já está documentado em `docs/engineering/AUTH-THREAT-MODEL.md`. Distribuição oficial
   continua bloqueada sem certificado Authenticode; nenhum pacote foi gerado neste marco.
 
+## [1.1.17] — 2026-09-10
+
+Build de diagnóstico (`release-unsigned/Pesagens Individuais Setup 1.1.17.exe`, sem assinatura
+Authenticode), visual D.17D.2R31, baseado no arquivo `Lançamento de Pesagens.dc.html` de 09/09/2026.
+Notas em `docs/release/1.1.17/`.
+
+### Added
+- Faixa única de Animal, Última, Ganho, tendência e avisos na tela de lançamento.
+
+### Changed
+- Tela de lançamento reconstruída com a malha, dimensões, cores, tabela, rodapé e painel lateral do
+  modelo aprovado (R29–R33); visualização inicial com 14 colunas e demais campos em Configuração de colunas.
+- Modo escuro e pop-ups conferidos com o mesmo sistema de componentes.
+- Identificação por múltiplas marcas resolvida ao sair do campo, não durante a digitação.
+
+### Fixed
+- Prévia de ganho corrigida para números/datas brasileiros e ordem cronológica.
+
+### Removed
+- Nenhum.
+
+### Migration
+- Nenhuma — esquema Dexie 6 e backup formato 2 inalterados.
+
+### Security
+- Nenhuma alteração; pacote de diagnóstico sem assinatura (não é release oficial).
+
 ## [1.1.16] — 2026-09-04
 
 ### Corrigido
