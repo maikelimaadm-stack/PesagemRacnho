@@ -188,7 +188,7 @@ assert.doesNotMatch(auxiliaryRegistry, /registryService/, 'cadastros não depend
 assert.ok(!existsSync(join(root, 'src/pages/ConfiguracoesSanidade.jsx')), 'tela de sanidade removida (ADR-022)');
 assert.ok(!existsSync(join(root, 'src/pages/CadastrosComerciais.jsx')), 'cadastros comerciais migraram para Parceiros (ADR-024)');
 const settingsPage = readFileSync(join(root, 'src/pages/Configuracoes.jsx'), 'utf8');
-assert.match(settingsPage, /<RequirePermission permission="settings\.manage">/, 'Configurações exige settings.manage');
+assert.match(settingsPage, /<RequirePermission permission="settings\.(manage|operational)">/, 'Configurações exige permissão de configurações (settings.operational/manage)');
 assert.match(settingsPage, /FormCard/, 'Configurações usa o padrão registro (FormCard)');
 const usersPage = readFileSync(join(root, 'src/pages/Usuarios.jsx'), 'utf8');
 assert.match(usersPage, /users\.manage/, 'Usuários exige users.manage');

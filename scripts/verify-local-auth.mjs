@@ -47,7 +47,7 @@ assert.equal(USERS_STORE, 'usuarios');
 assert.match(STORES.usuarios, /&login_normalizado/, 'login_normalizado único');
 assert.match(STORES.usuarios, /\brole\b/, 'índice role');
 assert.ok(!/password|recovery|senha/.test(STORES.usuarios), 'hash/salt nunca indexados');
-assert.equal(STORES.usuariosLocais, undefined, 'store da rev. 1 não existe');
+assert.equal(STORES.usuarios, undefined, 'store da rev. 1 não existe');
 for (const name of ['authenticate', 'countActiveUsers', 'bootstrapFirstAdmin', 'findActiveUser', 'createUser', 'updateUser', 'setActive', 'resetPassword', 'forcePasswordChange', 'changeOwnPassword', 'recoverAdminPassword', 'listUsers', 'getLockState', 'registerLogout']) {
   assert.equal(typeof auth[name], 'function', `localAuthService.${name}`);
   assert.equal(authServiceAlias[name], auth[name], `authService.js reexporta ${name}`);

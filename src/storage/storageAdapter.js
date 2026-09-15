@@ -57,7 +57,6 @@ export const storage = {
   faixasIdentificadores: repos.faixaIdentificadorRepository,
   excecoesIdentificadores: repos.excecaoIdentificadorRepository,
   usuarios: repos.usuarioRepository,
-  usuariosLocais: repos.usuarioRepository, // alias rev. 1 (mesmo repositório)
   usersStore: repos.USERS_STORE,
   settings: { get: repos.readAppSetting, set: repos.writeAppSetting },
 

@@ -19,7 +19,7 @@ const { BACKUP_FORMAT, MASTER_REGISTRY_STORES, PROTECTED_STORES, STORE_NAMES, ST
 const { BACKUP_FORMAT_VERSION, DATA_CONTRACT_VERSION, DB_SCHEMA_VERSION, UI_BUILD_ID, APP_VERSION } = await imp('src/versioning/versionInfo.js');
 const { MIGRATION_STATUS, readMigrationState } = await imp('src/storage/migrations/migrationState.js');
 const storage = (await imp('src/storage/storageAdapter.js')).default;
-const USERS = STORE_NAMES.includes('usuarios') ? 'usuarios' : 'usuariosLocais';
+const USERS = STORE_NAMES.includes('usuarios') ? 'usuarios' : 'usuarios';
 const HASH = USERS === 'usuarios' ? 'password_hash' : 'senha_hash';
 const SALT = USERS === 'usuarios' ? 'password_salt' : 'senha_salt';
 const ROLE = USERS === 'usuarios' ? 'role' : 'perfil';
@@ -69,7 +69,7 @@ assert.equal(dryCurrent.schemaUpgradeRequired, false);
 assert.deepEqual(dryCurrent.ignoredStores, []);
 assert.deepEqual(dryCurrent.newStores, []);
 assert.equal(dryCurrent.formatVersion, 3);
-assert.equal(dryCurrent.usuariosLocais, 1);
+assert.equal(dryCurrent.usuarios, 1);
 
 // Negativos: SHA divergente; banco mais novo; contagem divergente.
 const tampered = structuredClone(bak.backup);

@@ -59,7 +59,7 @@ const v7Db = await ensureStorageReady();
 assert(v7Db.verno === DB_VERSION && DB_VERSION === 7, `banco aberto na v7 (verno=${v7Db.verno})`);
 const v7Tables = v7Db.tables.map((t) => t.name);
 assert(!v7Tables.includes('lotes'), 'store lotes removida na v7 (ADR-023)');
-for (const name of [...MASTER_REGISTRY_STORES, 'usuariosLocais']) assert(v7Tables.includes(name), `store nova criada: ${name}`);
+for (const name of [...MASTER_REGISTRY_STORES, 'usuarios']) assert(v7Tables.includes(name), `store nova criada: ${name}`);
 const sessions = await v7Db.table('sessoesPesagem').toArray();
 assert(sessions.find((s) => s.id === 's-aberta').status === 'ABERTA', 'upgrade converte Aberta → ABERTA');
 assert(sessions.find((s) => s.id === 's-fechada').status === 'FECHADA', 'upgrade converte Fechada → FECHADA');
