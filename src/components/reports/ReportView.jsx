@@ -137,6 +137,7 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
     if (!viewModel) return;
     try {
       const result = await emitReport(viewModel, format, actor);
+      if (result.canceled) return;
       toast.success(`${format.toUpperCase()} gerado: ${result.written.location}`, { description: `SHA-256 ${result.manifest.sha256.slice(0, 16)}… · ${result.manifest.recordCount} registros` });
     } catch (err) {
       toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode exportar este relatório." : `Falha ao exportar: ${err.message}`);
@@ -243,6 +244,7 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
                   <DropdownMenuLabel className="text-xs">Mesma população e totais da tela</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="text-xs" onClick={() => exportAs("csv")}><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />CSV (Excel pt-BR)</DropdownMenuItem>
+                  <DropdownMenuItem className="text-xs" onClick={() => exportAs("xlsx")}><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />XLSX (Excel)</DropdownMenuItem>
                   <DropdownMenuItem className="text-xs" onClick={() => exportAs("json")}><FileJson className="h-3.5 w-3.5" aria-hidden="true" />JSON com manifesto</DropdownMenuItem>
                   <DropdownMenuItem className="text-xs" onClick={() => emitDocument("pdf")}><FileText className="h-3.5 w-3.5" aria-hidden="true" />PDF (A4)</DropdownMenuItem>
                   <DropdownMenuSeparator />

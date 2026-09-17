@@ -10,10 +10,12 @@ import { describePeriod } from '../domain/reportPeriod.js';
 import { getReportDefinition } from '../definitions/reportCatalog.js';
 import { buildCsv } from '../infrastructure/exporters/csvExporter.js';
 import { buildJsonBody } from '../infrastructure/exporters/jsonExporter.js';
+import { buildXlsx } from '../infrastructure/exporters/xlsxExporter.js';
 
 export const EXPORT_FORMATS = Object.freeze({
   csv: { extension: 'csv', mime: 'text/csv;charset=utf-8', binary: false },
   json: { extension: 'json', mime: 'application/json;charset=utf-8', binary: false },
+  xlsx: { extension: 'xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', binary: true },
 });
 
 export const MANIFEST_FORMAT_VERSION = 1;
@@ -87,6 +89,10 @@ export async function prepareEmission(viewModel, format, actor) {
   if (format === 'csv') {
     content = buildCsv(viewModel);
     manifest.sha256 = await sha256Hex(content);
+  } else if (format === 'xlsx') {
+    // A aba Manifesto leva o manifesto sem o hash (o hash é do próprio arquivo, calculado depois).
+    content = buildXlsx(viewModel, { ...manifest });
+    manifest.sha256 = await sha256Hex(content);
   } else {
     const body = buildJsonBody(viewModel);
     manifest.contentSha256 = await sha256Hex(JSON.stringify(body));
@@ -97,9 +103,24 @@ export async function prepareEmission(viewModel, format, actor) {
 }
 
 /** Writer padrão: Electron grava em <dados>/relatorios; navegador baixa o arquivo. */
+function toBase64(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
 export async function defaultReportWriter({ fileName, content, mime }) {
   const api = typeof window !== 'undefined' ? window.pesagemApp : null;
-  if (api?.files?.writeUserFile) {
+  if (content instanceof Uint8Array) {
+    // Binário (XLSX): destino escolhido no diálogo nativo; renderer não envia caminho.
+    if (api?.reports?.saveFile) {
+      const response = await api.reports.saveFile({ extension: `.${fileName.split('.').pop()}`, base64: toBase64(content), suggestedName: fileName });
+      const result = response?.data ?? response;
+      if (response?.ok === false) throw Object.assign(new Error(response.error?.message || 'Falha ao salvar'), { code: response.error?.code });
+      if (result.canceled) return { canceled: true };
+      return { location: result.path, size: result.size, sha256: result.sha256, channel: 'electron-dialog' };
+    }
+  } else if (api?.files?.writeUserFile) {
     const result = await api.files.writeUserFile({ subdir: 'relatorios', filename: fileName, content });
     return { location: result.path, size: result.size, sha256: result.sha256, channel: 'electron' };
   }
@@ -113,10 +134,11 @@ export async function defaultReportWriter({ fileName, content, mime }) {
   return { location: fileName, size: blob.size, sha256: null, channel: 'download' };
 }
 
-/** Emite CSV/JSON: grava o arquivo e o manifesto ao lado (<arquivo>.manifest.json). */
+/** Emite CSV/JSON/XLSX: grava o arquivo e o manifesto (<arquivo>.manifest.json). */
 export async function emitReport(viewModel, format, actor, { writer = defaultReportWriter } = {}) {
   const prepared = await prepareEmission(viewModel, format, actor);
   const written = await writer(prepared);
+  if (written.canceled) return { ...prepared, written, manifestWritten: null, canceled: true };
   if (written.sha256 && written.sha256 !== prepared.manifest.sha256) {
     const error = new Error('Falha de integridade: o arquivo gravado não confere com o conteúdo gerado.');
     error.code = 'REPORT_INTEGRITY';
@@ -124,6 +146,7 @@ export async function emitReport(viewModel, format, actor, { writer = defaultRep
   }
   const manifestFile = `${prepared.fileName}.manifest.json`;
   const manifestContent = `${JSON.stringify(prepared.manifest, null, 2)}\n`;
+  // Manifesto é texto: no Electron vai para <dados>/relatorios; no navegador, download.
   const manifestWritten = format === 'json' ? null : await writer({ fileName: manifestFile, content: manifestContent, mime: 'application/json;charset=utf-8' });
   return { ...prepared, written, manifestWritten };
 }
