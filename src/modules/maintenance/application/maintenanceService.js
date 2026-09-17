@@ -3,24 +3,23 @@
 // manual) validam o perfil ADMIN quando existe ator autenticado (ADR-036);
 // sem ator (gates em Node, primeira execução) a validação não se aplica.
 import * as adapter from '../infrastructure/maintenanceDataAdapter.js';
-import { getActor } from '../../../storage/indexedDb/auditActor.js';
+import { getCurrentActor } from '../../../storage/indexedDb/auditActor.js';
+import { can } from '../../auth/domain/permissionService.js';
 
 export const CLEAR_CONFIRMATION_TEXT = 'LIMPAR';
 export const RESET_CONFIRMATION_TEXT = 'RESET';
 
-// Campos do ator: `actor_user_*` (auditActor atual) ou `usuario_id`/`role` (docs 11 rev. 2).
-function actorIdentity(actor) {
-  return {
-    id: actor.actor_user_id ?? actor.usuario_id ?? null,
-    profile: actor.actor_user_profile ?? actor.role ?? actor.perfil ?? actor.usuario_role ?? null,
-  };
-}
-
-function requireAdminWhenAuthenticated(operation) {
-  const { id, profile } = actorIdentity(getActor());
-  if (id && profile && profile !== 'ADMIN') {
-    const err = new Error(`${operation}: ação exclusiva do perfil ADMIN.`);
+// Autorização pela matriz (maintenance.restore/clear/reset/migrate = ADMIN).
+// getActor() só traz os campos de auditoria (sem papel): o papel vem de getCurrentActor().
+// Com sessão autenticada, papel ausente ou sem a ação é recusado (falha fechada).
+function requireMaintenanceAction(operation, action) {
+  const actor = getCurrentActor();
+  if (!actor) return;
+  if (!can(actor.role, action)) {
+    const err = new Error(`: ação exclusiva do perfil ADMIN.`);
     err.code = 'MAINTENANCE_FORBIDDEN';
+    err.action = action;
+    err.role = actor.role ?? null;
     throw err;
   }
 }
@@ -62,7 +61,7 @@ export async function dryRunRestoreBackup(backupPath) {
 }
 
 export async function applyRestoreBackup(backupPath) {
-  requireAdminWhenAuthenticated('Restauração');
+  requireMaintenanceAction('Restauração', 'maintenance.restore');
   return adapter.applyRestoreBackup(backupPath);
 }
 
@@ -110,20 +109,20 @@ export async function dryRunMigration() {
 
 /** "Continuar migração" (maintenance.migrate — ADMIN). */
 export async function resumeMigration(options) {
-  requireAdminWhenAuthenticated('Continuar migração');
+  requireMaintenanceAction('Continuar migração', 'maintenance.migrate');
   return adapter.resumeMigration(options);
 }
 
 /** "Limpar dados operacionais" (maintenance.clear — ADMIN): preserva usuários, configurações e cadastros mestres. */
 export async function clearOperationalData({ confirmationText } = {}) {
-  requireAdminWhenAuthenticated('Limpar dados operacionais');
+  requireMaintenanceAction('Limpar dados operacionais', 'maintenance.clear');
   requireConfirmationText(confirmationText, CLEAR_CONFIRMATION_TEXT, 'Limpar dados operacionais');
   return adapter.clearOperationalData();
 }
 
 /** "Reset completo" (ADMIN): apaga tudo exceto o histórico de backups. */
 export async function resetAllData({ confirmationText } = {}) {
-  requireAdminWhenAuthenticated('Reset completo');
+  requireMaintenanceAction('Reset completo', 'maintenance.reset');
   requireConfirmationText(confirmationText, RESET_CONFIRMATION_TEXT, 'Reset completo');
   return adapter.resetAllData({ confirmedByAdmin: true });
 }

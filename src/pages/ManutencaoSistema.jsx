@@ -11,6 +11,7 @@ import {
 } from "@/components/modelobase1";
 import { fmtDateTimeBR, fmtInt } from "@/components/common/formatNumber";
 import ConfirmActionDialog from "@/components/common/ConfirmActionDialog";
+import { useAuth } from "@/components/auth/useAuth";
 
 function fileLabel(result) {
   return result?.backupPath || result?.filePath || result?.path || result?.fileName || "";
@@ -35,6 +36,10 @@ function migrationTone(status) {
 }
 
 export default function ManutencaoSistema() {
+  // Ações destrutivas seguem a matriz (maintenance.restore/clear/reset/migrate = ADMIN);
+  // o serviço recusa de novo — esconder aqui só evita oferecer o que será negado.
+  const auth = useAuth();
+  const allowed = (action) => (auth ? auth.can(action) : true);
   const [statusLabel, setStatusLabel] = useState("—");
   const [lastCheckAt, setLastCheckAt] = useState("");
   const [stats, setStats] = useState(null);
@@ -454,7 +459,7 @@ export default function ManutencaoSistema() {
             <Button type="button" className="emp-toolbar-btn px-4" onClick={onMigrationDryRun} disabled={!!busy}>
               {busy === "mig-dry" ? "Simulando…" : "Simular migração (dry-run)"}
             </Button>
-            <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={onResumeMigration} disabled={!!busy || !canResume}>
+            <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={onResumeMigration} disabled={!!busy || !canResume || !allowed("maintenance.migrate")}>
               {busy === "mig-resume" ? "Migrando…" : "Continuar migração"}
             </Button>
           </div>
@@ -577,6 +582,7 @@ export default function ManutencaoSistema() {
         </CardContent>
       </Card>
 
+      {allowed("maintenance.restore") && (
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
           <CardTitle className="text-xs font-semibold uppercase tracking-wide">Restauração</CardTitle>
@@ -618,12 +624,15 @@ export default function ManutencaoSistema() {
           )}
         </CardContent>
       </Card>
+      )}
 
+      {(allowed("maintenance.clear") || allowed("maintenance.reset")) && (
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
           <CardTitle className="text-xs font-semibold uppercase tracking-wide">Limpeza de dados</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4 text-sm text-slate-700">
+          {allowed("maintenance.clear") && (
           <div className="space-y-2 border border-slate-200 rounded-md p-3">
             <p className="font-medium">Limpar dados operacionais</p>
             <p className="text-xs text-slate-500">
@@ -647,6 +656,8 @@ export default function ManutencaoSistema() {
               </Button>
             </div>
           </div>
+          )}
+          {allowed("maintenance.reset") && (
           <div className="space-y-2 border border-red-200 rounded-md p-3">
             <p className="font-medium text-red-700">Reset completo (ADMIN)</p>
             <p className="text-xs text-slate-500">
@@ -670,8 +681,10 @@ export default function ManutencaoSistema() {
               </Button>
             </div>
           </div>
+          )}
         </CardContent>
       </Card>
+      )}
 
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
