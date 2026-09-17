@@ -1,36 +1,34 @@
 /* Rolagem das páginas (17/09/2026): o slot do shell tem altura fixa e overflow hidden, então
-   uma página cujo conteúdo passa da altura ficava sem barra e sem como chegar ao fim.
-   A própria página passa a rolar, com a barra oficial (erp-scrollbar). Telas que já rolam por
-   dentro (tabelas com corpo rolável) não mudam: o conteúdo delas cabe e a barra não aparece. */
+   uma página cujo conteúdo passava da altura ficava sem barra e sem como chegar ao fim.
+   Aqui só se define COMPORTAMENTO (altura e overflow). A APARÊNCIA da barra continua vindo do
+   arquivo oficial erp-scrollbar.css, que estiliza `html *::-webkit-scrollbar` e só usa
+   `scrollbar-width` dentro de @supports: declarar `scrollbar-width` aqui faria o Chromium do
+   aplicativo empacotado desenhar a barra nativa, diferente do resto do sistema. */
 .mb1-app-shell .mb1-operational-page {
-  /* A página precisa ficar do tamanho do slot (que tem altura fixa); com min-height: 100%
-     ela crescia e o pai cortava o excedente sem barra nenhuma. */
+  /* A página fica do tamanho do slot; com min-height: 100% ela crescia e o pai cortava. */
   height: 100%;
   max-height: 100%;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  scrollbar-width: thin;
+  /* Mesma geometria e cor das tabelas no Chrome e no Electron instalado: a regra global
+     `* { scrollbar-width: thin }` do index.css faria o empacotado desenhar a barra nativa
+     clara, diferente do resto do sistema (mesmo contrato do bloco .d17c-table-scroll). */
+  scrollbar-width: auto;
+  scrollbar-color: #728195 #e8edf1;
+}
+
+html.dark .mb1-app-shell .mb1-operational-page {
   scrollbar-color: var(--erp-scrollbar-thumb) var(--erp-scrollbar-track);
 }
 
-.mb1-app-shell .mb1-operational-page::-webkit-scrollbar {
-  width: var(--erp-scrollbar-size, 10px);
-  height: var(--erp-scrollbar-size, 10px);
-  background: var(--erp-scrollbar-bg);
-}
-.mb1-app-shell .mb1-operational-page::-webkit-scrollbar-track { background: var(--erp-scrollbar-track); }
-.mb1-app-shell .mb1-operational-page::-webkit-scrollbar-thumb {
-  min-height: var(--erp-scrollbar-min-thumb-size, 24px);
-  border-radius: var(--erp-scrollbar-radius, 999px);
-  background: var(--erp-scrollbar-thumb);
-}
-.mb1-app-shell .mb1-operational-page::-webkit-scrollbar-thumb:hover { background: var(--erp-scrollbar-thumb-hover); }
-.mb1-app-shell .mb1-operational-page::-webkit-scrollbar-thumb:active { background: var(--erp-scrollbar-thumb-active); }
-
-/* Assistente de importação: a conferência pode ter centenas de linhas. */
-.importacao-page .importacao-body { min-height: 0; }
+.mb1-app-shell .mb1-operational-page::-webkit-scrollbar { width: 10px; height: 10px; }
+.mb1-app-shell .mb1-operational-page::-webkit-scrollbar-track { background: #e8edf1; border-radius: 999px; }
+.mb1-app-shell .mb1-operational-page::-webkit-scrollbar-thumb { min-height: 24px; border: 2px solid #e8edf1; border-radius: 999px; background: #728195; }
+.mb1-app-shell .mb1-operational-page::-webkit-scrollbar-thumb:hover { background: #607082; }
+html.dark .mb1-app-shell .mb1-operational-page::-webkit-scrollbar-track { background: var(--erp-scrollbar-track); }
+html.dark .mb1-app-shell .mb1-operational-page::-webkit-scrollbar-thumb { border-color: var(--erp-scrollbar-track); background: var(--erp-scrollbar-thumb); }
 
 /* Páginas em coluna flex (Ficha, Fechamento, Lançamento): com a altura limitada, os blocos
    encolhiam e o conteúdo ficava espremido. Só os painéis que rolam por dentro podem encolher;
@@ -38,3 +36,6 @@
 .mb1-app-shell .mb1-operational-page > *:not(.mg-view-panel):not(.emp-table-root):not(.emp-table-shell):not(.d17b-list-body):not(.d17d-launch-table-card):not(.mak-mother-page__table) {
   flex-shrink: 0;
 }
+
+/* Assistente de importação: a conferência pode ter centenas de linhas. */
+.importacao-page .importacao-body { min-height: 0; }
