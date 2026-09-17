@@ -6,6 +6,7 @@
 // valor_normalizado e a marca em marca_id; sessões nascem ABERTA; toda linha de
 // auditoria carrega o ator (auditActor) e ATUALIZAR em massa grava resumo +
 // campos_alterados em vez de antes/depois completos.
+import { compareWeighingEvents } from '../domain/weighingSeries.js';
 import { filterLegacyPayload, storageRecordToViewModel } from '../domain/weighingMapper.js';
 import storage from '../../../storage/storageAdapter.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
@@ -24,10 +25,9 @@ function actorUserId() {
   return actor.actor_user_id ?? actor.usuario_id ?? null;
 }
 
-const eventOrder = (left, right) =>
-  String(left.data_pesagem || '').localeCompare(String(right.data_pesagem || ''))
-  || String(left.created_at || '').localeCompare(String(right.created_at || ''))
-  || String(left.id || '').localeCompare(String(right.id || ''));
+// Mesma ordem canônica do domínio (data → tipo → gravação → id).
+const eventView = (row) => ({ tipo_manejo: weighingUi(row).tipo_manejo, data_pesagem: row.data_pesagem ?? weighingUi(row).data_pesagem, created_at: row.created_at, id: row.id });
+const eventOrder = (left, right) => compareWeighingEvents(eventView(left), eventView(right));
 
 function weighingUi(row) {
   return typeof row?.legacy_payload === 'object' ? row.legacy_payload : {};

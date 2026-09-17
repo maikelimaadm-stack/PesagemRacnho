@@ -2,10 +2,27 @@ import { calculateWeightGain } from './weighingCalculations.js';
 import { legacyAnimalKey } from '../../animals/domain/animalHistory.js';
 
 const identity = (entry) => entry.animal_id ? `id:${entry.animal_id}` : `legacy:${legacyAnimalKey(entry)}`;
-const eventOrder = (left, right) =>
-  String(left.data_pesagem || '').localeCompare(String(right.data_pesagem || ''))
-  || String(left.created_date || left.created_at || '').localeCompare(String(right.created_date || right.created_at || ''))
-  || String(left.id || '').localeCompare(String(right.id || ''));
+
+// Ordem canônica do histórico de um animal (lançamento, importação, projeções e recálculo):
+// data real do evento → tipo (Cadastro antes de Manejo antes de Saída, no mesmo dia) →
+// momento de gravação → id. A ordem das linhas de um arquivo nunca define a cronologia.
+export const EVENT_TYPE_RANK = Object.freeze({ Cadastro: 0, Manejo: 1, 'Saída': 2 });
+
+export function compareWeighingEvents(left, right) {
+  return String(left.data_pesagem || '').localeCompare(String(right.data_pesagem || ''))
+    || (EVENT_TYPE_RANK[left.tipo_manejo] ?? 1) - (EVENT_TYPE_RANK[right.tipo_manejo] ?? 1)
+    || String(left.created_date || left.created_at || '').localeCompare(String(right.created_date || right.created_at || ''))
+    || String(left.id || '').localeCompare(String(right.id || ''));
+}
+
+/** Peso medido: número finito > 0; null, vazio e 0 não são pesagem (Saída sem peso não vira 0 kg). */
+export function measuredWeightOf(entry) {
+  const raw = entry?.peso ?? entry?.peso_kg;
+  if (raw === null || raw === undefined || raw === '') return null;
+  const value = Number(raw);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+const eventOrder = compareWeighingEvents;
 
 export function recalculateWeightSeries(entries = [], affectedKeys = null) {
   const groups = new Map();
@@ -22,7 +39,7 @@ export function recalculateWeightSeries(entries = [], affectedKeys = null) {
     group.sort(eventOrder);
     const history = [];
     for (const entry of group) {
-      const measuredWeight = entry.peso ?? entry.peso_kg;
+      const measuredWeight = measuredWeightOf(entry);
       const result = entry.tipo_manejo === 'Manejo'
         ? calculateWeightGain({ history, date: entry.data_pesagem, weight: measuredWeight })
         : { dataAnterior: null, pesoAnterior: null, dias: null, ganho: null, gmd: null };
@@ -39,7 +56,7 @@ export function recalculateWeightSeries(entries = [], affectedKeys = null) {
         legacyPayload: { ...entry, ...patch },
         patch,
       });
-      if (Number.isFinite(Number(measuredWeight))) history.push(entry);
+      if (measuredWeight !== null) history.push(entry);
     }
   }
   return updates;

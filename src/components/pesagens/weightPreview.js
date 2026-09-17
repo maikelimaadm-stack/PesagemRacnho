@@ -12,7 +12,8 @@ export function buildWeightPreview({ history = [], date, weight, editingId }) {
     .sort((a, b) => a.data_pesagem.localeCompare(b.data_pesagem));
   const parsedWeight = parseBrazilianNumber(weight);
   const hasWeight = Number.isFinite(parsedWeight) && parsedWeight > 0;
-  const gain = calculateWeightGain({ history: previous, date: currentDate, weight: hasWeight ? parsedWeight : 0 });
+  // Sem peso digitado: calcula só a referência anterior (peso 1 é marcador; ganho/GMD saem nulos).
+  const gain = calculateWeightGain({ history: previous, date: currentDate, weight: hasWeight ? parsedWeight : 1 });
   if (!hasWeight) { gain.ganho = null; gain.gmd = null; }
   const values = previous.slice(-6).map((entry) => entry.peso);
   if (!values.length) return { gain, trend: null };
