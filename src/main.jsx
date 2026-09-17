@@ -10,5 +10,6 @@ import '@/styles/modelobase1/erp-scrollbar.css';
 import '@/styles/modelobase1.css';
 import '@/styles/d17b-modelobase1.css';
 import '@/styles/launch-field-size.css';
+import '@/styles/page-scroll.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
