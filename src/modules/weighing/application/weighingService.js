@@ -6,6 +6,16 @@ import {
 import * as weighingDataAdapter from '../infrastructure/weighingDataAdapter.js';
 import { animalIdentityKey, recalculateWeightSeries } from '../domain/weighingSeries.js';
 import { calculateWeightGain } from '../domain/weighingCalculations.js';
+import { getCurrentActor } from '../../../storage/indexedDb/auditActor.js';
+import { authorize } from '../../auth/domain/permissionService.js';
+
+// Escrita autorizada no SERVIÇO (não só na tela): com sessão, o papel precisa da ação
+// (weighing.write para lançar/importar; weighing.edit para editar/excluir). Sem sessão
+// (gates em Node, migração) não há ator e a verificação não se aplica.
+function requireWeighingPermission(action) {
+  const actor = getCurrentActor();
+  if (actor) authorize(actor.role, action);
+}
 
 /**
  * Fluxo operacional IndexedDB/Dexie no armazenamento local do renderer.
@@ -24,6 +34,7 @@ export async function detectStorageStatus() {
 }
 
 export async function createEntry(uiPayload) {
+  requireWeighingPermission('weighing.write');
   validateUiPayload(uiPayload);
   try {
     const trace = globalThis.__MAK_PERF_TRACE__ === true;
@@ -75,6 +86,7 @@ export async function createEntry(uiPayload) {
 }
 
 export async function bulkCreateEntries(items, options = {}) {
+  requireWeighingPermission('weighing.write');
   const payloads = items.map((item) => {
     validateUiPayload(item);
     return uiToStorageRecord(item);
@@ -85,6 +97,7 @@ export async function bulkCreateEntries(items, options = {}) {
 }
 
 export async function bulkUpdateEntries(items, { recalculate = true, systemDerived = false } = {}) {
+  requireWeighingPermission('weighing.edit');
   const payloads = [];
   for (const item of items) {
     validateUiPayload(item.patch, { isUpdate: true });
@@ -102,6 +115,7 @@ export async function bulkUpdateEntries(items, { recalculate = true, systemDeriv
 }
 
 export async function bulkDeleteEntries(ids, { recalculate = true } = {}) {
+  requireWeighingPermission('weighing.edit');
   const removed = await weighingDataAdapter.bulkDeleteEntries(ids);
   if (recalculate) await recalculateAllWeightSeries();
   return removed;
@@ -163,6 +177,7 @@ async function recalculateWeightSeriesForKeys(affectedKeys) {
 }
 
 export async function updateEntry(id, uiPayload) {
+  requireWeighingPermission('weighing.edit');
   try {
     validateUiPayload(uiPayload, { isUpdate: true });
     const existing = await weighingDataAdapter.getEntryById(id);
@@ -181,6 +196,7 @@ export async function updateEntry(id, uiPayload) {
 }
 
 export async function deleteEntry(pesagemOrId) {
+  requireWeighingPermission('weighing.edit');
   const pesagem = typeof pesagemOrId === 'object' ? pesagemOrId : { id: pesagemOrId };
   const id = pesagem.id;
   try {

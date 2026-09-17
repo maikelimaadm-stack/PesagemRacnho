@@ -37,6 +37,7 @@ import { getSetting, setSetting } from "@/modules/settings/application/settingsS
 import GerenciarEmbarquesDialog from "../components/embarque/GerenciarEmbarquesDialog";
 import ResumoEmbarque from "../components/embarque/ResumoEmbarque";
 import ResumoVendaDia from "../components/pesagens/ResumoVendaDia";
+import { useAuth } from "@/components/auth/useAuth";
 import SequenciaBrincos from "../components/pesagens/SequenciaBrincos";
 import GerenciarApartacoesDialog from "../components/pesagens/GerenciarApartacoesDialog";
 import ResumoLotes from "../components/pesagens/ResumoLotes";
@@ -76,6 +77,7 @@ const POLITICAS_INICIAIS = Object.freeze({
 const SEM_SELECAO = '__none__';
 // Categoria do Cadastro: "Automático" escolhe pelo sexo e pela faixa de peso da categoria.
 const CATEGORIA_AUTOMATICA = '__auto__';
+const COMMERCIAL_VALUE_FIELDS = new Set(["valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "valor_arroba_abate", "valor_total_abate"]);
 const NUMBER_COLUMN_IDS = new Set(["numero_registro", "peso", "peso_anterior", "valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "doc_qtd", "dias", "ganho", "gmd"]);
 const DATE_COLUMN_IDS = new Set(["data_pesagem", "data_anterior"]);
 const getColumnFilterType = (id) => DATE_COLUMN_IDS.has(id) ? "date" : NUMBER_COLUMN_IDS.has(id) ? "number" : "text";
@@ -446,6 +448,8 @@ export default function LancamentoPesagensIndividuais() {
   { id: 'gmd', label: 'GMD', default: true },
   { id: 'observacao', label: 'Observação', default: false }];
 
+  const auth = useAuth();
+  const podeVerValores = auth ? Boolean(auth.can?.('commercial.values')) : true;
   const COLUMN_MODEL_VERSION = 'd17d2r31';
   const defaultVisibleColumns = COLUNAS_DISPONIVEIS.filter((column) => column.default).map((column) => column.id);
 
@@ -496,8 +500,10 @@ export default function LancamentoPesagensIndividuais() {
     setColunaMenuAberto(null);
   };
 
+  // Valores comerciais só com commercial.values (OPERADOR lança a saída; o gestor vê/ajusta valores).
+  const colunasPermitidas = COLUNAS_DISPONIVEIS.filter((c) => podeVerValores || !COMMERCIAL_VALUE_FIELDS.has(c.id));
   const colunasOrdenadas = colunasOrdem.
-  map((id) => COLUNAS_DISPONIVEIS.find((c) => c.id === id)).
+  map((id) => colunasPermitidas.find((c) => c.id === id)).
   filter((c) => c && colunasVisiveis.includes(c.id));
 
   // ========== CARREGAR REGISTRO PARA EDIÇÃO ==========
@@ -1023,7 +1029,7 @@ export default function LancamentoPesagensIndividuais() {
       valor_venda_total: tipoManejo === 'Saída' && motivoSaida === 'Venda' && valorVendaTotal ? parseBrazilianNumber(valorVendaTotal) : null,
       valor_arroba: tipoManejo === 'Saída' && motivoSaida === 'Venda' && valorArroba ? parseBrazilianNumber(valorArroba) : null,
       rendimento_carcaca: calculoComercial?.yieldPercent ?? null,
-      rendimento_origem: calculoComercial ? rendimentoOrigem : null,
+      rendimento_origem: calculoComercial?.yieldPercent != null ? rendimentoOrigem : null,
       peso_carcaca_estimado: calculoComercial?.carcassWeightKg ?? null,
       quantidade_arrobas: calculoComercial?.arrobas ?? null,
       // Dados de Saída (Abate)
@@ -1630,6 +1636,7 @@ export default function LancamentoPesagensIndividuais() {
                 Dados de Compra
               </h3>
               <div className="d17d-detail-grid grid grid-cols-4 gap-3">
+                {podeVerValores &&
                 <div className="space-y-1">
                   <Label className="text-xs">Valor por Cabeça (R$)</Label>
                   <Input
@@ -1640,6 +1647,7 @@ export default function LancamentoPesagensIndividuais() {
                   placeholder="2500,00" />
 
                 </div>
+                }
                 <div className="space-y-1">
                   <Label className="text-xs">Vendedor/Origem</Label>
                   <Select value={origemAnimal || '__none__'} onValueChange={(value) => setOrigemAnimal(value === '__none__' ? '' : value)}>
@@ -1735,6 +1743,7 @@ export default function LancamentoPesagensIndividuais() {
                   placeholder="Ex: Fazenda XYZ" />
 
                 </div>
+                {podeVerValores && <>
                 <div className="space-y-1">
                   <Label className="text-xs">Valor da Arroba (R$)</Label>
                   <Input
@@ -1761,12 +1770,13 @@ export default function LancamentoPesagensIndividuais() {
                 </div>
                 {peso && valorArroba &&
               <div className="space-y-1 col-span-4">
-                    <Label className="text-xs">Estimativa comercial ({n(calculoVendaVisual.yieldPercent)}% de rendimento)</Label>
+                    <Label className="text-xs">Estimativa comercial{calculoVendaVisual.yieldPercent != null ? ` (${n(calculoVendaVisual.yieldPercent)}% de rendimento)` : ''}</Label>
                     <div className="h-8 flex items-center text-xs font-semibold text-blue-700">
-                      {m(calculoVendaVisual.estimatedValue || 0)} · Carcaça (kg): {n(calculoVendaVisual.carcassWeightKg || 0)} · Arrobas: {n(calculoVendaVisual.arrobas || 0)}
+                      {calculoVendaVisual.yieldPercent == null ? 'Informe o rendimento de carcaça para estimar carcaça e arrobas' : `${calculoVendaVisual.estimatedValue != null ? m(calculoVendaVisual.estimatedValue) : '—'} · Carcaça (kg): ${n(calculoVendaVisual.carcassWeightKg)} · Arrobas: ${n(calculoVendaVisual.arrobas)}`}
                     </div>
                   </div>
               }
+                </>}
                 <div className="space-y-1">
                   <Label className="text-xs">Número GTA</Label>
                   <Input
@@ -1880,6 +1890,7 @@ export default function LancamentoPesagensIndividuais() {
                     </SelectContent>
                   </Select>
                 </div>
+                {podeVerValores && <>
                 <div className="space-y-1">
                   <Label className="text-xs">Valor por Arroba (R$)</Label>
                   <Input
@@ -1906,12 +1917,13 @@ export default function LancamentoPesagensIndividuais() {
                 </div>
                 {peso && valorArrobaAbate &&
               <div className="space-y-1">
-                    <Label className="text-xs">Estimativa comercial ({n(calculoAbateVisual.yieldPercent)}% de rendimento)</Label>
+                    <Label className="text-xs">Estimativa comercial{calculoAbateVisual.yieldPercent != null ? ` (${n(calculoAbateVisual.yieldPercent)}% de rendimento)` : ''}</Label>
                     <div className="h-8 flex items-center text-xs font-semibold text-purple-700">
-                      {m(calculoAbateVisual.estimatedValue || 0)} · Carcaça (kg): {n(calculoAbateVisual.carcassWeightKg || 0)} · Arrobas: {n(calculoAbateVisual.arrobas || 0)}
+                      {calculoAbateVisual.yieldPercent == null ? 'Informe o rendimento de carcaça para estimar carcaça e arrobas' : `${calculoAbateVisual.estimatedValue != null ? m(calculoAbateVisual.estimatedValue) : '—'} · Carcaça (kg): ${n(calculoAbateVisual.carcassWeightKg)} · Arrobas: ${n(calculoAbateVisual.arrobas)}`}
                     </div>
                   </div>
               }
+                </>}
                 <div className="space-y-1">
                   <Label className="text-xs">Número GTA</Label>
                   <Input
@@ -2268,7 +2280,7 @@ export default function LancamentoPesagensIndividuais() {
         {/* RESUMO: Lotes ou Documentação */}
         {painelResumoTipo === 'personalizado' ? (
           <ResumoPersonalizado
-            configuracoes={resumoPersonalizado}
+            configuracoes={podeVerValores ? resumoPersonalizado : (resumoPersonalizado || []).filter((item) => !COMMERCIAL_VALUE_FIELDS.has(item.field) && !COMMERCIAL_VALUE_FIELDS.has(item.divisorField))}
             pesagens={pesagens}
             dataPesagem={dataPesagem}
             apartacaoSelecionada={apartacaoSelecionada}
@@ -2280,7 +2292,7 @@ export default function LancamentoPesagensIndividuais() {
             embarqueSelecionado={embarqueSelecionadoDoc}
             pesagens={pesagens}
           />
-        ) : painelResumoTipo === 'venda' ? (
+        ) : painelResumoTipo === 'venda' && podeVerValores ? (
           <ResumoVendaDia
             pesagens={pesagens}
             dataPesagem={dataPesagem}
@@ -2346,7 +2358,7 @@ export default function LancamentoPesagensIndividuais() {
         <MakColumnConfigDialog
           open={showConfigColunas}
           onOpenChange={setShowConfigColunas}
-          columns={COLUNAS_DISPONIVEIS}
+          columns={colunasPermitidas}
           order={colunasOrdem}
           visible={colunasVisiveis}
           onApply={aplicarConfiguracaoColunas}

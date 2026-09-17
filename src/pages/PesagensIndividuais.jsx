@@ -53,6 +53,7 @@ import { parseBrazilianNumber, parseCivilDate } from "@/modules/weighing/domain/
 import { isSnIdentifier, normalizeAnimalIdentifier } from "@/modules/animals/domain/snAnimal";
 import { sha256Hex } from "@/lib/sha256";
 import { useAuth } from "@/components/auth/useAuth";
+import { avg as avgValues, sum as sumValues, weightedGmd } from "@/modules/reporting/domain/aggregateEngine";
 import { REGISTRY_WRITE_PERMISSION, brandService, breedService, resolveMany } from "@/modules/catalog/application/index";
 import { collectRegistryTexts, countUnknownRegistries, splitImportRowsByRegistry } from "@/modules/operations/domain/importRegistryResolution";
 
@@ -98,6 +99,10 @@ const COLUNAS_DISPONIVEIS = [
   { id: "gmd", label: "GMD", default: true, sortable: true, align: "right" },
   { id: "observacao", label: "Observação", default: false, sortable: true, align: "left" },
 ];
+
+// Valores comerciais (preço, valor, arrobas): só perfis com commercial.values os veem, filtram
+// ou exportam; as demais colunas comerciais (comprador, destino, frigorífico) são texto operacional.
+const COMMERCIAL_VALUE_COLUMN_IDS = new Set(["valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas"]);
 
 const NUMBER_COLUMN_IDS = new Set(["peso", "peso_anterior", "valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "doc_qtd", "dias", "ganho", "gmd"]);
 const DATE_COLUMN_IDS = new Set(["data_pesagem", "data_anterior"]);
@@ -172,6 +177,17 @@ export default function PesagensIndividuais() {
   const [criarCadastrosNaImportacao, setCriarCadastrosNaImportacao] = useState(false);
   const auth = useAuth();
   const podeCriarCadastros = Boolean(auth?.can?.(REGISTRY_WRITE_PERMISSION));
+  // Fora do AuthGate (harness de UI) não há sessão: nada é restringido; o serviço repete a checagem.
+  const pode = (action) => (auth ? Boolean(auth.can?.(action)) : true);
+  const podeLancar = pode('launch.use');
+  const podeEditar = pode('weighing.edit');
+  const podeImportar = pode('weighing.write');
+  const podeExportar = pode('reports.export');
+  const podeVerValores = pode('commercial.values');
+  const colunasPermitidas = useMemo(
+    () => COLUNAS_DISPONIVEIS.filter((coluna) => podeVerValores || !COMMERCIAL_VALUE_COLUMN_IDS.has(coluna.id)),
+    [podeVerValores],
+  );
   const totalCadastrosDesconhecidos = countUnknownRegistries(importResolucaoCadastros.desconhecidos);
   // Linhas que dependem de cadastros ainda inexistentes: só entram com a opção ligada.
   const linhasPendentesCadastro = useMemo(() => importResolucaoCadastros.rejeitadas.map((item) => item.row), [importResolucaoCadastros]);
@@ -274,7 +290,7 @@ export default function PesagensIndividuais() {
   };
 
   const colunasOrdenadas = colunasOrdem
-    .map(id => COLUNAS_DISPONIVEIS.find(c => c.id === id))
+    .map(id => colunasPermitidas.find(c => c.id === id))
     .filter(c => c && colunasVisiveis.includes(c.id));
   const tableMinWidth = colunasOrdenadas.reduce((total, coluna) => total + getColumnWidth(coluna.id), 0);
 
@@ -354,36 +370,28 @@ export default function PesagensIndividuais() {
 
   // Estatísticas
   const stats = useMemo(() => {
+    // Motor canônico: ausente ≠ 0 (sem valor → null, a tela mostra "-"); animais únicos por
+    // animal_id (fallback legado número+marca só para registros sem id); GMD de grupo ponderado.
     const total = pesagensFiltradas.length;
-    const pesoTotal = pesagensFiltradas.reduce((s, p) => s + (Number(p.peso) || 0), 0);
-    const registrosComPeso = pesagensFiltradas.filter((p) => Number.isFinite(Number(p.peso)) && Number(p.peso) > 0);
-    const pesoMedio = registrosComPeso.length > 0 ? pesoTotal / registrosComPeso.length : 0;
     const latestByAnimal = new Map();
     for (const entry of pesagensFiltradas) {
       const key = entry.animal_id || `${String(entry.numero_animal || '').trim().toUpperCase()}::${String(entry.marca || '').trim().toUpperCase()}`;
       const current = latestByAnimal.get(key);
       if (!current || String(entry.data_pesagem || '') > String(current.data_pesagem || '')) latestByAnimal.set(key, entry);
     }
-    const animaisUnicos = latestByAnimal.size;
     const ativos = [...latestByAnimal.values()].filter((entry) => (entry.status_animal || 'Ativo') === 'Ativo');
-    const pesoAtual = ativos.reduce((sum, entry) => sum + (Number(entry.peso) || 0), 0);
-    const pesoMedioAtual = ativos.length ? pesoAtual / ativos.length : 0;
-    const arrobaTotal = pesoTotal / 15;
-    const arrobaMedia = pesoMedio / 15;
-    const registrosComGmd = pesagensFiltradas.filter((p) => p.gmd !== null && p.gmd !== undefined && p.gmd !== '');
-    const registrosComGanho = pesagensFiltradas.filter((p) => p.ganho !== null && p.ganho !== undefined && p.ganho !== '');
-    const registrosComDias = pesagensFiltradas.filter((p) => p.dias !== null && p.dias !== undefined && p.dias !== '');
-    const gmdMedio = registrosComGmd.length > 0
-      ? registrosComGmd.reduce((s, p) => s + (Number(p.gmd) || 0), 0) / registrosComGmd.length
-      : 0;
-    const ganhoMedio = registrosComGanho.length > 0
-      ? registrosComGanho.reduce((s, p) => s + (Number(p.ganho) || 0), 0) / registrosComGanho.length
-      : 0;
-    const diasMedio = registrosComDias.length > 0
-      ? registrosComDias.reduce((s, p) => s + (Number(p.dias) || 0), 0) / registrosComDias.length
-      : 0;
-    const arrobaGanhaMedia = ganhoMedio / 15;
-    return { total, animaisUnicos, animaisAtivos: ativos.length, pesoMedio, pesoTotal, pesoAtual, pesoMedioAtual, arrobaMedia, arrobaTotal, gmdMedio, ganhoMedio, diasMedio, arrobaGanhaMedia };
+    return {
+      total,
+      animaisUnicos: latestByAnimal.size,
+      animaisAtivos: ativos.length,
+      pesoTotal: sumValues(pesagensFiltradas, 'peso').value,
+      pesoMedio: avgValues(pesagensFiltradas, 'peso').value,
+      pesoAtual: sumValues(ativos, 'peso').value,
+      pesoMedioAtual: avgValues(ativos, 'peso').value,
+      gmdMedio: weightedGmd(pesagensFiltradas).value,
+      ganhoMedio: avgValues(pesagensFiltradas, 'ganho').value,
+      diasMedio: avgValues(pesagensFiltradas, 'dias').value,
+    };
   }, [pesagensFiltradas]);
 
 
@@ -872,6 +880,7 @@ export default function PesagensIndividuais() {
       <div className="mak-mother-page__toolbar mg-subtoolbar-stack" data-mak-region="toolbar">
         <div data-template-id="action-bar" className="mg-action-bar canva-section flex w-full shrink-0 items-center" style={{ background: "var(--bg-card)" }}>
           <div className="mg-action-bar__actions flex min-w-0 items-center">
+            {podeLancar && (
             <div className="mg-action-slot is-visible" style={{ "--slot-width": "122px" }}>
               <Link to={createPageUrl("LancamentoPesagensIndividuais")} className="mg-action-slot__link">
                 <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green" title="Lançar pesagem">
@@ -879,6 +888,8 @@ export default function PesagensIndividuais() {
                 </button>
               </Link>
             </div>
+            )}
+            {podeEditar && (<>
             <div className={`mg-action-slot${selectedItems.length === 1 ? " is-visible" : ""}`} style={{ "--slot-width": "66px" }} aria-hidden={selectedItems.length !== 1}>
               <Link to={createPageUrl(`LancamentoPesagensIndividuais?editar=${selectedItems[0] || ""}`)} className="mg-action-slot__link" tabIndex={selectedItems.length === 1 ? 0 : -1}>
                 <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" title="Editar" tabIndex={-1}>
@@ -892,6 +903,7 @@ export default function PesagensIndividuais() {
                 Excluir
               </button>
             </div>
+            </>)}
           </div>
 
           <div className="mg-action-bar__end">
@@ -917,9 +929,11 @@ export default function PesagensIndividuais() {
                 onOpenChange={setMoreOpen}
                 items={[
                   { id: "atualizar", label: "Atualizar", icon: RefreshCw, onClick: () => refetch() },
-                  { id: "exportar", label: "Exportar CSV", icon: Download, onClick: exportarCSV },
-                  { id: "importar", label: "Importar CSV", icon: Upload, onClick: () => importInputRef.current?.click() },
-                  { id: "modelo", label: "Baixar modelo CSV", icon: FileSpreadsheet, onClick: baixarModelo },
+                  ...(podeExportar ? [{ id: "exportar", label: "Exportar CSV", icon: Download, onClick: exportarCSV }] : []),
+                  ...(podeImportar ? [
+                    { id: "importar", label: "Importar CSV", icon: Upload, onClick: () => importInputRef.current?.click() },
+                    { id: "modelo", label: "Baixar modelo CSV", icon: FileSpreadsheet, onClick: baixarModelo },
+                  ] : []),
                 ]}
               />
               <input ref={importInputRef} type="file" accept=".csv,.txt" className="sr-only" tabIndex={-1} aria-label="Importar CSV" onChange={handleFileUpload} />
@@ -1031,6 +1045,7 @@ export default function PesagensIndividuais() {
                           );
                         }
                         if (coluna.id === 'acoes') {
+                          if (!podeEditar) return <TableCell key="acoes" className="text-xs !p-0 text-center" />;
                           return (
                             <TableCell key="acoes" className="text-xs !p-0 text-center">
                               <DropdownMenu>
@@ -1339,7 +1354,7 @@ export default function PesagensIndividuais() {
         <MakColumnConfigDialog
           open={showConfigColunas}
           onOpenChange={setShowConfigColunas}
-          columns={COLUNAS_DISPONIVEIS}
+          columns={colunasPermitidas}
           order={colunasOrdem}
           visible={colunasVisiveis}
           onApply={aplicarConfiguracaoColunas}
