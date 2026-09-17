@@ -6,6 +6,8 @@ import __Layout from './Layout.jsx';
 // avaliados juntos na abertura do aplicativo.
 const LancamentoPesagensIndividuais = lazy(() => import('./pages/LancamentoPesagensIndividuais'));
 const PesagensIndividuais = lazy(() => import('./pages/PesagensIndividuais'));
+// Importação inteligente: assistente em etapas sobre o motor de src/modules/import.
+const Importacao = lazy(() => import('./pages/Importacao'));
 const ManutencaoSistema = lazy(() => import('./pages/ManutencaoSistema'));
 const FechamentoDia = lazy(() => import('./pages/FechamentoDia'));
 const FichaAnimal = lazy(() => import('./pages/FichaAnimal'));
@@ -27,6 +29,7 @@ const Configuracoes = lazy(() => import('./pages/Configuracoes'));
 export const PAGES = {
     "LancamentoPesagensIndividuais": LancamentoPesagensIndividuais,
     "PesagensIndividuais": PesagensIndividuais,
+    "Importacao": Importacao,
     "FechamentoDia": FechamentoDia,
     "FichaAnimal": FichaAnimal,
     "Sanidade": Sanidade,

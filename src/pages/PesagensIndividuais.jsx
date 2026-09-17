@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
+import React, { useMemo, useState } from "react";
 import MakTh, { makRowClass } from "@/components/mak/MakTh";
 import { isMakColumnFilterActive } from "@/components/mak/MakColumnMenu";
 import MakColumnConfigDialog from "@/components/mak/MakColumnConfigDialog";
@@ -29,7 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Upload, Search, Trash2, FileSpreadsheet, Download, FileDown,
   ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X, Scale,
-  AlertTriangle, CheckCircle2, Settings, MoreVertical, Layers, ListFilter, ChevronLeft, ChevronRight
+  Settings, MoreVertical, Layers, ListFilter, ChevronLeft, ChevronRight
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -39,18 +39,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
 import { TEMPLATE_KINDS, buildImportTemplateCsv } from "@/modules/import/domain/spreadsheetTemplate";
 import { buildDeletionPlan } from "@/modules/animals/domain/animalHistory";
 import { deleteEntriesRespectingHistory } from "@/modules/animals/application/animalHistoryService";
-import { applyImportLotSelection, importLotKey } from "@/modules/weighing/domain/importLotSelection";
-import { parseCsv } from "@/modules/weighing/domain/csvParser";
-import { parseBrazilianNumber, parseCivilDate } from "@/modules/weighing/domain/brazilianValues";
-import { isSnIdentifier, normalizeAnimalIdentifier } from "@/modules/animals/domain/snAnimal";
-import { sha256Hex } from "@/lib/sha256";
 import { useAuth } from "@/components/auth/useAuth";
 import { avg as avgValues, sum as sumValues, weightedGmd } from "@/modules/reporting/domain/aggregateEngine";
 import { normalizeText } from "@/modules/reporting/domain/filterEngine";
@@ -62,15 +57,11 @@ import { loadEventRows } from "@/modules/reporting/infrastructure/reportSources/
 import { EXPORT_PROFILES } from "@/modules/weighing/export/weighingExportContract";
 import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
 import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
-import { REGISTRY_WRITE_PERMISSION, brandService, breedService, resolveMany } from "@/modules/catalog/application/index";
-import { collectRegistryTexts, countUnknownRegistries, splitImportRowsByRegistry } from "@/modules/operations/domain/importRegistryResolution";
 
-// Importação (S-01.5 / IMPORT-TARGET-MODEL §2.2): marca e raça das linhas são
-// resolvidas por nome normalizado contra os cadastros mestres no dry-run. Texto
-// sem cadastro fica como erro por linha; só a opção explícita "Criar estes
-// cadastros ao importar" (exige registry.write) cria marcas/raças — e antes da
-// gravação das pesagens. Nenhuma criação silenciosa.
-const RESOLUCAO_CADASTROS_VAZIA = Object.freeze({ resolved: {}, desconhecidos: { marcas: [], racas: [] }, rejeitadas: [] });
+// Importação (17/09/2026): a Relação não lê mais arquivo nenhum. "Importar CSV" leva ao
+// assistente de Importação (src/pages/Importacao.jsx), onde a leitura, o mapeamento de
+// colunas, a escolha de tipo/lote, a conciliação (dry-run) e a gravação acontecem sobre o
+// motor de src/modules/import. Aqui ficam só a exportação e o modelo de planilha.
 
 // Colunas da Relação = ColumnDefinition compartilhada do grão EVENT (mesma definição dos
 // relatórios): filtro, ordenação e formatação vêm do núcleo de reporting.
@@ -141,26 +132,11 @@ export default function PesagensIndividuais() {
   const [showQuickSearch, setShowQuickSearch] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
-  const importInputRef = useRef(null);
   const [colunaMenuAberto, setColunaMenuAberto] = useState(null);
   const [filtrosColuna, setFiltrosColuna] = useState({});
-  
-  // Import states
-  const [showImportDialog, setShowImportDialog] = useState(false);
-  const [importData, setImportData] = useState([]);
-  const [importErrors, setImportErrors] = useState([]);
-  const [importFileInfo, setImportFileInfo] = useState(null);
-  const [isImporting, setIsImporting] = useState(false);
-  const [importProgress, setImportProgress] = useState(0);
   const [showConfigColunas, setShowConfigColunas] = useState(false);
-  const [tipoManejoImport, setTipoManejoImport] = useState('Manejo');
-  const [motivoSaidaImport, setMotivoSaidaImport] = useState('');
-  const [destinoVendaImport, setDestinoVendaImport] = useState('');
-  // Cadastros (marca/raça) não encontrados no dry-run e a opção de criá-los.
-  const [importResolucaoCadastros, setImportResolucaoCadastros] = useState(RESOLUCAO_CADASTROS_VAZIA);
-  const [criarCadastrosNaImportacao, setCriarCadastrosNaImportacao] = useState(false);
+  const navigate = useNavigate();
   const auth = useAuth();
-  const podeCriarCadastros = Boolean(auth?.can?.(REGISTRY_WRITE_PERMISSION));
   // Fora do AuthGate (harness de UI) não há sessão: nada é restringido; o serviço repete a checagem.
   const pode = (action) => (auth ? Boolean(auth.can?.(action)) : true);
   const podeLancar = pode('launch.use');
@@ -172,19 +148,6 @@ export default function PesagensIndividuais() {
     () => COLUNAS_DISPONIVEIS.filter((coluna) => podeVerValores || !COMMERCIAL_VALUE_COLUMN_IDS.has(coluna.id)),
     [podeVerValores],
   );
-  const totalCadastrosDesconhecidos = countUnknownRegistries(importResolucaoCadastros.desconhecidos);
-  // Linhas que dependem de cadastros ainda inexistentes: só entram com a opção ligada.
-  const linhasPendentesCadastro = useMemo(() => importResolucaoCadastros.rejeitadas.map((item) => item.row), [importResolucaoCadastros]);
-  const importErrosExibidos = useMemo(
-    () => (criarCadastrosNaImportacao ? importErrors : [...importErrors, ...importResolucaoCadastros.rejeitadas.map(({ linha, erro }) => ({ linha, erro }))]),
-    [criarCadastrosNaImportacao, importErrors, importResolucaoCadastros],
-  );
-  const totalLinhasImportaveis = importData.length + (criarCadastrosNaImportacao ? linhasPendentesCadastro.length : 0);
-  
-  // Estado para vinculação de lotes
-  const [showVincularLotes, setShowVincularLotes] = useState(false);
-  const [lotesParaVincular, setLotesParaVincular] = useState([]);
-  const [vincularLotesSelecionados, setVincularLotesSelecionados] = useState({});
 
   // Estado para edição em lote
   const [showEditarLote, setShowEditarLote] = useState(false);
@@ -345,249 +308,6 @@ export default function PesagensIndividuais() {
       key,
       direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
     }));
-  };
-
-  const handleFileUpload = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const text = e.target.result;
-        const fileHash = await sha256Hex(text);
-        setImportFileInfo({ id: crypto.randomUUID(), name: file.name, size: file.size, hash: fileHash, origin: 'csv' });
-        const { rows } = parseCsv(text);
-         
-        if (rows.length < 2) {
-          toast.error('Arquivo vazio ou sem dados');
-          return;
-        }
-
-        const headers = rows[0].map(h => h.trim().toLowerCase());
-        
-        // Mapear colunas (normaliza removendo espaços, acentos e underscores)
-        const normalizar = (str) => str.toLowerCase().replace(/[_\s]/g, '').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        
-        const colMap = {
-          id_sistema: headers.findIndex(h => normalizar(h) === 'id'),
-          id_externo: headers.findIndex(h => normalizar(h) === 'idexterno'),
-          data: headers.findIndex(h => normalizar(h) === 'data'),
-          numero_animal: headers.findIndex(h => normalizar(h) === 'numeroanimal' || normalizar(h) === 'animal'),
-          sexo: headers.findIndex(h => normalizar(h) === 'sexo'),
-          raca: headers.findIndex(h => normalizar(h) === 'raca' || normalizar(h) === 'raça'),
-          era: headers.findIndex(h => normalizar(h) === 'era'),
-          marca: headers.findIndex(h => normalizar(h) === 'marca'),
-          peso: headers.findIndex(h => normalizar(h) === 'peso'),
-          nome_lote: headers.findIndex(h => normalizar(h) === 'lote' || normalizar(h) === 'nomelote'),
-          nome_apartacao: headers.findIndex(h => normalizar(h) === 'apartacao' || normalizar(h) === 'nomeapartacao'),
-          observacao: headers.findIndex(h => normalizar(h) === 'observacao' || normalizar(h) === 'obs'),
-          data_anterior: headers.findIndex(h => normalizar(h) === 'dataanterior'),
-          peso_anterior: headers.findIndex(h => normalizar(h) === 'pesoanterior'),
-          dias: headers.findIndex(h => normalizar(h) === 'dias'),
-          ganho: headers.findIndex(h => normalizar(h) === 'ganho'),
-          gmd: headers.findIndex(h => normalizar(h) === 'gmd'),
-        };
-
-        const dados = [];
-        const erros = [];
-
-        for (let i = 1; i < rows.length; i++) {
-          const valores = rows[i];
-          
-          const registro = {
-            linha: i + 1,
-            id_externo: colMap.id_externo >= 0 ? valores[colMap.id_externo] : null,
-            data_pesagem: colMap.data >= 0 ? parseCivilDate(valores[colMap.data]) : null,
-            numero_animal: colMap.numero_animal >= 0 ? normalizeAnimalIdentifier(valores[colMap.numero_animal]) : null,
-            sexo: colMap.sexo >= 0 ? valores[colMap.sexo]?.toUpperCase() : null,
-            raca: colMap.raca >= 0 ? valores[colMap.raca] : null,
-            era: colMap.era >= 0 ? valores[colMap.era] : null,
-            marca: colMap.marca >= 0 ? valores[colMap.marca] : null,
-            peso: colMap.peso >= 0 ? parseBrazilianNumber(valores[colMap.peso]) : null,
-            nome_lote: colMap.nome_lote >= 0 ? valores[colMap.nome_lote] : null,
-            nome_apartacao: colMap.nome_apartacao >= 0 ? valores[colMap.nome_apartacao] : null,
-            observacao: colMap.observacao >= 0 ? valores[colMap.observacao] : null,
-            // Derivados do arquivo são deliberadamente ignorados. O serviço
-            // recompõe a série após o commit atômico da importação.
-            data_anterior: null,
-            peso_anterior: null,
-            dias: null,
-            ganho: null,
-            gmd: null,
-          };
-
-          // Validar campos obrigatórios
-          if (!registro.numero_animal) {
-            erros.push({ linha: i + 1, erro: 'Número do animal não informado' });
-            continue;
-          }
-          if (!Number.isFinite(registro.peso) || registro.peso <= 0) {
-            erros.push({ linha: i + 1, erro: `Animal ${registro.numero_animal}: Peso não informado` });
-            continue;
-          }
-          if (!registro.data_pesagem) {
-            erros.push({ linha: i + 1, erro: `Animal ${registro.numero_animal}: Data inválida` });
-            continue;
-          }
-
-          // Se for SN, limpar campos de ganho/GMD
-          const isSN = isSnIdentifier(registro.numero_animal);
-          if (isSN) {
-            registro.data_anterior = null;
-            registro.peso_anterior = null;
-            registro.dias = null;
-            registro.ganho = null;
-            registro.gmd = null;
-          }
-
-          dados.push(registro);
-        }
-
-        // Dry-run de cadastros: marca/raça resolvidas por nome normalizado
-        // (resolvedor único). Texto não cadastrado sai da lista elegível e vira
-        // erro por linha até o responsável optar por criar os cadastros.
-        const resolucao = await resolveMany(collectRegistryTexts(dados), { empresaId: empresaSelecionadaId });
-        const { elegiveis, rejeitadas, desconhecidos } = splitImportRowsByRegistry(dados, resolucao, { criarDesconhecidos: false });
-        setImportResolucaoCadastros({ resolved: resolucao, desconhecidos, rejeitadas });
-        setCriarCadastrosNaImportacao(false);
-        const dadosElegiveis = elegiveis;
-
-        // Verificar se há lotes/apartações no arquivo que existem no sistema
-        const lotesNoArquivo = [...new Set(dados.filter(d => d.nome_lote && d.nome_apartacao).map(d => `${d.nome_lote}|${d.nome_apartacao}`))];
-        const lotesEncontrados = [];
-        
-        for (const loteKey of lotesNoArquivo) {
-          const [nomeLote, nomeApartacao] = loteKey.split('|');
-          
-          // Buscar apartação pelo nome
-          const apartacao = apartacoesData.find(a => a.nome_apartacao?.toUpperCase() === nomeApartacao?.toUpperCase());
-          if (apartacao) {
-            // Buscar lote pelo nome dentro da apartação
-            const lote = lotesData.find(l => 
-              l.apartacao_id === apartacao.id && 
-              l.nome_lote?.toUpperCase() === nomeLote?.toUpperCase()
-            );
-            if (lote) {
-              lotesEncontrados.push({
-                nome_lote: nomeLote,
-                nome_apartacao: nomeApartacao,
-                lote_id: lote.id,
-                apartacao_id: apartacao.id,
-                quantidade: dados.filter(d => d.nome_lote === nomeLote && d.nome_apartacao === nomeApartacao).length
-              });
-            }
-          }
-        }
-
-        setImportData(dadosElegiveis);
-        setImportErrors(erros);
-        
-        if (lotesEncontrados.length > 0) {
-          setLotesParaVincular(lotesEncontrados);
-          // Inicializar todos como selecionados para vincular
-          const selecionados = {};
-          lotesEncontrados.forEach((lote) => { selecionados[importLotKey(lote)] = true; });
-          setVincularLotesSelecionados(selecionados);
-          setShowVincularLotes(true);
-        } else {
-          setShowImportDialog(true);
-        }
-      } catch (error) {
-        toast.error('Erro ao processar arquivo: ' + error.message);
-      }
-    };
-    reader.readAsText(file, 'UTF-8');
-    event.target.value = '';
-  };
-
-  const confirmarVinculacaoLotes = () => {
-    const dadosAtualizados = applyImportLotSelection(importData, lotesParaVincular, vincularLotesSelecionados);
-    const removidos = importData.length - dadosAtualizados.length;
-    if (removidos > 0) toast.info(`${fmtInt(removidos)} registro(s) removido(s) por não vincular aos lotes existentes.`);
-    setImportData(dadosAtualizados);
-    // As linhas pendentes de cadastro seguem a mesma decisão de lotes.
-    setImportResolucaoCadastros((atual) => {
-      const linhasMantidas = new Set(applyImportLotSelection(atual.rejeitadas.map((item) => item.row), lotesParaVincular, vincularLotesSelecionados).map((row) => row.linha));
-      return { ...atual, rejeitadas: atual.rejeitadas.filter((item) => linhasMantidas.has(item.row.linha)) };
-    });
-    setShowVincularLotes(false);
-    setShowImportDialog(true);
-  };
-
-  // Estado para texto de progresso detalhado
-  const [importProgressText, setImportProgressText] = useState("");
-
-  // Cria as marcas/raças desconhecidas (opção explícita, registry.write) e
-  // devolve TODAS as linhas com os ids resolvidos — sempre antes de bulkCreateEntries.
-  const criarCadastrosDesconhecidos = async () => {
-    if (!podeCriarCadastros) throw new Error('Seu perfil não pode criar cadastros. Peça a um gestor para cadastrar as marcas/raças antes de importar.');
-    const actor = auth?.user || null;
-    const { marcas = [], racas = [] } = importResolucaoCadastros.desconhecidos;
-    setImportProgressText(`Criando ${fmtInt(marcas.length + racas.length)} cadastro(s) informado(s) no arquivo...`);
-    for (const nome of marcas) await brandService.create(actor, { nome, empresa_id: empresaSelecionadaId });
-    for (const nome of racas) await breedService.create(actor, { nome, empresa_id: empresaSelecionadaId });
-    const todas = [...importData, ...linhasPendentesCadastro];
-    const resolucao = await resolveMany(collectRegistryTexts(todas), { empresaId: empresaSelecionadaId });
-    const { elegiveis, rejeitadas } = splitImportRowsByRegistry(todas, resolucao, { criarDesconhecidos: false });
-    if (rejeitadas.length) throw new Error(`Cadastros ainda não encontrados após a criação: ${rejeitadas[0].erro}`);
-    return elegiveis;
-  };
-
-  const confirmarImportacao = async () => {
-    if (totalLinhasImportaveis === 0) {
-      toast.error('Nenhum dado válido para importar');
-      return;
-    }
-    if (criarCadastrosNaImportacao && !podeCriarCadastros) {
-      toast.error('Seu perfil não pode criar cadastros. Desmarque a opção ou peça a um gestor.');
-      return;
-    }
-
-    setIsImporting(true);
-    setImportProgress(0);
-    setImportProgressText("Iniciando importação...");
-
-    try {
-      // Sem a opção, só as linhas com marca/raça cadastradas (ou em branco) entram.
-      const linhasParaImportar = criarCadastrosNaImportacao && totalCadastrosDesconhecidos > 0
-        ? await criarCadastrosDesconhecidos()
-        : importData;
-      const registros = linhasParaImportar.map(({ linha: _linha, ...item }) => ({
-          ...item,
-          empresa_id: empresaSelecionadaId,
-          tipo_manejo: tipoManejoImport,
-          motivo_saida: tipoManejoImport === 'Saída' ? motivoSaidaImport : null,
-          status_animal: tipoManejoImport === 'Saída' ? 'Inativo' : 'Ativo',
-          destino_venda: (tipoManejoImport === 'Saída' && motivoSaidaImport === 'Venda') ? destinoVendaImport : null,
-        }));
-      setImportProgressText(`Validando e gravando ${fmtInt(registros.length)} registros em uma única transação...`);
-      const importReport = await weighingService.bulkCreateEntries(registros, {
-        importMetadata: { ...importFileInfo, totalRows: registros.length + importErrosExibidos.length, operador: 'LOCAL' },
-      });
-      const importados = registros.length;
-      setImportProgress(100);
-
-      setImportProgressText("Finalizando...");
-      toast.success(`${importados} pesagens importadas; ${fmtInt(importReport.animais_criados || 0)} animais e ${fmtInt(importReport.movimentos_criados || 0)} movimentos criados.`);
-      setShowImportDialog(false);
-      setImportData([]);
-      setImportErrors([]);
-      setImportFileInfo(null);
-      setLotesParaVincular([]);
-      setVincularLotesSelecionados({});
-      setImportResolucaoCadastros(RESOLUCAO_CADASTROS_VAZIA);
-      setCriarCadastrosNaImportacao(false);
-      setTipoManejoImport('Manejo');
-      setMotivoSaidaImport('');
-      setDestinoVendaImport('');
-      queryClient.invalidateQueries({ queryKey: ['pesagens-individuais'] });
-    } catch (error) {
-      toast.error('Erro ao importar: ' + error.message);
-    } finally {
-      setIsImporting(false);
-      setImportProgressText("");
-    }
   };
 
   const deletePlan = useMemo(() => buildDeletionPlan(pesagens, deleteRequest.ids), [pesagens, deleteRequest.ids]);
@@ -869,12 +589,11 @@ export default function PesagensIndividuais() {
                     { id: "exportar-reimportacao", label: "Exportar para reimportação (CSV)", icon: FileDown, onClick: () => exportarCSV(EXPORT_PROFILES.REIMPORT) },
                   ] : []),
                   ...(podeImportar ? [
-                    { id: "importar", label: "Importar CSV", icon: Upload, onClick: () => importInputRef.current?.click() },
+                    { id: "importar", label: "Importar CSV", icon: Upload, onClick: () => navigate(createPageUrl("Importacao")) },
                     { id: "modelo", label: "Baixar modelo CSV", icon: FileSpreadsheet, onClick: baixarModelo },
                   ] : []),
                 ]}
               />
-              <input ref={importInputRef} type="file" accept=".csv,.txt" className="sr-only" tabIndex={-1} aria-label="Importar CSV" onChange={handleFileUpload} />
             </div>
           </div>
         </div>
@@ -1224,315 +943,6 @@ export default function PesagensIndividuais() {
         />
       ) : null}
 
-      {/* Dialog de Vinculação de Lotes */}
-      <Dialog open={showVincularLotes} onOpenChange={setShowVincularLotes}>
-        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--medium">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-amber-700">
-              <AlertTriangle className="w-5 h-5" />
-              Lotes Encontrados no Sistema
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="d17b-standard-dialog__body space-y-4">
-            <div className="bg-amber-50 border border-amber-200 rounded p-3">
-              <p className="text-xs text-amber-800">
-                ⚠️ Foram encontrados lotes no arquivo que já existem no sistema. 
-                Selecione quais deseja vincular. <strong>Registros de lotes não selecionados serão removidos da importação.</strong>
-              </p>
-            </div>
-            
-            <div className="max-h-64 overflow-auto border rounded">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-xs w-10"><MakTableSelectCheck checked={lotesParaVincular.length > 0 && lotesParaVincular.every((lote) => vincularLotesSelecionados[importLotKey(lote)])} ariaLabel="Selecionar todos os lotes encontrados" onChange={(checked) => setVincularLotesSelecionados(Object.fromEntries(lotesParaVincular.map((lote) => [importLotKey(lote), checked])))} /></TableHead>
-                    <TableHead className="text-xs">Lote</TableHead>
-                    <TableHead className="text-xs">Apartação</TableHead>
-                    <TableHead className="text-xs text-right">Qtd. Registros</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {lotesParaVincular.map((lote) => {
-                    const key = importLotKey(lote);
-                    return (
-                      <TableRow key={key} className="hover:bg-gray-50">
-                        <TableCell className="text-xs py-1 border border-gray-300">
-                          <MakTableSelectCheck
-                            checked={vincularLotesSelecionados[key] || false}
-                            ariaLabel={`Vincular lote ${lote.nome_lote}`}
-                            onChange={(checked) => {
-                              setVincularLotesSelecionados(prev => ({
-                                ...prev,
-                                [key]: checked
-                              }));
-                            }}
-                          />
-                        </TableCell>
-                        <TableCell className="text-xs py-1 border border-gray-300 font-semibold">{lote.nome_lote}</TableCell>
-                        <TableCell className="text-xs py-1 border border-gray-300">{lote.nome_apartacao}</TableCell>
-                        <TableCell className="text-xs py-1 border border-gray-300 text-right">{fmtInt(lote.quantidade)}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-            
-            <div className="text-xs text-slate-600">
-              {fmtInt(Object.values(vincularLotesSelecionados).filter(v => v).length)} de {fmtInt(lotesParaVincular.length)} lotes selecionados para vincular
-            </div>
-          </div>
-
-          <DialogFooter className="d17b-standard-dialog__footer">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setShowVincularLotes(false);
-                setImportData([]);
-                setLotesParaVincular([]);
-                setImportResolucaoCadastros(RESOLUCAO_CADASTROS_VAZIA);
-                setCriarCadastrosNaImportacao(false);
-                toast.info('Importação cancelada');
-              }}
-            >
-              Cancelar Importação
-            </Button>
-            <Button onClick={confirmarVinculacaoLotes} className="emp-toolbar-btn emp-toolbar-btn-save">
-              Continuar com Importação
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog de Importação */}
-      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
-        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--large overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileSpreadsheet className="w-5 h-5" />
-              Importar Pesagens Individuais
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="d17b-standard-dialog__body flex-1 overflow-auto space-y-4">
-            {/* Seleção de Tipo de Manejo */}
-            <Card className="border-emerald-200 bg-emerald-50">
-              <CardContent className="p-3 space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold">Tipo de Movimentação *</Label>
-                    <Select value={tipoManejoImport} onValueChange={(v) => { setTipoManejoImport(v); setMotivoSaidaImport(''); setDestinoVendaImport(''); }}>
-                      <SelectTrigger className="h-8 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Cadastro">Cadastro (Novo Animal)</SelectItem>
-                        <SelectItem value="Manejo">Manejo (Pesagem)</SelectItem>
-                        <SelectItem value="Saída">Saída (Venda/Morte/Doação)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {tipoManejoImport === 'Saída' && (
-                    <>
-                      <div className="space-y-1">
-                        <Label className="text-xs font-semibold">Motivo da Saída *</Label>
-                        <Select value={motivoSaidaImport || undefined} onValueChange={setMotivoSaidaImport}>
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Selecione" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Venda">Venda</SelectItem>
-                            <SelectItem value="Morte">Morte</SelectItem>
-                            <SelectItem value="Doação">Doação</SelectItem>
-                            <SelectItem value="Abate">Abate</SelectItem>
-                            <SelectItem value="Transferência">Transferência</SelectItem>
-                            <SelectItem value="Outros">Outros</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {motivoSaidaImport === 'Venda' && (
-                        <div className="space-y-1">
-                          <Label className="text-xs font-semibold">Destino da Venda</Label>
-                          <Input
-                            value={destinoVendaImport}
-                            onChange={(e) => setDestinoVendaImport(e.target.value)}
-                            placeholder="Ex: Fazenda XYZ"
-                            className="h-8 text-xs"
-                          />
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-
-                <div className="bg-white border border-emerald-300 rounded p-2">
-                  <p className="text-xs text-emerald-800">
-                    ℹ️ <strong>{tipoManejoImport}:</strong> {
-                      tipoManejoImport === 'Cadastro' 
-                        ? 'Novos animais serão marcados como ATIVOS (não calcula ganho de peso)' 
-                        : tipoManejoImport === 'Saída'
-                        ? 'Animais serão marcados como INATIVOS automaticamente'
-                        : 'Pesagem periódica com cálculo de ganho de peso'
-                    }
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Resumo */}
-            <div className="grid grid-cols-2 gap-3">
-              <Card className="bg-emerald-50">
-                <CardContent className="p-3 flex items-center gap-2">
-                  <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                  <div>
-                    <div className="text-xs text-emerald-600">Registros Válidos</div>
-                    <div className="text-lg font-bold text-emerald-800">{fmtInt(totalLinhasImportaveis)}</div>
-                  </div>
-                </CardContent>
-              </Card>
-              {importErrosExibidos.length > 0 && (
-                <Card className="bg-red-50">
-                  <CardContent className="p-3 flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 text-red-600" />
-                    <div>
-                      <div className="text-xs text-red-600">Erros</div>
-                      <div className="text-lg font-bold text-red-800">{fmtInt(importErrosExibidos.length)}</div>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-
-            {/* Cadastros não encontrados (marca/raça): nunca criados em silêncio */}
-            {totalCadastrosDesconhecidos > 0 && (
-              <Card className="border-amber-200" data-import-unknown-registries>
-                <CardHeader className="py-2 px-3 bg-amber-50">
-                  <CardTitle className="text-sm text-amber-800">Cadastros não encontrados ({fmtInt(totalCadastrosDesconhecidos)})</CardTitle>
-                </CardHeader>
-                <CardContent className="p-3 space-y-2">
-                  <p className="text-xs text-slate-600">
-                    Estes valores do arquivo não existem nos cadastros mestres. As {fmtInt(linhasPendentesCadastro.length)} linha(s) que os usam só entram na importação se você optar por criá-los.
-                  </p>
-                  {importResolucaoCadastros.desconhecidos.marcas.length > 0 && (
-                    <div className="text-xs"><strong>Marcas:</strong> {importResolucaoCadastros.desconhecidos.marcas.join(', ')}</div>
-                  )}
-                  {importResolucaoCadastros.desconhecidos.racas.length > 0 && (
-                    <div className="text-xs"><strong>Raças:</strong> {importResolucaoCadastros.desconhecidos.racas.join(', ')}</div>
-                  )}
-                  <label className="flex items-center gap-2 text-xs font-medium text-slate-800">
-                    <input
-                      type="checkbox"
-                      checked={criarCadastrosNaImportacao}
-                      disabled={!podeCriarCadastros || isImporting}
-                      onChange={(e) => setCriarCadastrosNaImportacao(e.target.checked)}
-                      aria-label="Criar estes cadastros ao importar"
-                    />
-                    Criar estes cadastros ao importar
-                  </label>
-                  {!podeCriarCadastros && (
-                    <p className="text-xs text-amber-700">Seu perfil não pode criar cadastros (permissão registry.write). Peça a um gestor para cadastrá-los antes de importar.</p>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Erros */}
-            {importErrosExibidos.length > 0 && (
-              <Card className="border-red-200">
-                <CardHeader className="py-2 px-3 bg-red-50">
-                  <CardTitle className="text-sm text-red-700">Erros na Importação</CardTitle>
-                </CardHeader>
-                <CardContent className="p-2 max-h-32 overflow-auto">
-                  {importErrosExibidos.slice(0, 10).map((err, idx) => (
-                    <div key={idx} className="text-xs text-red-600 py-1">
-                      Linha {err.linha}: {err.erro}
-                    </div>
-                  ))}
-                  {importErrosExibidos.length > 10 && (
-                    <div className="text-xs text-red-500 font-semibold">... e mais {importErrosExibidos.length - 10} erros</div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Preview */}
-            {importData.length > 0 && (
-              <div>
-                <Label className="text-sm font-semibold mb-2 block">Preview (primeiros 20 registros)</Label>
-                <div className="overflow-auto max-h-64 border rounded">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-xs">Data</TableHead>
-                        <TableHead className="text-xs">Animal</TableHead>
-                        <TableHead className="text-xs">Sexo</TableHead>
-                        <TableHead className="text-xs">Marca</TableHead>
-                        <TableHead className="text-xs">Raça</TableHead>
-                        <TableHead className="text-xs text-right">Peso</TableHead>
-                        <TableHead className="text-xs">Lote</TableHead>
-                        <TableHead className="text-xs">Apartação</TableHead>
-                        <TableHead className="text-xs text-right">GMD</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {importData.slice(0, 20).map((item, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="text-xs">{fmtDateBR(item.data_pesagem)}</TableCell>
-                          <TableCell className="text-xs font-medium">{item.numero_animal}</TableCell>
-                          <TableCell className="text-xs">{item.sexo}</TableCell>
-                          <TableCell className="text-xs">{item.marca || '-'}</TableCell>
-                          <TableCell className="text-xs">{item.raca || '-'}</TableCell>
-                          <TableCell className="text-xs text-right font-mono">{fmtNum(item.peso)}</TableCell>
-                          <TableCell className="text-xs">{item.nome_lote}</TableCell>
-                          <TableCell className="text-xs">{item.nome_apartacao}</TableCell>
-                          <TableCell className="text-xs text-right font-mono">{item.gmd != null ? fmtNum(item.gmd, 3) : '-'}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
-            )}
-
-            {/* Progress */}
-            {isImporting && (
-              <div className="space-y-2 bg-blue-50 border border-blue-200 rounded p-3">
-                <div className="flex justify-between text-xs text-slate-700">
-                  <span className="font-medium">{importProgressText || 'Importando...'}</span>
-                  <span className="font-bold text-blue-700">{importProgress}%</span>
-                </div>
-                <div className="w-full bg-slate-200 rounded-full h-3">
-                  <div className="bg-emerald-600 h-3 rounded-full transition-all" style={{ width: `${importProgress}%` }} />
-                </div>
-                <div className="text-[10px] text-slate-500 text-center">
-                  Aguarde, não feche esta janela...
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="d17b-standard-dialog__footer">
-            <Button variant="outline" onClick={() => {
-              setShowImportDialog(false);
-              setTipoManejoImport('Manejo');
-              setMotivoSaidaImport('');
-              setDestinoVendaImport('');
-            }} disabled={isImporting}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={confirmarImportacao}
-              disabled={isImporting || totalLinhasImportaveis === 0 || (tipoManejoImport === 'Saída' && !motivoSaidaImport) || (criarCadastrosNaImportacao && !podeCriarCadastros)}
-              className="emp-toolbar-btn emp-toolbar-btn-save"
-            >
-              {isImporting ? 'Importando...' : `Importar ${fmtInt(totalLinhasImportaveis)} Registros`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </ModeloBase1PageContainer>
   );
 }

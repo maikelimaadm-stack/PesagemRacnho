@@ -1,0 +1,249 @@
+/* Assistente de importação (OPERAÇÃO › Importação). A composição da página, a barra de
+   ações, as abas e os diálogos vêm do ModeloBase1 (modelo-base1-shell.css,
+   d17b-modelobase1.css); aqui ficam só as peças próprias do assistente: trilha de etapas,
+   cartões de escolha, aferição do arquivo, painel de contagens, tabelas do mapeamento e da
+   conferência e a barra de progresso. Todas as cores saem dos tokens --mb1-*, então claro e
+   escuro seguem o mesmo shell; as cores por situação da linha têm par no tema escuro. */
+
+.importacao-page { gap: 8px; }
+.importacao-body {
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid var(--mb1-border);
+  border-radius: var(--mb1-radius-card);
+  background: var(--mb1-bg-card);
+  box-shadow: var(--mb1-container-shadow);
+}
+
+/* Trilha das etapas */
+.importacao-steps .importacao-steps__control { flex-wrap: wrap; }
+.importacao-steps__tab { display: inline-flex; align-items: center; gap: 6px; }
+.importacao-steps__tab:disabled { opacity: .45; cursor: not-allowed; }
+.importacao-steps__badge {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  background: var(--mb1-bg-field);
+  color: var(--mb1-text-2);
+  font-size: 9px;
+  font-weight: 700;
+}
+.importacao-steps__tab.active .importacao-steps__badge { background: var(--mb1-green); color: #0f2f18; }
+.importacao-steps__tab[data-concluida="true"] .importacao-steps__badge { background: var(--mb1-green-soft); color: #118b32; }
+
+/* Conteúdo de uma etapa */
+.importacao-step { display: flex; flex-direction: column; gap: 10px; }
+.importacao-step__title { margin: 0; color: var(--mb1-text-1); font-size: 15px; font-weight: 700; line-height: 20px; }
+.importacao-step__subtitle { margin: 6px 0 0; color: var(--mb1-text-1); font-size: 12px; font-weight: 700; }
+.importacao-step__lead { margin: 0; max-width: 90ch; color: var(--mb1-text-2); font-size: 12px; line-height: 17px; }
+.importacao-step__tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.importacao-step__tools--fim { margin-top: 6px; }
+.importacao-hint { margin: 0; color: var(--mb1-text-3); font-size: 11px; line-height: 15px; }
+.importacao-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--mb1-border);
+  border-radius: var(--mb1-radius-control);
+  color: var(--mb1-text-2);
+  font-size: 12px;
+  text-align: center;
+}
+.importacao-list { margin: 4px 0 0; padding-left: 18px; color: var(--mb1-text-2); font-size: 11px; line-height: 16px; }
+.importacao-link-button {
+  border: 0;
+  background: none;
+  color: #118b32;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Avisos */
+.importacao-alert {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 0;
+  padding: 8px 10px;
+  gap: 8px;
+  border: 1px solid var(--mb1-border);
+  border-radius: var(--mb1-radius-control);
+  background: var(--mb1-bg-field);
+  color: var(--mb1-text-1);
+  font-size: 12px;
+  line-height: 17px;
+}
+.importacao-alert--ok { border-color: #6ee7b7; background: #ecfdf5; color: #047857; }
+.importacao-alert--aviso { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
+.importacao-alert--erro { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
+.importacao-alert--info { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+.importacao-alert .importacao-list { color: inherit; }
+
+/* Arquivo */
+.importacao-file-box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.importacao-facts { display: flex; flex-wrap: wrap; margin: 0; gap: 8px 18px; }
+.importacao-facts div { display: flex; flex-direction: column; }
+.importacao-facts dt { color: var(--mb1-text-3); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.importacao-facts dd { margin: 0; color: var(--mb1-text-1); font-size: 12px; font-weight: 600; }
+
+/* Campos */
+.importacao-field { display: flex; flex-direction: column; min-width: 180px; gap: 3px; }
+.importacao-field--inline { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
+.importacao-field label { color: var(--mb1-text-2); font-size: 11px; font-weight: 600; }
+.importacao-field-grid { display: flex; flex-wrap: wrap; gap: 10px 14px; }
+.importacao-select,
+.importacao-input {
+  min-width: 170px;
+  height: var(--mb1-button-height);
+  padding: 0 8px;
+  border: 1px solid var(--mb1-border);
+  border-radius: var(--mb1-radius-control);
+  background: var(--mb1-bg-card);
+  color: var(--mb1-text-1);
+  font-size: 12px;
+}
+.importacao-select:focus-visible,
+.importacao-input:focus-visible { outline: 0; border-color: var(--mb1-focus-border); box-shadow: var(--mb1-focus-ring); }
+.importacao-check { display: flex; align-items: flex-start; gap: 8px; color: var(--mb1-text-1); font-size: 12px; line-height: 17px; }
+.importacao-check input { margin-top: 2px; }
+.importacao-template-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+
+/* Cartões de escolha (pergunta da conciliação, tipos, modo de categoria) */
+.importacao-choice-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.importacao-choice-grid--compacta { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.importacao-choice {
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px;
+  gap: 4px;
+  border: 1px solid var(--mb1-border);
+  border-radius: var(--mb1-radius-card);
+  background: var(--mb1-bg-card);
+  color: var(--mb1-text-1);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--mb1-motion), background var(--mb1-motion);
+}
+.importacao-choice:hover:not(:disabled) { border-color: var(--mb1-focus-border); }
+.importacao-choice:disabled { opacity: .55; cursor: not-allowed; }
+.importacao-choice strong { font-size: 13px; font-weight: 700; line-height: 18px; }
+.importacao-choice span { color: var(--mb1-text-2); font-size: 11px; line-height: 16px; }
+.importacao-choice small { color: var(--mb1-text-3); font-size: 10px; line-height: 14px; }
+.importacao-choice--ativa { border-color: var(--mb1-green); background: var(--mb1-green-soft); }
+.importacao-choice__bloqueio { color: #b91c1c; }
+.importacao-subchoice { display: flex; flex-direction: column; gap: 8px; }
+
+/* Aferição do arquivo */
+.importacao-afericao { display: flex; flex-direction: column; gap: 8px; }
+.importacao-afericao__linha {
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--mb1-border);
+  border-radius: var(--mb1-radius-control);
+  background: var(--mb1-bg-field);
+  color: var(--mb1-text-1);
+  font-size: 12px;
+}
+
+/* Painel de contagens */
+.importacao-counts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.importacao-count {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  gap: 2px;
+  border: 1px solid var(--mb1-border);
+  border-radius: var(--mb1-radius-control);
+  background: var(--mb1-bg-card);
+}
+.importacao-count__valor { color: var(--mb1-text-1); font-size: 17px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 20px; }
+.importacao-count__label { color: var(--mb1-text-2); font-size: 10px; line-height: 14px; }
+.importacao-count--ok { border-color: #6ee7b7; }
+.importacao-count--aviso { border-color: #fcd34d; }
+.importacao-count--erro { border-color: #fca5a5; }
+.importacao-count--erro .importacao-count__valor { color: #b91c1c; }
+
+.importacao-repetidos { display: flex; flex-direction: column; gap: 4px; }
+
+/* Tabelas do assistente */
+.importacao-table-wrap { overflow: auto; border: 1px solid var(--mb1-border); border-radius: var(--mb1-radius-control); }
+.importacao-table-wrap--rolagem { max-height: 420px; }
+.importacao-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.importacao-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--mb1-border);
+  background: var(--mb1-bg-field);
+  color: var(--mb1-text-1);
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  white-space: nowrap;
+}
+.importacao-table tbody th,
+.importacao-table tbody td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--mb1-border);
+  color: var(--mb1-text-1);
+  font-weight: 400;
+  text-align: left;
+  vertical-align: top;
+}
+.importacao-table tbody th { font-weight: 600; white-space: nowrap; }
+.importacao-table__sample,
+.importacao-table__mensagens { color: var(--mb1-text-2); }
+.importacao-table__num { text-align: right; font-variant-numeric: tabular-nums; }
+.importacao-table__nota { display: block; color: var(--mb1-text-3); font-size: 9px; }
+.importacao-table td.importacao-empty { border: 0; }
+
+.importacao-pager { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--mb1-text-2); font-size: 11px; }
+
+/* Situação da linha */
+.importacao-status {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+.importacao-status--novo { border-color: #6ee7b7; background: #ecfdf5; color: #047857; }
+.importacao-status--existe { border-color: #cbd5e1; background: #f1f5f9; color: #475569; }
+.importacao-status--duplicidade { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
+.importacao-status--conflito { border-color: #fdba74; background: #fff7ed; color: #c2410c; }
+.importacao-status--erro { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
+.importacao-status--ambiguo { border-color: #c4b5fd; background: #f5f3ff; color: #6d28d9; }
+.importacao-status--ignorada { border-color: #e2e8f0; background: #f8fafc; color: #94a3b8; }
+
+/* Confirmação e progresso */
+.importacao-confirm-dialog__body { display: flex; flex-direction: column; gap: 10px; font-size: 12px; }
+.importacao-progress { display: flex; flex-direction: column; gap: 4px; }
+.importacao-progress__bar { width: 100%; height: 8px; overflow: hidden; border-radius: 999px; background: var(--mb1-bg-field); }
+.importacao-progress__fill { height: 100%; background: var(--mb1-green); transition: width var(--mb1-motion); }
+.importacao-progress p { margin: 0; color: var(--mb1-text-2); font-size: 11px; }
+
+.importacao-navbar__passo { color: var(--mb1-text-2); font-size: 11px; font-weight: 600; }
+
+/* Tema escuro: as faixas coloridas acima são claras demais sobre o fundo #0d1117. */
+html:is(.dark, .tema-escuro, .escuro) .importacao-alert--ok { border-color: #1a7f4b; background: rgba(16, 185, 129, .12); color: #6ee7b7; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-alert--aviso { border-color: #a16207; background: rgba(217, 119, 6, .14); color: #fcd34d; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-alert--erro { border-color: #b91c1c; background: rgba(220, 38, 38, .14); color: #fca5a5; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-alert--info { border-color: #1d4ed8; background: rgba(37, 99, 235, .16); color: #93c5fd; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-count--erro .importacao-count__valor { color: #fca5a5; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-link-button { color: #6ee7b7; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-status--novo { border-color: #1a7f4b; background: rgba(16, 185, 129, .16); color: #6ee7b7; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-status--existe { border-color: #484f58; background: rgba(148, 163, 184, .14); color: #cbd5e1; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-status--duplicidade { border-color: #a16207; background: rgba(217, 119, 6, .16); color: #fcd34d; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-status--conflito { border-color: #c2410c; background: rgba(234, 88, 12, .16); color: #fdba74; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-status--erro { border-color: #b91c1c; background: rgba(220, 38, 38, .16); color: #fca5a5; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-status--ambiguo { border-color: #6d28d9; background: rgba(124, 58, 237, .18); color: #c4b5fd; }
+html:is(.dark, .tema-escuro, .escuro) .importacao-status--ignorada { border-color: #484f58; background: rgba(148, 163, 184, .1); color: #848d97; }

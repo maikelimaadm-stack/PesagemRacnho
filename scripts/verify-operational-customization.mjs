@@ -245,23 +245,24 @@ assert.match(closing, /session\?\.status === 'FECHADA'/, 'Fechamento lê o statu
 assert.match(closing, /loadOperationalPolicies\(\)/, 'Fechamento lê a política comercial');
 assert.doesNotMatch(closing, /totalWeight \* 0\.5 \/ 15/, 'NEGATIVO: @ estimada não usa 50% fixo');
 
-// Importação (Relação): dry-run resolve por nome; desconhecidos listados; criação só com opção explícita + registry.write, antes de bulkCreateEntries.
-assert.match(relation, /resolveMany\(collectRegistryTexts\(dados\), \{ empresaId: empresaSelecionadaId \}\)/, 'dry-run resolve marca/raça pelo resolvedor único');
-assert.match(relation, /splitImportRowsByRegistry\(dados, resolucao, \{ criarDesconhecidos: false \}\)/, 'dry-run separa linhas com cadastros desconhecidos');
-assert.match(relation, /Cadastros não encontrados/, 'lista "Cadastros não encontrados" na importação');
-assert.match(relation, /aria-label="Criar estes cadastros ao importar"/, 'opção "Criar estes cadastros ao importar" é um checkbox');
-assert.match(relation, /const podeCriarCadastros = Boolean\(auth\?\.can\?\.\(REGISTRY_WRITE_PERMISSION\)\)/, 'opção exige registry.write via useAuth().can');
-assert.match(relation, /disabled=\{!podeCriarCadastros \|\| isImporting\}/, 'checkbox desabilitado sem registry.write');
-assert.match(relation, /const criarCadastrosDesconhecidos = async \(\) => \{\s*if \(!podeCriarCadastros\) throw/, 'criação recusa perfis sem registry.write');
-assert.match(relation, /criarCadastrosNaImportacao && totalCadastrosDesconhecidos > 0\s*\? await criarCadastrosDesconhecidos\(\)\s*: importData/, 'sem a opção as linhas desconhecidas não entram');
-const posCriacao = relation.indexOf('await criarCadastrosDesconhecidos()');
-const posBulk = relation.indexOf('weighingService.bulkCreateEntries(registros');
-assert.ok(posCriacao > 0 && posBulk > posCriacao, 'cadastros são criados ANTES de bulkCreateEntries');
-const chamadasCreate = relation.match(/(brandService|breedService)\.create\(/g) || [];
-assert.equal(chamadasCreate.length, 2, 'só a rotina explícita chama brandService/breedService.create');
-const rotina = relation.slice(relation.indexOf('const criarCadastrosDesconhecidos'), relation.indexOf('const confirmarImportacao'));
-assert.equal((rotina.match(/(brandService|breedService)\.create\(/g) || []).length, 2, 'NEGATIVO: nenhuma criação de marca/raça fora da rotina explícita');
-assert.match(rotina, /brandService\.create\(actor, \{ nome, empresa_id: empresaSelecionadaId \}\)/, 'marca criada com o ator da sessão');
+// Importação (17/09/2026): saiu da Relação e virou tela própria (src/pages/Importacao.jsx).
+// O que continua valendo — dry-run que resolve cadastros por nome, cadastros ausentes listados
+// e criação só com opção explícita + registry.write, ANTES de gravar as pesagens — é do motor
+// (src/modules/import) e passa a ser provado ali, não por inspeção do código da Relação.
+assert.ok(!relation.includes('splitImportRowsByRegistry'), 'NEGATIVO: a Relação não faz mais a conciliação de cadastros da importação');
+assert.ok(!relation.includes('brandService.create('), 'NEGATIVO: a Relação não cria mais marcas/raças');
+assert.ok(!relation.includes('bulkCreateEntries'), 'NEGATIVO: a Relação não grava mais importação');
+assert.match(relation, /label: "Importar CSV"[\s\S]{0,120}navigate\(createPageUrl\("Importacao"\)\)/, '"Importar CSV" leva ao assistente');
+const wizard = read('src/pages/Importacao.jsx');
+const wizardRules = read('src/components/importacao/StepRegras.jsx');
+assert.match(wizard, /analyzeImport\(/, 'o assistente concilia pelo dry-run do serviço');
+assert.match(wizard, /applyImport\(plan, actor/, 'o assistente grava pelo serviço, com o ator da sessão');
+assert.match(wizardRules, /createMissingMasters: event\.target\.checked/, 'criar cadastros ausentes continua sendo opção explícita');
+assert.match(wizardRules, /disabled=\{!podeCadastrosMestres\}/, 'a opção exige registry.write');
+assert.match(wizard, /const REGISTRY_WRITE = 'registry\.write'/, 'o assistente declara a permissão de cadastros');
+const importService = read('src/modules/import/application/importService.js');
+assert.match(importService, /requireImportPermission\(actor, 'registry\.write'\)/, 'o serviço recusa criar cadastros sem registry.write');
+assert.ok(importService.indexOf('await createMissingMasters(fresh, actor)') < importService.indexOf('await writeImportBatch('), 'cadastros ausentes são criados ANTES de gravar as pesagens');
 
 // Contrato anterior que continua valendo.
 assert.doesNotMatch(launch, /GerenciarSaidasDialog/, 'o popup legado de perfis de venda/abate não deve voltar ao lançamento');

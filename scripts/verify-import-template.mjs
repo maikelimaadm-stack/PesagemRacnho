@@ -4,6 +4,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { COLUMNS_NOT_IN_TEMPLATE, TEMPLATE_KINDS, buildImportTemplateCsv, importTemplateHeaders } from '../src/modules/import/domain/spreadsheetTemplate.js';
+import { IMPORT_TYPES } from '../src/modules/import/domain/importConstants.js';
+import { listMappableFields, suggestMapping } from '../src/modules/import/domain/importFields.js';
+
+const mapeaveis = (type) => listMappableFields(type).map((campo) => campo.id);
 
 const normalizar = (text) => String(text).toLowerCase().replace(/[_\s]/g, '').normalize('NFD').replace(/\p{M}/gu, '');
 const proibidas = COLUMNS_NOT_IN_TEMPLATE.map(normalizar);
@@ -23,12 +27,21 @@ for (const kind of Object.values(TEMPLATE_KINDS)) {
 assert.deepEqual(importTemplateHeaders(TEMPLATE_KINDS.PESAGENS), ['Data', 'NumeroAnimal', 'Marca', 'Sexo', 'Raça', 'Categoria', 'Peso', 'Apartação', 'Lote', 'Observação']);
 assert.deepEqual(importTemplateHeaders(TEMPLATE_KINDS.SAIDAS), ['Data', 'NumeroAnimal', 'Marca', 'MotivoSaida', 'CausaMorte', 'Peso', 'Observação']);
 
-// A importação atual da Relação reconhece os cabeçalhos do modelo de pesagens (mesma normalização da tela).
-const relacao = readFileSync(new URL('../src/pages/PesagensIndividuais.jsx', import.meta.url), 'utf8');
-for (const aceito of ['data', 'numeroanimal', 'sexo', 'raca', 'marca', 'peso', 'lote', 'apartacao', 'observacao']) {
-  assert.ok(relacao.includes(`'${aceito}'`), `importação da Relação aceita ${aceito}`);
+// 17/09/2026: a Relação não interpreta mais cabeçalho nenhum — quem reconhece as colunas do
+// modelo é o motor da importação (suggestMapping), usado pelo assistente. Em vez de procurar
+// os apelidos no código da tela, o gate prova o reconhecimento de verdade.
+for (const [kind, type, esperados] of [
+  [TEMPLATE_KINDS.PESAGENS, IMPORT_TYPES.HISTORICO, ['data', 'numero', 'marca', 'sexo', 'raca', 'categoria', 'peso', 'apartacao', 'lote', 'observacao']],
+  [TEMPLATE_KINDS.SAIDAS, IMPORT_TYPES.SAIDAS, ['data', 'numero', 'marca', 'motivo_saida', 'causa_morte', 'peso', 'observacao']],
+]) {
+  const mapeamento = suggestMapping(importTemplateHeaders(kind), type);
+  assert.deepEqual(Object.values(mapeamento), esperados, `${kind}: o motor reconhece cada coluna do modelo`);
+  assert.ok(Object.values(mapeamento).every((campo) => mapeaveis(type).includes(campo)), `${kind}: só campos digitáveis`);
 }
+const relacao = readFileSync(new URL('../src/pages/PesagensIndividuais.jsx', import.meta.url), 'utf8');
 assert.match(relacao, /buildImportTemplateCsv\(TEMPLATE_KINDS\.PESAGENS\)/, 'Relação baixa o modelo compartilhado');
+const assistente = readFileSync(new URL('../src/pages/Importacao.jsx', import.meta.url), 'utf8');
+assert.match(assistente, /buildImportTemplateCsv\(TEMPLATE_KINDS\[kind\]\)/, 'o assistente oferece o mesmo modelo (pesagens e saídas)');
 assert.doesNotMatch(relacao, /'ID_Externo'|'PesoAnterior'|'DataAnterior'/, 'NEGATIVO: modelo antigo com derivados saiu da tela');
 
 console.log(JSON.stringify({ gate: 'import:template:verify', ok: true, pesagens: importTemplateHeaders(TEMPLATE_KINDS.PESAGENS), saidas: importTemplateHeaders(TEMPLATE_KINDS.SAIDAS) }, null, 2));

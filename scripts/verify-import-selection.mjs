@@ -66,29 +66,50 @@ assert.equal(marcas.length, 3, 'NEGATIVO: a resolução pura não cria registros
 const vazio = splitImportRowsByRegistry([], {}, {});
 assert.deepEqual(vazio, { elegiveis: [], rejeitadas: [], desconhecidos: { marcas: [], racas: [] }, pendentes: 0 }, 'sem linhas não há nada a resolver');
 
+// -----------------------------------------------------------------------------
+// 17/09/2026 — a Relação de Pesagens NÃO importa mais. A leitura do arquivo, a escolha do
+// tipo (Cadastro/Manejo/Saída ou conciliação automática), o vínculo de apartação/lote e a
+// gravação passaram para o assistente de Importação (src/pages/Importacao.jsx +
+// src/components/importacao/**) sobre o motor de src/modules/import. As asserções acima
+// continuam valendo para o domínio puro; as de tela abaixo provam o comportamento NOVO.
+// -----------------------------------------------------------------------------
 const relation = await readFile(new URL('../src/pages/PesagensIndividuais.jsx', import.meta.url), 'utf8');
-assert.match(relation, /applyImportLotSelection\(importData, lotesParaVincular, vincularLotesSelecionados\)/);
-assert.match(relation, /Selecionar todos os lotes encontrados/);
-assert.match(relation, /motivoSaidaImport \|\| undefined/);
-assert.doesNotMatch(relation, /SelectItem\s+value=\{null\}/);
-assert.match(relation, /resolveMany\(collectRegistryTexts\(dados\), \{ empresaId: empresaSelecionadaId \}\)/, 'dry-run resolve marca/raça pelo resolvedor único dos cadastros');
-assert.match(relation, /splitImportRowsByRegistry\(dados, resolucao, \{ criarDesconhecidos: false \}\)/, 'dry-run começa sem criar nada');
-assert.match(relation, /Cadastros não encontrados/, 'lista de cadastros não encontrados aparece no diálogo');
-assert.match(relation, /aria-label="Criar estes cadastros ao importar"/, 'opção explícita de criação');
-assert.match(relation, /auth\?\.can\?\.\(REGISTRY_WRITE_PERMISSION\)/, 'opção exige registry.write via useAuth().can');
-assert.match(relation, /criarCadastrosNaImportacao && totalCadastrosDesconhecidos > 0\s*\? await criarCadastrosDesconhecidos\(\)\s*: importData/, 'sem a opção, linhas com valor desconhecido não entram');
-assert.ok(relation.indexOf('await criarCadastrosDesconhecidos()') < relation.indexOf('weighingService.bulkCreateEntries(registros'), 'cadastros são criados antes de bulkCreateEntries');
-assert.equal((relation.match(/(brandService|breedService)\.create\(/g) || []).length, 2, 'NEGATIVO: nenhuma criação de marca/raça fora da rotina explícita');
-assert.doesNotMatch(relation, /linha: _linha, \.\.\.item \}\) => \(\{[\s\S]{0,40}linha/, 'o número da linha do arquivo não vai para o payload');
+assert.doesNotMatch(relation, /colMap/, 'NEGATIVO: o mapeamento de colunas antigo saiu da Relação');
+assert.doesNotMatch(relation, /parseCsv/, 'NEGATIVO: a Relação não faz mais parse de CSV');
+assert.doesNotMatch(relation, /FileReader/, 'NEGATIVO: a Relação não lê mais arquivo');
+assert.doesNotMatch(relation, /type="file"/, 'NEGATIVO: a Relação não tem mais campo de arquivo');
+assert.doesNotMatch(relation, /bulkCreateEntries/, 'NEGATIVO: a Relação não grava mais importação');
+assert.doesNotMatch(relation, /applyImportLotSelection|splitImportRowsByRegistry|criarCadastrosNaImportacao/, 'NEGATIVO: a conciliação antiga (lotes e cadastros) saiu da Relação');
+assert.match(
+  relation,
+  /id: "importar", label: "Importar CSV"[\s\S]{0,120}navigate\(createPageUrl\("Importacao"\)\)/,
+  '"Importar CSV" leva ao assistente de Importação',
+);
+assert.match(relation, /id: "modelo", label: "Baixar modelo CSV"[\s\S]{0,80}baixarModelo/, '"Baixar modelo CSV" continua na Relação');
+assert.doesNotMatch(relation, /SelectItem\s+value=\{null\}/, 'NEGATIVO: nenhum item de seleção com valor nulo (continua valendo para os diálogos restantes)');
+assert.match(relation, /buildImportTemplateCsv\(TEMPLATE_KINDS\.PESAGENS\)/, 'o modelo continua vindo de spreadsheetTemplate');
+
+// A escolha de tipo e o vínculo de apartação/lote agora moram no assistente.
+const wizard = await readFile(new URL('../src/pages/Importacao.jsx', import.meta.url), 'utf8');
+const regras = await readFile(new URL('../src/components/importacao/StepRegras.jsx', import.meta.url), 'utf8');
+const tipo = await readFile(new URL('../src/components/importacao/StepTipo.jsx', import.meta.url), 'utf8');
+assert.match(wizard, /analyzeImport/, 'o assistente concilia pelo serviço (dry-run)');
+assert.match(wizard, /applyImport/, 'o assistente grava pelo serviço');
+assert.match(tipo, /TIPOS_UNICOS/, 'a escolha de Cadastros/Manejos/Saídas vive no assistente');
+assert.match(regras, /apartacao_id/, 'a apartação fixa vive no assistente');
+assert.match(regras, /lote_id/, 'o lote fixo vive no assistente');
+assert.match(regras, /createMissingMasters/, 'criar cadastros ausentes (registry.write) vive no assistente');
 
 console.log('OK verify-import-selection');
 console.log(JSON.stringify({
   selectionPersists: true,
   rejectedLotsExcluded: true,
   acceptedLotsLinked: true,
-  importExitReasonSelectable: true,
   registryResolvedByNormalizedName: true,
   unknownRegistriesListed: true,
   unknownRowsRejectedWithoutOption: true,
   noSilentRegistryCreation: true,
+  legacyRelationImportRemoved: true,
+  relationNavigatesToWizard: true,
+  lotAndTypeSelectionInWizard: true,
 }, null, 2));
