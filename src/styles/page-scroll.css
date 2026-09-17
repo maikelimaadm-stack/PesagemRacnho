@@ -3,6 +3,11 @@
    A própria página passa a rolar, com a barra oficial (erp-scrollbar). Telas que já rolam por
    dentro (tabelas com corpo rolável) não mudam: o conteúdo delas cabe e a barra não aparece. */
 .mb1-app-shell .mb1-operational-page {
+  /* A página precisa ficar do tamanho do slot (que tem altura fixa); com min-height: 100%
+     ela crescia e o pai cortava o excedente sem barra nenhuma. */
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -26,3 +31,10 @@
 
 /* Assistente de importação: a conferência pode ter centenas de linhas. */
 .importacao-page .importacao-body { min-height: 0; }
+
+/* Páginas em coluna flex (Ficha, Fechamento, Lançamento): com a altura limitada, os blocos
+   encolhiam e o conteúdo ficava espremido. Só os painéis que rolam por dentro podem encolher;
+   o resto mantém a altura natural e a página rola. */
+.mb1-app-shell .mb1-operational-page > *:not(.mg-view-panel):not(.emp-table-root):not(.emp-table-shell):not(.d17b-list-body):not(.d17d-launch-table-card):not(.mak-mother-page__table) {
+  flex-shrink: 0;
+}
