@@ -213,7 +213,9 @@ export async function runReport(definitionOrId, request = {}, actor) {
         total: afterAggregate - startedAt,
       },
     },
-    // Resolver interno para exportadores (não serializável; removido no JSON).
+    // Internos (não serializados): resolver de colunas e população antes dos filtros do usuário
+    // (opções das pílulas de filtro). Mesma referência de objetos — nenhuma cópia do dataset.
     resolve: selection.resolve,
+    population: locked,
   };
 }

@@ -80,7 +80,8 @@ export const EVENT_COLUMNS = [
   }),
   defineColumn({ id: 'quantidade_arrobas', label: '@ carcaça estimada', type: 'number', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'rendimento_carcaca', label: 'Rendimento', unit: '%', type: 'percentage', grains: EVENT_GRAINS, weightedBy: 'peso', aggregations: ['countValid', 'avg', 'min', 'max', 'weightedAvg'] }),
-  defineColumn({ id: 'peso_carcaca_estimado', label: 'Carcaça estimada', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
+  // Carcaça estimada é sensível: arrobas = carcaça ÷ 15 (seria canal lateral para o valor).
+  defineColumn({ id: 'peso_carcaca_estimado', label: 'Carcaça estimada', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'frigorifico', label: 'Frigorífico', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'legado-texto' }),
   defineColumn({ id: 'valor_total_abate', label: 'Valor abate', type: 'money', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'causa_morte', label: 'Causa da morte', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'legado-texto' }),
