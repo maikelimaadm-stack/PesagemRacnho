@@ -416,21 +416,42 @@ ok('vinculo-historico');
 // ---------------------------------------------------------------------------
 await deleteDbForTests();
 db = await ensureStorageReady();
-assert.deepEqual(CATEGORIAS_SEED.map((c) => [c.nome, c.sexo_aplicavel, c.peso_min_kg, c.peso_max_kg, c.era]), [
-  ['Bezerro', 'M', null, null, null], ['Bezerra', 'F', null, null, null], ['Garrote', 'M', null, null, null], ['Novilha', 'F', null, null, null],
-  ['Boi', 'M', null, null, null], ['Vaca', 'F', null, null, null], ['Touro', 'M', null, null, null],
-], 'CATEGORIAS_SEED com sexo; faixas de peso e era ficam para o responsável definir');
+// Pré-cadastro definido pelo responsável em 17/09/2026: 12 categorias com faixa de peso por
+// sexo e a era em meses (limite superior da faixa etária). É ponto de partida — quem usa edita.
+assert.deepEqual(CATEGORIAS_SEED.map((c) => [c.ordem, c.nome, c.sexo_aplicavel, c.peso_min_kg, c.peso_max_kg, c.era]), [
+  [1, 'Bezerro', 'M', 0, 199, 12],
+  [2, 'Garrote leve', 'M', 200, 269, 18],
+  [3, 'Garrote', 'M', 270, 329, 24],
+  [4, 'Boi magro', 'M', 330, 399, 30],
+  [5, 'Boi em engorda', 'M', 400, 449, 36],
+  [6, 'Boi terminado', 'M', 450, 499, 36],
+  [7, 'Boi pesado', 'M', 500, null, 36],
+  [8, 'Bezerra', 'F', 0, 199, 12],
+  [9, 'Novilha leve', 'F', 200, 269, 18],
+  [10, 'Novilha', 'F', 270, 329, 24],
+  [11, 'Novilha pesada', 'F', 330, 399, 30],
+  [12, 'Fêmea adulta', 'F', 400, null, 36],
+], 'CATEGORIAS_SEED: pré-cadastro de 17/09/2026');
+// Faixas por sexo: começam em 0, são contíguas (sem buraco e sem sobreposição) e a última é aberta.
+for (const sexo of ['M', 'F']) {
+  const faixas = CATEGORIAS_SEED.filter((c) => c.sexo_aplicavel === sexo).sort((a, b) => a.ordem - b.ordem);
+  assert.equal(faixas[0].peso_min_kg, 0, `${sexo}: primeira faixa começa em 0`);
+  assert.equal(faixas.at(-1).peso_max_kg, null, `${sexo}: última faixa é aberta`);
+  faixas.slice(0, -1).forEach((faixa, i) => {
+    assert.equal(faixas[i + 1].peso_min_kg, faixa.peso_max_kg + 1, `${sexo}: faixa ${faixa.nome} encosta na seguinte`);
+  });
+}
 assert.deepEqual(RACA_PADRAO_SEED, { nome: 'Nelore', grupo: 'ZEBUINO', ordem: 1 });
 assert.equal(PROPRIEDADE_PADRAO_SEED.tipo, 'PROPRIA');
 assert.ok(Object.isFrozen(CATEGORIAS_SEED) && CATEGORIAS_SEED.every((c) => Object.isFrozen(c)), 'seeds imutáveis');
 assert.equal(typeof applySeeds, 'function');
 const seed1 = await ensureSeeds('local');
-assert.deepEqual(seed1, { categoriasAnimal: 7, racas: 1, propriedades: 1 }, 'primeira execução semeia tudo');
+assert.deepEqual(seed1, { categoriasAnimal: 12, racas: 1, propriedades: 1, categoriasAtualizadas: 0, categoriasRemovidas: 0 }, 'primeira execução semeia tudo');
 assert.ok(CATEGORIAS_SEED.every((c) => !('id' in c)), 'seed não carrega id fixo');
 const seed2 = await ensureSeeds('local');
-assert.deepEqual(seed2, { categoriasAnimal: 0, racas: 0, propriedades: 0 }, 'segunda execução não cria nada');
+assert.deepEqual(seed2, { categoriasAnimal: 0, racas: 0, propriedades: 0, categoriasAtualizadas: 0, categoriasRemovidas: 0 }, 'segunda execução não cria, não atualiza e não remove nada');
 const categorias = await categoryService.list();
-assert.deepEqual(categorias.map((c) => c.nome), ['Bezerro', 'Bezerra', 'Garrote', 'Novilha', 'Boi', 'Vaca', 'Touro'], 'categorias padrão na ordem');
+assert.deepEqual(categorias.map((c) => c.nome), CATEGORIAS_SEED.map((c) => c.nome), 'categorias padrão na ordem do pré-cadastro');
 assert.ok(categorias.every((c) => c.id && c.id.length >= 32), 'ids gerados, nunca fixos');
 assert.ok(categorias.every((c) => ['M', 'F'].includes(c.sexo_aplicavel)), 'toda categoria padrão é de macho ou de fêmea');
 const nelore = await breedService.resolveByName('nelore');
@@ -445,7 +466,7 @@ assert.equal(seed3.propriedades, 0, 'propriedade renomeada não é recriada');
 await categoryService.remove(GESTOR, categorias[6].id);
 const seed4 = await ensureSeeds('local');
 assert.equal(seed4.categoriasAnimal, 0, 'categoria excluída de propósito não volta');
-assert.equal((await db.table('categoriasAnimal').count()), 7, 'sem linhas duplicadas');
+assert.equal((await db.table('categoriasAnimal').count()), CATEGORIAS_SEED.length, 'sem linhas duplicadas');
 ok('seeds-idempotentes');
 
 // ---------------------------------------------------------------------------
@@ -465,7 +486,7 @@ const causaR = await deathCauseService.create(GESTOR, { nome: 'Raio', categoria:
 const resolvido = await resolveMany({
   marcas: ['abc', ' ABC ', 'antiga', 'zzz', '', null],
   racas: ['NELORE', 'Angus'],
-  categorias: ['boi', 'Cavalo'],
+  categorias: ['garrote', 'Cavalo'],
   parceiros: ['joão  comprador', 'Ninguém'],
   propriedades: ['fazenda real'],
   causas: ['raio', '???'],
@@ -476,7 +497,7 @@ assert.equal(resolvido.marcas['antiga'], marcaInativa.id, 'inativo resolve (hist
 assert.deepEqual(resolvido.desconhecidos.marcas, ['zzz'], 'desconhecido listado; vazios ignorados');
 assert.equal(resolvido.racas['NELORE'], nelore.id);
 assert.deepEqual(resolvido.desconhecidos.racas, ['Angus']);
-assert.equal(resolvido.categorias['boi'], categorias[4].id);
+assert.equal(resolvido.categorias['garrote'], categorias.find((c) => c.nome === 'Garrote').id);
 assert.deepEqual(resolvido.desconhecidos.categorias, ['Cavalo']);
 assert.equal(resolvido.parceiros['joão  comprador'], comprador.id);
 assert.deepEqual(resolvido.desconhecidos.parceiros, ['Ninguém']);

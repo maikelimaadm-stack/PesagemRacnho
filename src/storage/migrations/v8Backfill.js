@@ -5,12 +5,17 @@
 // existente é reescrito. O backfill existe para que a v8 tenha estado técnico
 // próprio (appSettings['migration:v8']) na mesma cadeia resumível da v7: backup
 // pré-migração, PENDENTE antes de abrir, FALHOU com escrita bloqueada e
-// "Continuar migração". Passo único S1 (idempotente): confere as stores criadas
-// e registra as contagens no relatório.
+// "Continuar migração". Passos idempotentes: S1 confere as stores criadas e registra as
+// contagens; S2 aplica o pré-cadastro de categorias de 17/09/2026 (12 categorias com faixa de
+// peso por sexo e era em meses) — cria as que faltam, completa as antigas que ninguém editou e
+// tira do caminho os nomes antigos fora da lista que não estão em uso. Categoria editada pelo
+// responsável ou citada por algum registro nunca é alterada.
 //
 // A chave legada `cadastros-auxiliares:sanidade:*` NÃO é convertida aqui: ela é
 // tratada pelo B11 da v7 (exportada e removida; retida só sem porta de arquivos).
 import { SANITY_STORES } from '../indexedDb/schema.js';
+import { normalizeName } from '../indexedDb/normalize.js';
+import { CATEGORIAS_SEED, CATEGORIAS_SEED_ANTERIOR } from '../../modules/catalog/domain/seeds.js';
 import {
   MIGRATION_STATUS,
   MigrationError,
@@ -21,7 +26,7 @@ import {
 } from './migrationState.js';
 
 export const V8_VERSION = 8;
-export const V8_STEPS = ['S1'];
+export const V8_STEPS = ['S1', 'S2'];
 
 const nowIso = () => new Date().toISOString();
 
@@ -38,7 +43,72 @@ async function runS1(ctx) {
   for (const name of SANITY_STORES) ctx.report[name] = await ctx.db.table(name).count();
 }
 
-const STEP_RUNNERS = { S1: runS1 };
+// ---------------------------------------------------------------------------
+// S2 — pré-cadastro de categorias (seeds de catalog/domain/seeds.js).
+// ---------------------------------------------------------------------------
+async function runS2(ctx) {
+  // Grava direto na store, como o B3 da v7: durante a migração a escrita pelos serviços está
+  // bloqueada. Idempotente e conservador — só toca no que veio do pré-cadastro antigo.
+  const tabela = ctx.db.table('categoriasAnimal');
+  const ts = nowIso();
+  const todas = await tabela.toArray();
+  const porNome = new Map(todas.map((row) => [normalizeName(row.nome), row]));
+  const intocada = (row) => row.peso_min_kg == null && row.peso_max_kg == null && !row.era;
+  let criadas = 0;
+  let atualizadas = 0;
+  let removidas = 0;
+
+  for (const seed of CATEGORIAS_SEED) {
+    const chave = normalizeName(seed.nome);
+    const existente = porNome.get(chave);
+    if (!existente) {
+      await tabela.add({
+        id: crypto.randomUUID(),
+        empresa_id: 'local',
+        nome: seed.nome,
+        nome_normalizado: chave,
+        sexo_aplicavel: seed.sexo_aplicavel,
+        peso_min_kg: seed.peso_min_kg,
+        peso_max_kg: seed.peso_max_kg,
+        era: seed.era,
+        ordem: seed.ordem,
+        ativo: true,
+        created_at: ts,
+        updated_at: ts,
+        deleted_at: null,
+      });
+      criadas += 1;
+      continue;
+    }
+    if (!existente.deleted_at && intocada(existente) && existente.sexo_aplicavel === seed.sexo_aplicavel) {
+      await tabela.update(existente.localId, {
+        peso_min_kg: seed.peso_min_kg, peso_max_kg: seed.peso_max_kg, era: seed.era, ordem: seed.ordem, updated_at: ts,
+      });
+      atualizadas += 1;
+    }
+  }
+
+  // Nomes do pré-cadastro anterior que saíram da lista: só quando ninguém editou nem usou.
+  const novos = new Set(CATEGORIAS_SEED.map((seed) => normalizeName(seed.nome)));
+  const animais = await ctx.db.table('animais').toArray();
+  const lotes = await ctx.db.table('loteApartacoes').toArray();
+  const emUso = (id) => animais.some((row) => !row.deleted_at && row.categoria_id === id)
+    || lotes.some((row) => !row.deleted_at && row.categoria_id === id);
+  for (const nome of CATEGORIAS_SEED_ANTERIOR) {
+    const chave = normalizeName(nome);
+    if (novos.has(chave)) continue;
+    const existente = porNome.get(chave);
+    if (!existente || existente.deleted_at || !intocada(existente) || emUso(existente.id)) continue;
+    await tabela.update(existente.localId, { deleted_at: ts, updated_at: ts });
+    removidas += 1;
+  }
+
+  ctx.report.categoriasCriadas = criadas;
+  ctx.report.categoriasAtualizadas = atualizadas;
+  ctx.report.categoriasRemovidas = removidas;
+}
+
+const STEP_RUNNERS = { S1: runS1, S2: runS2 };
 
 /**
  * Executa (ou continua) o backfill v8. Mesmo contrato de runV7Backfill:

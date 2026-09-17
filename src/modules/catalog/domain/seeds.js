@@ -4,18 +4,30 @@
 // Idempotente: verifica por nome (inclusive registros excluídos, para não
 // recriar o que o responsável removeu de propósito).
 //
-// Faixas de peso e era ficam vazias: são definidas pelo responsável na tela de
-// Categorias. Sem faixa de peso a categoria não entra na escolha automática.
-const categoria = (nome, sexo, ordem) => ({ nome, sexo_aplicavel: sexo, peso_min_kg: null, peso_max_kg: null, era: null, ordem });
+// Pré-cadastro de categorias definido pelo responsável em 17/09/2026: faixa de peso por sexo
+// (contígua, a última sem máximo) e a era em MESES, que é o que o cadastro aceita e o que vai
+// gravado na pesagem — usamos o limite superior da faixa etária da tabela ("0 a 12 meses" → 12;
+// faixas abertas "acima de 30 meses" → 36). É só um ponto de partida: quem usa pode editar,
+// renomear ou apagar à vontade.
+const categoria = (ordem, nome, sexo, pesoMin, pesoMax, era) => ({ nome, sexo_aplicavel: sexo, peso_min_kg: pesoMin, peso_max_kg: pesoMax, era, ordem });
 export const CATEGORIAS_SEED = Object.freeze([
-  categoria('Bezerro', 'M', 1),
-  categoria('Bezerra', 'F', 2),
-  categoria('Garrote', 'M', 3),
-  categoria('Novilha', 'F', 4),
-  categoria('Boi', 'M', 5),
-  categoria('Vaca', 'F', 6),
-  categoria('Touro', 'M', 7),
+  categoria(1, 'Bezerro', 'M', 0, 199, 12),
+  categoria(2, 'Garrote leve', 'M', 200, 269, 18),
+  categoria(3, 'Garrote', 'M', 270, 329, 24),
+  categoria(4, 'Boi magro', 'M', 330, 399, 30),
+  categoria(5, 'Boi em engorda', 'M', 400, 449, 36),
+  categoria(6, 'Boi terminado', 'M', 450, 499, 36),
+  categoria(7, 'Boi pesado', 'M', 500, null, 36),
+  categoria(8, 'Bezerra', 'F', 0, 199, 12),
+  categoria(9, 'Novilha leve', 'F', 200, 269, 18),
+  categoria(10, 'Novilha', 'F', 270, 329, 24),
+  categoria(11, 'Novilha pesada', 'F', 330, 399, 30),
+  categoria(12, 'Fêmea adulta', 'F', 400, null, 36),
 ].map((seed) => Object.freeze(seed)));
+
+// Pré-cadastro anterior (1.2.0), sem faixa de peso. Os nomes que não continuam saem do caminho
+// quando ninguém os editou nem usou; em uso ou editados, ficam como estão.
+export const CATEGORIAS_SEED_ANTERIOR = Object.freeze(['Bezerro', 'Bezerra', 'Garrote', 'Novilha', 'Boi', 'Vaca', 'Touro']);
 
 export const RACA_PADRAO_SEED = Object.freeze({ nome: 'Nelore', grupo: 'ZEBUINO', ordem: 1 });
 export const PROPRIEDADE_PADRAO_SEED = Object.freeze({ nome: 'Propriedade principal', tipo: 'PROPRIA' });
@@ -27,10 +39,38 @@ export async function applySeeds({ categoryService, breedService, propertyServic
   const criados = { categoriasAnimal: 0, racas: 0, propriedades: 0 };
   const opts = { empresaId, incluirExcluidos: true };
 
+  const intocada = (registro) => registro.peso_min_kg == null && registro.peso_max_kg == null && !registro.era;
+  criados.categoriasAtualizadas = 0;
+  criados.categoriasRemovidas = 0;
+
   for (const seed of CATEGORIAS_SEED) {
-    if (await categoryService.resolveByName(seed.nome, opts)) continue;
-    await categoryService.create(null, { ...seed, empresa_id: empresaId });
-    criados.categoriasAnimal += 1;
+    const existente = await categoryService.resolveByName(seed.nome, opts);
+    if (!existente) {
+      await categoryService.create(null, { ...seed, empresa_id: empresaId });
+      criados.categoriasAnimal += 1;
+      continue;
+    }
+    // Só completa o que ainda está como veio do pré-cadastro antigo (sem faixa e sem era):
+    // categoria que o responsável ajustou nunca é sobrescrita.
+    if (!existente.deleted_at && intocada(existente) && existente.sexo_aplicavel === seed.sexo_aplicavel) {
+      await categoryService.update(null, existente.id, { peso_min_kg: seed.peso_min_kg, peso_max_kg: seed.peso_max_kg, era: seed.era, ordem: seed.ordem });
+      criados.categoriasAtualizadas += 1;
+    }
+  }
+
+  // Nomes do pré-cadastro anterior que não fazem parte do novo: saem se ninguém mexeu e se não
+  // estão em uso (o serviço recusa excluir cadastro citado por qualquer registro).
+  const nomesNovos = new Set(CATEGORIAS_SEED.map((seed) => seed.nome.toLocaleLowerCase('pt-BR')));
+  for (const nome of CATEGORIAS_SEED_ANTERIOR) {
+    if (nomesNovos.has(nome.toLocaleLowerCase('pt-BR'))) continue;
+    const existente = await categoryService.resolveByName(nome, { empresaId });
+    if (!existente || existente.deleted_at || !intocada(existente)) continue;
+    try {
+      await categoryService.remove(null, existente.id);
+      criados.categoriasRemovidas += 1;
+    } catch {
+      // Em uso por algum animal/lote: fica como está (fato histórico não se apaga).
+    }
   }
 
   if (!(await breedService.resolveByName(RACA_PADRAO_SEED.nome, opts))) {

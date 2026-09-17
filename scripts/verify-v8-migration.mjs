@@ -15,6 +15,7 @@
 //      stores legadas da v5 ignoradas.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
+import { CATEGORIAS_SEED } from '../src/modules/catalog/domain/seeds.js';
 import { createHash } from 'node:crypto';
 import Dexie from 'dexie';
 import { DB_NAME, DB_VERSION, SANITY_STORES, STORES_V6, STORES_V7, STORE_NAMES } from '../src/storage/indexedDb/schema.js';
@@ -147,6 +148,9 @@ async function expectStillV7() {
 }
 
 const dataStores = Object.keys(STORES_V7).filter((name) => !['appSettings', 'backupHistory'].includes(name));
+// O passo S2 aplica o pré-cadastro de categorias (e audita o que fez): essas duas stores mudam
+// de propósito na v8. Todo o resto tem de sair exatamente como entrou.
+const storesIntactas = dataStores.filter((name) => !['categoriasAnimal', 'auditoria'].includes(name));
 
 // ---------------------------------------------------------------------------
 // Caso A — upgrade v7 → v8 com dados reais simulados.
@@ -190,7 +194,8 @@ let v7BackupJson = null;
   assert.equal(result.state.versao, 8);
   assert.equal(result.state.status, MIGRATION_STATUS.CONCLUIDA);
   assert.deepEqual(result.state.passos_concluidos, V8_STEPS);
-  assert.deepEqual(result.state.relatorio, { storesCriadas: SANITY_STORES, programasSanidade: 0, medicamentos: 0, aplicacoesSanidade: 0 }, 'relatório próprio da v8');
+  assert.deepEqual(result.state.relatorio, { storesCriadas: SANITY_STORES, programasSanidade: 0, medicamentos: 0, aplicacoesSanidade: 0, categoriasCriadas: result.state.relatorio.categoriasCriadas, categoriasAtualizadas: result.state.relatorio.categoriasAtualizadas, categoriasRemovidas: result.state.relatorio.categoriasRemovidas }, 'relatório próprio da v8');
+assert.equal(typeof result.state.relatorio.categoriasCriadas, 'number', 'S2 registra o pré-cadastro de categorias aplicado');
   assert.deepEqual(result.states[7], before.appSettings.find((item) => item.key === 'migration:v7').value, 'estado da v7 intacto (a v7 não é reexecutada)');
   assert.ok(progress.length > 0 && progress.every((p) => p.versao === 8 && V8_STEPS.includes(p.passo)), 'só o backfill v8 reporta progresso');
 
@@ -214,8 +219,19 @@ let v7BackupJson = null;
   // Dados intactos store a store, linha a linha; stores novas vazias.
   const db = await ensureStorageReady();
   assert.equal(db.verno, DB_VERSION);
-  for (const name of dataStores) {
+  for (const name of storesIntactas) {
     assert.deepEqual(await db.table(name).toArray(), before[name], `store ${name} intacta após a v8 (${before[name].length} registro(s))`);
+  }
+  // S2: o pré-cadastro de categorias entra sem apagar o que já existia e sem duplicar nomes.
+  const categoriasDepois = (await db.table('categoriasAnimal').toArray()).filter((row) => !row.deleted_at);
+  const nomes = categoriasDepois.map((row) => row.nome);
+  assert.equal(new Set(nomes).size, nomes.length, 'S2 não duplica categorias');
+  for (const antes of before.categoriasAnimal.filter((row) => !row.deleted_at)) {
+    const depois = (await db.table('categoriasAnimal').toArray()).find((row) => row.id === antes.id);
+    assert.ok(depois, `categoria ${antes.nome} continua no banco`);
+  }
+  for (const seed of ['Bezerro', 'Garrote', 'Novilha', 'Boi pesado', 'Fêmea adulta']) {
+    assert.ok(nomes.includes(seed), `pré-cadastro aplicado: ${seed}`);
   }
   for (const name of SANITY_STORES) assert.equal(await db.table(name).count(), 0, `${name} nasce vazia`);
   const settings = await db.table('appSettings').toArray();
@@ -291,7 +307,7 @@ let v7BackupJson = null;
   assert.deepEqual(resumed.results, [{ versao: 7, completed: true, alreadyDone: true }, { versao: 8, completed: true, alreadyDone: false }]);
   assert.equal(isWriteBlocked(), false, '"Continuar migração" libera a escrita');
   const db = await ensureStorageReady();
-  for (const name of dataStores) assert.deepEqual(await db.table(name).toArray(), before[name], `store ${name} intacta após falha e retomada`);
+  for (const name of storesIntactas) assert.deepEqual(await db.table(name).toArray(), before[name], `store ${name} intacta após falha e retomada`);
   assert.ok((await sanity.saveProgram({ nome: 'Aftosa', tipo: 'VACINACAO' })).id, 'gravação de sanidade liberada após concluir');
   summary.casos.push({ caso: 'falha-e-retomada-v8', passoFalho: 'S1' });
 }
@@ -357,7 +373,7 @@ let v7BackupJson = null;
   assert.equal(restored.restored, true);
   assert.equal(restored.backfill.status, MIGRATION_STATUS.CONCLUIDA);
   for (const name of SANITY_STORES) assert.equal(await db.table(name).count(), 0, `${name} vazia após restore do backup v7 (o pré-restore some)`);
-  for (const name of dataStores) {
+  for (const name of storesIntactas) {
     const expected = v7BackupJson.stores[name].map(({ localId: _localId, ...rest }) => rest);
     const actual = (await db.table(name).toArray()).map(({ localId: _localId, ...rest }) => rest);
     assert.deepEqual(actual, expected, `dados v7 intactos após restore: ${name}`);
@@ -390,7 +406,8 @@ let v7BackupJson = null;
   assert.equal(fresh.states[8].status, MIGRATION_STATUS.CONCLUIDA);
   assert.equal(fresh.states[8].origem, 'fresh');
   const db = await ensureStorageReady();
-  assert.equal(await db.table('categoriasAnimal').count(), 7, 'seeds de categorias (v7)');
+  assert.equal(await db.table('categoriasAnimal').count(), CATEGORIAS_SEED.length, 'banco novo: pré-cadastro de categorias completo (v7 semeia, S2 completa faixa e era)');
+assert.ok((await db.table('categoriasAnimal').toArray()).every((row) => row.peso_min_kg != null && row.era != null), 'todas com faixa de peso e era');
   assert.equal((await db.table('racas').toArray()).find((item) => item.padrao)?.nome, 'Nelore');
   assert.equal((await db.table('propriedades').toArray()).filter((item) => item.tipo === 'PROPRIA' && item.padrao).length, 1);
   for (const name of SANITY_STORES) assert.equal(await db.table(name).count(), 0);
@@ -447,7 +464,7 @@ let v7BackupJson = null;
   const animal = await db.table('animais').where('id').equals('a1').first();
   assert.ok(animal.marca_id && animal.situacao === 'ATIVO', 'backfill v7 converteu o animal');
   assert.equal(await db.table('causasMorte').count(), 1, 'backfill v7 migrou o catálogo legado');
-  assert.equal(await db.table('categoriasAnimal').count(), 7, 'seeds da v7');
+  assert.equal(await db.table('categoriasAnimal').count(), CATEGORIAS_SEED.length, 'cadeia v6 → v8: seeds da v7 mais o pré-cadastro completado pelo S2');
   for (const name of SANITY_STORES) assert.equal(await db.table(name).count(), 0);
   const history = (await db.table('backupHistory').toArray()).map((item) => item.tipo);
   assert.deepEqual(history, ['pre-migration', 'migration-v7', 'migration-v8'], `ordem da cadeia no histórico (${history.join(',')})`);
