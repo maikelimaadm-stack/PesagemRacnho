@@ -20,6 +20,7 @@ const registry = (id, nome, extra = {}) => ({ id, empresa_id: 'local', nome, nom
  *  A2 fêmea Angus  marca BETA  lote L2: 250 (08-05) → 260 (08-15, 10 d, +10) → Saída Venda 280 (09-05)
  *  A3 macho Nelore marca ALFA  lote L1: 410 (08-10) → Saída Morte sem peso (09-01)
  *  A4 fêmea sem raça   marca "Álfa" (texto com acento) sem lote: 200 (09-12)
+ *  Embarque E1 (05/09, Frigo Sul) com documento D1 (GTA 12345, previsto 0 M + 2 F) → e6 vinculada
  */
 export async function seedReportFixture() {
   await deleteDbForTests();
@@ -33,6 +34,8 @@ export async function seedReportFixture() {
     { id: 'L1', empresa_id: 'local', apartacao_id: 'ap1', nome_apartacao: 'Engorda', nome_lote: 'Lote 01', quantidade_maxima: 10, created_at: TS, updated_at: TS, deleted_at: null },
     { id: 'L2', empresa_id: 'local', apartacao_id: 'ap1', nome_apartacao: 'Engorda', nome_lote: 'Lote 02', quantidade_maxima: 10, created_at: TS, updated_at: TS, deleted_at: null },
   ]);
+  await db.table('embarques').bulkAdd([{ id: 'E1', empresa_id: 'local', nome: 'Embarque Sul', data: '2026-09-05', frigorifico: 'Frigo Sul', status: 'Concluído', created_at: TS, updated_at: TS, deleted_at: null }]);
+  await db.table('documentosEmbarque').bulkAdd([{ id: 'D1', embarque_id: 'E1', embarque_nome: 'Embarque Sul', tipo_documento: 'GTA', numero_gta: '12345', motorista_nome: 'João', placa_carreta: 'ABC1D23', qtd_prev_machos: 0, qtd_prev_femeas: 2, created_at: TS, updated_at: TS, deleted_at: null }]);
   const base = { empresa_id: 'local', status_animal: 'Ativo' };
   const lote = (id) => (id === 'L1'
     ? { lote_id: 'L1', nome_lote: 'Lote 01', apartacao_id: 'ap1', nome_apartacao: 'Engorda' }
@@ -47,7 +50,7 @@ export async function seedReportFixture() {
     { ...a1, id: 'e3', tipo_manejo: 'Manejo', data_pesagem: '2026-09-10', peso: 345, observacao: 'conferência' },
     { ...a2, id: 'e4', tipo_manejo: 'Cadastro', data_pesagem: '2026-08-05', peso: 250 },
     { ...a2, id: 'e5', tipo_manejo: 'Manejo', data_pesagem: '2026-08-15', peso: 260 },
-    { ...a2, id: 'e6', tipo_manejo: 'Saída', motivo_saida: 'Venda', comprador: 'Frigo Sul', data_pesagem: '2026-09-05', peso: 280, valor_venda_total: 3000, valor_arroba: 300, rendimento_carcaca: 50, peso_carcaca_estimado: 140, quantidade_arrobas: 140 / 15, rendimento_origem: 'INFORMADO' },
+    { ...a2, id: 'e6', tipo_manejo: 'Saída', motivo_saida: 'Venda', comprador: 'Frigo Sul', data_pesagem: '2026-09-05', peso: 280, valor_venda_total: 3000, valor_arroba: 300, rendimento_carcaca: 50, peso_carcaca_estimado: 140, quantidade_arrobas: 140 / 15, rendimento_origem: 'INFORMADO', embarque_id: 'E1', embarque_nome: 'Embarque Sul', documento_embarque_id: 'D1', documento_tipo: 'GTA', documento_numero: '12345' },
     { ...a3, id: 'e7', tipo_manejo: 'Cadastro', data_pesagem: '2026-08-10', peso: 410 },
     { ...a3, id: 'e8', tipo_manejo: 'Saída', motivo_saida: 'Morte', causa_morte: 'Raio', data_pesagem: '2026-09-01', peso: null },
     { ...a4, id: 'e9', tipo_manejo: 'Cadastro', data_pesagem: '2026-09-12', peso: 200 },
