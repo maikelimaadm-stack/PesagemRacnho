@@ -105,3 +105,12 @@ html.dark .rpt-error { background: #2d1416; color: #f5a3a3; border-color: #5c242
 .rpt-card-content { display: flex; flex-direction: column; min-height: 0; height: 100%; }
 .rpt-card-head { padding: 4px 10px 0; }
 .rpt-card-content > .rpt-table-scroll { flex: 1 1 auto; }
+
+/* Contraste do tema escuro (revisão visual 1440×900). */
+html.dark .rpt-card__desc, html.dark .rpt-context, html.dark .rpt-breadcrumb, html.dark .rpt-param, html.dark .rpt-dialog__check, html.dark .rpt-dialog__column { color: #adbac7; }
+html.dark .rpt-card__meta, html.dark .rpt-notes, html.dark .rpt-group-count, html.dark .rpt-chip em, html.dark .rpt-timing { color: #8b949e; }
+html.dark .rpt-family h2 { color: #c9d1d9; }
+html.dark .rpt-card:hover { border-color: #444c56; }
+html.dark .rpt-star { color: #8b949e; }
+html.dark .rpt-star.is-on { color: #e3b341; }
+html.dark .rpt-dialog__row--wrap { border-bottom-color: #2d333b; }
