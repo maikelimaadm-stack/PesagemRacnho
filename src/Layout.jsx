@@ -1,4 +1,4 @@
-import { CalendarCheck, Contact, Database, Dna, Handshake, Layers, ListChecks, MapPin, PlusCircle, Settings, Skull, Tag, Users } from "lucide-react";
+import { BarChart3, CalendarCheck, Contact, Database, Dna, Handshake, Layers, ListChecks, MapPin, PlusCircle, Settings, Skull, Tag, Users } from "lucide-react";
 import { ModeloBase1AppShell } from "@/components/modelobase1";
 import RequirePermission from "@/components/auth/RequirePermission";
 import { useAuth } from "@/components/auth/useAuth";
@@ -11,6 +11,7 @@ export const NAV_GROUPS = [
   { id: "operacao", label: "Operação" },
   { id: "rebanho", label: "Rebanho" },
   { id: "comercial", label: "Comercial" },
+  { id: "relatorios", label: "Relatórios" },
   { id: "cadastros", label: "Cadastros" },
   { id: "sistema", label: "Sistema" },
 ];
@@ -51,6 +52,15 @@ const NAV_ITEMS = [
     Icon: Contact,
     group: "rebanho",
     permission: "animal.read",
+  },
+  {
+    id: "pec-relatorios",
+    title: "Relatórios",
+    longTitle: "Relatórios",
+    url: "Relatorios",
+    Icon: BarChart3,
+    group: "relatorios",
+    permission: "reports.read",
   },
   {
     id: "pec-marcas",
