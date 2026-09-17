@@ -38,7 +38,9 @@ const EXPECTED = {
   'shipment.write': [A, G],
   'session.close': [A, G],
   'session.reopen': [A, G],
-  'reports.read': [A, G, C],
+  'reports.read': [A, G, O, C],
+  'reports.export': [A, G, C],
+  'reports.templates.share': [A, G],
   'maintenance.backup': [A, G],
   'maintenance.restore': [A],
   'maintenance.clear': [A],
@@ -48,7 +50,7 @@ const EXPECTED = {
   'settings.operational': [A, G],
   'settings.auth': [A],
   'settings.manage': [A],
-  'audit.read': [A, G, C],
+  'audit.read': [A, G],
 };
 
 async function rejectsWithCode(promise, code, message) {
@@ -60,7 +62,7 @@ async function rejectsWithCode(promise, code, message) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Matriz exata (4 papéis × 26 ações) e propriedades estruturais.
+// 1. Matriz exata (4 papéis × 28 ações) e propriedades estruturais.
 // ---------------------------------------------------------------------------
 function checkMatrix(matrix, canFn) {
   assert.deepEqual(Object.keys(matrix).sort(), Object.keys(EXPECTED).sort(), 'conjunto de ações igual ao do documento');
@@ -78,12 +80,12 @@ function checkMatrix(matrix, canFn) {
 assert.deepEqual([...ROLES], [A, G, O, C], 'quatro papéis fixos, nesta ordem');
 assert.deepEqual([...ROLES], [...USUARIO_ROLES], 'papéis iguais aos do esquema (schema.js)');
 const checks = checkMatrix(MATRIX, can);
-assert.equal(checks, 26 * 4, 'todas as 104 combinações verificadas');
-assert.equal(ACTIONS.length, 26);
+assert.equal(checks, 28 * 4, 'todas as 112 combinações verificadas');
+assert.equal(ACTIONS.length, 28);
 assert.ok(Object.isFrozen(MATRIX) && Object.isFrozen(MATRIX['users.manage']) && Object.isFrozen(ROLES), 'matriz imutável');
-assert.equal(listActions(A).length, 26, 'ADMIN tem todas as ações');
-assert.equal(listActions(G).length, 19);
-assert.equal(listActions(O).length, 8);
+assert.equal(listActions(A).length, 28, 'ADMIN tem todas as ações');
+assert.equal(listActions(G).length, 21);
+assert.equal(listActions(O).length, 9);
 assert.equal(listActions(C).length, 7);
 assert.deepEqual(listActions('ROOT'), []);
 assert.equal(can(A, 'permissao.inexistente'), false, 'ação desconhecida é negada mesmo para ADMIN');
@@ -119,6 +121,9 @@ assert.throws(() => authorize(null, 'launch.use'), (err) => err.code === 'AUTH_F
 assert.throws(() => authorize(A, 'nao.existe'), (err) => err.code === 'AUTH_FORBIDDEN', 'ação inexistente → AUTH_FORBIDDEN');
 assert.throws(() => authorize(C, 'launch.use'), (err) => err.code === 'AUTH_FORBIDDEN', 'CONSULTA não usa o Lançamento');
 assert.throws(() => authorize(O, 'commercial.values'), (err) => err.code === 'AUTH_FORBIDDEN', 'OPERADOR não vê valores');
+assert.throws(() => authorize(C, 'audit.read'), (err) => err.code === 'AUTH_FORBIDDEN', 'CONSULTA não lê auditoria');
+assert.throws(() => authorize(O, 'reports.export'), (err) => err.code === 'AUTH_FORBIDDEN', 'OPERADOR não exporta relatórios');
+assert.throws(() => authorize(C, 'reports.templates.share'), (err) => err.code === 'AUTH_FORBIDDEN', 'CONSULTA não compartilha modelos');
 
 assert.equal(PROFILES, ROLES, 'fachada: PROFILES é o mesmo array de ROLES');
 assert.equal(ALL_PERMISSIONS, ACTIONS);

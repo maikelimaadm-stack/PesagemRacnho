@@ -31,7 +31,10 @@ export const MATRIX = Object.freeze({
   'shipment.write': row(true, true, false, false),
   'session.close': row(true, true, false, false),
   'session.reopen': row(true, true, false, false),
-  'reports.read': row(true, true, false, true),
+  // Relatórios (programa reporting 1.3.0): permissões genéricas, nunca uma por relatório.
+  'reports.read': row(true, true, true, true),
+  'reports.export': row(true, true, false, true), // CONSULTA exporta só relatórios não sensíveis
+  'reports.templates.share': row(true, true, false, false),
   'maintenance.backup': row(true, true, false, false),
   'maintenance.restore': row(true, false, false, false),
   'maintenance.clear': row(true, false, false, false),
@@ -41,7 +44,7 @@ export const MATRIX = Object.freeze({
   'settings.operational': row(true, true, false, false),
   'settings.auth': row(true, false, false, false),
   'settings.manage': row(true, false, false, false),
-  'audit.read': row(true, true, false, true),
+  'audit.read': row(true, true, false, false),
 });
 
 export const ACTIONS = Object.freeze(Object.keys(MATRIX));
