@@ -8,3 +8,9 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   font-size: 18px !important;
   line-height: 22px !important;
 }
+
+/* Identificação em negrito. */
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+  .d17d-launch-fields .d17d-field.d17d-field--animal > input:not([type="checkbox"]):not([type="radio"]) {
+  font-weight: 700 !important;
+}
