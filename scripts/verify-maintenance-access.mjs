@@ -44,6 +44,39 @@ for (const [name, run] of OPERATIONS) {
 assert.equal(results['ADMIN.clearOperationalData'], 'MAINTENANCE_CONFIRMATION_REQUIRED');
 assert.equal(results['ADMIN.resetAllData'], 'MAINTENANCE_CONFIRMATION_REQUIRED');
 
+// Backup, exportação e importação: maintenance.backup (ADMIN/GESTOR). O backup completo
+// contém dados comerciais e hashes de senha — OPERADOR/CONSULTA são recusados no serviço.
+const BACKUP_OPERATIONS = [
+  ['createDatabaseBackup', () => maintenance.createDatabaseBackup({})],
+  ['createFullDataBackup', () => maintenance.createFullDataBackup({})],
+  ['exportWeighingJson', () => maintenance.exportWeighingJson({})],
+  ['exportWeighingCsv', () => maintenance.exportWeighingCsv({})],
+  ['dryRunImportWeighingJson', () => maintenance.dryRunImportWeighingJson({})],
+  ['applyImportWeighingJson', () => maintenance.applyImportWeighingJson({}, {})],
+  ['dryRunRestoreBackup', () => maintenance.dryRunRestoreBackup('x.json')],
+];
+for (const role of ['OPERADOR', 'CONSULTA']) {
+  setActorProvider(() => ({ id: `u-${role}`, nome: 'Teste', role }));
+  for (const [name, run] of BACKUP_OPERATIONS) {
+    assert.equal((await outcome(run)).code, 'MAINTENANCE_FORBIDDEN', `${name} recusado para ${role}`);
+    results[`${role}.${name}`] = 'MAINTENANCE_FORBIDDEN';
+  }
+}
+setActorProvider(() => ({ id: 'u-gestor', nome: 'Gestor', role: 'GESTOR' }));
+for (const [name, run] of BACKUP_OPERATIONS.filter(([name]) => name !== 'dryRunRestoreBackup')) {
+  assert.notEqual((await outcome(run)).code, 'MAINTENANCE_FORBIDDEN', `${name} permitido ao GESTOR`);
+}
+assert.equal((await outcome(BACKUP_OPERATIONS.at(-1)[1])).code, 'MAINTENANCE_FORBIDDEN', 'GESTOR não simula restauração');
+
+// Autenticação ativa e sem sessão: falha fechada.
+setActorProvider(() => null);
+for (const [name, run] of [...OPERATIONS, ...BACKUP_OPERATIONS]) {
+  assert.equal((await outcome(run)).code, 'MAINTENANCE_FORBIDDEN', `${name} recusado sem sessão`);
+}
+setActorProvider(() => ({ id: 'u-op', nome: 'Op', role: 'OPERADOR' }));
+const mensagem = (await outcome(OPERATIONS[0][1])).error.message;
+assert.match(mensagem, /^Restauração: /, 'mensagem nomeia a operação');
+
 // Negativo: o formato antigo (sem role, só campos de auditoria) não pode abrir a trava.
 setActorProvider(() => ({ usuario_id: 'u-legado', usuario_nome_snapshot: 'Legado' }));
 assert.equal((await outcome(OPERATIONS[3][1])).code, 'MAINTENANCE_FORBIDDEN', 'ator sem papel é recusado');

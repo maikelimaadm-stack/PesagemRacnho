@@ -40,14 +40,41 @@ for (const [operation, code] of Object.entries(denied)) assert.equal(code, 'AUTH
 assert.equal((await weighingService.listEntries({ empresaId: 'local' })).length, 1, 'CONSULTA lê; nada foi gravado nem excluído');
 assert.equal((await weighingService.getEntryById('cad')).observacao, 'op', 'edição da CONSULTA não aplicada');
 
-// Sem sessão (gates, migração) não há ator: o serviço não bloqueia.
+// Autenticação ativa (provedor registrado) e SEM sessão: falha fechada.
+setActorProvider(() => null);
+assert.equal(await codeOf(() => weighingService.updateEntry('cad', { observacao: 'sem sessão' })), 'AUTH_FORBIDDEN', 'sem sessão no app: recusa');
+assert.equal(await codeOf(() => weighingService.createEntry({ ...base, id: 'x9', animal_id: 'a900', tipo_manejo: 'Manejo', data_pesagem: '2026-09-06', peso: 330 })), 'AUTH_FORBIDDEN');
+
+// Sem provedor de ator (gates em Node, migração): o serviço não bloqueia.
 setActorProvider(null);
 assert.equal(await codeOf(() => weighingService.updateEntry('cad', { observacao: 'sistema' })), 'OK');
+
+// Valores comerciais digitados só entram com commercial.write (serviço, não só a tela).
+as('GESTOR');
+await weighingService.createEntry({ ...base, numero_animal: '950', id: 'v1', animal_id: 'a950', tipo_manejo: 'Cadastro', data_pesagem: '2026-09-01', peso: 300, valor_pago_cabeca: 2500 });
+assert.equal((await weighingService.getEntryById('v1')).valor_pago_cabeca, 2500, 'GESTOR grava valor');
+as('OPERADOR');
+await weighingService.updateEntry('v1', { observacao: 'op', valor_pago_cabeca: 1 });
+const aposOperador = await weighingService.getEntryById('v1');
+assert.equal(aposOperador.valor_pago_cabeca, 2500, 'OPERADOR não altera valor; o gravado é preservado');
+assert.equal(aposOperador.observacao, 'op', 'o restante da edição do OPERADOR vale');
+await weighingService.bulkUpdateEntries([{ id: 'v1', patch: { valor_pago_cabeca: 2 } }], { recalculate: false });
+assert.equal((await weighingService.getEntryById('v1')).valor_pago_cabeca, 2500, 'edição em lote também');
+await weighingService.createEntry({ ...base, numero_animal: '951', id: 'v2', animal_id: 'a951', tipo_manejo: 'Cadastro', data_pesagem: '2026-09-01', peso: 310, valor_pago_cabeca: 999 });
+assert.equal((await weighingService.getEntryById('v2')).valor_pago_cabeca ?? null, null, 'OPERADOR não grava valor comercial');
+setActorProvider(null);
 await deleteDbForTests();
 
 // Inspeção de fonte das telas.
 const relacao = read('src/pages/PesagensIndividuais.jsx');
-assert.match(relacao, /COMMERCIAL_VALUE_COLUMN_IDS = new Set\(\["valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas"\]\)/, 'Relação declara as colunas de valor comercial');
+assert.match(relacao, /COMMERCIAL_VALUE_COLUMN_IDS = new Set\(EVENT_COLUMNS\.filter\(\(column\) => column\.sensitive === SENSITIVITY\.COMMERCIAL\)/, 'Relação usa a sensibilidade declarada nas colunas');
+{
+  const { EVENT_COLUMNS } = await import('../src/modules/reporting/definitions/columns/eventColumns.js');
+  const comerciais = EVENT_COLUMNS.filter((column) => column.sensitive === 'commercial').map((column) => column.id);
+  for (const id of ['valor_pago_cabeca', 'valor_venda_total', 'valor_arroba', 'quantidade_arrobas', 'valor_arroba_abate', 'valor_total_abate', 'peso_carcaca_estimado', 'rendimento_carcaca']) {
+    assert.ok(comerciais.includes(id), `coluna comercial: ${id}`);
+  }
+}
 assert.match(relacao, /const podeVerValores = pode\('commercial\.values'\)/);
 assert.match(relacao, /\.map\(id => colunasPermitidas\.find\(c => c\.id === id\)\)/, 'tabela usa só colunas permitidas');
 assert.match(relacao, /columns=\{colunasPermitidas\}/, 'configurador de colunas não oferece valores sem permissão');
@@ -63,5 +90,14 @@ assert.match(lancamento, /const podeVerValores = auth \? Boolean\(auth\.can\?\.\
 assert.match(lancamento, /colunasPermitidas\.find\(\(c\) => c\.id === id\)/, 'grade do Lançamento usa colunas permitidas');
 assert.equal((lancamento.match(/\{podeVerValores &&\s/g) || []).length, 3, 'campos de valor (compra, venda, abate) condicionados');
 assert.match(lancamento, /painelResumoTipo === 'venda' && podeVerValores/, 'resumo de venda só com commercial.values');
+for (const field of ['valor_arroba_abate', 'valor_total_abate', 'peso_carcaca_estimado', 'rendimento_carcaca']) {
+  assert.match(lancamento, new RegExp(`const COMMERCIAL_VALUE_FIELDS = new Set\\([^)]*"${field}"`), `Lançamento esconde ${field}`);
+}
+assert.match(lancamento, /exportarExcel=\{auth && !auth\.can\?\.\('reports\.export'\) \? null : exportarExcel\}/, 'Exportar do rodapé só com reports.export');
+assert.match(lancamento, /mostrarArrobas=\{podeVerValores\}/, 'arrobas do resumo de lotes só com commercial.values');
+assert.match(read('src/components/pesagens/PesagensResumoRodape.jsx'), /\{exportarExcel \? \(/, 'rodapé sem botão quando não há exportação');
+const ficha = read('src/pages/FichaAnimal.jsx');
+assert.match(ficha, /\{pode\('reports\.export'\) \? <button[^>]*onClick=\{exportHistory\}/, 'Ficha: Exportar histórico só com reports.export');
+assert.match(ficha, /\.\.\.\(pode\('commercial\.values'\) \? \[\['@ carcaça est\.'/, 'Ficha: @ carcaça só com commercial.values');
 
 console.log(JSON.stringify({ gate: 'auth:weighing-access:verify', ok: true, consultaDenied: denied }, null, 2));

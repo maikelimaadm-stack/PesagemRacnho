@@ -3,9 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
-import { sum } from "@/modules/reporting/domain/aggregateEngine";
+import { avg, sum } from "@/modules/reporting/domain/aggregateEngine";
+import { normalizeCarcassYield } from "@/modules/weighing/domain/commercialCalculations";
 
-export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApartacaoAtual, pesagens, pesagensDia, dataPesagem }) {
+export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApartacaoAtual, pesagens, pesagensDia, dataPesagem, mostrarArrobas = true }) {
   const [modoVisualizacao, setModoVisualizacao] = useState('dia');
 
   const resumoLotes = useMemo(() => {
@@ -19,10 +20,11 @@ export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApa
     return lotesApartacaoAtual.map((lote) => {
     const animaisLote = todasPesagensApartacao.filter((p) => p.lote_id === lote.id);
     const qtd = animaisLote.length;
-    const pesoTotal = animaisLote.reduce((s, p) => s + (p.peso || 0), 0);
-    const pesoMedio = qtd > 0 ? pesoTotal / qtd : 0;
-    // Arrobas só as registradas no fato (1 @ = 15 kg de carcaça, com rendimento válido); sem nenhuma → null ("—").
-    const arrobasTotal = sum(animaisLote, "quantidade_arrobas").value;
+    const pesoTotal = sum(animaisLote, "peso").value;
+    // Média só entre pesagens com peso (sem peso não vira 0); nenhuma → null ("-").
+    const pesoMedio = avg(animaisLote, "peso").value;
+    // Arrobas registradas no fato COM rendimento válido (1 @ = 15 kg de carcaça); legado sem rendimento não entra.
+    const arrobasTotal = sum(animaisLote.filter((p) => normalizeCarcassYield(p.rendimento_carcaca) !== null), "quantidade_arrobas").value;
     return { ...lote, quantidade_atual: qtd, peso_total: pesoTotal, peso_medio: pesoMedio, arrobas_total: arrobasTotal };
     }).sort((a, b) => (a.nome_lote || '').localeCompare(b.nome_lote || ''));
   }, [apartacaoSelecionada, lotesApartacaoAtual, pesagens, pesagensDia, modoVisualizacao]);
@@ -51,7 +53,7 @@ export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApa
                 </div>
               </div>
               <Table>
-              <TableHeader><TableRow><TableHead className="text-[10px]">Lote</TableHead><TableHead className="text-[10px] text-right">Qtd.</TableHead><TableHead className="text-[10px] text-right">Peso Médio</TableHead><TableHead className="text-[10px] text-right">@ carcaça est.</TableHead></TableRow></TableHeader>
+              <TableHeader><TableRow><TableHead className="text-[10px]">Lote</TableHead><TableHead className="text-[10px] text-right">Qtd.</TableHead><TableHead className="text-[10px] text-right">Peso Médio</TableHead>{mostrarArrobas ? <TableHead className="text-[10px] text-right">@ carcaça est.</TableHead> : null}</TableRow></TableHeader>
                 <TableBody>
                   {resumoLotes.map((lote) => {
                     const cheio = lote.fechado || lote.quantidade_atual >= (lote.quantidade_maxima || 999999);
@@ -60,14 +62,14 @@ export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApa
                         <TableCell className={`text-xs font-medium ${cheio ? "text-red-700" : ""}`}>{lote.nome_lote} {cheio && "[FECHADO]"}</TableCell>
                         <TableCell className={`text-xs text-right ${cheio ? "text-red-700 font-bold" : ""}`}>{fmtInt(lote.quantidade_atual)}/{fmtInt(lote.quantidade_maxima || 0)}</TableCell>
                         <TableCell className="text-xs text-right font-mono">{fmtNum(lote.peso_medio)}</TableCell>
-                        <TableCell className="text-xs text-right font-mono">{fmtNum(lote.arrobas_total)}</TableCell>
+                        {mostrarArrobas ? <TableCell className="text-xs text-right font-mono">{fmtNum(lote.arrobas_total)}</TableCell> : null}
                       </TableRow>
                     );
                   })}
                 </TableBody>
               </Table>
               <div className="d17d-summary-panel__totals mt-2 pt-2 border-t text-xs text-center text-slate-500">
-                Qtd. lançada: {fmtInt(resumoLotes.reduce((s, l) => s + (l.quantidade_atual || 0), 0))} | Arrobas estimadas de carcaça: {fmtNum(sum(resumoLotes, "arrobas_total").value)}
+                Qtd. lançada: {fmtInt(resumoLotes.reduce((s, l) => s + (l.quantidade_atual || 0), 0))}{mostrarArrobas ? <> | Arrobas estimadas de carcaça: {fmtNum(sum(resumoLotes, "arrobas_total").value)}</> : null}
               </div>
             </>
           ) : (

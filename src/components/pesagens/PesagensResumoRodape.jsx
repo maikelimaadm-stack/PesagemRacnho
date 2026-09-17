@@ -101,9 +101,11 @@ export default function PesagensResumoRodape({ estatisticas, tipoManejo, motivoS
             <Button type="button" variant="ghost" size="icon" className="d17d-icon-action h-7 w-7 rounded-full" disabled={pagination.currentPage >= pagination.totalPages} onClick={pagination.onNext} aria-label="Próxima página"><pagination.NextIcon className="h-4 w-4" /></Button>
           </>
         )}
-        <Button size="sm" onClick={exportarExcel} className="d17d-export-action emp-toolbar-btn emp-toolbar-btn-save h-7 text-xs shrink-0">
-          Exportar
-        </Button>
+        {exportarExcel ? (
+          <Button size="sm" onClick={exportarExcel} className="d17d-export-action emp-toolbar-btn emp-toolbar-btn-save h-7 text-xs shrink-0">
+            Exportar
+          </Button>
+        ) : null}
       </div>
     </div>);
 

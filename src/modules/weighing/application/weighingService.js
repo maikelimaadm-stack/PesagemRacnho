@@ -6,15 +6,32 @@ import {
 import * as weighingDataAdapter from '../infrastructure/weighingDataAdapter.js';
 import { animalIdentityKey, recalculateWeightSeries } from '../domain/weighingSeries.js';
 import { calculateWeightGain } from '../domain/weighingCalculations.js';
-import { getCurrentActor } from '../../../storage/indexedDb/auditActor.js';
-import { authorize } from '../../auth/domain/permissionService.js';
+import { getCurrentActor, hasActorProvider } from '../../../storage/indexedDb/auditActor.js';
+import { authorize, can, forbiddenError } from '../../auth/domain/permissionService.js';
 
 // Escrita autorizada no SERVIÇO (não só na tela): com sessão, o papel precisa da ação
-// (weighing.write para lançar/importar; weighing.edit para editar/excluir). Sem sessão
-// (gates em Node, migração) não há ator e a verificação não se aplica.
+// (weighing.write para lançar/importar; weighing.edit para editar/excluir). Com o módulo de
+// autenticação ativo e sem sessão, recusa (falha fechada). Sem provedor de ator (gates em
+// Node, migração) a verificação não se aplica.
 function requireWeighingPermission(action) {
   const actor = getCurrentActor();
-  if (actor) authorize(actor.role, action);
+  if (actor) {
+    authorize(actor.role, action);
+    return actor;
+  }
+  if (hasActorProvider()) throw forbiddenError(null, action);
+  return null;
+}
+
+// Valores comerciais digitados (preços e totais em dinheiro) só entram com commercial.write.
+// Arrobas/carcaça derivadas do rendimento configurado não são digitação de preço e seguem.
+const COMMERCIAL_INPUT_FIELDS = ['valor_pago_cabeca', 'valor_venda_total', 'valor_arroba', 'valor_arroba_abate', 'valor_total_abate'];
+
+function withoutCommercialInput(actor, payload) {
+  if (!actor || !payload || can(actor.role, 'commercial.write')) return payload;
+  const copy = { ...payload };
+  for (const field of COMMERCIAL_INPUT_FIELDS) delete copy[field];
+  return copy;
 }
 
 /**
@@ -33,8 +50,8 @@ export async function detectStorageStatus() {
   };
 }
 
-export async function createEntry(uiPayload) {
-  requireWeighingPermission('weighing.write');
+export async function createEntry(rawPayload) {
+  const uiPayload = withoutCommercialInput(requireWeighingPermission('weighing.write'), rawPayload);
   validateUiPayload(uiPayload);
   try {
     const trace = globalThis.__MAK_PERF_TRACE__ === true;
@@ -85,8 +102,9 @@ export async function createEntry(uiPayload) {
   }
 }
 
-export async function bulkCreateEntries(items, options = {}) {
-  requireWeighingPermission('weighing.write');
+export async function bulkCreateEntries(rawItems, options = {}) {
+  const actor = requireWeighingPermission('weighing.write');
+  const items = rawItems.map((item) => withoutCommercialInput(actor, item));
   const payloads = items.map((item) => {
     validateUiPayload(item);
     return uiToStorageRecord(item);
@@ -96,8 +114,10 @@ export async function bulkCreateEntries(items, options = {}) {
   return { ...report, payloads };
 }
 
-export async function bulkUpdateEntries(items, { recalculate = true, systemDerived = false } = {}) {
-  requireWeighingPermission('weighing.edit');
+export async function bulkUpdateEntries(rawItems, { recalculate = true, systemDerived = false } = {}) {
+  const actor = requireWeighingPermission('weighing.edit');
+  // Patch sem valores comerciais: o valor gravado anteriormente é preservado (merge com existing).
+  const items = rawItems.map((item) => ({ ...item, patch: withoutCommercialInput(actor, item.patch) }));
   const payloads = [];
   for (const item of items) {
     validateUiPayload(item.patch, { isUpdate: true });
@@ -176,8 +196,8 @@ async function recalculateWeightSeriesForKeys(affectedKeys) {
   return updates.length;
 }
 
-export async function updateEntry(id, uiPayload) {
-  requireWeighingPermission('weighing.edit');
+export async function updateEntry(id, rawPayload) {
+  const uiPayload = withoutCommercialInput(requireWeighingPermission('weighing.edit'), rawPayload);
   try {
     validateUiPayload(uiPayload, { isUpdate: true });
     const existing = await weighingDataAdapter.getEntryById(id);

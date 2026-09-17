@@ -55,7 +55,8 @@ import { useAuth } from "@/components/auth/useAuth";
 import { avg as avgValues, sum as sumValues, weightedGmd } from "@/modules/reporting/domain/aggregateEngine";
 import { normalizeText } from "@/modules/reporting/domain/filterEngine";
 import { formatCell } from "@/modules/reporting/domain/reportFormatting";
-import { RELATION_COLUMN_IDS } from "@/modules/reporting/definitions/columns/eventColumns";
+import { EVENT_COLUMNS, RELATION_COLUMN_IDS } from "@/modules/reporting/definitions/columns/eventColumns";
+import { SENSITIVITY } from "@/modules/reporting/domain/columnDefinition";
 import { relationPopulation, resolveEventColumn } from "@/modules/reporting/application/relationPopulation";
 import { loadEventRows } from "@/modules/reporting/infrastructure/reportSources/eventSource";
 import { REGISTRY_WRITE_PERMISSION, brandService, breedService, resolveMany } from "@/modules/catalog/application/index";
@@ -82,7 +83,8 @@ const COLUNAS_DISPONIVEIS = [
 
 // Valores comerciais (preço, valor, arrobas): só perfis com commercial.values os veem, filtram
 // ou exportam; as demais colunas comerciais (comprador, destino, frigorífico) são texto operacional.
-const COMMERCIAL_VALUE_COLUMN_IDS = new Set(["valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas"]);
+// Sensibilidade declarada nas colunas canônicas: valores, arrobas, carcaça e rendimento.
+const COMMERCIAL_VALUE_COLUMN_IDS = new Set(EVENT_COLUMNS.filter((column) => column.sensitive === SENSITIVITY.COMMERCIAL).map((column) => column.id));
 
 
 

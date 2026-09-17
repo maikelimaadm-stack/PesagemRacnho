@@ -45,6 +45,15 @@ export function getActorRole() {
   return actor?.role ? String(actor.role) : null;
 }
 
+/**
+ * true quando o módulo de autenticação registrou o provedor (aplicativo em execução).
+ * Serviços usam isso para falhar FECHADO: provedor presente + sem sessão = recusa.
+ * Gates em Node e migrações sem auth não registram provedor.
+ */
+export function hasActorProvider() {
+  return provider !== null;
+}
+
 /** Ator completo { id, nome, role } | null — para serviços que precisam dos três. */
 export function getCurrentActor() {
   return readProvider();

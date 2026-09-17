@@ -77,7 +77,7 @@ const POLITICAS_INICIAIS = Object.freeze({
 const SEM_SELECAO = '__none__';
 // Categoria do Cadastro: "Automático" escolhe pelo sexo e pela faixa de peso da categoria.
 const CATEGORIA_AUTOMATICA = '__auto__';
-const COMMERCIAL_VALUE_FIELDS = new Set(["valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "valor_arroba_abate", "valor_total_abate"]);
+const COMMERCIAL_VALUE_FIELDS = new Set(["valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "valor_arroba_abate", "valor_total_abate", "peso_carcaca_estimado", "rendimento_carcaca"]);
 const NUMBER_COLUMN_IDS = new Set(["numero_registro", "peso", "peso_anterior", "valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "doc_qtd", "dias", "ganho", "gmd"]);
 const DATE_COLUMN_IDS = new Set(["data_pesagem", "data_anterior"]);
 const getColumnFilterType = (id) => DATE_COLUMN_IDS.has(id) ? "date" : NUMBER_COLUMN_IDS.has(id) ? "number" : "text";
@@ -2264,7 +2264,7 @@ export default function LancamentoPesagensIndividuais() {
             resumoDoc={resumoDoc}
             resumoEmbarque={resumoEmbarque}
             pesagensDia={pesagensDia}
-            exportarExcel={exportarExcel}
+            exportarExcel={auth && !auth.can?.('reports.export') ? null : exportarExcel}
             pagination={{
               currentPage: launchPageSafe,
               totalPages: launchTotalPages,
@@ -2296,6 +2296,7 @@ export default function LancamentoPesagensIndividuais() {
           <ResumoVendaDia
             pesagens={pesagens}
             dataPesagem={dataPesagem}
+            mostrarArrobas={podeVerValores}
           />
         ) : (
           <ResumoLotes
@@ -2305,6 +2306,7 @@ export default function LancamentoPesagensIndividuais() {
             pesagens={pesagens}
             pesagensDia={pesagensDia}
             dataPesagem={dataPesagem}
+            mostrarArrobas={podeVerValores}
           />
         )}
       </div>

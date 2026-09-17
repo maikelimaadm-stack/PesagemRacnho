@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
@@ -42,6 +42,8 @@ const createWindow = () => {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      // Instalado: sem DevTools (a sessão e as regras de permissão vivem no renderer).
+      devTools: !app.isPackaged,
     },
   });
 
@@ -63,6 +65,8 @@ const createWindow = () => {
 };
 
 app.whenReady().then(() => {
+  // Instalado: sem menu (remove atalhos de recarregar/DevTools).
+  if (app.isPackaged) Menu.setApplicationMenu(null);
   const userDataPath = app.getPath('userData');
   const dataDir = getDataDir();
 

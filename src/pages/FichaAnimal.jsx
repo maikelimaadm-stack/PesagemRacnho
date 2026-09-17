@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { loadOperationalCatalog } from '@/modules/operations/application/operationalInsightsService';
 import { calculateCarcassTrade } from '@/modules/weighing/domain/commercialCalculations';
+import { useAuth } from '@/components/auth/useAuth';
 import '@/styles/operational-insights.css';
 
 const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -58,6 +59,8 @@ function buildProfiles(catalog) {
 
 export default function FichaAnimal() {
   const navigate = useNavigate();
+  const auth = useAuth();
+  const pode = (action) => (auth ? Boolean(auth.can?.(action)) : true);
   const [catalog, setCatalog] = useState({ pesagens: [], apartacoes: [], lotes: [], animais: [], sessoes: [] });
   const [selectedKey, setSelectedKey] = useState('');
   const [query, setQuery] = useState('');
@@ -147,7 +150,7 @@ export default function FichaAnimal() {
     ['Ganho total', totalGain === null ? '—' : `${totalGain >= 0 ? '+' : ''}${nf.format(totalGain)}`, 'desde o cadastro', 'accent'],
     ['GMD médio', averageGmd === null ? '—' : n3.format(averageGmd), `kg/dia · ${ni.format(totalDays)} dias`, 'accent'],
     ['GMD última', latestGmd !== null ? n3.format(latestGmd) : '—', latest?.data_anterior ? `vs. ${dateBr(latest.data_anterior)}` : 'primeira pesagem', 'accent'],
-    ['@ carcaça est.', carcass.arrobas === null ? '—' : nf.format(carcass.arrobas), carcass.yieldPercent === null ? 'sem rendimento informado' : `rendimento ${nf.format(carcass.yieldPercent)}% · 1 @ = 15 kg`, ''],
+    ...(pode('commercial.values') ? [['@ carcaça est.', carcass.arrobas === null ? '—' : nf.format(carcass.arrobas), carcass.yieldPercent === null ? 'sem rendimento informado' : `rendimento ${nf.format(carcass.yieldPercent)}% · 1 @ = 15 kg`, '']] : []),
     ['Pesagens', ni.format(selected.entries.length), 'série completa', ''],
   ];
 
@@ -156,7 +159,7 @@ export default function FichaAnimal() {
       <div className="op-toolbar op-toolbar--animal">
         <label className="op-field" style={{ width: 260 }}><Search /><input value={query} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)} placeholder="Brinco, nome ou marca" aria-label="Buscar animal" />{searchOpen && <div className="op-search-results">{results.map((profile) => <button className="op-search-result" type="button" key={profile.key} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(profile)}><span>{profile.number}</span><span className="op-pill">{profile.brand}</span><small>{profile.sex} · {profile.race}</small></button>)}{!results.length && <div className="op-empty">Nenhum animal encontrado.</div>}</div>}</label>
         <div className="op-animal-heading"><div className="op-animal-heading__line"><strong>{selected.number}</strong><span className="op-pill">{selected.brand}</span><span className={`op-pill ${['ATIVO', 'Ativo'].includes(selected.status) ? 'op-pill--active' : ''}`}>{selected.status}</span></div><span className="op-animal-heading__meta">{selected.sex} · {selected.race} · {selected.era} · {selected.lot} · {selected.apartacao}</span></div>
-        <div className="op-toolbar-actions"><button className="op-button" type="button" onClick={exportHistory}>Exportar histórico</button><button className="op-button op-button--primary" type="button" onClick={() => navigate('/LancamentoPesagensIndividuais')}>Lançar pesagem</button></div>
+        <div className="op-toolbar-actions">{pode('reports.export') ? <button className="op-button" type="button" onClick={exportHistory}>Exportar histórico</button> : null}<button className="op-button op-button--primary" type="button" onClick={() => navigate('/LancamentoPesagensIndividuais')}>Lançar pesagem</button></div>
       </div>
 
       <div className="op-kpis">{kpis.map(([label, value, hint, accent]) => <div key={label} className={`op-kpi ${accent ? `op-kpi--${accent}` : ''}`}><span className="op-kpi__label">{label}</span><strong className="op-kpi__value">{value}</strong><span className="op-kpi__hint">{hint}</span></div>)}</div>

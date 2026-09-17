@@ -1,9 +1,10 @@
 // Serviço de manutenção: backup, exportação, importação, restauração, limpeza,
-// migração e diagnóstico. As ações críticas (restore, limpeza, reset, migração
-// manual) validam o perfil ADMIN quando existe ator autenticado (ADR-036);
-// sem ator (gates em Node, primeira execução) a validação não se aplica.
+// migração e diagnóstico. Backup/exportação/importação exigem maintenance.backup (o backup
+// completo contém dados comerciais e hashes de senha); restore, limpeza, reset e migração
+// manual exigem as ações ADMIN (ADR-036). Com autenticação ativa e sem sessão: recusa.
+// Sem provedor de ator (gates em Node) a validação não se aplica.
 import * as adapter from '../infrastructure/maintenanceDataAdapter.js';
-import { getCurrentActor } from '../../../storage/indexedDb/auditActor.js';
+import { getCurrentActor, hasActorProvider } from '../../../storage/indexedDb/auditActor.js';
 import { can } from '../../auth/domain/permissionService.js';
 
 export const CLEAR_CONFIRMATION_TEXT = 'LIMPAR';
@@ -14,12 +15,12 @@ export const RESET_CONFIRMATION_TEXT = 'RESET';
 // Com sessão autenticada, papel ausente ou sem a ação é recusado (falha fechada).
 function requireMaintenanceAction(operation, action) {
   const actor = getCurrentActor();
-  if (!actor) return;
-  if (!can(actor.role, action)) {
-    const err = new Error(`: ação exclusiva do perfil ADMIN.`);
+  if (!actor && !hasActorProvider()) return;
+  if (!actor || !can(actor.role, action)) {
+    const err = new Error(`${operation}: ação não permitida para o seu perfil.`);
     err.code = 'MAINTENANCE_FORBIDDEN';
     err.action = action;
-    err.role = actor.role ?? null;
+    err.role = actor?.role ?? null;
     throw err;
   }
 }
@@ -33,30 +34,37 @@ function requireConfirmationText(received, expected, operation) {
 }
 
 export async function createDatabaseBackup(options) {
+  requireMaintenanceAction('Backup', 'maintenance.backup');
   return adapter.createDatabaseBackup(options);
 }
 
 export async function createFullDataBackup(options) {
+  requireMaintenanceAction('Backup completo', 'maintenance.backup');
   return adapter.createFullDataBackup(options);
 }
 
 export async function exportWeighingJson(filters) {
+  requireMaintenanceAction('Exportação JSON', 'maintenance.backup');
   return adapter.exportWeighingJson(filters);
 }
 
 export async function exportWeighingCsv(filters) {
+  requireMaintenanceAction('Exportação CSV', 'maintenance.backup');
   return adapter.exportWeighingCsv(filters);
 }
 
 export async function dryRunImportWeighingJson(payload) {
+  requireMaintenanceAction('Importação', 'maintenance.backup');
   return adapter.dryRunImportWeighingJson(payload);
 }
 
 export async function applyImportWeighingJson(payload, options) {
+  requireMaintenanceAction('Importação', 'maintenance.backup');
   return adapter.applyImportWeighingJson(payload, options);
 }
 
 export async function dryRunRestoreBackup(backupPath) {
+  requireMaintenanceAction('Restauração', 'maintenance.restore');
   return adapter.dryRunRestoreBackup(backupPath);
 }
 
