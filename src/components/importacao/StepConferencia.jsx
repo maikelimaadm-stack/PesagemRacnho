@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { fmtDateBR, fmtInt, fmtNum } from '@/components/common/formatNumber';
-import { ROW_STATUS, ROW_STATUS_HINTS, ROW_STATUS_TONE } from './importacaoModel';
+import { IMPORT_TYPES, ROW_STATUS, ROW_STATUS_HINTS, ROW_STATUS_TONE } from './importacaoModel';
 
 const POR_PAGINA = 50;
 
@@ -12,6 +12,8 @@ export default function StepConferencia({ plan, erro, onBaixarRelatorio, onImpor
   const [filtro, setFiltro] = useState('TODAS');
   const [pagina, setPagina] = useState(1);
   const linhas = plan?.rows || [];
+  // Aplicações de sanidade não têm categoria nem peso: a coluna mostra a própria aplicação.
+  const sanidade = plan?.type === IMPORT_TYPES.SANIDADE;
 
   const contagemPorStatus = useMemo(() => {
     const mapa = new Map();
@@ -34,6 +36,7 @@ export default function StepConferencia({ plan, erro, onBaixarRelatorio, onImpor
       <h2 id="importacao-step-conferencia-titulo" className="importacao-step__title">Confira linha por linha</h2>
       <p className="importacao-step__lead">
         A situação de cada linha diz o que vai acontecer com ela. Só as linhas marcadas como “NOVO” serão gravadas.
+        {sanidade ? ' Cada linha é uma aplicação de sanidade ligada ao animal, na data do próprio evento.' : ''}
       </p>
 
       <div className="importacao-step__tools">
@@ -70,7 +73,7 @@ export default function StepConferencia({ plan, erro, onBaixarRelatorio, onImpor
               <th scope="col">Animal</th>
               <th scope="col">Data</th>
               <th scope="col">Peso</th>
-              <th scope="col">Categoria</th>
+              <th scope="col">{sanidade ? 'Aplicação' : 'Categoria'}</th>
               <th scope="col">Observações do sistema</th>
             </tr>
           </thead>
@@ -90,7 +93,7 @@ export default function StepConferencia({ plan, erro, onBaixarRelatorio, onImpor
                 </td>
                 <td>{fmtDateBR(linha.data, '—')}</td>
                 <td className="importacao-table__num">{linha.peso === null || linha.peso === undefined ? '—' : fmtNum(linha.peso)}</td>
-                <td>{linha.categoria?.nome || '—'}</td>
+                <td>{(sanidade ? linha.sanidade?.resumo : linha.categoria?.nome) || '—'}</td>
                 <td className="importacao-table__mensagens">{(linha.messages || []).join(' · ') || '—'}</td>
               </tr>
             ))}

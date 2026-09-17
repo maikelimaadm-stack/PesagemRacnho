@@ -26,6 +26,10 @@ for (const kind of Object.values(TEMPLATE_KINDS)) {
 }
 assert.deepEqual(importTemplateHeaders(TEMPLATE_KINDS.PESAGENS), ['Data', 'NumeroAnimal', 'Marca', 'Sexo', 'Raça', 'Categoria', 'Peso', 'Apartação', 'Lote', 'Observação']);
 assert.deepEqual(importTemplateHeaders(TEMPLATE_KINDS.SAIDAS), ['Data', 'NumeroAnimal', 'Marca', 'MotivoSaida', 'CausaMorte', 'Peso', 'Observação']);
+// Aplicações de sanidade (17/09/2026): nenhuma coluna calculada e nenhuma coluna de peso —
+// a dose é a da planilha e nunca é calculada pelo peso do animal.
+assert.deepEqual(importTemplateHeaders(TEMPLATE_KINDS.SANIDADE), ['Data', 'NumeroAnimal', 'Marca', 'Programa', 'Medicamento', 'Dose', 'Unidade', 'Via', 'Observação']);
+assert.ok(!importTemplateHeaders(TEMPLATE_KINDS.SANIDADE).some((header) => /peso/i.test(header)), 'NEGATIVO: o modelo de aplicações não pede peso');
 
 // 17/09/2026: a Relação não interpreta mais cabeçalho nenhum — quem reconhece as colunas do
 // modelo é o motor da importação (suggestMapping), usado pelo assistente. Em vez de procurar
@@ -33,6 +37,7 @@ assert.deepEqual(importTemplateHeaders(TEMPLATE_KINDS.SAIDAS), ['Data', 'NumeroA
 for (const [kind, type, esperados] of [
   [TEMPLATE_KINDS.PESAGENS, IMPORT_TYPES.HISTORICO, ['data', 'numero', 'marca', 'sexo', 'raca', 'categoria', 'peso', 'apartacao', 'lote', 'observacao']],
   [TEMPLATE_KINDS.SAIDAS, IMPORT_TYPES.SAIDAS, ['data', 'numero', 'marca', 'motivo_saida', 'causa_morte', 'peso', 'observacao']],
+  [TEMPLATE_KINDS.SANIDADE, IMPORT_TYPES.SANIDADE, ['data', 'numero', 'marca', 'programa', 'medicamento', 'dose', 'unidade', 'via_aplicacao', 'observacao']],
 ]) {
   const mapeamento = suggestMapping(importTemplateHeaders(kind), type);
   assert.deepEqual(Object.values(mapeamento), esperados, `${kind}: o motor reconhece cada coluna do modelo`);
@@ -44,4 +49,13 @@ const assistente = readFileSync(new URL('../src/pages/Importacao.jsx', import.me
 assert.match(assistente, /buildImportTemplateCsv\(TEMPLATE_KINDS\[kind\]\)/, 'o assistente oferece o mesmo modelo (pesagens e saídas)');
 assert.doesNotMatch(relacao, /'ID_Externo'|'PesoAnterior'|'DataAnterior'/, 'NEGATIVO: modelo antigo com derivados saiu da tela');
 
-console.log(JSON.stringify({ gate: 'import:template:verify', ok: true, pesagens: importTemplateHeaders(TEMPLATE_KINDS.PESAGENS), saidas: importTemplateHeaders(TEMPLATE_KINDS.SAIDAS) }, null, 2));
+const painelSanidade = readFileSync(new URL('../src/components/sanidade/AplicacoesPanel.jsx', import.meta.url), 'utf8');
+assert.match(painelSanidade, /buildImportTemplateCsv\(TEMPLATE_KINDS\.SANIDADE\)/, 'a aba Aplicações da Sanidade baixa o mesmo modelo compartilhado');
+
+console.log(JSON.stringify({
+  gate: 'import:template:verify',
+  ok: true,
+  pesagens: importTemplateHeaders(TEMPLATE_KINDS.PESAGENS),
+  saidas: importTemplateHeaders(TEMPLATE_KINDS.SAIDAS),
+  sanidade: importTemplateHeaders(TEMPLATE_KINDS.SANIDADE),
+}, null, 2));

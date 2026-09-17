@@ -24,6 +24,7 @@ import {
   CONCILIACAO_OPCOES,
   CONCILIACAO_PERGUNTA,
   IMPORT_STEPS,
+  MODELOS_PLANILHA,
   ROW_STATUS_TONE,
   STEP_IDS,
   afericaoDoArquivo,
@@ -31,6 +32,8 @@ import {
   camposObrigatoriosFaltando,
   describeImportError,
   headerOfField,
+  modelosParaTipo,
+  respostaDoTipo,
   stepIndex,
 } from '../src/components/importacao/importacaoModel.js';
 
@@ -103,9 +106,15 @@ for (const type of Object.values(IMPORT_TYPES)) {
     assert.ok(!oferecidos.includes(proibido), `${type}: NEGATIVO: "${proibido}" não é oferecido no mapeamento`);
   }
   assert.ok(listMappableFields(type).every((campo) => !campo.derived && !campo.technical), `${type}: só campos digitáveis`);
-  if (type !== IMPORT_TYPES.MESTRES) {
+  // MESTRES e SANIDADE têm catálogo próprio (nomes de cadastro / aplicação), sem peso e sem
+  // campos técnicos — por isso o motor não conhece nada além do que a tela oferece.
+  if (type !== IMPORT_TYPES.MESTRES && type !== IMPORT_TYPES.SANIDADE) {
     assert.ok(oferecidos.includes('numero') && oferecidos.includes('data') && oferecidos.includes('peso'), `${type}: os campos digitados continuam disponíveis`);
     assert.ok(listImportFields(type).length > oferecidos.length, `${type}: o motor conhece mais campos do que a tela oferece`);
+  }
+  if (type === IMPORT_TYPES.SANIDADE) {
+    assert.deepEqual(oferecidos, ['data', 'numero', 'marca', 'programa', 'medicamento', 'dose', 'unidade', 'via_aplicacao', 'observacao'], 'SANIDADE: só o que a pessoa digita na planilha de aplicações');
+    assert.ok(!oferecidos.includes('peso'), 'NEGATIVO: aplicação de sanidade não lê peso');
   }
 }
 assert.match(stepColunas, /campos\.map\(\(campo\) =>/, 'o select da coluna lista só os campos recebidos (listMappableFields)');
@@ -192,10 +201,11 @@ assert.match(relation, /exportWeighingCsv\(/, 'a exportação continua intacta n
 // 7. Pergunta da conciliação, aviso de repetidos e resumo dos animais com várias linhas.
 // ---------------------------------------------------------------------------
 assert.equal(CONCILIACAO_PERGUNTA, 'O arquivo tem mais de uma pesagem do mesmo animal?');
-assert.deepEqual(CONCILIACAO_OPCOES.map((opcao) => opcao.id), ['SIM', 'NAO', 'MESTRES'], 'duas respostas para a pergunta + cadastros mestres');
+assert.deepEqual(CONCILIACAO_OPCOES.map((opcao) => opcao.id), ['SIM', 'NAO', 'MESTRES', 'SANIDADE'], 'duas respostas para a pergunta + cadastros mestres + aplicações de sanidade');
 assert.equal(CONCILIACAO_OPCOES[0].tipo, IMPORT_TYPES.HISTORICO, '"Sim" é a conciliação automática');
 assert.equal(CONCILIACAO_OPCOES[1].tipo, null, '"Não" abre a escolha do tipo único');
 assert.equal(CONCILIACAO_OPCOES[2].tipo, IMPORT_TYPES.MESTRES, 'cadastros mestres é opção separada');
+assert.equal(CONCILIACAO_OPCOES[3].tipo, IMPORT_TYPES.SANIDADE, 'aplicações de sanidade é opção separada');
 assert.match(CONCILIACAO_OPCOES[0].titulo, /recomendado/, 'a conciliação automática é a recomendada');
 assert.match(CONCILIACAO_OPCOES[0].texto, /mais antiga de cada animal novo vira Cadastro/, 'o texto explica Cadastro × Manejo pela data');
 assert.match(CONCILIACAO_OPCOES[0].texto, /já existe no sistema, todas entram como Manejo/, 'o texto explica o animal já cadastrado');
@@ -240,6 +250,33 @@ assert.match(stepConciliacao, /animaisComVariasLinhas\(plan\)/, 'o resumo agrupa
 assert.match(stepConciliacao, /importacao-animais-repetidos/, 'a seção "Animais com várias linhas" existe');
 assert.match(stepConciliacao, /Animais com várias linhas/, 'a seção tem título em português claro');
 
+// ---------------------------------------------------------------------------
+// 8. Aplicações de sanidade (17/09/2026): tipo novo, entrada pela tela Sanidade e
+//    modelo de planilha próprio. O motor e a gravação estão em verify-import-sanity.
+// ---------------------------------------------------------------------------
+const stepArquivoFonte = stepArquivo;
+const painelAplicacoes = read('src/components/sanidade/AplicacoesPanel.jsx');
+assert.deepEqual(MODELOS_PLANILHA.map((modelo) => modelo.kind), ['PESAGENS', 'SAIDAS', 'SANIDADE'], 'três modelos de planilha');
+assert.deepEqual(modelosParaTipo(IMPORT_TYPES.SANIDADE).map((modelo) => modelo.kind), ['SANIDADE'], 'com o tipo escolhido, só o modelo dele');
+assert.deepEqual(modelosParaTipo(IMPORT_TYPES.HISTORICO).map((modelo) => modelo.kind), ['PESAGENS'], 'histórico usa o modelo de pesagens');
+assert.deepEqual(modelosParaTipo(null).map((modelo) => modelo.kind), ['PESAGENS', 'SAIDAS', 'SANIDADE'], 'sem tipo, todos os modelos');
+assert.equal(respostaDoTipo(IMPORT_TYPES.SANIDADE), 'SANIDADE', 'o tipo vindo da rota já marca a resposta da etapa Tipo');
+assert.equal(respostaDoTipo(IMPORT_TYPES.MANEJOS), 'NAO', 'tipo único cai na resposta "todas do mesmo tipo"');
+assert.equal(respostaDoTipo(null), null);
+assert.match(stepArquivoFonte, /modelos\.map\(\(modelo\) =>/, 'a etapa Arquivo oferece os modelos do tipo escolhido');
+assert.match(page, /function tipoDaRota\(search\)/, 'o assistente aceita o tipo pedido pela rota');
+assert.match(page, /Object\.values\(IMPORT_TYPES\)\.includes\(pedido\)/, 'NEGATIVO: tipo desconhecido na rota é ignorado');
+assert.match(stepConferencia, /plan\?\.type === IMPORT_TYPES\.SANIDADE/, 'a Conferência mostra a aplicação linha a linha');
+assert.match(stepConferencia, /linha\.sanidade\?\.resumo/, 'o resumo da aplicação vem do plano, sem recalcular');
+assert.match(stepConciliacao, /summary\.aplicacoes/, 'a Conciliação conta quantas aplicações serão criadas');
+assert.match(stepResultado, /resultado\.aplicacoesCriadas/, 'o resultado mostra as aplicações criadas');
+assert.match(stepRegras, /importacao-regras-sanidade/, 'as Regras explicam o que vale nas aplicações de sanidade');
+assert.match(painelAplicacoes, /data-testid="sanidade-importar-aplicacoes"[\s\S]{0,200}onClick=\{abrirImportacao\}/, 'a aba Aplicações traz o botão "Importar aplicações"');
+assert.match(painelAplicacoes, /createPageUrl\('Importacao\?tipo=SANIDADE'\)/, 'o botão abre o assistente já no tipo certo');
+assert.match(painelAplicacoes, /disabled=\{!canApply\}[\s\S]{0,60}Importar aplicações|Importar aplicações[\s\S]{0,200}/, 'importar aplicações exige weighing.write (canApply)');
+assert.match(painelAplicacoes, /buildImportTemplateCsv\(TEMPLATE_KINDS\.SANIDADE\)/, 'a aba Aplicações oferece o modelo de planilha do tipo');
+assert.ok(!/analyzeImport|applyImport/.test(painelAplicacoes), 'NEGATIVO: a tela Sanidade não importa por conta própria — leva ao assistente');
+
 console.log('OK verify-import-ui');
 console.log(JSON.stringify({
   sevenStepsInOrder: true,
@@ -252,4 +289,6 @@ console.log(JSON.stringify({
   reconciliationQuestionWithTwoAnswers: true,
   repeatedAnimalsWarningSwitchesMode: true,
   repeatedAnimalsShownInSummary: true,
+  sanityApplicationsImportType: true,
+  sanityImportEntryPointInSanidadeScreen: true,
 }, null, 2));

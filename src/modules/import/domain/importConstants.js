@@ -8,6 +8,7 @@ export const IMPORT_TYPES = Object.freeze({
   MANEJOS: 'MANEJOS',
   SAIDAS: 'SAIDAS',
   MESTRES: 'MESTRES',
+  SANIDADE: 'SANIDADE',
 });
 
 export const IMPORT_TYPE_LABELS = Object.freeze({
@@ -16,6 +17,7 @@ export const IMPORT_TYPE_LABELS = Object.freeze({
   MANEJOS: 'Manejos',
   SAIDAS: 'Saídas',
   MESTRES: 'Cadastros mestres',
+  SANIDADE: 'Aplicações de sanidade',
 });
 
 export const ROW_STATUS = Object.freeze({

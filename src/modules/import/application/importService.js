@@ -19,7 +19,9 @@
 import storage from '../../../storage/storageAdapter.js';
 import { getCurrentActor, hasActorProvider } from '../../../storage/indexedDb/auditActor.js';
 import { authorize, forbiddenError, roleOf } from '../../auth/domain/permissionService.js';
+import { normalizeName } from '../../catalog/domain/normalize.js';
 import { getRegistryService } from '../../catalog/application/registryServices.js';
+import { listMedicamentos, listProgramas, saveMedicamento, saveProgram } from '../../sanity/application/sanityService.js';
 import { buildAnimalIdentityIndex } from '../domain/animalIdentity.js';
 import {
   DEFAULT_EMPRESA_ID,
@@ -35,10 +37,12 @@ import { buildRegistryContext } from '../domain/importRegistryContext.js';
 import { planToCsv, resultToCsv } from '../domain/importReport.js';
 import { weightKey } from '../domain/importValues.js';
 import { buildMasterImportPlan } from '../domain/masterImportPlanner.js';
-import { loadImportRegistry, loadSeriesForAnimals } from '../infrastructure/importContextLoader.js';
+import { buildSanityImportPlan, buildSanityRegistryContext, prepareSanityImportRows } from '../domain/sanityImportPlanner.js';
+import { loadApplicationsForAnimals, loadImportRegistry, loadSanityRegistry, loadSeriesForAnimals } from '../infrastructure/importContextLoader.js';
 import { IMPORT_JOB_ORIGIN, completeJob, createJob, failJob, listJobsForHash, reopenJob } from '../infrastructure/importJobs.js';
 import { readTemplateStore, sanitizeImportTemplate, writeTemplateStore } from '../infrastructure/importTemplates.js';
 import { loadWriteDefaults, writeImportBatch } from '../infrastructure/importWriter.js';
+import { writeSanityImportBatch } from '../infrastructure/sanityImportWriter.js';
 
 export { IMPORT_TYPES, IMPORT_TYPE_LABELS, ROW_STATUS } from '../domain/importConstants.js';
 export { listImportFields, listMappableFields, suggestMapping, readImportFile, planToCsv, resultToCsv };
@@ -117,6 +121,23 @@ export async function analyzeImport({ text, type, mapping = null, rules = {}, fi
       fileErrors: prepared.fileErrors,
       existing: { marcas: registry.marcas.rows, racas: registry.racas.rows, causasMorte: registry.causas.rows, categoriasAnimal: registry.categorias },
     });
+  } else if (type === IMPORT_TYPES.SANIDADE) {
+    const empresaId = String(rules?.empresaId || DEFAULT_EMPRESA_ID);
+    const registry = buildRegistryContext(raw, empresaId);
+    const identityIndex = buildAnimalIdentityIndex({ animals: raw.animals.filter(sameCompany(empresaId)), identifiers: raw.identifiers, marcas: registry.marcas.rows });
+    const sanityRegistry = buildSanityRegistryContext(await loadSanityRegistry(db), empresaId);
+    context = { identityIndex, registry, sanityRegistry };
+    const prepared = prepareSanityImportRows({ file, mapping: effectiveMapping, rules, context });
+    const [seriesByAnimal, applicationsByAnimal] = await Promise.all([
+      loadSeriesForAnimals(db, prepared.candidateAnimalIds),
+      loadApplicationsForAnimals(db, prepared.candidateAnimalIds, { empresaId }),
+    ]);
+    plan = buildSanityImportPlan(prepared, {
+      ...context,
+      seriesByAnimal,
+      applicationsByAnimal,
+      permissions: { canRegistryWrite: canImport(actor, 'registry.write') },
+    });
   } else {
     const empresaId = String(rules?.empresaId || DEFAULT_EMPRESA_ID);
     const registry = buildRegistryContext(raw, empresaId);
@@ -186,7 +207,7 @@ function comparePlans(original, fresh, jobs) {
     }
     if (rowSignature(row) === rowSignature(current)) continue;
     const becameExisting = row.status === ROW_STATUS.NOVO && current.status === ROW_STATUS.JA_EXISTE;
-    if (becameExisting && original.type === IMPORT_TYPES.MESTRES) continue;
+    if (becameExisting && (original.type === IMPORT_TYPES.MESTRES || original.type === IMPORT_TYPES.SANIDADE)) continue;
     if (becameExisting && current.matchedImportacaoId && jobsById.has(current.matchedImportacaoId)) {
       writtenBy.add(current.matchedImportacaoId);
       continue;
@@ -218,21 +239,46 @@ function emptyResult(plan, extra = {}) {
     eventosRecalculados: 0,
     categoriasResolvidasAutomaticamente: 0,
     cadastrosMestresCriados: 0,
+    aplicacoesCriadas: 0,
     lotes: 0,
     linhasGravadas: [],
     ...extra,
   };
 }
 
+// Cadastros de sanidade criados junto da importação. O programa nasce com tipo "Outro"
+// (a planilha só traz o nome) e pode ser detalhado depois na tela de Sanidade. A gravação é
+// sempre pelo sanityService, que valida, audita e recusa nome repetido.
+const SANITY_MASTER_CREATORS = Object.freeze({
+  programasSanidade: Object.freeze({
+    list: (empresaId) => listProgramas({ includeInactive: true, empresaId }),
+    create: (nome, empresaId) => saveProgram({ nome, tipo: 'OUTRO', empresa_id: empresaId }),
+  }),
+  medicamentos: Object.freeze({
+    list: (empresaId) => listMedicamentos({ includeInactive: true, empresaId }),
+    create: (nome, empresaId) => saveMedicamento({ nome, empresa_id: empresaId }),
+  }),
+});
+
 async function createMissingMasters(plan, actor) {
-  const creatable = (plan.summary.cadastrosMestresAusentes || []).filter((item) => ['marcas', 'racas', 'causasMorte'].includes(item.store));
+  const creatable = (plan.summary.cadastrosMestresAusentes || [])
+    .filter((item) => ['marcas', 'racas', 'causasMorte'].includes(item.store) || SANITY_MASTER_CREATORS[item.store]);
   if (!creatable.length) return 0;
   const registryActor = requireImportPermission(actor, 'registry.write');
+  const empresaId = plan.rules.empresaId;
   let created = 0;
   for (const item of creatable) {
+    const sanityCreator = SANITY_MASTER_CREATORS[item.store];
+    if (sanityCreator) {
+      const existing = await sanityCreator.list(empresaId);
+      if (existing.some((row) => (row.nome_normalizado || normalizeName(row.nome)) === normalizeName(item.nome))) continue;
+      await sanityCreator.create(item.nome, empresaId);
+      created += 1;
+      continue;
+    }
     const service = getRegistryService(item.store);
-    if (await service.resolveByName(item.nome, { empresaId: plan.rules.empresaId })) continue;
-    await service.create(registryActor, { nome: item.nome, empresa_id: plan.rules.empresaId });
+    if (await service.resolveByName(item.nome, { empresaId })) continue;
+    await service.create(registryActor, { nome: item.nome, empresa_id: empresaId });
     created += 1;
   }
   return created;
@@ -260,6 +306,55 @@ async function applyMasterPlan(fresh, actor, { onProgress }) {
     throw error;
   }
   return { ...emptyResult(fresh), importacaoId: job.id, status: JOB_STATUS.CONCLUIDA, cadastrosMestresCriados: created, linhasGravadas: [...new Set(novos.map((row) => row.line))] };
+}
+
+/**
+ * applySanityPlan(fresh, actor, …) → ImportResult das aplicações de sanidade. Cada lote é uma
+ * transação própria (writeSanityImportBatch); reimportar o mesmo arquivo não duplica nada
+ * porque a análise já devolve tudo como JÁ EXISTE.
+ */
+async function applySanityPlan(fresh, actor, { onProgress = null, batchRows = 200, mastersCreated = 0, resumeJob = null } = {}) {
+  const db = await storage.ensureReady();
+  const novos = fresh.rows.filter((row) => row.status === ROW_STATUS.NOVO && row.payload);
+  if (!novos.length) {
+    if (resumeJob) {
+      const done = await completeJob(db, resumeJob.id, { cadastros_mestres_criados: mastersCreated });
+      return emptyResult(fresh, { importacaoId: done.id, status: JOB_STATUS.CONCLUIDA, retomada: true, cadastrosMestresCriados: mastersCreated });
+    }
+    return emptyResult(fresh, { cadastrosMestresCriados: mastersCreated });
+  }
+  const retomada = Boolean(resumeJob);
+  const job = resumeJob
+    ? await reopenJob(db, resumeJob.id, { animaisTotal: fresh.animals.filter((animal) => animal.novos.length).length })
+    : await createJob(db, { plan: fresh, operador: operatorName(actor) });
+  const size = Math.max(1, Math.floor(Number(batchRows) || 200));
+  const totalBatches = Math.ceil(novos.length / size);
+  const totals = {};
+  let processed = 0;
+  try {
+    for (let index = 0; index < novos.length; index += size) {
+      const batch = novos.slice(index, index + size);
+      const counters = await writeSanityImportBatch(db, { rows: batch, job, empresaId: fresh.rules.empresaId });
+      for (const [key, value] of Object.entries(counters)) totals[key] = (totals[key] || 0) + value;
+      processed += batch.length;
+      onProgress?.({ lote: index / size + 1, lotes: totalBatches, animaisProcessados: processed, animaisTotal: novos.length, registrosCriados: totals.registros_criados });
+    }
+    await completeJob(db, job.id, { cadastros_mestres_criados: mastersCreated });
+  } catch (error) {
+    await failJob(db, job.id, error).catch(() => {});
+    throw error;
+  }
+  return {
+    ...emptyResult(fresh),
+    importacaoId: job.id,
+    status: JOB_STATUS.CONCLUIDA,
+    retomada,
+    aplicacoesCriadas: totals.aplicacoes_criadas || 0,
+    animaisConciliados: totals.animais_conciliados || 0,
+    cadastrosMestresCriados: mastersCreated,
+    lotes: totalBatches,
+    linhasGravadas: novos.map((row) => row.line).sort((a, b) => a - b),
+  };
 }
 
 /**
@@ -291,6 +386,10 @@ export async function applyImport(plan, actor = null, { onProgress = null, batch
     mastersCreated = await createMissingMasters(fresh, actor);
     fresh = await analyzeImport(plan.input, actor);
     if (fresh.blocking) throw new ImportError('IMPORT_BLOCKING', 'Depois de criar os cadastros ausentes a análise ainda tem pendências. Refaça a análise.');
+  }
+
+  if (plan.type === IMPORT_TYPES.SANIDADE) {
+    return applySanityPlan(fresh, actor, { onProgress, mastersCreated, resumeJob: comparison.resumeJob });
   }
 
   const groups = fresh.animals.filter((animal) => animal.novos.length);

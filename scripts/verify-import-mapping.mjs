@@ -27,7 +27,7 @@ import { sha256HexSync } from '../src/modules/import/domain/sha256Sync.js';
 const BOM = String.fromCharCode(0xfeff);
 
 // 1. Contrato público.
-assert.deepEqual(Object.keys(IMPORT_TYPES), ['HISTORICO', 'CADASTROS', 'MANEJOS', 'SAIDAS', 'MESTRES']);
+assert.deepEqual(Object.keys(IMPORT_TYPES), ['HISTORICO', 'CADASTROS', 'MANEJOS', 'SAIDAS', 'MESTRES', 'SANIDADE']);
 assert.equal(IMPORT_TYPE_LABELS.HISTORICO, 'Histórico conciliado — Cadastro + Manejos');
 assert.deepEqual(Object.values(ROW_STATUS), ['NOVO', 'JÁ EXISTE', 'POSSÍVEL DUPLICIDADE', 'CONFLITO', 'ERRO', 'AMBÍGUO', 'IGNORADA']);
 const technical = 'id;animal_id;id_externo;data;tipo;motivo_saida;causa_morte;numero;marca;marca_id;sexo;raca;raca_id;categoria;categoria_id;peso;apartacao;lote;observacao'.split(';');
@@ -44,6 +44,12 @@ for (const type of ['HISTORICO', 'CADASTROS', 'MANEJOS', 'SAIDAS']) {
 assert.equal(listImportFields('SAIDAS').find((item) => item.id === 'peso').required, false, 'Saída aceita peso ausente');
 assert.equal(listImportFields('MANEJOS').find((item) => item.id === 'peso').required, true);
 assert.deepEqual(listImportFields('MESTRES').map((item) => item.id), ['marca', 'raca', 'causa_morte', 'categoria', 'sexo', 'peso_min_kg', 'peso_max_kg', 'era', 'ordem']);
+// Aplicações de sanidade (17/09/2026): campos próprios, nenhum técnico e nenhum derivado —
+// a cobertura de ponta a ponta do tipo está em scripts/verify-import-sanity.mjs.
+assert.equal(IMPORT_TYPE_LABELS.SANIDADE, 'Aplicações de sanidade');
+assert.deepEqual(listImportFields('SANIDADE').map((item) => item.id), ['data', 'numero', 'marca', 'programa', 'medicamento', 'dose', 'unidade', 'via_aplicacao', 'observacao']);
+assert.deepEqual(listImportFields('SANIDADE').filter((item) => item.required).map((item) => item.id), ['data', 'numero']);
+assert.ok(listImportFields('SANIDADE').every((item) => !item.derived && !item.technical), 'SANIDADE: nenhum campo técnico ou derivado');
 assert.throws(() => listImportFields('X'), /Tipo de importação desconhecido/, 'NEGATIVO: tipo desconhecido');
 
 // 2. Cabeçalhos técnicos mapeiam 1:1; aliases conhecidos.

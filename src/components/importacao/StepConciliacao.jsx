@@ -78,6 +78,7 @@ export default function StepConciliacao({ plan, analisando, erro, onAnalisar, af
             <Contagem label="Categorias resolvidas pelo peso" valor={summary.categoriasAutomaticasResolvidas} />
             <Contagem label="Categorias não resolvidas" valor={summary.categoriasNaoResolvidas} tom={summary.categoriasNaoResolvidas ? 'aviso' : ''} />
             {type === IMPORT_TYPES.MESTRES ? <Contagem label="Cadastros mestres novos" valor={summary.cadastrosMestresNovos} tom="ok" /> : null}
+            {type === IMPORT_TYPES.SANIDADE ? <Contagem label="Aplicações de sanidade" valor={summary.aplicacoes} tom="ok" /> : null}
           </div>
 
           {ausentes.length ? (

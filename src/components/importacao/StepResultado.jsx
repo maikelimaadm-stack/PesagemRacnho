@@ -42,6 +42,7 @@ export default function StepResultado({ resultado, erro, onBaixarResultado, onNo
         <Contagem label="Cadastros criados" valor={resultado.cadastrosCriados} tom="ok" />
         <Contagem label="Manejos criados" valor={resultado.manejosCriados} tom="ok" />
         <Contagem label="Saídas criadas" valor={resultado.saidasCriadas} tom="ok" />
+        <Contagem label="Aplicações de sanidade criadas" valor={resultado.aplicacoesCriadas} tom="ok" />
         <Contagem label="Animais novos" valor={resultado.animaisNovos} />
         <Contagem label="Animais conciliados" valor={resultado.animaisConciliados} />
         <Contagem label="Duplicidades ignoradas" valor={resultado.duplicidadesIgnoradas} />

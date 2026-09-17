@@ -73,6 +73,25 @@ const MASTER_FIELDS = Object.freeze([
   field('ordem', 'Ordem', ['ordem']),
 ]);
 
+// Aplicações de sanidade (tipo SANIDADE): uma linha por aplicação já feita. O animal é
+// resolvido pela identidade canônica (número + marca) e programa/medicamento pelo NOME
+// normalizado nos cadastros de sanidade. Nenhum campo técnico: ninguém digita id.
+const SANITY_FIELDS = Object.freeze([
+  field('data', 'Data da aplicação', ['data', 'dataaplicacao', 'datadaaplicacao', 'dataevento', 'dt']),
+  field('numero', 'Nº / Identificação', ['numero', 'numeroanimal', 'numerodoanimal', 'animal', 'brinco', 'identificador', 'identificacao', 'n', 'no', 'nro', 'num']),
+  field('marca', 'Marca', ['marca', 'marcaanimal', 'ferro']),
+  field('programa', 'Programa / Procedimento', ['programa', 'programasanidade', 'programadesanidade', 'procedimento', 'programaprocedimento']),
+  field('medicamento', 'Medicamento / Produto', ['medicamento', 'produto', 'medicamentoproduto', 'vacina', 'vermifugo']),
+  field('dose', 'Dose', ['dose', 'dosagem', 'quantidade', 'qtd']),
+  field('unidade', 'Unidade da dose', ['unidade', 'unidadedose', 'unidadedadose', 'un']),
+  field('via_aplicacao', 'Via de aplicação', ['via', 'viaaplicacao', 'viadeaplicacao']),
+  field('observacao', 'Observação', ['observacao', 'observacoes', 'obs']),
+]);
+
+// Obrigatórios do tipo SANIDADE. Programa/medicamento não entram aqui porque basta UM dos
+// dois: a exigência é por linha (validateApplicationInput do sanityService).
+const SANITY_REQUIRED = Object.freeze(['data', 'numero']);
+
 /** Cabeçalho comparável: sem BOM, acentos, caixa, espaços e pontuação ("Nº" → "n", "Peso (kg)" → "pesokg"). */
 export function normalizeHeader(header) {
   return normalizeText(stripBom(String(header ?? ''))).replace(/[^a-z0-9]/g, '');
@@ -81,6 +100,9 @@ export function normalizeHeader(header) {
 /** listImportFields(type) → [{ id, label, required, aliases, derived, technical }] na ordem do CSV técnico. */
 export function listImportFields(type) {
   if (type === IMPORT_TYPES.MESTRES) return MASTER_FIELDS.map((item) => ({ ...item, aliases: [...item.aliases] }));
+  if (type === IMPORT_TYPES.SANIDADE) {
+    return SANITY_FIELDS.map((item) => ({ ...item, aliases: [...item.aliases], required: SANITY_REQUIRED.includes(item.id) }));
+  }
   if (!Object.prototype.hasOwnProperty.call(REQUIRED_BY_TYPE, type)) {
     throw new Error(`Tipo de importação desconhecido: ${type}`);
   }

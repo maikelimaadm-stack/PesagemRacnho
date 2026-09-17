@@ -1,8 +1,8 @@
 # Importação — trazer uma planilha para o sistema
 
-A Importação traz para o sistema o que está numa planilha: **pesagens, saídas e cadastros**. Ela é um assistente de sete etapas e **nada é gravado antes de você confirmar**: o sistema lê o arquivo, compara com o que já existe e mostra, linha por linha, o que aconteceria.
+A Importação traz para o sistema o que está numa planilha: **pesagens, saídas, cadastros e aplicações de sanidade**. Ela é um assistente de sete etapas e **nada é gravado antes de você confirmar**: o sistema lê o arquivo, compara com o que já existe e mostra, linha por linha, o que aconteceria.
 
-No menu, abra **Operação › Importação**. Você também chega lá pela Relação de Pesagens, em **Mais opções › Importar CSV**.
+No menu, abra **Operação › Importação**. Você também chega lá pela Relação de Pesagens, em **Mais opções › Importar CSV**, e pela tela de Sanidade, na aba **Aplicações › Importar aplicações** (que já abre o assistente no tipo certo).
 
 ## Quem pode fazer o quê
 
@@ -11,7 +11,8 @@ No menu, abra **Operação › Importação**. Você também chega lá pela Rela
 | Abrir a Importação e analisar um arquivo | ✔ | ✔ | ✔ | — |
 | Gravar pesagens, manejos e saídas | ✔ | ✔ | ✔ | — |
 | Importar cadastros mestres (marcas, raças, causas, categorias) | ✔ | ✔ | — | — |
-| Marcar “Criar marcas, raças e causas que faltam” | ✔ | ✔ | — | — |
+| Importar aplicações de sanidade | ✔ | ✔ | ✔ | — |
+| Marcar “Criar cadastros que faltam” (marcas, raças, causas, programas, medicamentos) | ✔ | ✔ | — | — |
 
 Quem não pode gravar pesagens vê a mensagem de acesso não permitido em vez da tela. Quem não pode gravar cadastros encontra as opções de cadastro desligadas, com a explicação do porquê.
 
@@ -31,10 +32,13 @@ A trilha no topo mostra em que etapa você está. Dá para **voltar** a qualquer
 
 ## Antes de começar: baixe o modelo
 
-Na etapa **Arquivo** há dois modelos prontos:
+Na etapa **Arquivo** há modelos prontos:
 
 - **Modelo de pesagens** — Data, NumeroAnimal, Marca, Sexo, Raça, Categoria, Peso, Apartação, Lote, Observação.
 - **Modelo de saídas** — Data, NumeroAnimal, Marca, MotivoSaida, CausaMorte, Peso, Observação.
+- **Modelo de aplicações de sanidade** — Data, NumeroAnimal, Marca, Programa, Medicamento, Dose, Unidade, Via, Observação.
+
+Quando o tipo já está escolhido (por exemplo, ao entrar pela tela de Sanidade), aparece só o modelo daquele tipo.
 
 Os modelos trazem **só o que você digita**. Peso anterior, data anterior, dias, ganho e GMD **não entram na planilha**: o sistema calcula tudo sozinho, pela data de cada pesagem do animal.
 
@@ -47,6 +51,7 @@ Salve a planilha como **CSV (separado por ponto e vírgula)**. O sistema também
 - **Sim — conciliar automaticamente (recomendado).** O sistema ordena as linhas por data: a pesagem mais antiga de cada animal novo vira **Cadastro** e as seguintes viram **Manejo**. Se o animal já existe no sistema, todas entram como Manejo. A ordem das linhas no arquivo não importa: vale a data.
 - **Não — todas as linhas são do mesmo tipo.** Aí você escolhe entre **Cadastros de animais**, **Manejos** ou **Saídas**. Nesse modo, duas linhas do mesmo animal viram conflito.
 - **Cadastros mestres.** Para uma planilha só de nomes: cada nome preenchido vira uma marca, raça, causa de morte ou categoria.
+- **Aplicações de sanidade.** Para uma planilha de vacinas, vermífugos e tratamentos já aplicados: cada linha é uma aplicação ligada a um animal. Veja a seção própria mais abaixo.
 
 **Saídas** têm fluxo próprio: o motivo da saída é obrigatório (Venda, Abate, Morte, Doação, Transferência, Outros) e o peso é opcional em Morte, Doação e Transferência.
 
@@ -71,7 +76,7 @@ Se faltar uma coluna obrigatória, a tela diz qual é e não deixa avançar.
 - **Formato das datas** e **separador dos decimais**: deixe em "Reconhecer sozinho" se não souber.
 - **Categoria dos animais**: da planilha, uma categoria fixa para todos, ou **automática pelo peso** (usa faixa de peso e sexo). A automática vale **só para os animais criados no Cadastro**; manejos nunca mudam a categoria de um animal que já existe.
 - **Valores iguais para todas as linhas**: marca, raça, sexo, apartação, lote e motivo da saída. O que vier na coluna do arquivo sempre vence o valor fixo.
-- **Criar marcas, raças e causas que faltam**: use quando a planilha cita cadastros que ainda não existem. Exige permissão de cadastros; eles são criados **antes** das pesagens.
+- **Criar cadastros que faltam**: use quando a planilha cita cadastros que ainda não existem — marcas, raças e causas de morte nas pesagens; programas/procedimentos e medicamentos nas aplicações de sanidade. Exige permissão de cadastros; eles são criados **antes** dos registros.
 - **Modelos de mapeamento**: salve as escolhas com um nome e reaproveite na próxima planilha do mesmo formato. O modelo guarda só as escolhas, nunca os dados do arquivo.
 
 ## Etapa Conciliação — o que cada número quer dizer
@@ -125,6 +130,36 @@ Mostra tudo que foi gravado: cadastros, manejos, saídas, animais novos e concil
 
 Se aparecer **"Nada novo para gravar"**, é porque o arquivo já tinha sido importado: **nada é duplicado**.
 
+## Importar aplicações de sanidade
+
+Use este tipo quando você tem **as aplicações já feitas numa planilha**: uma linha por aplicação.
+
+**Por onde entrar.** O caminho natural é **Operação › Sanidade › aba Aplicações › Importar aplicações**: o assistente abre já no tipo certo. Em **Mais opções › Baixar modelo de importação** você pega a planilha pronta. Também dá para escolher o tipo direto na etapa **Tipo** do assistente.
+
+**As colunas.**
+
+| Coluna | O que vai nela |
+|---|---|
+| **Data** | Data da aplicação. Não pode ser futura. |
+| **NumeroAnimal** e **Marca** | Identificam o animal, como nas pesagens. O animal **precisa já existir**. |
+| **Programa** | Nome do programa/procedimento (ex.: Vermifugação). |
+| **Medicamento** | Nome do medicamento/produto (ex.: Ivermectina 1%). |
+| **Dose**, **Unidade**, **Via** | Dose aplicada (ex.: 4,5), unidade (ml, mg, g, dose, comprimido, UI) e via (SC, IM, IV, Oral, Pour-on, Tópica, Intranasal, Outra). |
+| **Observação** | Texto livre. |
+
+Preencha **Programa, Medicamento ou os dois** — pelo menos um é obrigatório em cada linha. A planilha **não tem coluna de peso**: o sistema **não calcula dose pelo peso**.
+
+**Como o sistema resolve cada linha.**
+
+- O **animal** é encontrado pelo número + marca (a mesma regra das pesagens). Animal que não existe é **erro**; número que serve para mais de um animal é **ambiguidade** — informe a marca para separar.
+- **Programa** e **medicamento** são reconhecidos **pelo nome**, sem diferenciar acentos nem maiúsculas. Nome que ainda não está cadastrado vira **cadastro ausente**: ou você cadastra antes, em **Operação › Sanidade**, ou marca **Criar cadastros que faltam** na etapa Regras (exige permissão de cadastros). Programa ou medicamento **inativo** é recusado: reative antes de importar.
+- A **data** precisa estar dentro da vida do animal: não antes do Cadastro nem depois da saída.
+- **Nenhuma pesagem é criada.** A aplicação fica ligada ao animal, na data do próprio evento, e aparece no histórico da aba Aplicações e na Ficha do Animal, com **origem Avulsa**.
+
+**Repetir não duplica.** Se a mesma aplicação (mesmo animal, data, programa, medicamento e dose) já estiver no sistema, a linha vem como **JÁ EXISTE** e não é gravada. Importar o mesmo arquivo duas vezes não cria nada de novo.
+
+Na etapa **Conferência**, a coluna que mostra a categoria nas pesagens passa a mostrar **a aplicação** de cada linha (por exemplo, `Aftosa / Vacina aftosa · 5 ml · SC`).
+
 ## Perguntas comuns
 
 **Importei o mesmo arquivo duas vezes. E agora?**
@@ -138,3 +173,6 @@ Cadastre a marca antes (**Cadastros › Marcas**) ou volte à etapa Regras e mar
 
 **A importação parou no meio.**
 Refaça a análise e importe de novo: a gravação continua de onde parou, sem duplicar o que já entrou.
+
+**Importei aplicações de sanidade e o programa saiu com o tipo “Outro”.**
+É o esperado quando o programa foi criado pela própria importação: a planilha só traz o nome. Abra **Operação › Sanidade › Programas/Procedimentos** e ajuste o tipo e a descrição.

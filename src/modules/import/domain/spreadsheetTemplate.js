@@ -4,7 +4,7 @@
 // da série cronológica do animal (pedido do responsável em 17/09/2026).
 import { CSV_BOM, csvCell } from '../../reporting/infrastructure/exporters/csvExporter.js';
 
-export const TEMPLATE_KINDS = Object.freeze({ PESAGENS: 'PESAGENS', SAIDAS: 'SAIDAS' });
+export const TEMPLATE_KINDS = Object.freeze({ PESAGENS: 'PESAGENS', SAIDAS: 'SAIDAS', SANIDADE: 'SANIDADE' });
 
 const TEMPLATES = Object.freeze({
   // Cadastros e manejos (também o Histórico conciliado: o sistema decide Cadastro/Manejo pela data).
@@ -23,6 +23,18 @@ const TEMPLATES = Object.freeze({
     examples: [
       ['10/02/2026', '4368', 'ABC', 'Venda', '', '310', ''],
       ['12/02/2026', '4370', 'XYZ', 'Morte', 'Raio', '', ''],
+    ],
+  },
+  // Aplicações de sanidade já feitas: uma por linha. Programa e medicamento vão pelo NOME
+  // (o sistema resolve nos cadastros de sanidade); dose, unidade e via seguem a validação do
+  // serviço de sanidade. Nunca há cálculo de dose por peso.
+  SANIDADE: {
+    fileName: 'modelo_importacao_aplicacoes_sanidade.csv',
+    headers: ['Data', 'NumeroAnimal', 'Marca', 'Programa', 'Medicamento', 'Dose', 'Unidade', 'Via', 'Observação'],
+    examples: [
+      ['05/01/2026', '4368', 'ABC', 'Aftosa', 'Vacina aftosa', '5', 'ml', 'SC', ''],
+      ['05/01/2026', '4370', 'XYZ', 'Aftosa', 'Vacina aftosa', '5', 'ml', 'SC', 'lote 22A'],
+      ['12/02/2026', '4368', 'ABC', 'Vermifugação', 'Ivermectina 1%', '4,5', 'ml', 'SC', ''],
     ],
   },
 });

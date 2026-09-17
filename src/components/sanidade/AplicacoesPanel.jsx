@@ -3,14 +3,18 @@
 // cancelar exige weighing.edit (`canCancel`) e nunca apaga o fato. Os filtros vão para
 // sanityService.listApplications; pesquisa e pílulas refinam só o que já foi carregado.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Columns3, ListFilter, RefreshCw } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Columns3, FileSpreadsheet, ListFilter, RefreshCw, Upload } from 'lucide-react';
 import { toast } from 'sonner';
+import { createPageUrl } from '@/utils';
 import MakDateControl from '@/components/mak/MakDateControl';
 import MakTableSelectCheck from '@/components/mak/MakTableSelectCheck';
 import MgDesktopSearch from '@/components/mak/MgDesktopSearch';
 import MgSpeedDialMenu from '@/components/mak/MgSpeedDialMenu';
 import { Columns3Cog } from '@/components/mak/mgIcons';
 import { cancelApplication, listApplications, registerApplication } from '@/modules/sanity/application/sanityService';
+import { TEMPLATE_KINDS, buildImportTemplateCsv } from '@/modules/import/domain/spreadsheetTemplate';
+import { downloadCsvFile } from '@/modules/weighing/export/csvDownload';
 import AnimalSearchField from './AnimalSearchField.jsx';
 import AplicacaoFormDialog from './AplicacaoFormDialog.jsx';
 import CancelarAplicacaoDialog from './CancelarAplicacaoDialog.jsx';
@@ -51,6 +55,17 @@ export default function AplicacoesPanel({
   const [registerOpen, setRegisterOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
   const requestRef = useRef(0);
+  const navigate = useNavigate();
+
+  // Importar aplicações em massa: o assistente de Importação já abre no tipo "Aplicações de
+  // sanidade" (motor no módulo de importação). Exige weighing.write, a mesma permissão de
+  // registrar uma aplicação — o serviço confere de novo.
+  const abrirImportacao = () => navigate(createPageUrl('Importacao?tipo=SANIDADE'));
+  const baixarModeloImportacao = () => {
+    const { content, fileName } = buildImportTemplateCsv(TEMPLATE_KINDS.SANIDADE);
+    downloadCsvFile({ content, fileName });
+    toast.success('Modelo de importação de aplicações baixado.');
+  };
 
   const ctx = useMemo(() => ({ viaLabels, animalsById: animalIndex.byId, animalsLoading }), [viaLabels, animalIndex, animalsLoading]);
   const table = useSanidadeTable({ rows, columns: APLICACAO_COLUMNS, ctx, prefsKey: 'sanidade-colunas:aplicacoes' });
@@ -119,7 +134,9 @@ export default function AplicacoesPanel({
   };
 
   const emptyText = queryError
-    || (filtersActive ? 'Nenhuma aplicação encontrada para os filtros escolhidos.' : 'Nenhuma aplicação registrada. Registre uma aplicação avulsa ou aplique durante o Lançamento.');
+    || (filtersActive
+      ? 'Nenhuma aplicação encontrada para os filtros escolhidos.'
+      : 'Nenhuma aplicação registrada. Registre uma aplicação avulsa, aplique durante o Lançamento ou importe as aplicações de uma planilha.');
 
   return (
     <>
@@ -128,6 +145,12 @@ export default function AplicacoesPanel({
           <div className="mg-action-bar__actions flex min-w-0 items-center">
             <div className={`mg-action-slot${canApply ? ' is-visible' : ''}`} style={{ '--slot-width': '142px' }} aria-hidden={!canApply}>
               <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green" onClick={() => setRegisterOpen(true)} title="Registrar aplicação avulsa" tabIndex={canApply ? 0 : -1} disabled={!canApply}>Registrar aplicação</button>
+            </div>
+            <div className={`mg-action-slot${canApply ? ' is-visible' : ''}`} style={{ '--slot-width': '150px' }} aria-hidden={!canApply}>
+              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" data-testid="sanidade-importar-aplicacoes" onClick={abrirImportacao} title="Importar aplicações de uma planilha" tabIndex={canApply ? 0 : -1} disabled={!canApply}>
+                <Upload className="w-4 h-4 mr-1" aria-hidden="true" />
+                Importar aplicações
+              </button>
             </div>
             <div className={`mg-action-slot${canCancelSelected ? ' is-visible' : ''}`} style={{ '--slot-width': '136px' }} aria-hidden={!canCancelSelected}>
               <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost tb-btn-danger" onClick={() => setCancelTarget(selectedApplication)} title="Cancelar a aplicação selecionada" tabIndex={canCancelSelected ? 0 : -1} disabled={busy || !canCancelSelected}>Cancelar aplicação</button>
@@ -159,6 +182,7 @@ export default function AplicacoesPanel({
                   { id: 'atualizar', label: 'Atualizar', icon: RefreshCw, onClick: load },
                   { id: 'colunas', label: 'Configurar colunas', icon: Columns3, onClick: () => table.setShowColumnConfig(true) },
                   { id: 'limpar', label: 'Limpar filtros', icon: ListFilter, onClick: clearAll },
+                  { id: 'modelo-importacao', label: 'Baixar modelo de importação', icon: FileSpreadsheet, onClick: baixarModeloImportacao },
                 ]}
               />
             </div>

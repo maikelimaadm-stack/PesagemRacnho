@@ -2,12 +2,13 @@ import { useRef } from 'react';
 import { FileSpreadsheet, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { fmtInt } from '@/components/common/formatNumber';
-import { delimiterLabel, formatFileSize } from './importacaoModel';
+import { delimiterLabel, formatFileSize, modelosParaTipo } from './importacaoModel';
 
 // Etapa 1 — Arquivo. A leitura é do motor (readImportFile): aqui só se escolhe o arquivo,
 // mostra-se o que foi lido e oferece-se o modelo de planilha.
-export default function StepArquivo({ fileName, fileSize, file, lendo, erro, delimiter, onEscolherArquivo, onDelimiterChange, onBaixarModelo, podeBaixarModelo }) {
+export default function StepArquivo({ fileName, fileSize, file, lendo, erro, delimiter, type, onEscolherArquivo, onDelimiterChange, onBaixarModelo, podeBaixarModelo }) {
   const inputRef = useRef(null);
+  const modelos = modelosParaTipo(type);
 
   return (
     <section className="importacao-step" aria-labelledby="importacao-step-arquivo-titulo">
@@ -35,18 +36,12 @@ export default function StepArquivo({ fileName, fileSize, file, lendo, erro, del
           <Upload className="w-4 h-4 mr-1" aria-hidden="true" />
           {fileName ? 'Trocar arquivo' : 'Escolher arquivo'}
         </Button>
-        {podeBaixarModelo ? (
-          <>
-            <Button type="button" variant="outline" onClick={() => onBaixarModelo('PESAGENS')}>
-              <FileSpreadsheet className="w-4 h-4 mr-1" aria-hidden="true" />
-              Baixar modelo de pesagens
-            </Button>
-            <Button type="button" variant="outline" onClick={() => onBaixarModelo('SAIDAS')}>
-              <FileSpreadsheet className="w-4 h-4 mr-1" aria-hidden="true" />
-              Baixar modelo de saídas
-            </Button>
-          </>
-        ) : null}
+        {podeBaixarModelo ? modelos.map((modelo) => (
+          <Button key={modelo.kind} type="button" variant="outline" data-modelo={modelo.kind} onClick={() => onBaixarModelo(modelo.kind)}>
+            <FileSpreadsheet className="w-4 h-4 mr-1" aria-hidden="true" />
+            {modelo.rotulo}
+          </Button>
+        )) : null}
       </div>
 
       {lendo ? <p className="importacao-hint" role="status">Lendo o arquivo…</p> : null}

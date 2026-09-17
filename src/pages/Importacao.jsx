@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { ensureEmpresaId } from '@/api/db';
 import { AccessDenied } from '@/components/auth/RequirePermission';
@@ -26,6 +27,7 @@ import {
   afericaoDoArquivo,
   camposObrigatoriosFaltando,
   describeImportError,
+  respostaDoTipo,
   stepIndex,
 } from '@/components/importacao/importacaoModel';
 import {
@@ -65,8 +67,17 @@ const CATALOGOS_VAZIOS = Object.freeze({ marcas: [], racas: [], categorias: [], 
 
 const carimbo = () => new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
 
+// Tipo pré-escolhido pela tela que abriu o assistente (hoje: Sanidade › Aplicações →
+// #/Importacao?tipo=SANIDADE). Valor desconhecido é ignorado: o assistente abre normal.
+function tipoDaRota(search) {
+  const pedido = new URLSearchParams(search || '').get('tipo');
+  return pedido && Object.values(IMPORT_TYPES).includes(pedido) ? pedido : null;
+}
+
 export default function Importacao() {
   const auth = useAuth();
+  const { search } = useLocation();
+  const tipoPedido = tipoDaRota(search);
   const empresaId = ensureEmpresaId();
   // Fora do AuthGate (harness de UI) não há sessão: nada é restringido; o serviço checa de novo.
   const pode = (action) => (auth ? Boolean(auth.can?.(action)) : true);
@@ -83,8 +94,8 @@ export default function Importacao() {
   const [lendo, setLendo] = useState(false);
   const [erroArquivo, setErroArquivo] = useState('');
 
-  const [resposta, setResposta] = useState(null);
-  const [type, setType] = useState(null);
+  const [resposta, setResposta] = useState(() => respostaDoTipo(tipoPedido));
+  const [type, setType] = useState(tipoPedido);
   const [mapping, setMapping] = useState({});
   const [rules, setRules] = useState({ ...REGRAS_INICIAIS, fixedValues: {} });
 
@@ -121,6 +132,12 @@ export default function Importacao() {
     });
     return () => { vivo = false; };
   }, [empresaId, podeImportar]);
+
+  useEffect(() => {
+    if (!tipoPedido) return;
+    setType(tipoPedido);
+    setResposta(respostaDoTipo(tipoPedido));
+  }, [tipoPedido]);
 
   const recarregarModelos = useCallback(async () => {
     setTemplatesCarregando(true);
@@ -323,7 +340,7 @@ export default function Importacao() {
   const novaImportacao = () => {
     setPasso('arquivo');
     setFileName(''); setFileSize(0); setTexto(''); setFile(null); setDelimiter('auto');
-    setResposta(null); setType(null); setMapping({}); setRules({ ...REGRAS_INICIAIS, fixedValues: {} });
+    setResposta(respostaDoTipo(tipoPedido)); setType(tipoPedido); setMapping({}); setRules({ ...REGRAS_INICIAIS, fixedValues: {} });
     limparPlano();
   };
 
@@ -385,6 +402,7 @@ export default function Importacao() {
             lendo={lendo}
             erro={erroArquivo}
             delimiter={delimiter}
+            type={type}
             podeBaixarModelo
             onEscolherArquivo={escolherArquivo}
             onDelimiterChange={trocarDelimitador}

@@ -57,6 +57,13 @@ export const CONCILIACAO_OPCOES = Object.freeze([
     detalhe: 'Exige permissão para gravar cadastros.',
     tipo: IMPORT_TYPES.MESTRES,
   }),
+  Object.freeze({
+    id: 'SANIDADE',
+    titulo: 'Aplicações de sanidade (vacinas, vermífugos, tratamentos)',
+    texto: 'O arquivo não tem pesagens: cada linha é uma aplicação já feita em um animal, com data, programa/procedimento, medicamento, dose, unidade e via.',
+    detalhe: 'O animal precisa existir; programa e medicamento são reconhecidos pelo nome. Entra também pela tela Sanidade, na aba Aplicações.',
+    tipo: IMPORT_TYPES.SANIDADE,
+  }),
 ]);
 
 // Tipos oferecidos quando a resposta é "todas as linhas são do mesmo tipo".
@@ -68,7 +75,30 @@ export const IMPORT_TYPE_HINTS = Object.freeze({
   [IMPORT_TYPES.MANEJOS]: 'Pesagens de animais que já existem no sistema. Nenhum animal novo é criado.',
   [IMPORT_TYPES.SAIDAS]: 'Venda, abate, morte, doação ou transferência. Tem fluxo próprio: motivo da saída obrigatório e peso opcional em morte, doação e transferência.',
   [IMPORT_TYPES.MESTRES]: 'Cria marcas, raças, causas de morte e categorias a partir dos nomes do arquivo.',
+  [IMPORT_TYPES.SANIDADE]: 'Uma linha por aplicação já feita. Nenhuma pesagem é criada e nenhum peso é lido: a aplicação fica ligada ao animal, na data do próprio evento.',
 });
+
+// Modelos de planilha oferecidos na etapa Arquivo. As colunas de cada modelo estão em
+// src/modules/import/domain/spreadsheetTemplate.js (o assistente só pede o arquivo pronto).
+export const MODELOS_PLANILHA = Object.freeze([
+  Object.freeze({ kind: 'PESAGENS', rotulo: 'Baixar modelo de pesagens', tipos: Object.freeze([IMPORT_TYPES.HISTORICO, IMPORT_TYPES.CADASTROS, IMPORT_TYPES.MANEJOS]) }),
+  Object.freeze({ kind: 'SAIDAS', rotulo: 'Baixar modelo de saídas', tipos: Object.freeze([IMPORT_TYPES.SAIDAS]) }),
+  Object.freeze({ kind: 'SANIDADE', rotulo: 'Baixar modelo de aplicações de sanidade', tipos: Object.freeze([IMPORT_TYPES.SANIDADE]) }),
+]);
+
+/** Com o tipo já escolhido, oferece só o modelo daquele tipo; sem tipo, oferece todos. */
+export function modelosParaTipo(type) {
+  const doTipo = MODELOS_PLANILHA.filter((modelo) => modelo.tipos.includes(type));
+  return doTipo.length ? doTipo : MODELOS_PLANILHA;
+}
+
+/** Resposta da etapa Tipo que corresponde a um tipo já escolhido (ex.: vindo da tela Sanidade). */
+export function respostaDoTipo(type) {
+  if (!type) return null;
+  // A opção "Não" tem tipo nulo de propósito (ela abre a escolha do tipo único), por isso a
+  // busca só vale para as opções que já carregam um tipo.
+  return CONCILIACAO_OPCOES.find((opcao) => opcao.tipo === type)?.id ?? 'NAO';
+}
 
 // Situação da linha → classe de cor (importacao.css).
 export const ROW_STATUS_TONE = Object.freeze({

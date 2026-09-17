@@ -16,6 +16,7 @@
 // aditiva é coberta por migration:v8:verify.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
+import { CATEGORIAS_SEED } from '../src/modules/catalog/domain/seeds.js';
 import { createHash } from 'node:crypto';
 import { performance } from 'node:perf_hooks';
 import Dexie from 'dexie';
@@ -221,7 +222,7 @@ const summary = { casos: [] };
 
   // B3 categorias (seed, ids gerados), B4 causas (ids preservados), B5 parceiros, B6 propriedades.
   const categorias = await db.table('categoriasAnimal').toArray();
-  assert.deepEqual(categorias.map((c) => c.nome), ['Bezerro', 'Bezerra', 'Garrote', 'Novilha', 'Boi', 'Vaca', 'Touro']);
+  assert.deepEqual(categorias.map((c) => c.nome), CATEGORIAS_SEED.map((c) => c.nome), 'pré-cadastro de categorias vigente');
   assert.ok(categorias.every((c) => /^[0-9a-f-]{36}$/.test(c.id)), 'ids das categorias são UUID gerados');
   const causas = await db.table('causasMorte').toArray();
   assert.deepEqual(causas.map((c) => c.id).sort(), ['causa-1', 'causa-2'], 'ids das causas preservados');
@@ -296,7 +297,7 @@ const summary = { casos: [] };
   assert.equal(again.state.status, MIGRATION_STATUS.CONCLUIDA);
   const db2 = await ensureStorageReady();
   assert.equal(await db2.table('marcas').count(), 4);
-  assert.equal(await db2.table('categoriasAnimal').count(), 7);
+  assert.equal(await db2.table('categoriasAnimal').count(), CATEGORIAS_SEED.length);
   assert.equal(await db2.table('parceiros').count(), 4);
   const dry = await coordinator.dryRunBackfill();
   assert.equal(dry.pendente, false);
@@ -340,12 +341,13 @@ const summary = { casos: [] };
     completed = result.completed;
     if (!completed) {
       assert.equal(result.state.status, MIGRATION_STATUS.EM_ANDAMENTO);
-      assert.match(result.state.last_checkpoint, /^B\d+:(localId=\d+|done)$/);
+      assert.match(result.state.last_checkpoint, /^(B\d+:(localId=\d+|done)|S\d+:done)$/, 'checkpoint da v7 (B*) ou da v8 (S*)');
       if (/localId=/.test(result.state.last_checkpoint)) interruptedMidCursor += 1;
       checkpoints.push(result.state.last_checkpoint);
       // Simula fechar e reabrir o app: o checkpoint precisa vir do banco.
       resetDbForTests();
-      const reopened = await readMigrationState(await ensureStorageReady(), 7);
+      const versaoDoPasso = result.state.last_checkpoint.startsWith('S') ? 8 : 7;
+      const reopened = await readMigrationState(await ensureStorageReady(), versaoDoPasso);
       assert.equal(reopened.last_checkpoint, result.state.last_checkpoint, 'checkpoint persistido no banco');
     }
     assert.ok(calls < 100, 'backfill deve terminar');
@@ -358,7 +360,7 @@ const summary = { casos: [] };
   assert.equal(state.processed, state.total);
   assert.equal(await db.table('marcas').count(), 2, 'marcas não duplicadas após retomadas');
   assert.equal(await db.table('racas').count(), 2);
-  assert.equal(await db.table('categoriasAnimal').count(), 7);
+  assert.equal(await db.table('categoriasAnimal').count(), CATEGORIAS_SEED.length);
   assert.equal(await db.table('propriedades').count(), 1);
   assert.equal(state.relatorio.animaisAtualizados, 1100, 'cada animal contado uma única vez');
   assert.equal(state.relatorio.identificadores, 1100);
@@ -479,7 +481,7 @@ const summary = { casos: [] };
   assert.equal(fresh.states[7].origem, 'fresh');
   assert.equal(files.written.length, 0, 'banco novo não gera backup pré-migração');
   const db = await ensureStorageReady();
-  assert.equal(await db.table('categoriasAnimal').count(), 7);
+  assert.equal(await db.table('categoriasAnimal').count(), CATEGORIAS_SEED.length);
   assert.equal((await db.table('propriedades').toArray()).filter((p) => p.tipo === 'PROPRIA' && p.padrao).length, 1);
   assert.equal((await db.table('racas').toArray()).find((r) => r.padrao)?.nome, 'Nelore');
   assert.equal(await db.table('marcas').count(), 0, 'sem dados não há marcas');

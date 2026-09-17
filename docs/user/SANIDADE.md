@@ -17,6 +17,7 @@ No menu, abra **Operação › Sanidade**. A tela tem três abas:
 | Ver a tela e o histórico | ✔ | ✔ | ✔ | ✔ |
 | Cadastrar, editar, inativar e reativar programas e medicamentos | ✔ | ✔ | — | — |
 | Registrar aplicação (no Lançamento ou avulsa) | ✔ | ✔ | ✔ | — |
+| Importar aplicações de uma planilha | ✔ | ✔ | ✔ | — |
 | Cancelar aplicação | ✔ | ✔ | ✔ | — |
 
 Quem não pode gravar vê os botões ocultos e abre os cadastros em **Consultar** (somente leitura).
@@ -72,6 +73,29 @@ Use quando o animal foi medicado fora de um dia de pesagem.
 3. Informe a **Data** (não pode ser futura), o **Programa/procedimento** e/ou o **Medicamento/produto** (pelo menos um dos dois), a **Dose**, a **Unidade**, a **Via** e, se quiser, uma **Observação**.
 4. Clique em **Registrar**.
 
+## Exemplo 5 — importar aplicações de uma planilha
+
+Use quando as aplicações já foram feitas e estão anotadas numa planilha (uma linha por aplicação).
+
+1. Abra a aba **Aplicações**.
+2. Em **Mais opções › Baixar modelo de importação**, pegue a planilha pronta com as colunas
+   **Data, NumeroAnimal, Marca, Programa, Medicamento, Dose, Unidade, Via, Observação**.
+3. Preencha e salve como **CSV (separado por ponto e vírgula)**.
+4. Clique em **Importar aplicações**. O assistente de Importação abre já no tipo **Aplicações de sanidade**.
+5. Siga as etapas do assistente. Na **Conferência** você vê, linha por linha, qual aplicação será criada para qual animal — **nada é gravado antes de você confirmar**.
+
+O que o sistema exige:
+
+- o **animal precisa existir** (ele é encontrado pelo número + marca; sem marca, um número repetido em duas marcas vira ambiguidade);
+- cada linha precisa de **programa, medicamento ou os dois**;
+- **programa e medicamento são reconhecidos pelo nome**. Se ainda não estiverem cadastrados, ou você cadastra antes (abas Programas/Procedimentos e Medicamentos/Produtos), ou marca **Criar cadastros que faltam** na etapa Regras do assistente — isso exige permissão de cadastros, e o programa criado assim nasce com o tipo **Outro**;
+- a **data** não pode ser futura nem ficar fora da vida do animal (antes do cadastro ou depois da saída);
+- **dose, unidade e via** seguem as mesmas listas da tela. A planilha não tem coluna de peso: o sistema **não calcula dose pelo peso**.
+
+As aplicações importadas entram como **origem Avulsa** e **não criam pesagem nenhuma**. Importar o mesmo arquivo duas vezes **não duplica**: a aplicação repetida (mesmo animal, data, programa, medicamento e dose) aparece como **JÁ EXISTE** e não é gravada.
+
+O passo a passo completo do assistente está em `IMPORTACAO.md`.
+
 ## Consultar o histórico
 
 Na aba **Aplicações**, use a faixa de filtros:
@@ -81,7 +105,7 @@ Na aba **Aplicações**, use a faixa de filtros:
 - **Programa** e **Medicamento**;
 - **Incluir canceladas:** mostra também o que foi cancelado.
 
-As colunas mostram data, animal, marca, programa, medicamento, dose, via, observação, **responsável** (usuário que registrou), **origem** (*Lançamento* ou *Avulsa*) e **situação** (*Aplicada* ou *Cancelada*). A pesquisa da barra e os filtros de cada coluna refinam o que já está na tela; **Mais opções › Configurar colunas** escolhe e ordena as colunas.
+As colunas mostram data, animal, marca, programa, medicamento, dose, via, observação, **responsável** (usuário que registrou), **origem** (*Lançamento* ou *Avulsa* — aplicações importadas de planilha entram como Avulsa) e **situação** (*Aplicada* ou *Cancelada*). A pesquisa da barra e os filtros de cada coluna refinam o que já está na tela; **Mais opções › Configurar colunas** escolhe e ordena as colunas.
 
 Na **Ficha do Animal**, a seção **Sanidade** lista todas as aplicações daquele animal, das mais recentes para as mais antigas, com as canceladas marcadas e o motivo do cancelamento.
 
@@ -103,7 +127,7 @@ Selecione o cadastro e clique em **Inativar**. Ele some das listas de escolha do
 - **Compras** e custos de medicamentos;
 - **Prescrição** ou receituário veterinário;
 - **Calendário** ou agenda de próximas aplicações e alertas de reforço;
-- **Cálculo de dose** pelo peso do animal;
+- **Cálculo de dose** pelo peso do animal (nem na tela, nem na importação);
 - **Bloqueio por carência** em vendas e abates;
 - Diagnóstico, prontuário clínico, financeiro ou documentos fiscais.
 

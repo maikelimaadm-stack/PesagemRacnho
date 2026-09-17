@@ -37,6 +37,38 @@ const groupSeries = (rows, wanted) => {
   return series;
 };
 
+/** Cadastros de sanidade da base (stores pequenas): programas e medicamentos. */
+export async function loadSanityRegistry(db) {
+  const [programas, medicamentos] = await Promise.all([readAll(db, 'programasSanidade'), readAll(db, 'medicamentos')]);
+  return { programas, medicamentos };
+}
+
+/**
+ * Map(animalId → aplicações NÃO canceladas) dos animais candidatos, para a detecção de
+ * "JÁ EXISTE" na importação de aplicações de sanidade. Mesma estratégia da série: índice por
+ * animal quando são poucos, leitura sequencial filtrada quando são muitos.
+ */
+export async function loadApplicationsForAnimals(db, animalIds, { empresaId = 'local', maxIndexed = SERIES_INDEX_MAX_ANIMALS } = {}) {
+  const wanted = new Set([...animalIds].map(String).filter(Boolean));
+  if (!wanted.size || !hasTable(db, 'aplicacoesSanidade')) return new Map();
+  const table = db.table('aplicacoesSanidade');
+  let rows;
+  if (wanted.size <= maxIndexed) {
+    rows = [];
+    for (const animalId of wanted) rows.push(...await table.where('animal_id').equals(animalId).toArray());
+  } else {
+    rows = await table.toArray();
+  }
+  const byAnimal = new Map([...wanted].map((id) => [id, []]));
+  for (const row of rows) {
+    const animalId = String(row.animal_id ?? '');
+    if (row.deleted_at || row.cancelled_at || !wanted.has(animalId)) continue;
+    if ((row.empresa_id ?? row.empresaId ?? empresaId) !== empresaId) continue;
+    byAnimal.get(animalId).push(row);
+  }
+  return byAnimal;
+}
+
 /** Map(animalId → view models ordenados pela ordem canônica), sem excluídos. */
 export async function loadSeriesForAnimals(db, animalIds, { maxIndexed = SERIES_INDEX_MAX_ANIMALS } = {}) {
   const wanted = new Set([...animalIds].map(String).filter(Boolean));

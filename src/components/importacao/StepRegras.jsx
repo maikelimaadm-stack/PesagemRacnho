@@ -42,7 +42,10 @@ export default function StepRegras({
   const [nomeModelo, setNomeModelo] = useState('');
   const [modeloSelecionado, setModeloSelecionado] = useState('');
   const mestres = type === IMPORT_TYPES.MESTRES;
+  const sanidade = type === IMPORT_TYPES.SANIDADE;
   const saidas = type === IMPORT_TYPES.SAIDAS;
+  // Aplicações de sanidade não criam animal: categoria, sexo, raça e lote não valem aqui.
+  const semPerfilDeAnimal = mestres || sanidade;
   const fixos = rules.fixedValues || {};
   const alterarFixo = (chave, valor) => onAlterar({ fixedValues: { ...fixos, [chave]: valor || null } });
 
@@ -66,7 +69,14 @@ export default function StepRegras({
         </Campo>
       </div>
 
-      {!mestres ? (
+      {sanidade ? (
+        <p className="importacao-hint" data-testid="importacao-regras-sanidade">
+          Nas aplicações de sanidade o sistema lê a data, a identificação do animal, o programa/procedimento,
+          o medicamento, a dose, a unidade e a via. Nenhuma pesagem é criada e a dose nunca é calculada pelo peso.
+        </p>
+      ) : null}
+
+      {!semPerfilDeAnimal ? (
         <>
           <h3 className="importacao-step__subtitle">Categoria dos animais</h3>
           <div className="importacao-choice-grid importacao-choice-grid--compacta" role="radiogroup" aria-label="Como definir a categoria">
@@ -156,11 +166,15 @@ export default function StepRegras({
           disabled={!podeCadastrosMestres}
           onChange={(event) => onAlterar({ createMissingMasters: event.target.checked })}
         />
-        <span>Criar marcas, raças e causas de morte que o arquivo citar e o sistema ainda não tiver</span>
+        <span>
+          {sanidade
+            ? 'Criar programas/procedimentos e medicamentos que o arquivo citar e o sistema ainda não tiver'
+            : 'Criar marcas, raças e causas de morte que o arquivo citar e o sistema ainda não tiver'}
+        </span>
       </label>
       {!podeCadastrosMestres ? (
         <p className="importacao-hint" data-testid="importacao-sem-registry-write">
-          Seu perfil não pode criar cadastros. Peça a um gestor para cadastrar marcas, raças e causas antes de importar.
+          Seu perfil não pode criar cadastros. Peça a um gestor para cadastrar {sanidade ? 'os programas e medicamentos' : 'marcas, raças e causas'} antes de importar.
         </p>
       ) : null}
 

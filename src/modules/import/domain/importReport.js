@@ -54,6 +54,7 @@ export const RESULT_METRICS = Object.freeze([
   ['seriesRecalculadas', 'Séries recalculadas'],
   ['categoriasResolvidasAutomaticamente', 'Categorias resolvidas automaticamente'],
   ['cadastrosMestresCriados', 'Cadastros mestres criados'],
+  ['aplicacoesCriadas', 'Aplicações de sanidade criadas'],
 ]);
 
 /**

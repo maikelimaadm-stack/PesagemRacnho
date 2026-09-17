@@ -25,6 +25,7 @@ export const EMPTY_JOB_COUNTERS = Object.freeze({
   eventos_recalculados: 0,
   categorias_resolvidas_automaticamente: 0,
   cadastros_mestres_criados: 0,
+  aplicacoes_criadas: 0,
 });
 
 /** Jobs de um arquivo (qualquer tipo/situação), do mais antigo ao mais novo. */
