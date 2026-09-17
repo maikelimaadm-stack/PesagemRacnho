@@ -221,7 +221,19 @@ assert.match(snDialog, /categoriesForSex\(categorias, form\.sexo\)/, 'diálogo S
 assert.match(snDialog, /Automático \(pelo peso\)/, 'diálogo SN oferece a categoria automática');
 assert.doesNotMatch(snDialog, /nascimento/i, 'NEGATIVO: diálogo SN não pede nascimento');
 assert.doesNotMatch(snDialog, /\bera\b/, 'NEGATIVO: diálogo SN não pede Era');
-assert.match(closing, /exitRequiresDocument\(row\.motivo_saida, salesPolicy\)/, 'Fechamento só gera pendência "Doc" para Venda quando a política exigir (Abate sempre)');
+// R5: a regra saiu da tela para a fonte única (closingPendencies), compartilhada com os relatórios.
+assert.match(closing, /pendenciesOf\(row, salesPolicy\)/, 'Fechamento usa a regra única de pendências com a política de venda');
+{
+  const { exitRequiresDocument, pendenciesOf } = await import('../src/modules/operations/domain/closingPendencies.js');
+  assert.equal(exitRequiresDocument('Abate', {}), true, 'Abate sempre exige documento');
+  assert.equal(exitRequiresDocument('Venda', {}), false, 'Venda sem política: não exige');
+  assert.equal(exitRequiresDocument('Venda', { exigir_documento_venda: true }), true, 'Venda com política: exige');
+  assert.equal(exitRequiresDocument('Morte', { exigir_documento_venda: true }), false);
+  const venda = { id: 'v', tipo_manejo: 'Saída', motivo_saida: 'Venda' };
+  assert.deepEqual(pendenciesOf(venda, {}).map((item) => item.type), [], 'Fechamento só gera pendência "Doc" para Venda quando a política exigir');
+  assert.deepEqual(pendenciesOf(venda, { exigir_documento_venda: true }).map((item) => item.type), ['Doc']);
+  assert.deepEqual(pendenciesOf({ ...venda, documento_embarque_id: 'D1' }, { exigir_documento_venda: true }), []);
+}
 assert.match(closing, /session\?\.status === 'FECHADA'/, 'Fechamento lê o status de sessão no enum v7');
 assert.match(closing, /loadOperationalPolicies\(\)/, 'Fechamento lê a política comercial');
 assert.doesNotMatch(closing, /totalWeight \* 0\.5 \/ 15/, 'NEGATIVO: @ estimada não usa 50% fixo');
