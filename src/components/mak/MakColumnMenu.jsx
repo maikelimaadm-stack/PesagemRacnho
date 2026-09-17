@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Check, ChevronDown, EyeOff, Filter, PanelLeft, ScanLine, Search, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import MakDateControl from "./MakDateControl";
+import { isFilterActive, matchesFilter } from "@/modules/reporting/domain/filterEngine";
 
 const OPERATORS = {
   text: [
@@ -111,66 +112,15 @@ function MakConditionSelect({ value, options, onChange, label }) {
   );
 }
 
+// O predicado vive no núcleo de reporting (filterEngine) — uma única semântica para
+// Relação, Lançamento, Cadastros e relatórios. Mantidos aqui como fachada de compatibilidade.
 export function isMakColumnFilterActive(filter) {
-  if (filter && typeof filter === "object") {
-    if (["empty", "not_empty"].includes(filter.operator)) return true;
-    if (Array.isArray(filter.values) && filter.values.length > 0) return true;
-    return String(filter.value ?? "").trim() !== "";
-  }
-  return String(filter ?? "").trim() !== "";
+  return isFilterActive(filter);
 }
 
 export function matchesMakColumnFilter(rawValue, filter, filterType = "text") {
-  if (!isMakColumnFilterActive(filter)) return true;
-  const normalized = normalizeFilter(filter, filterType);
-  const raw = rawValue == null ? "" : String(rawValue).trim();
-  const empty = raw === "";
-  if (normalized.operator === "empty") return empty;
-  if (normalized.operator === "not_empty") return !empty;
-  if (normalized.values.length > 0) return normalized.values.includes(raw);
-
-  if (filterType === "number") {
-    if (normalized.operator === "contains") {
-      return raw.includes(String(normalized.value ?? "").trim());
-    }
-    const actual = Number(String(raw).replace(",", "."));
-    const expected = Number(String(normalized.value).replace(",", "."));
-    const expectedTo = Number(String(normalized.valueTo).replace(",", "."));
-    if (!Number.isFinite(actual) || !Number.isFinite(expected)) return false;
-    if (normalized.operator === "greater") return actual > expected;
-    if (normalized.operator === "greater_equal") return actual >= expected;
-    if (normalized.operator === "less") return actual < expected;
-    if (normalized.operator === "less_equal") return actual <= expected;
-    if (["between", "not_between"].includes(normalized.operator)) {
-      if (!Number.isFinite(expectedTo)) return false;
-      const isBetween = actual >= Math.min(expected, expectedTo) && actual <= Math.max(expected, expectedTo);
-      return normalized.operator === "not_between" ? !isBetween : isBetween;
-    }
-    return actual === expected;
-  }
-
-  if (filterType === "date") {
-    const actual = raw.slice(0, 10);
-    const expected = String(normalized.value).slice(0, 10);
-    const expectedTo = String(normalized.valueTo).slice(0, 10);
-    if (!actual || !expected) return false;
-    if (normalized.operator === "contains") return actual.includes(expected);
-    if (normalized.operator === "before") return actual < expected;
-    if (normalized.operator === "after") return actual > expected;
-    if (normalized.operator === "between") return Boolean(expectedTo) && actual >= [expected, expectedTo].sort()[0] && actual <= [expected, expectedTo].sort()[1];
-    return actual === expected;
-  }
-
-  const actual = raw.toLocaleLowerCase("pt-BR");
-  const expected = String(normalized.value).trim().toLocaleLowerCase("pt-BR");
-  if (normalized.operator === "not_contains") return !actual.includes(expected);
-  if (normalized.operator === "equals") return actual === expected;
-  if (normalized.operator === "not_equals") return actual !== expected;
-  if (normalized.operator === "starts_with") return actual.startsWith(expected);
-  if (normalized.operator === "ends_with") return actual.endsWith(expected);
-  return actual.includes(expected);
+  return matchesFilter(rawValue, filter, filterType);
 }
-
 export default function MakColumnMenu({
   aberto,
   onFechar,
