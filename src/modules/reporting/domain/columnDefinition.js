@@ -31,7 +31,7 @@ const ALLOWED_BY_TYPE = {
   integer: ['count', 'countValid', 'sum', 'avg', 'min', 'max', 'range', 'weightedAvg', 'ratio'],
   weight: ['count', 'countValid', 'sum', 'avg', 'min', 'max', 'range', 'weightedAvg'],
   money: ['count', 'countValid', 'sum', 'avg', 'min', 'max', 'range', 'weightedAvg', 'ratio'],
-  percentage: ['count', 'countValid', 'avg', 'min', 'max', 'range', 'weightedAvg'],
+  percentage: ['count', 'countValid', 'avg', 'min', 'max', 'range', 'weightedAvg', 'ratio'],
   gmd: ['count', 'countValid', 'avg', 'min', 'max', 'range', 'weightedGmd'],
   date: ['count', 'countValid', 'min', 'max'],
   datetime: ['count', 'countValid', 'min', 'max'],

@@ -3,6 +3,7 @@
 // { rows, strategy, rowsRead, timings: { query, transform }, warnings? }.
 import { loadEventRows } from './eventSource.js';
 import { loadAnimalCurrentRows, loadAnimalPeriodRows } from './animalSource.js';
+import { loadAuditRows, loadBackupRows, loadDataIssueRows, loadLotRows, loadLotStayRows, loadRegistryRows, loadShipmentDocumentRows } from './controlSources.js';
 
 function periodOf(params) {
   return Object.values(params || {}).find((value) => value && value.from && value.to) || null;
@@ -20,6 +21,21 @@ const SOURCES = {
     if (!period) throw new Error(`relatório ${definition.id}: fonte animals.period exige período`);
     return loadAnimalPeriodRows({ empresaId, period, params });
   },
+  'lots.current': async ({ empresaId }) => loadLotRows({ empresaId }),
+  'lotStays.byPeriod': async ({ definition, params, today }) => {
+    const period = periodOf(params);
+    if (!period) throw new Error(`relatório ${definition.id}: permanências exigem período`);
+    return loadLotStayRows({ period, today });
+  },
+  'shipments.documents': async ({ params }) => loadShipmentDocumentRows({ period: periodOf(params) }),
+  'audit.byPeriod': async ({ definition, params }) => {
+    const period = periodOf(params);
+    if (!period) throw new Error(`relatório ${definition.id}: auditoria exige período`);
+    return loadAuditRows({ period });
+  },
+  'data.quality': async () => loadDataIssueRows(),
+  'backups.history': async () => loadBackupRows(),
+  ...Object.fromEntries(['marcas', 'racas', 'categoriasAnimal', 'parceiros', 'propriedades', 'causasMorte', 'usuarios'].map((store) => [`registry.${store}`, async () => loadRegistryRows({ store })])),
 };
 
 export function registerReportSource(id, loader) {

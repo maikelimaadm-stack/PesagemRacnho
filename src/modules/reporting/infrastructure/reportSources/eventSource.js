@@ -4,6 +4,7 @@
 // sessões) são buscadas por `anyOf` nos índices; cadastros são stores pequenas.
 import storage from '../../../../storage/storageAdapter.js';
 import { buildEventLookups, enrichEventRows, storageRowToEventViewModel } from './eventRows.js';
+import { readAppSetting } from '../../../../storage/indexedDb/repositories/index.js';
 
 const instrumentation = { lastQuery: null };
 
@@ -35,8 +36,10 @@ export async function loadEventLookups(db, viewModels) {
     activeByIds(db.table('sessoesPesagem'), viewModels.map((row) => row.sessao_id)),
     activeByIds(db.table('animais'), viewModels.map((row) => row.animal_id)),
   ]);
+  // Política de vendas (documento obrigatório) para as pendências; sem configuração, sem exigência.
+  const salesPolicy = (await readAppSetting('sales-policy:local').catch(() => null)) || {};
   // Usuários: só id e nome saem daqui (buildEventLookups descarta o resto).
-  return buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais });
+  return buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais, salesPolicy });
 }
 
 /**

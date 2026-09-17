@@ -83,6 +83,7 @@ export const EVENT_COLUMNS = [
   // Carcaça estimada é sensível: arrobas = carcaça ÷ 15 (seria canal lateral para o valor).
   defineColumn({ id: 'peso_carcaca_estimado', label: 'Carcaça estimada', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'frigorifico', label: 'Frigorífico', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'legado-texto' }),
+  defineColumn({ id: 'valor_arroba_abate', label: 'Preço/@ abate', type: 'money', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, weightedBy: 'quantidade_arrobas', aggregations: ['countValid', 'avg', 'min', 'max', 'weightedAvg'] }),
   defineColumn({ id: 'valor_total_abate', label: 'Valor abate', type: 'money', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'causa_morte', label: 'Causa da morte', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'legado-texto' }),
   defineColumn({ id: 'embarque_nome', label: 'Embarque', type: 'text', grains: EVENT_GRAINS, groupable: true, groupKey: textKey('embarque_id', 'embarque_nome') }),
@@ -100,6 +101,8 @@ export const EVENT_COLUMNS = [
     weighted: { gain: 'ganho', days: 'dias' }, aggregations: ['countValid', 'avg', 'min', 'max', 'weightedGmd'],
   }),
   defineColumn({ id: 'observacao', label: 'Observação', type: 'text', grains: EVENT_GRAINS }),
+  defineColumn({ id: 'pendencias', label: 'Pendências', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'derivado', description: 'Mesmas regras do Fechamento do Dia: Peso (GMD negativo), Lote (sem lote), Doc (saída sem documento exigido).' }),
+  defineColumn({ id: 'embarque_vinculado', label: 'Vinculada a embarque', type: 'boolean', grains: EVENT_GRAINS, groupable: true, source: 'derivado' }),
   defineColumn({
     id: 'situacao_atual', label: 'Situação atual do animal', type: 'enum', grains: EVENT_GRAINS, groupable: true, source: 'atual',
     options: ['ATIVO', 'VENDIDO', 'ABATIDO', 'MORTO', 'DOADO', 'TRANSFERIDO', 'CANCELADO', 'INATIVO'].map((value) => ({ value, label: value.charAt(0) + value.slice(1).toLowerCase() })),

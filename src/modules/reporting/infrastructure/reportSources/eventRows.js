@@ -1,6 +1,7 @@
 // Linhas canônicas do grão EVENT. Uma única transformação alimenta a Relação de Pesagens e os
 // relatórios de pesagens: mesma deduplicação, mesmos nomes de cadastro, mesmos campos.
 import { storageRecordToViewModel } from '../../../weighing/domain/weighingMapper.js';
+import { pendenciesOf } from '../../../operations/domain/closingPendencies.js';
 
 /**
  * Deduplica por id de domínio mantendo a linha ativa mais recente (maior localId).
@@ -27,8 +28,9 @@ function sessionLabel(session) {
 }
 
 /** Mapas id → nome a partir das stores de cadastro (pequenas) e das entidades referenciadas. */
-export function buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais } = {}) {
+export function buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais, salesPolicy = {} } = {}) {
   return {
+    salesPolicy,
     marcas: nameMap(marcas),
     racas: nameMap(racas),
     categorias: nameMap(categorias),
@@ -62,6 +64,9 @@ export function enrichEventRows(viewModels, lookups = buildEventLookups()) {
     operador_nome: row.created_by_user_id ? lookups.usuarios.get(row.created_by_user_id) ?? null : null,
     situacao_atual: row.animal_id ? lookups.situacaoAnimal.get(row.animal_id) ?? null : null,
     doc_qtd: row.documento_embarque_id ? documentCounts.get(row.documento_embarque_id) : null,
+    // Mesmas regras do Fechamento do Dia (closingPendencies).
+    pendencias: pendenciesOf(row, lookups.salesPolicy).map((item) => item.type).join(', ') || null,
+    embarque_vinculado: Boolean(row.embarque_id || row.documento_embarque_id),
   }));
 }
 
