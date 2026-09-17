@@ -24,6 +24,7 @@ import { parseCivilDate, isFutureCivilDate } from '../src/modules/weighing/domai
 import { ANIMAL_SITUACOES, IDENTIFICADOR_TIPOS, LOTE_SITUACOES, SESSAO_STATUS, STORE_NAMES } from '../src/storage/indexedDb/schema.js';
 import { deleteDbForTests, ensureStorageReady } from '../src/storage/indexedDb/db.js';
 import storage from '../src/storage/storageAdapter.js';
+import { weightMatches } from '../src/modules/operations/domain/categorySuggestion.js';
 import * as weighingService from '../src/modules/weighing/application/weighingService.js';
 
 // Impressão digital estrutural da massa v6 "pequena" (semente padrão): ids,
@@ -152,10 +153,13 @@ for (const animal of first.stores.animais) {
   assert.equal(racaById.get(animal.raca_id)?.nome, animal.raca, 'raca_id aponta para a raça do texto legado');
   const categoria = categoriaById.get(animal.categoria_id);
   assert.ok(categoria, 'categoria_id resolve');
-  assert.ok(categoria.sexo_aplicavel === animal.sexo || categoria.sexo_aplicavel === 'AMBOS', 'categoria compatível com o sexo');
+  assert.equal(categoria.sexo_aplicavel, animal.sexo, 'categoria do mesmo sexo do animal');
+  assert.ok(weightMatches(categoria, animal.ultimo_peso_kg), 'categoria automática contém o último peso');
+  assert.equal(animal.categoria_automatica, true);
+  assert.equal(animal.era, String(categoria.era), 'era do animal é a da categoria');
   assert.ok(propriedadeIds.has(animal.propriedade_id), 'propriedade_id resolve');
-  assert.ok(parseCivilDate(animal.nascimento), 'nascimento civil');
-  assert.equal(animal.nascimento_estimado, true, 'nascimento derivado da era é estimado');
+  assert.equal(animal.nascimento, null, 'nascimento não é usado');
+  assert.equal(animal.nascimento_estimado, false);
   assert.equal(animal.nome, null);
   assert.ok(!('documento' in animal), 'massa anônima');
 }

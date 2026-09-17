@@ -166,9 +166,9 @@ button:focus-visible {
   input[aria-invalid="true"],
   textarea[aria-invalid="true"],
   select[aria-invalid="true"],
-  input:required:invalid,
-  textarea:required:invalid,
-  select:required:invalid {
+  input:required:user-invalid,
+  textarea:required:user-invalid,
+  select:required:user-invalid {
     @apply border-red-500 bg-red-50 focus-visible:ring-red-500;
   }
 }

@@ -113,8 +113,9 @@ export function verifyPackagedBuild({ root = PROJECT_ROOT, releaseDirName = proc
   const installerSha256 = sha256(installerPath);
   const expectedFields = {
     version,
-    dbSchema: DB_SCHEMA_VERSION,
-    backupFormat: BACKUP_FORMAT_VERSION,
+    // Nomes do manifesto formato 2 (docs/arquitetura-produto/13 e engineering/VERSIONING).
+    dbSchemaVersion: DB_SCHEMA_VERSION,
+    backupFormatVersion: BACKUP_FORMAT_VERSION,
     uiContract: UI_CONTRACT_VERSION,
     dataContract: DATA_CONTRACT_VERSION,
     uiBuildId: UI_BUILD_ID,
@@ -224,7 +225,8 @@ async function buildFixture({
   const installerPath = join(releaseDir, `Pesagens Individuais Setup ${version}.exe`);
   writeFileSync(installerPath, randomBytes(4096));
   const manifestPath = join(releaseDir, 'release-manifest.json');
-  const { manifest } = buildReleaseManifest({ root, releaseDirName, releaseKind });
+  // buildReleaseManifest recebe o caminho do diretório e devolve o manifesto.
+  const manifest = buildReleaseManifest({ root, releaseDir, releaseKind });
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
   return { root, releaseDir, releaseDirName, installerPath, manifestPath, asarPath, manifest };
 }
@@ -304,12 +306,12 @@ async function runSelfTest() {
     failedAsExpected.push(expectFail('tamanho divergente', /tamanho/, tamanhoErrado));
 
     const semDbSchema = track(await buildFixture({ version }));
-    rewriteManifest(semDbSchema, (m) => { delete m.dbSchema; });
-    failedAsExpected.push(expectFail('manifesto sem dbSchema', /sem o campo "dbSchema"/, semDbSchema));
+    rewriteManifest(semDbSchema, (m) => { delete m.dbSchemaVersion; });
+    failedAsExpected.push(expectFail('manifesto sem dbSchemaVersion', /sem o campo "dbSchemaVersion"/, semDbSchema));
 
     const esquemaErrado = track(await buildFixture({ version }));
-    rewriteManifest(esquemaErrado, (m) => { m.dataBuildId = 'schema-v0'; m.dbSchema = 0; });
-    failedAsExpected.push(expectFail('manifesto de outro esquema', /manifesto\.dbSchema/, esquemaErrado));
+    rewriteManifest(esquemaErrado, (m) => { m.dataBuildId = 'schema-v0'; m.dbSchemaVersion = 0; });
+    failedAsExpected.push(expectFail('manifesto de outro esquema', /manifesto\.dbSchemaVersion/, esquemaErrado));
 
     const versaoManifesto = track(await buildFixture({ version }));
     rewriteManifest(versaoManifesto, (m) => { m.version = otherVersion; });

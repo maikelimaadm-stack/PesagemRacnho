@@ -103,6 +103,49 @@ await assert.rejects(
 assert.equal((await weighingService.listEntries({ empresaId })).length, 2);
 await deleteDbForTests();
 
+// Categoria automática pelo peso (16/09/2026): gravada no Cadastro, recalculada no
+// Manejo, preservada quando escolhida à mão; a era vem da categoria de cada pesagem.
+const storage = (await import('../src/storage/storageAdapter.js')).default;
+const catDb = await storage.ensureReady();
+const categoriaFixture = (id, nome, sexo, min, max, era, ordem) => ({ id, empresa_id: 'local', nome, nome_normalizado: nome.toUpperCase(), sexo_aplicavel: sexo, peso_min_kg: min, peso_max_kg: max, era, ordem, ativo: true, created_at: '2026-09-16T00:00:00.000Z', updated_at: '2026-09-16T00:00:00.000Z', deleted_at: null });
+await catDb.table('categoriasAnimal').bulkAdd([
+  categoriaFixture('cat-bezerro', 'Bezerro', 'M', 300, 350, 12, 1),
+  categoriaFixture('cat-garrote', 'Garrote', 'M', 350, null, 24, 2),
+  categoriaFixture('cat-novilha', 'Novilha', 'F', 250, 400, 18, 3),
+  categoriaFixture('cat-touro', 'Touro', 'M', null, null, 36, 4),
+]);
+const animalDe = (id) => catDb.table('animais').where('id').equals(id).first();
+const entradaDe = async (id) => (await weighingService.listEntries({ empresaId })).find((item) => item.id === id);
+
+await weighingService.createEntry({ id: 'auto-cad', empresa_id: empresaId, animal_id: 'auto-animal', tipo_manejo: 'Cadastro', numero_animal: '101', marca: 'A', sexo: 'M', raca: 'Nelore', data_pesagem: '2026-09-01', peso: 320, categoria_automatica: true, status_animal: 'Ativo' });
+let auto = await animalDe('auto-animal');
+assert.equal(auto.categoria_id, 'cat-bezerro', 'Cadastro automático: macho de 320 kg entra como Bezerro');
+assert.equal(auto.categoria_automatica, true);
+assert.equal(auto.era, '12', 'era do animal vem da categoria');
+assert.equal(auto.nascimento, null, 'nascimento não é gravado');
+assert.equal((await entradaDe('auto-cad')).era, '12', 'pesagem de Cadastro grava a era da categoria');
+
+await weighingService.createEntry({ id: 'auto-man', empresa_id: empresaId, animal_id: 'auto-animal', tipo_manejo: 'Manejo', numero_animal: '101', marca: 'A', sexo: 'M', raca: 'Nelore', data_pesagem: '2026-09-10', peso: 362, status_animal: 'Ativo' });
+auto = await animalDe('auto-animal');
+assert.equal(auto.categoria_id, 'cat-garrote', 'Manejo recalcula: passou de 350 kg → Garrote');
+assert.equal(auto.era, '24');
+assert.equal((await entradaDe('auto-man')).era, '24', 'pesagem de Manejo grava a era da nova categoria');
+assert.equal((await entradaDe('auto-cad')).era, '12', 'histórico: a pesagem de Cadastro mantém a era do momento');
+
+await weighingService.deleteEntry('auto-man');
+auto = await animalDe('auto-animal');
+assert.equal(auto.categoria_id, 'cat-bezerro', 'excluir o Manejo volta a categoria pelo peso anterior');
+
+await weighingService.createEntry({ id: 'manual-cad', empresa_id: empresaId, animal_id: 'manual-animal', tipo_manejo: 'Cadastro', numero_animal: '102', marca: 'A', sexo: 'M', raca: 'Nelore', data_pesagem: '2026-09-01', peso: 500, categoria_id: 'cat-touro', categoria_automatica: false, era: '36', status_animal: 'Ativo' });
+await weighingService.createEntry({ id: 'manual-man', empresa_id: empresaId, animal_id: 'manual-animal', tipo_manejo: 'Manejo', numero_animal: '102', marca: 'A', sexo: 'M', raca: 'Nelore', data_pesagem: '2026-09-10', peso: 320, status_animal: 'Ativo' });
+const manual = await animalDe('manual-animal');
+assert.equal(manual.categoria_id, 'cat-touro', 'NEGATIVO: categoria escolhida à mão não é recalculada pelo peso');
+assert.equal(manual.categoria_automatica, false);
+
+await weighingService.createEntry({ id: 'femea-cad', empresa_id: empresaId, animal_id: 'femea-animal', tipo_manejo: 'Cadastro', numero_animal: '103', marca: 'A', sexo: 'F', raca: 'Nelore', data_pesagem: '2026-09-01', peso: 320, categoria_automatica: true, status_animal: 'Ativo' });
+assert.equal((await animalDe('femea-animal')).categoria_id, 'cat-novilha', 'fêmea de 320 kg nunca cai em categoria de macho');
+await deleteDbForTests();
+
 console.log('OK verify-animal-history-integrity');
 console.log(JSON.stringify({
   duplicateNumberByBrand: true,

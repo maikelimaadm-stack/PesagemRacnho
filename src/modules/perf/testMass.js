@@ -20,6 +20,7 @@
 // Roda em Node (fake-indexeddb) e no navegador (IndexedDB real) porque só usa
 // APIs presentes nos dois: Date, Map e aritmética inteira.
 import { recalculateWeightSeries } from '../weighing/domain/weighingSeries.js';
+import { eraOfCategory, suggestCategory } from '../operations/domain/categorySuggestion.js';
 
 export const TEST_MASSES = Object.freeze({
   vazia: { label: 'Vazia', weighings: 0, weighingsPerAnimal: 0 },
@@ -42,9 +43,10 @@ const APARTACOES = [
 ];
 // Cadastros mestres fixos da massa v7 (docs 12 §3.1). Sem nomes reais nem documentos.
 const BREED_GROUPS = { Nelore: 'ZEBUINO', Angus: 'TAURINO', Brangus: 'CRUZADO', Guzerá: 'ZEBUINO', Tabapuã: 'ZEBUINO' };
+// [nome, sexo, peso mínimo, peso máximo, era]. Touro sem faixa: só escolha manual.
 const CATEGORIES = [
-  ['Bezerro', 'M', 0, 12], ['Bezerra', 'F', 0, 12], ['Garrote', 'M', 13, 24], ['Novilha', 'F', 13, 36],
-  ['Boi', 'M', 25, null], ['Vaca', 'F', 37, null], ['Touro', 'M', 36, null],
+  ['Bezerro', 'M', 0, 250, 12], ['Bezerra', 'F', 0, 230, 12], ['Garrote', 'M', 250, 400, 24], ['Novilha', 'F', 230, 380, 24],
+  ['Boi', 'M', 400, null, 36], ['Vaca', 'F', 380, null, 36], ['Touro', 'M', null, null, 36],
 ];
 const PARTNERS = [
   ['Comprador da massa', 'JURIDICA', ['COMPRADOR']],
@@ -121,8 +123,8 @@ function generateMasterRegistry(random, empresaId, createdAt) {
   const racas = BREEDS.map((nome, index) => ({
     ...named(nome), abreviacao: null, grupo: BREED_GROUPS[nome] || 'OUTRO', padrao: nome === 'Nelore', ordem: index + 1,
   }));
-  const categoriasAnimal = CATEGORIES.map(([nome, sexo, min, max], index) => ({
-    ...named(nome), sexo_aplicavel: sexo, idade_min_meses: min, idade_max_meses: max, ordem: index + 1,
+  const categoriasAnimal = CATEGORIES.map(([nome, sexo, min, max, era], index) => ({
+    ...named(nome), sexo_aplicavel: sexo, peso_min_kg: min, peso_max_kg: max, era, ordem: index + 1,
   }));
   const causasMorte = DEATH_CAUSES.map(([nome, categoria, exige], index) => ({
     ...named(nome), categoria, descricao: null, exige_observacao: exige, ordem: index + 1,
@@ -130,20 +132,6 @@ function generateMasterRegistry(random, empresaId, createdAt) {
   return { marcas, racas, categoriasAnimal, parceiros, propriedades, causasMorte };
 }
 
-// Sugestão explicável de categoria (ADR-028): primeira compatível com sexo e idade.
-function categoryFor(categorias, sexo, months) {
-  return categorias.find((row) =>
-    (row.sexo_aplicavel === sexo || row.sexo_aplicavel === 'AMBOS')
-    && (row.idade_min_meses == null || months >= row.idade_min_meses)
-    && (row.idade_max_meses == null || months <= row.idade_max_meses)) || null;
-}
-
-// Nascimento estimado a partir da "era" em meses na data do Cadastro (docs 12 §5 B7).
-function estimatedBirth(dayMs, months) {
-  const date = new Date(dayMs);
-  date.setUTCMonth(date.getUTCMonth() - months);
-  return isoDay(date.getTime());
-}
 
 /**
  * Gera a massa em memória. Retorna as linhas por store, já no formato Dexie,
@@ -290,17 +278,20 @@ export function generateTestMass(massKey, { seed = 20260908, empresaId = 'local'
       updated_at: createdAt,
       deleted_at: null,
     };
-    // v7: ids de cadastro + situação em maiúsculas; marca/raca/era ficam como legado somente-leitura.
+    // v7: ids de cadastro + situação em maiúsculas; categoria automática pelo último peso.
+    const categoria = v7 ? suggestCategory({ categorias: registry.categoriasAnimal, sexo, peso: weight }) : null;
     animais.push(v7
       ? {
         ...animal,
         situacao: 'ATIVO',
         marca_id: brandIdByName.get(brand),
         raca_id: breedIdByName.get(raca),
-        categoria_id: categoryFor(registry.categoriasAnimal, sexo, Number(era))?.id || null,
+        categoria_id: categoria?.id || null,
+        categoria_automatica: true,
+        era: eraOfCategory(categoria) ?? era,
         propriedade_id: mainPropertyId,
-        nascimento: estimatedBirth(registrationDay, Number(era)),
-        nascimento_estimado: true,
+        nascimento: null,
+        nascimento_estimado: false,
       }
       : animal);
     const identifierId = random.uuid();

@@ -21,13 +21,21 @@ export const RELEASE_MANIFEST_VERSION = 2;
 
 const defaultRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-/** Commit curto do HEAD; null quando git não está disponível (nunca interrompe a release). */
+/**
+ * Commit curto do HEAD, com sufixo "-dirty" quando há alterações não commitadas —
+ * a mesma regra do bundle (vite.config.js), para o manifesto e a tela de Manutenção
+ * mostrarem o mesmo valor. Null quando git não está disponível (nunca interrompe a release).
+ */
 export function resolveGitCommit(cwd = defaultRoot) {
   try {
     const out = execSync('git rev-parse --short HEAD', { cwd, stdio: ['ignore', 'pipe', 'ignore'] })
       .toString('utf8')
       .trim();
-    return out || null;
+    if (!out) return null;
+    const dirty = execSync('git status --porcelain', { cwd, stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString('utf8')
+      .trim().length > 0;
+    return dirty ? `${out}-dirty` : out;
   } catch {
     return null;
   }

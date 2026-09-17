@@ -42,7 +42,7 @@ export default function MakFilterPill({
     >
       <button
         type="button"
-        className="d17c-filter-pill mg-filter-pill__trigger"
+        className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost mg-filter-pill__trigger"
         onClick={() => !disabled && setOpen((current) => !current)}
         disabled={disabled}
         aria-label={`Filtrar ${label}`}
@@ -50,20 +50,21 @@ export default function MakFilterPill({
         aria-haspopup="dialog"
       >
         <span>{label}</span>
-        {!active ? <ChevronDown aria-hidden="true" /> : null}
       </button>
       {active ? (
         <button
           type="button"
-          className="mg-filter-pill__clear"
+          className="mg-filter-pill__icon mg-filter-pill__icon--clear"
           onClick={clear}
           disabled={disabled}
           aria-label={`Limpar filtro ${label}`}
           title={`Limpar filtro ${label}`}
         >
-          <X aria-hidden="true" />
+          <X strokeWidth={2.2} aria-hidden="true" />
         </button>
-      ) : null}
+      ) : (
+        <ChevronDown className="mg-filter-pill__icon mg-filter-pill__icon--chevron" strokeWidth={2.2} aria-hidden="true" />
+      )}
       <MakColumnMenu
         aberto={open}
         onFechar={() => setOpen(false)}

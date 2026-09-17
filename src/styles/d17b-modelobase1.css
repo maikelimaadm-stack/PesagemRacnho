@@ -490,9 +490,9 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17b-page .mg-filter-pills-rail__toggle:hover,
 .d17b-page .mg-filter-pills-rail__nav:hover:not(:disabled),
 .d17b-page .mg-filter-pills-rail__config:hover:not(:disabled) { background: #e8edf1 !important; color: #25354a !important; }
-.d17b-page .mg-filter-pills-rail__toggle svg,
-.d17b-page .mg-filter-pills-rail__nav svg,
-.d17b-page .mg-filter-pills-rail__config svg { width: 14px; height: 14px; }
+.d17b-page:not(.d17b-list-page--mother) .mg-filter-pills-rail__toggle svg,
+.d17b-page:not(.d17b-list-page--mother) .mg-filter-pills-rail__nav svg,
+.d17b-page:not(.d17b-list-page--mother) .mg-filter-pills-rail__config svg { width: 14px; height: 14px; }
 .d17b-page .mg-filter-pills-rail__nav:disabled { opacity: .32; cursor: default; }
 .mg-filter-pills-rail__content {
   display: flex;
@@ -535,7 +535,7 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 
 .mg-filter-pill { position: relative; display: inline-flex; flex: 0 0 auto; height: 28px; }
 .d17b-page .d17c-filter-pill,
-.d17b-page .mg-filter-pill__trigger {
+.d17b-page:not(.d17b-list-page--mother) .mg-filter-pill__trigger {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
@@ -1927,12 +1927,13 @@ html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-sco
   color: #e6edf3 !important;
 }
 
-/* R13: escala global de 3 px e workspaces ocupando toda a altura disponível. */
-html body .d17b-shell.cadastro-emp-scope .d17b-page {
+/* R13: escala global de 3 px e workspaces ocupando toda a altura disponível.
+   Listas-mãe (Relação, cadastros, usuários) ficam de fora: seguem a escala do ModeloBase1. */
+html body .d17b-shell.cadastro-emp-scope .d17b-page:not(.d17b-list-page--mother):not(.aux-registry-page--record) {
   padding: 3px !important;
 }
-html body .d17b-shell.cadastro-emp-scope :is(.d17b-list-page, .d17b-maintenance-page, .d17b-kpi-grid),
-html body .d17b-shell.cadastro-emp-scope .d17b-page :where(div, section, header, footer, form, nav, ul) {
+html body .d17b-shell.cadastro-emp-scope :is(.d17b-list-page:not(.d17b-list-page--mother):not(.aux-registry-page--record), .d17b-maintenance-page, .d17b-kpi-grid),
+html body .d17b-shell.cadastro-emp-scope .d17b-page:not(.d17b-list-page--mother):not(.aux-registry-page--record) :where(div, section, header, footer, form, nav, ul) {
   gap: 3px !important;
 }
 html body .d17b-dialog-content :where(div, section, header, footer, form, nav, ul),
@@ -2895,8 +2896,9 @@ html.dark body .d17d-animal-performance__metric strong { color: #58d985; }
 
 /* R23 — contrato tipográfico operacional.
    Campos, comandos, tabelas e painéis de informação compartilham a mesma
-   escala de 11px. Hierarquia é indicada por peso, não por tamanhos aleatórios. */
-html body .d17b-shell.cadastro-emp-scope .d17b-page :is(
+   escala de 11px. Hierarquia é indicada por peso, não por tamanhos aleatórios.
+   Listas-mãe ficam de fora: tipografia e grade do ModeloBase1. */
+html body .d17b-shell.cadastro-emp-scope .d17b-page:not(.d17b-list-page--mother):not(.aux-registry-page--record) :is(
   label,
   input,
   textarea,
@@ -2907,7 +2909,7 @@ html body .d17b-shell.cadastro-emp-scope .d17b-page :is(
   font-size: 11px !important;
 }
 
-html body .d17b-shell.cadastro-emp-scope .d17b-page .emp-table-pro :is(
+html body .d17b-shell.cadastro-emp-scope .d17b-page:not(.d17b-list-page--mother):not(.d17b-launch-page) .emp-table-pro :is(
   th.emp-th,
   td.emp-td,
   th.emp-th span,
@@ -2921,14 +2923,14 @@ html body .d17b-shell.cadastro-emp-scope .d17b-page .emp-table-pro :is(
   line-height: 14px !important;
 }
 
-html body .d17b-shell.cadastro-emp-scope .d17b-page .emp-table-pro th.emp-th {
+html body .d17b-shell.cadastro-emp-scope .d17b-page:not(.d17b-list-page--mother):not(.d17b-launch-page) .emp-table-pro th.emp-th {
   height: 28px !important;
   min-height: 28px !important;
   color: #374151 !important;
   font-weight: 600 !important;
 }
 
-html body .d17b-shell.cadastro-emp-scope .d17b-page .emp-table-pro td.emp-td {
+html body .d17b-shell.cadastro-emp-scope .d17b-page:not(.d17b-list-page--mother):not(.d17b-launch-page) .emp-table-pro td.emp-td {
   height: 28px !important;
   min-height: 28px !important;
   color: #46566c !important;
@@ -4259,52 +4261,55 @@ html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-sco
    Pesagens Individuais; permanecem diferentes apenas os dados e o tamanho útil. */
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-table-card .emp-table-pro.d17c-data-table {
-  font-size: 11px !important;
+  font-size: 12px !important;
   border-collapse: separate !important;
   border-spacing: 0 !important;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-table-card .emp-table-pro.d17c-data-table :is(thead, th, th.emp-th) {
-  background: #f2f5f9 !important;
+  background: #ffffff !important;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-table-card .emp-table-pro.d17c-data-table :is(th, th.emp-th) {
   height: 30px !important;
-  min-height: 28px !important;
-  padding: 0 !important;
+  min-height: 30px !important;
+  padding: 0 9px !important;
   border: 0 !important;
-  color: #374151 !important;
-  font-size: 11px !important;
+  color: #334155 !important;
+  font-size: 12px !important;
   font-weight: 600 !important;
-  line-height: 14px !important;
-  box-shadow: inset -1px 0 0 #d1d9e5, inset 0 -1px 0 #d1d9e5 !important;
+  line-height: 30px !important;
+  box-shadow: inset -1px 0 0 #e7eaee, inset 0 -2px 0 #ffffff !important;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-table-card .emp-table-pro.d17c-data-table th :is(span, button, div) {
   color: inherit !important;
-  font-size: 11px !important;
+  font-size: 12px !important;
   font-weight: 600 !important;
-  line-height: 14px !important;
+  line-height: 30px !important;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-table-card .emp-table-pro.d17c-data-table :is(td, td.emp-td) {
-  height: 28px !important;
-  min-height: 28px !important;
-  padding: 0 !important;
-  border-top: 0 !important;
-  border-right: 0 !important;
-  border-bottom: 1px solid #d9e1eb !important;
-  border-left: 0 !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  padding: 0 9px !important;
+  border: 0 !important;
   background: #fff !important;
-  color: #46566c !important;
-  font-size: 11px !important;
+  color: #6b7280 !important;
+  font-size: 12px !important;
   font-weight: 400 !important;
-  line-height: 14px !important;
-  box-shadow: inset -1px 0 0 #d9e1eb, inset 0 -1px 0 #d9e1eb !important;
+  line-height: 20px !important;
+  box-shadow: inset -1px 0 0 #e7eaee, inset 0 -1px 0 #e7eaee !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+  .d17d-launch-table-card .emp-table-pro.d17c-data-table td button {
+  height: 22px !important;
+  min-height: 22px !important;
+  max-height: 22px !important;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-table-card .emp-table-pro.d17c-data-table tbody tr {
-  height: 28px !important;
+  height: 26px !important;
   font-size: 12px !important;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
@@ -4313,16 +4318,16 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
 }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-table-card .emp-table-pro.d17c-data-table :is(thead, th, th.emp-th) {
-  background: #161b22 !important;
-  color: #e6edf3 !important;
-  box-shadow: inset -1px 0 0 #30363d, inset 0 -1px 0 #30363d !important;
+  background: #20262e !important;
+  color: #c3ccd6 !important;
+  box-shadow: inset -1px 0 0 #2d333b, inset 0 -2px 0 #20262e !important;
 }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-table-card .emp-table-pro.d17c-data-table :is(td, td.emp-td) {
-  border-color: #30363d !important;
+  border-color: #2d333b !important;
   background: #161b22 !important;
-  color: #c3cbd4 !important;
-  box-shadow: inset -1px 0 0 #30363d, inset 0 -1px 0 #30363d !important;
+  color: #e6edf3 !important;
+  box-shadow: inset -1px 0 0 #2d333b, inset 0 -1px 0 #2d333b !important;
 }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-table-card .emp-table-pro.d17c-data-table tbody tr:nth-child(even) > td {
@@ -4477,4 +4482,177 @@ html.dark body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search
   color: #ffd98a;
   background: #3a2a00;
   border-bottom-color: #7a5a10;
+}
+
+/* R35 — Paridade das listas-mãe (Relação, cadastros, usuários) com o ModeloBase1;
+   as regras de grade (.emp-table-pro) valem também para a tabela do Lançamento.
+   Valores medidos por getComputedStyle no PROJETOMG-main (Cadastro de Empresas, 1440 px),
+   que vêm de src/styles/mg-prototype.css do projeto base (não portado inteiro). */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother {
+  gap: 0 !important;
+  padding: 0 !important;
+  background: #f5f6fa !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother > .mak-mother-page__toolbar {
+  padding: 0 !important;
+  background: #f5f6fa !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar {
+  gap: 8px !important;
+  padding: 4px 12px !important;
+  background: #ffffff !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother > .mak-mother-page__panel-strip {
+  position: relative;
+  z-index: 2;
+  padding: 0 !important;
+  border-radius: 0 0 16px 16px !important;
+  background: transparent !important;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08) !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-table-panel-strip {
+  gap: 8px !important;
+  padding: 4px 12px !important;
+  border-radius: 0 0 16px 16px !important;
+  background: #ffffff !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother > .d17b-list-body {
+  gap: 0 !important;
+  padding: 9px 10px 10px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother.d17b-filters-open > .d17b-list-body {
+  gap: 10px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .d17b-table-card,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-view-panel.emp-table-root {
+  border-radius: 14px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled {
+  font-size: 12px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro {
+  --emp-table-line: #e7eaee;
+  --emp-table-band-edge: #e7eaee;
+  color: #111827;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro tbody tr {
+  color: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro thead th.emp-th {
+  padding-right: 9px !important;
+  padding-left: 9px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  background: #ffffff !important;
+  color: #334155 !important;
+  line-height: 30px !important;
+  box-shadow: inset -1px 0 0 0 #e7eaee, inset 0 -2px 0 0 #ffffff !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro thead th.emp-th :is(.emp-th-label, span, button) {
+  line-height: 30px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro thead th.emp-th:last-child {
+  box-shadow: inset 0 -2px 0 0 #ffffff !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro tbody td.emp-td {
+  padding-right: 9px !important;
+  padding-left: 9px !important;
+  color: #6b7280 !important;
+  box-shadow: inset -1px 0 0 0 #e7eaee, inset 0 -1px 0 0 #e7eaee !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro :is(th, td):is(.emp-th-select, .emp-td-select, .aux-check-cell) {
+  padding: 0 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro :is(.emp-table-select-check, .mak-table-select-check) {
+  border-color: #f1f3f4 !important;
+}
+
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother,
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother > .mak-mother-page__toolbar {
+  background: #0d1117 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother :is(.mg-action-bar, .mg-table-panel-strip) {
+  background: #161b22 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother > .mak-mother-page__panel-strip {
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.28) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother :is(
+  .mg-filter-pills-rail__toggle,
+  .mg-filter-pills-rail__nav,
+  .mg-filter-pills-rail__config,
+  .mg-table-panel-strip__config-btn,
+  .mg-filter-pill__trigger
+) {
+  background: #21262d !important;
+  border-color: #484f58 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother :is(.mg-filter-pills-rail__toggle, .mg-table-panel-strip__config-btn) {
+  color: #40de63 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-filter-pills-rail__toggle {
+  border-color: rgba(64, 222, 99, 0.35) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-filter-pill__trigger {
+  color: #e6edf3 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-filter-pills-rail__divider {
+  background: #484f58 !important;
+}
+
+/* R36 — Tela de registro dos cadastros com a tipografia de formulário do
+   ModeloBase1 (medida no PROJETOMG-main): campo 38 px/13 px sobre #f6f8fa e
+   rótulo flutuante de 12 px. O restante do app mantém a escala de 11 px. */
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode :is(
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  [role="combobox"],
+  .cmd-display
+) {
+  font-size: 13px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode .mg-prototype-field > input:not([disabled]):not([readonly]) {
+  background: #f6f8fa !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode :is(.fg-label, .cmd-label) {
+  font-size: 12px !important;
+  color: #9ca3af !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-tabs .seg-tab {
+  font-size: 13px !important;
+}
+/* A faixa de abas segue a altura de barra do modelo (36 px); no app a variável é 44. */
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record {
+  --mg-toolbar-row-height: 36px;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode .mg-prototype-field > input:not([disabled]):not([readonly]) {
+  background: #21262d !important;
+  color: #e6edf3 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode :is(.fg-label, .cmd-label) {
+  color: #848d97 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro {
+  --emp-table-line: #2d333b;
+  --emp-table-band-edge: #2d333b;
+  color: #e6edf3;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro tbody tr {
+  color: #e6edf3 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro thead th.emp-th {
+  background: #20262e !important;
+  color: #c3ccd6 !important;
+  box-shadow: inset -1px 0 0 0 #2d333b, inset 0 -2px 0 0 #20262e !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro thead th.emp-th:last-child {
+  box-shadow: inset 0 -2px 0 0 #20262e !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro tbody td.emp-td {
+  color: #e6edf3 !important;
+  box-shadow: inset -1px 0 0 0 #2d333b, inset 0 -1px 0 0 #2d333b !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro :is(.emp-table-select-check, .mak-table-select-check) {
+  border-color: #484f58 !important;
+  background: #21262d !important;
 }

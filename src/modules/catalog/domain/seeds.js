@@ -4,16 +4,17 @@
 // Idempotente: verifica por nome (inclusive registros excluídos, para não
 // recriar o que o responsável removeu de propósito).
 //
-// As faixas etárias são ponto de partida editável na tela de Categorias; a
-// sugestão por idade (ADR-028) escolhe a primeira categoria compatível na ordem.
+// Faixas de peso e era ficam vazias: são definidas pelo responsável na tela de
+// Categorias. Sem faixa de peso a categoria não entra na escolha automática.
+const categoria = (nome, sexo, ordem) => ({ nome, sexo_aplicavel: sexo, peso_min_kg: null, peso_max_kg: null, era: null, ordem });
 export const CATEGORIAS_SEED = Object.freeze([
-  { nome: 'Bezerro', sexo_aplicavel: 'M', idade_min_meses: 0, idade_max_meses: 12, ordem: 1 },
-  { nome: 'Bezerra', sexo_aplicavel: 'F', idade_min_meses: 0, idade_max_meses: 12, ordem: 2 },
-  { nome: 'Garrote', sexo_aplicavel: 'M', idade_min_meses: 13, idade_max_meses: 24, ordem: 3 },
-  { nome: 'Novilha', sexo_aplicavel: 'F', idade_min_meses: 13, idade_max_meses: 36, ordem: 4 },
-  { nome: 'Boi', sexo_aplicavel: 'M', idade_min_meses: 25, idade_max_meses: null, ordem: 5 },
-  { nome: 'Vaca', sexo_aplicavel: 'F', idade_min_meses: 37, idade_max_meses: null, ordem: 6 },
-  { nome: 'Touro', sexo_aplicavel: 'M', idade_min_meses: 25, idade_max_meses: null, ordem: 7 },
+  categoria('Bezerro', 'M', 1),
+  categoria('Bezerra', 'F', 2),
+  categoria('Garrote', 'M', 3),
+  categoria('Novilha', 'F', 4),
+  categoria('Boi', 'M', 5),
+  categoria('Vaca', 'F', 6),
+  categoria('Touro', 'M', 7),
 ].map((seed) => Object.freeze(seed)));
 
 export const RACA_PADRAO_SEED = Object.freeze({ nome: 'Nelore', grupo: 'ZEBUINO', ordem: 1 });

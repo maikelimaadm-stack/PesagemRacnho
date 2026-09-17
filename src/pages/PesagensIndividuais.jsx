@@ -6,7 +6,6 @@ import MakDateControl from "@/components/mak/MakDateControl";
 import MakFilterRail from "@/components/mak/MakFilterRail";
 import MakFilterPill from "@/components/mak/MakFilterPill";
 import MakTableSelectCheck from "@/components/mak/MakTableSelectCheck";
-import MgFilterPanel from "@/components/mak/MgFilterPanel";
 import MgDesktopSearch from "@/components/mak/MgDesktopSearch";
 import MgSpeedDialMenu from "@/components/mak/MgSpeedDialMenu";
 import MgTablePanelStrip from "@/components/mak/MgTablePanelStrip";
@@ -30,7 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Upload, Search, Trash2, FileSpreadsheet, Download, 
-  ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, Filter, X, Scale,
+  ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X, Scale,
   AlertTriangle, CheckCircle2, Settings, MoreVertical, Layers, ListFilter, ChevronLeft, ChevronRight
 } from "lucide-react";
 import {
@@ -100,20 +99,13 @@ const COLUNAS_DISPONIVEIS = [
   { id: "observacao", label: "Observação", default: false, sortable: true, align: "left" },
 ];
 
-const DEFAULT_CUSTOM_FILTER_IDS = new Set([
-  "data_pesagem", "tipo_manejo", "numero_animal", "sexo", "peso", "nome_lote", "nome_apartacao",
-]);
-const FILTROS_DISPONIVEIS = COLUNAS_DISPONIVEIS
-  .filter((coluna) => !coluna.fixo)
-  .map((coluna) => ({ ...coluna, default: DEFAULT_CUSTOM_FILTER_IDS.has(coluna.id) }));
-
 const NUMBER_COLUMN_IDS = new Set(["peso", "peso_anterior", "valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "doc_qtd", "dias", "ganho", "gmd"]);
 const DATE_COLUMN_IDS = new Set(["data_pesagem", "data_anterior"]);
 const getColumnFilterType = (id) => DATE_COLUMN_IDS.has(id) ? "date" : NUMBER_COLUMN_IDS.has(id) ? "number" : "text";
 const COLUMN_WIDTHS = {
   // Colunas de controle não recebem a folga padrão das colunas de texto:
   // o checkbox fica centralizado, com apenas a área clicável necessária.
-  selecao: 32,
+  selecao: 36,
   acoes: 36,
   data_pesagem: 108,
   data_anterior: 108,
@@ -137,32 +129,6 @@ const getPesagemColumnValue = (pesagem, columnId, documentCounts = {}) => {
   return pesagem[columnId];
 };
 
-const asFilterValues = (value) => Array.isArray(value) ? value.filter(Boolean) : value ? [value] : [];
-const filterHasValue = (value) => asFilterValues(value).length > 0;
-const filterMatchesValue = (filter, value) => {
-  const selected = asFilterValues(filter);
-  return selected.length === 0 || selected.includes(String(value ?? ""));
-};
-const firstFilterValue = (value) => asFilterValues(value)[0] || "";
-
-// Painel lateral de filtros (ModeloBase1): texto "contém", datas e seleções.
-const CAMPOS_TEXTO_PAINEL = [
-  { key: "animal", label: "Animal" },
-  { key: "marca", label: "Marca" },
-  { key: "lote", label: "Lote" },
-  { key: "apartacao", label: "Apartação" },
-  { key: "raca", label: "Raça" },
-  { key: "observacao", label: "Observação" },
-];
-const CAMPOS_DATA_PAINEL = [
-  { key: "dataInicio", label: "Data inicial" },
-  { key: "dataFim", label: "Data final" },
-];
-const CAMPOS_SELECAO_PAINEL = [
-  { key: "sexo", label: "Sexo", options: [{ value: "Todos", label: "Todos" }, { value: "M", label: "Macho" }, { value: "F", label: "Fêmea" }] },
-  { key: "tipo", label: "Tipo", options: [{ value: "Todos", label: "Todos" }, { value: "Cadastro", label: "Cadastro" }, { value: "Manejo", label: "Manejo" }, { value: "Saída", label: "Saída" }] },
-  { key: "status", label: "Status", options: [{ value: "Todos", label: "Todos" }, { value: "Ativo", label: "Ativo" }, { value: "Inativo", label: "Inativo" }] },
-];
 const CAMPOS_RESULTADO_PESQUISA = [
   { key: "marca", label: "Marca" },
   { key: "data", label: "Data" },
@@ -170,7 +136,6 @@ const CAMPOS_RESULTADO_PESQUISA = [
   { key: "lote", label: "Lote" },
   { key: "apartacao", label: "Apartação" },
 ];
-const FILTRO_PAINEL_VAZIO = Object.freeze({ animal: [], marca: [], lote: [], apartacao: [], raca: [], observacao: [], dataInicio: [], dataFim: [], sexo: [], tipo: [], status: [] });
 const textoContem = (value, term) => normalizeSearchQuery(value).includes(normalizeSearchQuery(term));
 
 export default function PesagensIndividuais() {
@@ -180,26 +145,13 @@ export default function PesagensIndividuais() {
   // Estados
   const [searchTerm, setSearchTerm] = useState("");
   const [sortConfig, setSortConfig] = useState({ key: 'data_pesagem', direction: 'desc' });
-  const [filtroLote, setFiltroLote] = useState("");
-  const [filtroApartacao, setFiltroApartacao] = useState("");
-  const [filtroSexo, setFiltroSexo] = useState("");
-  const [filtroTipoManejo, setFiltroTipoManejo] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState("");
-  const [filtroDataInicio, setFiltroDataInicio] = useState("");
-  const [filtroDataFim, setFiltroDataFim] = useState("");
-  const [filtroMarca, setFiltroMarca] = useState("");
-  const [filtroObservacao, setFiltroObservacao] = useState("");
-  const [filtroDataEspecifica, setFiltroDataEspecifica] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [selectedItems, setSelectedItems] = useState([]);
   const [deleteRequest, setDeleteRequest] = useState({ open: false, ids: [] });
-  const [showFilters, setShowFilters] = useState(false);
   const [showQuickSearch, setShowQuickSearch] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [moreOpen, setMoreOpen] = useState(false);
-  const [filterDraft, setFilterDraft] = useState(() => ({ ...FILTRO_PAINEL_VAZIO }));
-  const [filtrosPainel, setFiltrosPainel] = useState(() => ({ ...FILTRO_PAINEL_VAZIO }));
   const importInputRef = useRef(null);
   const [colunaMenuAberto, setColunaMenuAberto] = useState(null);
   const [filtrosColuna, setFiltrosColuna] = useState({});
@@ -212,7 +164,6 @@ export default function PesagensIndividuais() {
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [showConfigColunas, setShowConfigColunas] = useState(false);
-  const [showConfigFiltros, setShowConfigFiltros] = useState(false);
   const [tipoManejoImport, setTipoManejoImport] = useState('Manejo');
   const [motivoSaidaImport, setMotivoSaidaImport] = useState('');
   const [destinoVendaImport, setDestinoVendaImport] = useState('');
@@ -234,28 +185,6 @@ export default function PesagensIndividuais() {
   const [showVincularLotes, setShowVincularLotes] = useState(false);
   const [lotesParaVincular, setLotesParaVincular] = useState([]);
   const [vincularLotesSelecionados, setVincularLotesSelecionados] = useState({});
-
-  const [filtrosOrdem, setFiltrosOrdem] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("filtros_ordem_pesagens_individuais_v3")) || FILTROS_DISPONIVEIS.map((filtro) => filtro.id);
-    } catch {
-      return FILTROS_DISPONIVEIS.map((filtro) => filtro.id);
-    }
-  });
-  const [filtrosVisiveis, setFiltrosVisiveis] = useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem("filtros_visiveis_pesagens_individuais_v3")) || FILTROS_DISPONIVEIS.filter((filtro) => filtro.default).map((filtro) => filtro.id);
-    } catch {
-      return FILTROS_DISPONIVEIS.filter((filtro) => filtro.default).map((filtro) => filtro.id);
-    }
-  });
-
-  const aplicarConfiguracaoFiltros = ({ order, visible }) => {
-    setFiltrosOrdem(order);
-    setFiltrosVisiveis(visible);
-    localStorage.setItem("filtros_ordem_pesagens_individuais_v3", JSON.stringify(order));
-    localStorage.setItem("filtros_visiveis_pesagens_individuais_v3", JSON.stringify(visible));
-  };
 
   // Estado para edição em lote
   const [showEditarLote, setShowEditarLote] = useState(false);
@@ -374,15 +303,6 @@ export default function PesagensIndividuais() {
   const marcasExistentes = [...new Set(pesagens.map(p => p.marca).filter(Boolean))].sort();
   const racasExistentes = [...new Set(pesagens.map(p => p.raca).filter(Boolean))].sort();
   const erasExistentes = [...new Set(pesagens.map(p => p.era).filter(Boolean))].sort();
-  
-  // Datas únicas por apartação selecionada
-  const datasUnicasApartacao = useMemo(() => {
-    let pesagensFiltro = pesagens;
-    if (filterHasValue(filtroApartacao)) {
-      pesagensFiltro = pesagens.filter(p => filterMatchesValue(filtroApartacao, p.nome_apartacao));
-    }
-    return [...new Set(pesagensFiltro.map(p => p.data_pesagem).filter(Boolean))].sort().reverse();
-  }, [pesagens, filtroApartacao]);
 
   // Filtrar e ordenar
   const pesagensFiltradas = useMemo(() => {
@@ -390,33 +310,6 @@ export default function PesagensIndividuais() {
       if (searchTerm) {
         const alvo = [p.numero_animal, p.marca, p.nome_lote, p.nome_apartacao, p.raca].map((value) => String(value ?? "")).join(" ");
         if (!textoContem(alvo, searchTerm)) return false;
-      }
-      for (const campo of CAMPOS_TEXTO_PAINEL) {
-        const termo = firstFilterValue(filtrosPainel[campo.key]);
-        if (!termo) continue;
-        const valor = campo.key === "animal" ? p.numero_animal : campo.key === "lote" ? p.nome_lote : campo.key === "apartacao" ? p.nome_apartacao : p[campo.key];
-        if (!textoContem(valor, termo)) return false;
-      }
-      if (!filterMatchesValue(filtroLote, p.nome_lote)) return false;
-      if (!filterMatchesValue(filtroApartacao, p.nome_apartacao)) return false;
-      if (!filterMatchesValue(filtroDataEspecifica, p.data_pesagem)) return false;
-      if (!filterMatchesValue(filtroSexo, p.sexo)) return false;
-      if (!filterMatchesValue(filtroTipoManejo, p.tipo_manejo)) return false;
-      const statusCalc = p.status_animal || (p.tipo_manejo === 'Saída' ? 'Inativo' : 'Ativo');
-      if (!filterMatchesValue(filtroStatus, statusCalc)) return false;
-      if (filtroDataInicio && p.data_pesagem < filtroDataInicio) return false;
-      if (filtroDataFim && p.data_pesagem > filtroDataFim) return false;
-      // Filtro de marca: "sem_marca" mostra os sem marca, ou filtra por marca específica
-      if (filterHasValue(filtroMarca)) {
-        const marcasSelecionadas = asFilterValues(filtroMarca);
-        const semMarca = !p.marca || p.marca.trim() === '';
-        if (!(marcasSelecionadas.includes(String(p.marca || "")) || (marcasSelecionadas.includes("sem_marca") && semMarca))) return false;
-      }
-      // Filtro de observação: "sem_observacao" mostra os sem obs, "com_observacao" mostra os com obs
-      if (filterHasValue(filtroObservacao)) {
-        const observacoesSelecionadas = asFilterValues(filtroObservacao);
-        const temObservacao = Boolean(p.observacao && p.observacao.trim() !== '');
-        if (!((observacoesSelecionadas.includes("com_observacao") && temObservacao) || (observacoesSelecionadas.includes("sem_observacao") && !temObservacao))) return false;
       }
       for (const [columnId, value] of Object.entries(filtrosColuna)) {
         if (!isMakColumnFilterActive(value)) continue;
@@ -447,7 +340,7 @@ export default function PesagensIndividuais() {
     });
 
     return filtered;
-  }, [pesagens, documentCounts, searchTerm, filtrosPainel, filtroLote, filtroApartacao, filtroDataEspecifica, filtroSexo, filtroTipoManejo, filtroStatus, filtroDataInicio, filtroDataFim, filtroMarca, filtroObservacao, filtrosColuna, sortConfig]);
+  }, [pesagens, documentCounts, searchTerm, filtrosColuna, sortConfig]);
 
   // Contagem estável por documento (também usada por filtro, ordenação e célula).
   const docCounts = documentCounts;
@@ -826,41 +719,11 @@ export default function PesagensIndividuais() {
   const limparFiltros = () => {
     setSearchTerm("");
     setSearchInput("");
-    setFilterDraft({ ...FILTRO_PAINEL_VAZIO });
-    setFiltrosPainel({ ...FILTRO_PAINEL_VAZIO });
-    setFiltroLote("");
-    setFiltroApartacao("");
-    setFiltroSexo("");
-    setFiltroDataInicio("");
-    setFiltroDataFim("");
-    setFiltroMarca("");
-    setFiltroObservacao("");
-    setFiltroDataEspecifica("");
-    setFiltroTipoManejo("");
-    setFiltroStatus("");
     setFiltrosColuna({});
     setCurrentPage(1);
   };
 
-  const hasActiveFilters = Boolean(
-    searchTerm || filterHasValue(filtroLote) || filterHasValue(filtroApartacao) || filterHasValue(filtroSexo) || filterHasValue(filtroTipoManejo) ||
-    filterHasValue(filtroStatus) || filtroDataInicio || filtroDataFim ||
-    filterHasValue(filtroMarca) || filterHasValue(filtroObservacao) || filterHasValue(filtroDataEspecifica) || Object.values(filtrosColuna).some(isMakColumnFilterActive)
-    || Object.values(filtrosPainel).some(filterHasValue)
-  );
-  const painelFiltrosAtivo = Object.values(filtrosPainel).some(filterHasValue);
-
-  // "Aplicar" do painel: os campos de seleção e datas alimentam os filtros já
-  // existentes; os campos de texto ("contém") ficam em filtrosPainel.
-  const aplicarFiltrosPainel = () => {
-    setFiltrosPainel({ ...filterDraft });
-    setFiltroSexo(filterDraft.sexo);
-    setFiltroTipoManejo(filterDraft.tipo);
-    setFiltroStatus(filterDraft.status);
-    setFiltroDataInicio(firstFilterValue(filterDraft.dataInicio));
-    setFiltroDataFim(firstFilterValue(filterDraft.dataFim));
-    setCurrentPage(1);
-  };
+  const hasActiveFilters = Boolean(searchTerm || Object.values(filtrosColuna).some(isMakColumnFilterActive));
 
   // Resultados da pesquisa expansível (ModeloBase1): um item por animal.
   const resultadosPesquisa = useMemo(() => {
@@ -965,9 +828,9 @@ export default function PesagensIndividuais() {
       <ArrowDown className="w-3 h-3 ml-1 text-emerald-600" />;
   };
 
-  const renderQuickFilter = (filterId) => {
-    const filtro = FILTROS_DISPONIVEIS.find((item) => item.id === filterId);
-    if (!filtro) return null;
+  // Uma pílula por coluna visível da tabela, na mesma ordem (ModeloBase1).
+  const renderQuickFilter = (coluna) => {
+    const filterId = coluna.id;
     const listOptions = [...new Set(
       pesagens
         .map((pesagem) => getPesagemColumnValue(pesagem, filterId, documentCounts))
@@ -976,7 +839,7 @@ export default function PesagensIndividuais() {
     return (
       <MakFilterPill
         key={filterId}
-        label={filtro.label}
+        label={coluna.label}
         value={filtrosColuna[filterId] || null}
         filterType={getColumnFilterType(filterId)}
         listOptions={listOptions}
@@ -996,7 +859,7 @@ export default function PesagensIndividuais() {
   return (
     <ModeloBase1PageContainer
       variant="table"
-      className={`d17b-page d17b-list-page d17b-list-page--mother cadastro-emp-scope mg-empresas-scope${showFilters ? " d17b-filters-open" : ""}`}
+      className="d17b-page d17b-list-page d17b-list-page--mother cadastro-emp-scope mg-empresas-scope"
     >
       <ModeloBase1PageHeader
         title="Pesagens Individuais"
@@ -1009,22 +872,6 @@ export default function PesagensIndividuais() {
       <div className="mak-mother-page__toolbar mg-subtoolbar-stack" data-mak-region="toolbar">
         <div data-template-id="action-bar" className="mg-action-bar canva-section flex w-full shrink-0 items-center" style={{ background: "var(--bg-card)" }}>
           <div className="mg-action-bar__actions flex min-w-0 items-center">
-            <div className="mg-action-slot is-visible" style={{ "--slot-width": "28px" }}>
-              <div className="mg-action-bar__filter-slot">
-                <button
-                  type="button"
-                  className={`ios-btn tb-btn tb-btn-ghost tb-btn-filter tb-btn-icon${painelFiltrosAtivo ? " tb-btn-filter-active" : ""}`}
-                  onClick={() => setShowFilters((visible) => !visible)}
-                  title="Filtrar"
-                  aria-label="Filtrar"
-                  aria-pressed={showFilters}
-                  aria-controls="filter-panel"
-                >
-                  <Filter className="h-3.5 w-3.5" />
-                  {painelFiltrosAtivo ? <span className="tb-filter-active-dot" aria-hidden="true" /> : null}
-                </button>
-              </div>
-            </div>
             <div className="mg-action-slot is-visible" style={{ "--slot-width": "122px" }}>
               <Link to={createPageUrl("LancamentoPesagensIndividuais")} className="mg-action-slot__link">
                 <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green" title="Lançar pesagem">
@@ -1084,28 +931,13 @@ export default function PesagensIndividuais() {
       {/* Faixa de pílulas de filtro + configuração de colunas (ModeloBase1). */}
       <div className="mak-mother-page__panel-strip" data-mak-region="panel-strip">
         <MgTablePanelStrip onConfigColumns={() => setShowConfigColunas(true)}>
-          <MakFilterRail
-            hasActiveFilters={hasActiveFilters}
-            onClear={limparFiltros}
-            onConfigureFilters={() => setShowConfigFiltros(true)}
-          >
-            {filtrosOrdem.filter((id) => filtrosVisiveis.includes(id)).map(renderQuickFilter)}
+          <MakFilterRail hasActiveFilters={hasActiveFilters} onClear={limparFiltros}>
+            {colunasOrdenadas.filter((coluna) => !coluna.fixo).map(renderQuickFilter)}
           </MakFilterRail>
         </MgTablePanelStrip>
       </div>
 
       <div className="d17b-list-body">
-        <MgFilterPanel
-          open={showFilters}
-          values={filterDraft}
-          onChange={(key, next) => setFilterDraft((current) => ({ ...current, [key]: next }))}
-          onClose={() => setShowFilters(false)}
-          onClear={limparFiltros}
-          onApply={aplicarFiltrosPainel}
-          textFields={CAMPOS_TEXTO_PAINEL}
-          dateFields={CAMPOS_DATA_PAINEL}
-          selectFields={CAMPOS_SELECAO_PAINEL}
-        />
 
       {/* Tabela */}
       <Card className="d17b-table-card">
@@ -1511,28 +1343,6 @@ export default function PesagensIndividuais() {
           order={colunasOrdem}
           visible={colunasVisiveis}
           onApply={aplicarConfiguracaoColunas}
-        />
-      ) : null}
-
-      {showConfigFiltros ? (
-        <MakColumnConfigDialog
-          open={showConfigFiltros}
-          onOpenChange={setShowConfigFiltros}
-          title="Configurar campos de filtros"
-          description="Escolha os filtros exibidos na barra e organize a ordem de uso."
-          availableLabel="Campos disponíveis"
-          usedLabel="Campos em uso"
-          usedCountSingular="filtro"
-          usedCountPlural="filtros"
-          availableSearchPlaceholder="Procurar campo"
-          usedSearchPlaceholder="Procurar campo em uso"
-          emptyAvailableMessage="Nenhum campo disponível."
-          emptyUsedMessage="Nenhum filtro em uso."
-          ItemIcon={ListFilter}
-          columns={FILTROS_DISPONIVEIS}
-          order={filtrosOrdem}
-          visible={filtrosVisiveis}
-          onApply={aplicarConfiguracaoFiltros}
         />
       ) : null}
 

@@ -41,7 +41,7 @@ export async function reopenWeighingDay(date) {
   return storage.sessoesPesagem.update(existing.id, { status: 'ABERTA', fim: null });
 }
 
-/** Registro do animal na store `animais` (ids de cadastro, nascimento, categoria); null quando não existe. */
+/** Registro do animal na store `animais` (ids de cadastro, categoria, era); null quando não existe. */
 export async function getAnimalRecord(animalId) {
   if (!animalId) return null;
   try {

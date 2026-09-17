@@ -9,8 +9,9 @@
 import { filterLegacyPayload, storageRecordToViewModel } from '../domain/weighingMapper.js';
 import storage from '../../../storage/storageAdapter.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
-import { estimateBirth, isOpenSessionStatus, normalizeName, situacaoFromExitReason } from '../../../storage/indexedDb/normalize.js';
+import { isOpenSessionStatus, normalizeName, situacaoFromExitReason } from '../../../storage/indexedDb/normalize.js';
 import { STORES } from '../../../storage/indexedDb/schema.js';
+import { eraOfCategory, suggestCategory } from '../../operations/domain/categorySuggestion.js';
 
 const EMPRESA_ID = 'local';
 // Nome do campo do operador da sessão segue o índice declarado no esquema
@@ -104,8 +105,7 @@ function newSession({ data, operador, ts }) {
   };
 }
 
-function newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao, dataCadastro, origem, ts }) {
-  const nascimento = estimateBirth(dataCadastro, ui.era);
+function newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao, origem, ts }) {
   return {
     id: animalId,
     empresa_id: ui.empresa_id || EMPRESA_ID,
@@ -119,10 +119,12 @@ function newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao, dat
     marca: ui.marca || null,
     marca_id: marcaId,
     raca_id: racaId,
-    categoria_id: null,
+    categoria_id: ui.categoria_id || null,
+    // Automática salvo escolha manual no lançamento: o Manejo recalcula pelo peso.
+    categoria_automatica: ui.categoria_automatica !== false,
     propriedade_id: propriedadeId,
-    nascimento,
-    nascimento_estimado: Boolean(nascimento),
+    nascimento: null,
+    nascimento_estimado: false,
     situacao,
     ...(origem ? { origem } : {}),
     created_at: ts,
@@ -180,6 +182,19 @@ async function validateAnimalChronology(db, { animalId, data, ui, ignoredEntryId
   }
 }
 
+// Pesagem de animal com categoria automática: grava no payload a categoria e a era
+// da faixa de peso daquele momento (a relação mostra a era de cada pesagem).
+async function stampAutomaticCategory(db, entry, { automatic, sexo }) {
+  const ui = entry.legacy_payload;
+  if (!automatic || !ui || typeof ui !== 'object') return;
+  const categorias = await db.table('categoriasAnimal').toArray();
+  const categoria = suggestCategory({ categorias, sexo, peso: entry.peso_kg ?? ui.peso });
+  ui.categoria_id = categoria?.id ?? null;
+  ui.categoria_automatica = true;
+  const era = eraOfCategory(categoria);
+  if (era) ui.era = era;
+}
+
 async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date().toISOString()) {
   if (!animalId) return null;
   const animal = await db.table('animais').where('id').equals(animalId).first();
@@ -196,7 +211,16 @@ async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date()
     .sort((left, right) => String(left.inicio || '').localeCompare(String(right.inicio || '')));
   const currentLot = openLots.at(-1) || null;
   const inactive = Boolean(latestExit);
+  const categoryChanges = {};
+  if (animal.categoria_automatica !== false && latest) {
+    const categorias = await db.table('categoriasAnimal').toArray();
+    const categoria = suggestCategory({ categorias, sexo: animal.sexo, peso: latest.peso_kg ?? latestUi.peso });
+    categoryChanges.categoria_id = categoria?.id ?? null;
+    const era = eraOfCategory(categoria);
+    if (era) categoryChanges.era = era;
+  }
   const changes = {
+    ...categoryChanges,
     // Enum v7 (ADR-028): derivado do motivo da saída definitiva; sem motivo mapeável → INATIVO.
     situacao: inactive ? situacaoFromExitReason(exitUi.motivo_saida) : 'ATIVO',
     data_saida: inactive ? latestExit.data_pesagem : null,
@@ -262,7 +286,7 @@ export async function createEntry(payload) {
 
   await validateAnimalChronology(db, { animalId, data: payload.data_pesagem, ui });
 
-  const tableNames = ['pesagens', 'auditoria', 'sessoesPesagem', 'animalLotes'];
+  const tableNames = ['pesagens', 'auditoria', 'sessoesPesagem', 'animalLotes', 'categoriasAnimal'];
   if (animalId) tableNames.push('animais', 'movimentosAnimais');
   if (isRegistration) tableNames.push('animalIdentificadores', 'marcas', 'racas', 'propriedades');
   if (movementType) tableNames.push('movimentosAnimais');
@@ -282,6 +306,10 @@ export async function createEntry(payload) {
       entry.sessao_id = sessionId;
     }
     if (await db.table('pesagens').where('id').equals(entryId).first()) throw new Error(`Pesagem duplicada (${entryId})`);
+    const existingForCategory = !isRegistration && animalId ? await db.table('animais').where('id').equals(animalId).first() : null;
+    await stampAutomaticCategory(db, entry, isRegistration
+      ? { automatic: ui.categoria_automatica !== false, sexo: ui.sexo }
+      : { automatic: Boolean(existingForCategory) && existingForCategory.categoria_automatica !== false, sexo: existingForCategory?.sexo });
     await db.table('pesagens').add(entry);
     if (isRegistration) {
       const existingAnimal = await db.table('animais').where('id').equals(animalId).first();
@@ -289,7 +317,7 @@ export async function createEntry(payload) {
         const marcaId = await resolveRegistryId(db, 'marcas', ui.marca, ts, { fallbackToDefault: true });
         const racaId = await resolveRegistryId(db, 'racas', ui.raca, ts);
         const propriedadeId = await findDefaultRegistryId(db, 'propriedades');
-        await db.table('animais').add(newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao: 'ATIVO', dataCadastro: payload.data_pesagem, origem: null, ts }));
+        await db.table('animais').add(newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao: 'ATIVO', origem: null, ts }));
         await db.table('animalIdentificadores').add(newVisualIdentifier({ animalId, ui, marcaId, inicio: payload.data_pesagem, ts }));
       }
     }
@@ -343,11 +371,16 @@ export async function updateEntry(id, payload) {
   const updated = { ...existing, ...payload, id, updated_by_user_id: actorUserId(), updated_at: ts };
   const ui = typeof updated.legacy_payload === 'object' ? updated.legacy_payload : {};
   await validateAnimalChronology(db, { animalId: updated.animal_id, data: updated.data_pesagem, ui, ignoredEntryId: id });
-  const tables = ['pesagens', 'animais', 'animalLotes', 'auditoria', 'marcas', 'racas'].map((name) => db.table(name));
+  const tables = ['pesagens', 'animais', 'animalLotes', 'auditoria', 'marcas', 'racas', 'categoriasAnimal'].map((name) => db.table(name));
   await db.transaction('rw', tables, async () => {
+    const animalAtual = updated.animal_id ? await db.table('animais').where('id').equals(updated.animal_id).first() : null;
+    const isRegistration = ui.tipo_manejo === 'Cadastro';
+    await stampAutomaticCategory(db, updated, isRegistration
+      ? { automatic: ui.categoria_automatica !== false, sexo: ui.sexo ?? animalAtual?.sexo }
+      : { automatic: Boolean(animalAtual) && animalAtual.categoria_automatica !== false, sexo: animalAtual?.sexo });
     await db.table('pesagens').update(existing.localId, updated);
-    if (ui.tipo_manejo === 'Cadastro' && updated.animal_id) {
-      const animal = await db.table('animais').where('id').equals(updated.animal_id).first();
+    if (isRegistration && updated.animal_id) {
+      const animal = animalAtual;
       if (animal) {
         const marcaId = ui.marca ? await resolveRegistryId(db, 'marcas', ui.marca, ts) : animal.marca_id ?? null;
         const racaId = ui.raca ? await resolveRegistryId(db, 'racas', ui.raca, ts) : animal.raca_id ?? null;
@@ -360,6 +393,8 @@ export async function updateEntry(id, payload) {
           marca: ui.marca ?? animal.marca,
           marca_id: marcaId,
           raca_id: racaId,
+          categoria_id: ui.categoria_id ?? animal.categoria_id ?? null,
+          categoria_automatica: ui.categoria_automatica !== undefined ? ui.categoria_automatica !== false : animal.categoria_automatica !== false,
           updated_at: ts,
         });
       }
@@ -382,7 +417,8 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
   storage.assertWritable('Importação de pesagens');
   const db = await storage.ensureReady();
   const ts = new Date().toISOString();
-  const tableNames = ['pesagens', 'animais', 'animalIdentificadores', 'movimentosAnimais', 'animalLotes', 'sessoesPesagem', 'auditoria', 'importacoes', 'marcas', 'racas', 'propriedades'];
+  // categoriasAnimal por último: só a projeção do animal a lê (fora da desestruturação abaixo).
+  const tableNames = ['pesagens', 'animais', 'animalIdentificadores', 'movimentosAnimais', 'animalLotes', 'sessoesPesagem', 'auditoria', 'importacoes', 'marcas', 'racas', 'propriedades', 'categoriasAnimal'];
   const tables = tableNames.map((name) => db.table(name));
   const [weighingTable, animalTable, identifierTable, movementTable, animalLotTable, sessionTable, auditTable, importTable, marcaTable, racaTable, propriedadeTable] = tables;
   const identityKey = (ui) => `${normalized(ui.numero_animal)}::${normalized(ui.marca)}`;
@@ -499,7 +535,6 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
           racaId,
           propriedadeId: propriedadePadraoId,
           situacao: ui.tipo_manejo === 'Saída' ? situacaoFromExitReason(ui.motivo_saida) : 'ATIVO',
-          dataCadastro: payload.data_pesagem,
           origem: 'importacao',
           ts,
         });
@@ -646,7 +681,7 @@ export async function bulkUpdateEntries(items, { audit = true, origin = 'edicao-
   const affectedAnimals = new Set();
   const projectionAnimals = new Set();
   let updatedCount = 0;
-  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalLotes'), db.table('auditoria'), async () => {
+  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalLotes'), db.table('auditoria'), db.table('categoriasAnimal'), async () => {
     for (const item of items) {
       const rows = await db.table('pesagens').where('id').equals(item.id).toArray();
       const existing = [...rows].reverse().find((row) => !row.deleted_at);
@@ -692,7 +727,7 @@ export async function bulkDeleteEntries(ids) {
   const ts = new Date().toISOString();
   let removed = 0;
   const affectedAnimals = new Set();
-  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalLotes'), db.table('auditoria'), async () => {
+  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalLotes'), db.table('auditoria'), db.table('categoriasAnimal'), async () => {
     for (const id of ids) {
       const rows = await db.table('pesagens').where('id').equals(id).toArray();
       const existing = [...rows].reverse().find((row) => !row.deleted_at);

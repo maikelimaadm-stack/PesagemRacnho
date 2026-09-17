@@ -11,6 +11,8 @@ export const LEGACY_PAYLOAD_ALLOWLIST = Object.freeze([
   'comprador', 'destino_venda', 'valor_venda_total', 'valor_arroba', 'rendimento_carcaca', 'peso_carcaca_estimado',
   'quantidade_arrobas', 'frigorifico', 'valor_arroba_abate', 'valor_total_abate', 'embarque_id', 'embarque_nome',
   'documento_embarque_id', 'documento_tipo', 'documento_numero', 'motorista_nome', 'placa_carreta',
+  // Categoria do animal no momento da pesagem (automática pelo peso ou escolhida à mão).
+  'categoria_id', 'categoria_automatica',
 ]);
 
 // Proibidas em gravação nova: redundantes com colunas/timestamps do registro

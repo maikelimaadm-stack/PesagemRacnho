@@ -4,7 +4,7 @@
 // o serviço do cadastro (list/get/create/update/deactivate/activate/remove/
 // setDefault?/countUsage?). A página não conhece stores nem chaves de configuração.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Columns3, FileText, Filter, LayoutDashboard, ListFilter, RefreshCw, Star, TableProperties, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Columns3, FileText, LayoutDashboard, ListFilter, RefreshCw, Star, TableProperties, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { ensureEmpresaId } from '@/api/db';
 import { Button } from '@/components/ui/button';
@@ -16,7 +16,6 @@ import MakFilterRail from '@/components/mak/MakFilterRail';
 import MakTableSelectCheck from '@/components/mak/MakTableSelectCheck';
 import MakTh from '@/components/mak/MakTh';
 import MakColumnConfigDialog from '@/components/mak/MakColumnConfigDialog';
-import MgFilterPanel from '@/components/mak/MgFilterPanel';
 import MgDesktopSearch from '@/components/mak/MgDesktopSearch';
 import MgSpeedDialMenu from '@/components/mak/MgSpeedDialMenu';
 import MgTablePanelStrip from '@/components/mak/MgTablePanelStrip';
@@ -285,7 +284,6 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
   const [usage, setUsage] = useState({});
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState(null);
-  const [filterOpenRequest, setFilterOpenRequest] = useState(0);
   const [columnFilters, setColumnFilters] = useState({});
   const [columnMenuOpen, setColumnMenuOpen] = useState(null);
   const [selected, setSelected] = useState([]);
@@ -302,9 +300,6 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
   const [deleteRequest, setDeleteRequest] = useState([]);
   // Tela Mãe do ModeloBase1: painel lateral de filtros, pesquisa expansível,
   // "Mais opções" e configuração de colunas (preferência local por página).
-  const [showFilters, setShowFilters] = useState(false);
-  const [filterDraft, setFilterDraft] = useState({});
-  const [panelFilters, setPanelFilters] = useState({});
   const [searchInput, setSearchInput] = useState('');
   const [moreOpen, setMoreOpen] = useState(false);
   const [showColumnConfig, setShowColumnConfig] = useState(false);
@@ -388,28 +383,7 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
     }
     return matchesMakColumnFilter(cellText(column, record), filter, column.filterType || 'text');
   }, [fieldsById, cellText]);
-
-  const panelTextFields = useMemo(() => listColumns
-    .filter((column) => { const campo = fieldsById.get(column.id); return !campo || campo.tipo === 'texto' || Boolean(column.referencia) || Boolean(campo.referencia); })
-    .map((column) => ({ key: column.id, label: column.label })), [listColumns, fieldsById]);
-  const panelSelectFields = useMemo(() => [
-    ...(tabs.length > 1 ? [{ key: '_typeLabel', label: 'Tipo de cadastro', options: [{ value: 'Todos', label: 'Todos' }, ...tabs.map((item) => ({ value: item.label, label: item.label }))] }] : []),
-    ...listColumns.flatMap((column) => {
-      const campo = fieldsById.get(column.id);
-      if (!campo || column.referencia || campo.referencia) return [];
-      if (campo.tipo === 'booleano') {
-        const labels = campo.id === 'ativo' ? ['Ativo', 'Inativo'] : ['Sim', 'Não'];
-        return [{ key: column.id, label: column.label, options: [{ value: 'Todos', label: 'Todos' }, ...labels.map((label) => ({ value: label, label }))] }];
-      }
-      if ((campo.tipo === 'select' || campo.tipo === 'multiselect') && campo.opcoes?.length) {
-        return [{ key: column.id, label: column.label, options: [{ value: 'Todos', label: 'Todos' }, ...campo.opcoes.map((option) => ({ value: option.label, label: option.label }))] }];
-      }
-      return [];
-    }),
-  ], [tabs, listColumns, fieldsById]);
-  const panelFiltersActive = Object.values(panelFilters).some((value) => Array.isArray(value) && value.length > 0);
-  const applyPanelFilters = () => { setPanelFilters({ ...filterDraft }); setCurrentPage(1); };
-  const clearPanelFilters = () => { setFilterDraft({}); setPanelFilters({}); setCurrentPage(1); };
+  const clearFilters = () => { setTypeFilter(null); setColumnFilters({}); setCurrentPage(1); };
 
   // Contagem de uso da lista em lotes (só para stores com contagem por índice).
   const loadUsage = useCallback(async (item, rows) => {
@@ -452,18 +426,8 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
   const filtered = useMemo(() => records.filter((record) => {
     if (isMakColumnFilterActive(typeFilter) && !matchesMakColumnFilter(record._typeLabel, typeFilter, 'text')) return false;
     if ([...listColumns, ...(usageAvailable ? [USAGE_COLUMN] : [])].some((column) => isMakColumnFilterActive(columnFilters[column.id]) && !matchesColumnFilter(column, record, columnFilters[column.id]))) return false;
-    for (const [key, values] of Object.entries(panelFilters)) {
-      if (!Array.isArray(values) || !values.length) continue;
-      const wanted = values[0];
-      if (key === '_typeLabel') { if (record._typeLabel !== wanted) return false; continue; }
-      const column = listColumns.find((item) => item.id === key);
-      const campo = fieldsById.get(key);
-      const text = column ? cellText(column, record) : String(record[key] ?? '');
-      if (campo && (campo.tipo === 'booleano' || campo.tipo === 'select') && !campo.referencia) { if (text !== wanted) return false; continue; }
-      if (!normalizeSearchQuery(text).includes(normalizeSearchQuery(wanted))) return false;
-    }
     return matchesSearch(record, search);
-  }), [records, search, typeFilter, listColumns, columnFilters, panelFilters, usageAvailable, matchesColumnFilter, matchesSearch, fieldsById, cellText]);
+  }), [records, search, typeFilter, listColumns, columnFilters, usageAvailable, matchesColumnFilter, matchesSearch]);
   const searchResults = useMemo(() => {
     const term = searchInput.trim();
     if (!term) return { items: [], total: 0 };
@@ -623,22 +587,6 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
           <div className="mak-mother-page__toolbar mg-subtoolbar-stack" data-mak-region="toolbar">
             <div data-template-id="action-bar" className="mg-action-bar canva-section flex w-full shrink-0 items-center" style={{ background: 'var(--bg-card)' }}>
               <div className="mg-action-bar__actions flex min-w-0 items-center">
-                <div className="mg-action-slot is-visible" style={{ '--slot-width': '28px' }}>
-                  <div className="mg-action-bar__filter-slot">
-                    <button
-                      type="button"
-                      className={`ios-btn tb-btn tb-btn-ghost tb-btn-filter tb-btn-icon${panelFiltersActive ? ' tb-btn-filter-active' : ''}`}
-                      onClick={() => setShowFilters((visible) => !visible)}
-                      title="Filtrar"
-                      aria-label="Filtrar"
-                      aria-pressed={showFilters}
-                      aria-controls="filter-panel"
-                    >
-                      <Filter className="h-3.5 w-3.5" />
-                      {panelFiltersActive ? <span className="tb-filter-active-dot" aria-hidden="true" /> : null}
-                    </button>
-                  </div>
-                </div>
                 <div className={`mg-action-slot${canWrite ? ' is-visible' : ''}`} style={{ '--slot-width': '64px' }} aria-hidden={!canWrite}>
                   <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green aux-new-button" onClick={() => openNew()} title="Novo" tabIndex={canWrite ? 0 : -1}>Novo</button>
                 </div>
@@ -683,9 +631,13 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
                 </div>
                 <ModeloBase1ViewSeg
                   mode={listViewMode}
-                  canOpenRecord={selected.length === 1}
+                  canOpenRecord={filtered.length > 0 || canWrite}
                   onTable={() => setListViewMode('tabela')}
-                  onRecord={() => selected.length === 1 && openEdit(selectedRecords[0])}
+                  onRecord={() => {
+                    const record = selected.length === 1 ? selectedRecords[0] : (paginated[0] || filtered[0]);
+                    if (record) openEdit(record);
+                    else if (canWrite) openNew();
+                  }}
                   onCards={() => setListViewMode('cards')}
                 />
                 <div className="relative">
@@ -695,7 +647,7 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
                     items={[
                       { id: 'atualizar', label: 'Atualizar', icon: RefreshCw, onClick: refresh },
                       { id: 'colunas', label: 'Configurar colunas', icon: Columns3, onClick: () => setShowColumnConfig(true) },
-                      { id: 'tipos', label: 'Mostrar todos os tipos', icon: ListFilter, onClick: () => { setTypeFilter(null); setColumnFilters({}); clearPanelFilters(); } },
+                      { id: 'tipos', label: 'Mostrar todos os tipos', icon: ListFilter, onClick: clearFilters },
                     ]}
                   />
                 </div>
@@ -705,39 +657,36 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
           <div className="mak-mother-page__panel-strip" data-mak-region="panel-strip">
             <MgTablePanelStrip onConfigColumns={() => setShowColumnConfig(true)}>
               <MakFilterRail
-                hasActiveFilters={isMakColumnFilterActive(typeFilter) || Object.values(columnFilters).some(isMakColumnFilterActive) || panelFiltersActive}
-                onClear={() => { setTypeFilter(null); setColumnFilters({}); clearPanelFilters(); }}
-                onConfigureFilters={() => setFilterOpenRequest((request) => request + 1)}
+                hasActiveFilters={isMakColumnFilterActive(typeFilter) || Object.values(columnFilters).some(isMakColumnFilterActive)}
+                onClear={clearFilters}
               >
-                {tabs.length > 1 ? (
-                  <MakFilterPill
-                    label="Tipo de cadastro"
-                    value={typeFilter}
-                    filterType="text"
-                    listOptions={tabs.map((item) => item.label)}
-                    openRequest={filterOpenRequest}
-                    onChange={(value) => { setTypeFilter(value); setCurrentPage(1); }}
-                  />
-                ) : null}
-                {listColumns.map((column) => (
-                  <MakFilterPill
-                    key={column.id}
-                    label={column.label}
-                    value={columnFilters[column.id] || null}
-                    filterType="text"
-                    listOptions={columnListOptions(column)}
-                    openRequest={tabs.length === 1 && column.id === listColumns[0]?.id ? filterOpenRequest : 0}
-                    onChange={(value) => { setColumnFilters((current) => ({ ...current, [column.id]: value })); setCurrentPage(1); }}
-                  />
-                ))}
-                {usageAvailable ? (
-                  <MakFilterPill
-                    label={USAGE_COLUMN.label}
-                    value={columnFilters._uso || null}
-                    filterType="number"
-                    onChange={(value) => { setColumnFilters((current) => ({ ...current, _uso: value })); setCurrentPage(1); }}
-                  />
-                ) : null}
+                {/* Uma pílula por coluna visível da tabela, na mesma ordem (ModeloBase1). */}
+                {tableColumns.map((column) => {
+                  // Acima do limite a contagem não é calculada: sem pílula de "Em uso".
+                  if (column.id === '_uso' && !usageAvailable) return null;
+                  if (column.id === '_typeLabel') {
+                    return (
+                      <MakFilterPill
+                        key="_typeLabel"
+                        label={column.label}
+                        value={typeFilter}
+                        filterType="text"
+                        listOptions={tabs.map((item) => item.label)}
+                        onChange={(value) => { setTypeFilter(value); setCurrentPage(1); }}
+                      />
+                    );
+                  }
+                  return (
+                    <MakFilterPill
+                      key={column.id}
+                      label={column.label}
+                      value={columnFilters[column.id] || null}
+                      filterType={column.id === '_uso' ? 'number' : 'text'}
+                      listOptions={column.id === '_uso' ? [] : columnListOptions(column)}
+                      onChange={(value) => { setColumnFilters((current) => ({ ...current, [column.id]: value })); setCurrentPage(1); }}
+                    />
+                  );
+                })}
               </MakFilterRail>
             </MgTablePanelStrip>
           </div>
@@ -823,16 +772,6 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
           </form>
         </section>
       ) : <div className="d17b-list-body">
-        <MgFilterPanel
-          open={showFilters}
-          values={filterDraft}
-          onChange={(key, next) => setFilterDraft((current) => ({ ...current, [key]: next }))}
-          onClose={() => setShowFilters(false)}
-          onClear={clearPanelFilters}
-          onApply={applyPanelFilters}
-          textFields={panelTextFields}
-          selectFields={panelSelectFields}
-        />
         <section className={`d17b-table-card aux-table-card${listViewMode === 'cards' ? ' aux-cards-card' : ''}`}>
         {listViewMode === 'cards' ? (
           <div className="mg-view-panel d17c-table-scroll aux-table-scroll aux-cards-scroll" aria-label="Cadastros em cartões">

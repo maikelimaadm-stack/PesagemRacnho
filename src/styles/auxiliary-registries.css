@@ -100,7 +100,7 @@ html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17e-selection-acti
   max-height: 36px !important;
   border: 1px solid var(--d17b-border, #e1e6eb) !important;
   border-top: 0 !important;
-  border-radius: 0 0 var(--d17b-radius-card, 12px) var(--d17b-radius-card, 12px) !important;
+  border-radius: 0 0 16px 16px !important;
   background: var(--bg-card, #fff) !important;
   box-shadow: var(--d17b-card-shadow, 0 2px 7px rgba(15, 23, 42, .05)) !important;
   opacity: 1 !important;
@@ -115,14 +115,15 @@ html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17e-selection-acti
 .aux-context-panel {
   display: flex !important;
   width: 100%;
-  height: 35px !important;
-  min-height: 35px !important;
-  max-height: 35px !important;
-  padding: 0 8px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+  padding: 4px 12px !important;
+  gap: 8px;
   border-radius: inherit;
 }
 .aux-context-panel .mg-context-panel__nav { max-width: 320px; opacity: 1; overflow: visible; pointer-events: auto; }
-.aux-context-panel .mg-nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 26px; min-width: 26px; height: 26px; padding: 0; border: 0; border-radius: 999px; background: #f1f3f4; color: #5c7088; }
+.aux-context-panel .mg-nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; min-width: 28px; height: 28px; padding: 0; border: 0; border-radius: 999px; background: #f1f3f4; color: #9ca3af; }
 .aux-context-panel .mg-nav-btn:hover:not(:disabled) { background: #e8edf1; color: #25354a; }
 .aux-context-panel .mg-nav-btn:disabled { opacity: .38; cursor: not-allowed; }
 .aux-context-panel .mg-nav-btn svg { width: 13px; height: 13px; }
@@ -155,7 +156,7 @@ html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page
 .aux-modelobase1-form,
 .aux-record-mode { display: flex; flex: 1; flex-direction: column; min-height: 0; width: 100%; overflow: hidden; background: var(--bg-page, #f1f3f6); }
 .aux-record-mode { --aux-card-gap: 12px; }
-.aux-record-tabs { flex: 0 0 var(--mg-toolbar-row-height, 36px); min-height: var(--mg-toolbar-row-height, 36px); max-height: var(--mg-toolbar-row-height, 36px); padding: 0 12px !important; background: var(--bg-page, #f1f3f6) !important; border-bottom: 1px solid var(--mg-panel-tabs-strip-divider-color, #d0d5dc); }
+.aux-record-tabs { flex: 0 0 36px; min-height: 36px; max-height: 36px; padding: 0 12px !important; background: var(--bg-page, #f1f3f6) !important; border-bottom: 1px solid var(--mg-panel-tabs-strip-divider-color, #d0d5dc); }
 .aux-record-tabs .mg-panel-tabs-rail,
 .aux-record-tabs .mg-panel-tabs-rail__viewport,
 .aux-record-tabs .seg-control { width: 100%; height: 100%; }

@@ -3,6 +3,49 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.2.0] — 2026-09-15
+
+Marco 1.2.0 do Programa Pesagens Individuais 2.0 (Fase 1). Esquema Dexie **7**,
+backup **formato 3** e login local. Instalador de diagnóstico (não assinado) em
+`release-unsigned/`; teste físico em máquina limpa NÃO EXECUTADO. Notas completas em
+`docs/release/1.2.0/RELEASE-NOTES.md`.
+
+### Added
+- Login local com usuários e perfis (ADMIN, GESTOR, OPERADOR): configuração inicial do
+  administrador, bloqueio por inatividade, bloqueio temporário após tentativas erradas e
+  troca de senha obrigatória na primeira entrada — tudo offline, sem senha padrão.
+- Cadastros mestres próprios (Marcas, Raças, Categorias, Parceiros, Propriedades e Causas
+  de Morte) com nome único, item padrão, inativação e contagem de uso.
+- Identidade do animal por marca cadastrada; migração automática e resumível da 1.1.17,
+  com backup conferido antes de qualquer alteração.
+- Backup formato 3 (com cadastros e usuários), limpeza em dois níveis e auditoria por
+  usuário em lançamentos, backups, restaurações e limpezas.
+
+### Changed
+- Relação de pesagens, cadastros e tela de login alinhados ao ModeloBase1 por estilos
+  computados: faixa de filtros, tipografia e grade (cabeçalho branco de 12 px, linhas de
+  26 px) e moldura da barra de ações. A tabela do Lançamento passou a usar a mesma grade.
+- As pílulas de filtro passaram a ser as colunas visíveis da tabela; a configuração
+  separada de filtros deixou de existir (permanece a de colunas).
+- Menu reorganizado em Operação · Cadastros · Sistema, filtrado pelo perfil.
+- Categoria do animal passa a ser **automática pelo peso**: cada categoria tem sexo (Macho ou
+  Fêmea), faixa de peso (mínimo/máximo) e era. No Cadastro, "Automático" escolhe, entre as
+  categorias do sexo, a de menor ordem cuja faixa contém o peso; a era gravada na pesagem vem
+  da categoria. Nas pesagens de Manejo o animal automático é reclassificado pelo novo peso;
+  categoria escolhida à mão não muda. A escolha e a origem ficam gravadas no animal e em cada
+  pesagem (`categoria_id`, `categoria_automatica`).
+- Formulário de Cadastro do Lançamento na ordem Data, Sexo, Categoria, Raça, Marca,
+  Identificação, Peso e Observação; a lista de categorias mostra só as do sexo escolhido.
+
+### Removed
+- Painel lateral de filtros da Relação e dos cadastros (filtragem por pílulas e menu de
+  coluna).
+- Data de nascimento (e "nascimento estimado") do Lançamento, do diálogo SN e da migração:
+  nada é mais estimado a partir da era. Saíram também as faixas de idade em meses das
+  categorias; as categorias padrão chegam sem faixa de peso e era, para o responsável definir.
+- Tela de Configurações de Sanidade, tabela `lotes`, diálogo legado "Gerenciar saídas" e
+  as configurações `cadastros-auxiliares:*` (convertidas nos cadastros).
+
 ## [1.1.18] — 2026-09-14
 
 Marco 1.1.18 do Programa Master de Evolução (ADR-047): baseline verde, contrato de

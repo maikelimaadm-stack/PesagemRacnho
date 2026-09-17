@@ -65,11 +65,12 @@ export function payloadFromForm(definition, form) {
 
 // Cards do registro: principais / adicionais / contato / observações.
 export function groupFields(definition) {
-  const observation = definition.campos.filter((campo) => OBSERVATION_FIELD_IDS.has(campo.id));
-  const contact = definition.campos.filter((campo) => CONTACT_FIELD_IDS.has(campo.id));
-  const additional = definition.campos.filter((campo) => ADDITIONAL_FIELD_IDS.has(campo.id));
+  const { campos } = definition;
+  const observation = campos.filter((campo) => OBSERVATION_FIELD_IDS.has(campo.id));
+  const contact = campos.filter((campo) => CONTACT_FIELD_IDS.has(campo.id));
+  const additional = campos.filter((campo) => ADDITIONAL_FIELD_IDS.has(campo.id));
   const classified = new Set([...observation, ...contact, ...additional].map((campo) => campo.id));
-  const primary = definition.campos.filter((campo) => !classified.has(campo.id));
+  const primary = campos.filter((campo) => !classified.has(campo.id));
   return { primary, additional, contact, observation };
 }
 

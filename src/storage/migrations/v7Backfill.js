@@ -7,7 +7,7 @@
 // na MESMA transação do lote. Fechar o app no meio e reabrir continua do
 // checkpoint sem duplicar nada.
 import { ANIMAL_SITUACOES, IDENTIFICADOR_TIPOS, SESSAO_STATUS, STORE_NAMES } from '../indexedDb/schema.js';
-import { SESSION_OPERATOR_FIELD, civilDateFromIso, estimateBirth, normalizeName, normalizeSessionStatus, situacaoFromExitReason } from '../indexedDb/normalize.js';
+import { SESSION_OPERATOR_FIELD, civilDateFromIso, normalizeName, normalizeSessionStatus, situacaoFromExitReason } from '../indexedDb/normalize.js';
 import { LEGACY_PAYLOAD_FORBIDDEN } from '../../modules/weighing/domain/weighingMapper.js';
 // Seeds: FONTE ÚNICA em catalog/domain/seeds.js (B2 raça padrão, B3 categorias, B6 propriedade).
 import { CATEGORIAS_SEED, PROPRIEDADE_PADRAO_SEED, RACA_PADRAO_SEED } from '../../modules/catalog/domain/seeds.js';
@@ -19,8 +19,6 @@ import {
   readMigrationState,
   writeMigrationState,
 } from './migrationState.js';
-
-export { estimateBirth };
 
 export const V7_VERSION = 7;
 export const BATCH_SIZE = 500;
@@ -281,8 +279,9 @@ async function runB3(ctx) {
     nome: seed.nome,
     nome_normalizado: normalizeName(seed.nome),
     sexo_aplicavel: seed.sexo_aplicavel,
-    idade_min_meses: seed.idade_min_meses ?? null,
-    idade_max_meses: seed.idade_max_meses ?? null,
+    peso_min_kg: seed.peso_min_kg ?? null,
+    peso_max_kg: seed.peso_max_kg ?? null,
+    era: seed.era ?? null,
     ordem: seed.ordem,
   }));
   if (records.length) await ctx.db.table('categoriasAnimal').bulkAdd(records);
@@ -503,33 +502,11 @@ async function runCursorStep(ctx, step, storeName, prepare) {
   return { done: true };
 }
 
-// Data civil de referência do nascimento estimado (ADR-028): a data_pesagem do
-// evento Cadastro do animal (índice animal_id; a mais antiga quando houver mais
-// de um), só então created_at e, por fim, ultima_pesagem_data.
-export async function collectRegistrationDates(db) {
-  const dates = new Map();
-  await db.table('pesagens').each((row) => {
-    if (row.deleted_at || !row.animal_id) return;
-    const ui = payloadObject(row) || {};
-    if ((ui.tipo_manejo ?? row.tipo_pesagem) !== 'Cadastro') return;
-    const date = civilDateFromIso(row.data_pesagem);
-    if (!date) return;
-    const current = dates.get(row.animal_id);
-    if (!current || date < current) dates.set(row.animal_id, date);
-  });
-  return dates;
-}
-
-export function birthReferenceDate(row, registrationDates) {
-  return registrationDates?.get(row.id) || civilDateFromIso(row.created_at) || civilDateFromIso(row.ultima_pesagem_data) || null;
-}
-
 async function prepareB7(ctx) {
   const resolveMarca = await buildBrandResolver(ctx.db);
   const racas = await activeRows(ctx.db, 'racas');
   const racaByNorm = new Map(racas.map((row) => [row.nome_normalizado, row.id]));
   const propriedadePadrao = (await activeRows(ctx.db, 'propriedades')).find((row) => row.tipo === 'PROPRIA' && row.padrao) || null;
-  const registrationDates = await collectRegistrationDates(ctx.db);
   return (row, counters) => {
     const changes = {};
     if (row.marca_id == null) {
@@ -541,21 +518,18 @@ async function prepareB7(ctx) {
       if (racaId) changes.raca_id = racaId;
     }
     if (row.categoria_id === undefined) changes.categoria_id = null;
+    // Animais existentes entram na categoria automática (pelo peso) até alguém escolher à mão.
+    if (row.categoria_automatica === undefined) changes.categoria_automatica = true;
     if (row.propriedade_id == null && propriedadePadrao) changes.propriedade_id = propriedadePadrao.id;
     const { situacao, semMotivo } = normalizeAnimalSituacao(row);
     if (row.situacao !== situacao) {
       changes.situacao = situacao;
       if (semMotivo) ctx.report.saidasSemMotivo += 1;
     }
-    if (row.nascimento === undefined || row.nascimento === null) {
-      const estimated = estimateBirth(birthReferenceDate(row, registrationDates), row.era);
-      if (estimated) {
-        changes.nascimento = estimated;
-        changes.nascimento_estimado = true;
-      } else if (row.nascimento === undefined) {
-        changes.nascimento = null;
-        changes.nascimento_estimado = false;
-      }
+    // Nascimento não é usado (decisão de 16/09/2026): nunca é estimado a partir da era.
+    if (row.nascimento === undefined) {
+      changes.nascimento = null;
+      changes.nascimento_estimado = false;
     }
     if (!Object.keys(changes).length) return null;
     changes.updated_at = nowIso();

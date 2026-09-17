@@ -12,7 +12,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { tmpdir } from 'os';
 import { dirname, join, resolve } from 'path';
 import { fileURLToPath } from 'url';
-import { RELEASE_MANIFEST_VERSION as VERSION_INFO_MANIFEST_VERSION } from '../src/versioning/versionInfo.js';
+import { DATA_BUILD_ID, DB_SCHEMA_VERSION, RELEASE_MANIFEST_VERSION as VERSION_INFO_MANIFEST_VERSION } from '../src/versioning/versionInfo.js';
 import {
   RELEASE_MANIFEST_VERSION as GENERATOR_MANIFEST_VERSION,
   buildReleaseManifest,
@@ -166,6 +166,9 @@ export function verifyVersionContract(root, { checkManifestVersionAgreement = tr
   if (checkManifestVersionAgreement) {
     record('f.releaseManifestVersion', VERSION_INFO_MANIFEST_VERSION === GENERATOR_MANIFEST_VERSION,
       `versionInfo.js = ${VERSION_INFO_MANIFEST_VERSION}, generate-release-manifest.mjs = ${GENERATOR_MANIFEST_VERSION}`);
+    // (g) DATA_BUILD_ID é literal (o gate de pacote o procura no bundle) e segue o esquema vigente.
+    record('g.dataBuildId', DATA_BUILD_ID === `schema-v${DB_SCHEMA_VERSION}`,
+      `DATA_BUILD_ID = "${DATA_BUILD_ID}" (esperado "schema-v${DB_SCHEMA_VERSION}")`);
   }
 
   return { ok: errors.length === 0, version, checks, errors };

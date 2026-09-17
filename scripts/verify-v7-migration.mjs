@@ -20,7 +20,7 @@ import { deleteDbForTests, ensureStorageReady, resetDbForTests } from '../src/st
 import * as coordinator from '../src/storage/migrations/migrationCoordinator.js';
 import { MIGRATION_STATUS, clearWriteBlock, isWriteBlocked, readMigrationState } from '../src/storage/migrations/migrationState.js';
 import { BATCH_SIZE, V7_STEPS } from '../src/storage/migrations/v7Backfill.js';
-import { normalizeName } from '../src/storage/indexedDb/normalize.js';
+import { SESSION_OPERATOR_FIELD, normalizeName } from '../src/storage/indexedDb/normalize.js';
 import { LEGACY_PAYLOAD_FORBIDDEN } from '../src/modules/weighing/domain/weighingMapper.js';
 import { logicalIntegrity } from '../src/storage/indexedDb/health/health.js';
 import storage from '../src/storage/storageAdapter.js';
@@ -194,9 +194,10 @@ const summary = { casos: [] };
   assert.equal(byId.get('a4').situacao, 'INATIVO', 'saída sem motivo mapeável → INATIVO');
   assert.equal(byId.get('a7').situacao, 'MORTO');
   assert.equal(result.state.relatorio.saidasSemMotivo, 1);
-  assert.equal(byId.get('a1').nascimento, '2025-01-10', 'nascimento estimado = created_at − era (12 meses)');
-  assert.equal(byId.get('a1').nascimento_estimado, true);
-  assert.equal(byId.get('a2').nascimento, null, 'era não numérica não estima nascimento');
+  // 16/09/2026: nascimento não é usado — a migração nunca o estima a partir da era.
+  assert.ok(animais.every((a) => a.nascimento === null && a.nascimento_estimado === false), 'nascimento fica vazio em todo animal migrado');
+  assert.equal(byId.get('a1').era, '12', 'era legada preservada');
+  assert.ok(animais.every((a) => a.categoria_automatica === true), 'animais migrados entram na categoria automática (pelo peso)');
   assert.equal(byId.get('a1').marca, 'ALFA', 'texto legado preservado');
   assert.equal(result.state.relatorio.animaisAtualizados, FIXTURE_ANIMALS.length);
 
@@ -242,7 +243,9 @@ const summary = { casos: [] };
   // B9 enums.
   const sessoes = await db.table('sessoesPesagem').toArray();
   assert.deepEqual(sessoes.map((s) => s.status).sort(), ['ABERTA', 'ABERTA', 'FECHADA']);
-  assert.ok(sessoes.every((s) => SESSAO_STATUS.includes(s.status) && s.local === null && s.operador_user_id === null));
+  // Nome do campo conforme o esquema vigente (rev. 2: operador_usuario_id).
+  assert.ok(sessoes.every((s) => SESSAO_STATUS.includes(s.status) && s.local === null && s[SESSION_OPERATOR_FIELD] === null));
+  assert.ok(sessoes.every((s) => s.operador_user_id === undefined), 'campo da rev. 1 não sobrevive à migração');
   const lotes = await db.table('loteApartacoes').toArray();
   assert.deepEqual(lotes.map((l) => l.situacao).sort(), ['ABERTO', 'FECHADO']);
   assert.ok(lotes.every((l) => LOTE_SITUACOES.includes(l.situacao) && l.ativo === true));

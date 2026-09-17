@@ -6,12 +6,13 @@ itens manuais sem GUI disponível ficam como **MANUAL PENDENTE**, nunca "aprovad
 
 ## 1. Versões e documentos
 
-- [ ] `package.json` e `package-lock.json` (inclusive `packages[""]`) em **1.2.0**.
+- [x] `package.json` e `package-lock.json` (inclusive `packages[""]`) em **1.2.0** (15/09/2026;
+      o fallback de `src/lib/appVersion.js` estava em 1.1.18 e foi alinhado).
 - [ ] `src/versioning/versionInfo.js`: `DB_SCHEMA_VERSION = 7`, `BACKUP_FORMAT_VERSION = 3`,
       `DATA_CONTRACT_VERSION = 2`, `DATA_BUILD_ID = 'schema-v7'`.
 - [ ] `uiBuildInfo.js` com o `UI_BUILD_ID` desta release.
-- [ ] `CHANGELOG.md` com o bloco `## [1.2.0]` consolidado
-      (Added/Changed/Fixed/Removed/Migration/Security), sem blocos "Não lançado" pendentes.
+- [x] `CHANGELOG.md` com o bloco `## [1.2.0] — 2026-09-15` consolidado
+      (Added/Changed/Removed), sem blocos "Não lançado" pendentes.
 - [ ] `docs/user/*` atualizados (LOGIN, USUARIOS, CADASTROS, GUIA-RAPIDO,
       INSTALACAO-WINDOWS, BACKUP-E-RESTAURACAO, TESTE-MAQUINA-LIMPA).
 - [ ] `docs/release/1.2.0/RELEASE-NOTES.md` e `MIGRATION-1.1.17-TO-1.2.0.md` com tempos medidos.
@@ -19,8 +20,12 @@ itens manuais sem GUI disponível ficam como **MANUAL PENDENTE**, nunca "aprovad
 
 ## 2. Gates automatizados
 
-- [ ] `npm run lint`
-- [ ] `npm run test:quick` (todos os gates, inclusive os novos da Fase 1)
+- [x] `npm run lint`
+- [x] `npm run test:quick` (todos os gates, inclusive os novos da Fase 1) — verde em 15/09/2026,
+      após corrigir três gates que tinham ficado desatualizados na onda 1 interrompida:
+      `verify-local-auth` (checava a ausência da store `usuarios` em vez de `usuariosLocais`),
+      `verify-v7-migration` (nascimento estimado e `operador_usuario_id`) e
+      `verify-packaged-build` (chamada de `buildReleaseManifest` e nomes do manifesto formato 2).
 - [ ] `npm run migration:v7:verify` (massas vazia, pequena e 36 mil; reentrância; bloqueio sem backup)
 - [ ] `npm run auth:local:verify` e `npm run auth:access:verify`
 - [ ] `npm run master-registry:verify` (cadastros mestres)
@@ -31,17 +36,25 @@ itens manuais sem GUI disponível ficam como **MANUAL PENDENTE**, nunca "aprovad
 
 ## 3. Build e pacote
 
-- [ ] `npm run release:clean` (nenhum Setup de outra versão em `release/` ou `release-unsigned/`).
-- [ ] `npm run build` limpo; `dist/assets` contém `UI_BUILD_ID`, `schema-v7` e `"1.2.0"`.
-- [ ] `electron-builder --win` (assinado em `release/`; sem certificado, `npm run dist:unsigned`).
-- [ ] `npm run packaged:build:verify` (ou `diagnostic:packaged:build:verify`): versão, marcadores,
-      manifesto com os cinco eixos, SHA-256, tamanho, `builtAt`, `signed`, Setup não anterior aos bundles.
-- [ ] `npm run release:checksum` gera `Pesagens Individuais Setup 1.2.0.exe.sha256`.
-- [ ] `npm run release:manifest` gera `release-manifest.json` com `version`, `dbSchema`, `backupFormat`,
-      `uiContract`, `dataContract`, `uiBuildId`, `dataBuildId`, `installer{file,sha256,sizeBytes,builtAt}`,
-      `signed`, `distribution`.
-- [ ] `npm run release:current-only:verify` (um único Setup, da versão atual).
-- [ ] `npm run packaged:source:verify` (main enxuto, preload, sem módulo nativo).
+- [x] `npm run release:clean` (nenhum Setup de outra versão em `release/` ou `release-unsigned/`;
+      o pacote da 1.1.17 foi guardado em `release-archive/1.1.17/`, fora dos diretórios de release).
+- [x] `npm run build` limpo; `dist/assets` contém `UI_BUILD_ID`, `schema-v7` e `"1.2.0"`.
+- [x] `npm run dist:unsigned` (sem certificado neste ambiente): `Pesagens Individuais Setup 1.2.0.exe`,
+      92.036.630 bytes, SHA-256 `7a40cc29b52d3bc9e0160efea83f7b0886abe185db6bb40e3263941b0f3883df`,
+      build de 15/09/2026, `gitCommit` `cc024d8-dirty` (árvore com alterações não commitadas).
+- [x] `npm run diagnostic:packaged:build:verify` verde (marcadores no `dist` e no `app.asar`,
+      manifesto conferido, SHA-256 e tamanho batendo, Setup mais novo que os bundles).
+      Para o marcador `schema-v7` existir no bundle, `DATA_BUILD_ID` deixou de ser interpolado;
+      a coerência com o esquema virou a verificação `g.dataBuildId` do contrato de versão.
+- [x] `npm run diagnostic:checksum` gerou `Pesagens Individuais Setup 1.2.0.exe.sha256`.
+- [x] `npm run diagnostic:manifest` gerou `release-manifest.json` (formato 2) com `appVersion`,
+      `dbSchemaVersion`, `backupFormatVersion`, `uiContract`, `dataContract`, `uiBuildId`,
+      `dataBuildId`, `installer{file,sha256,sizeBytes,builtAt}`, `signed: false`,
+      `distribution: unsigned-diagnostic`.
+- [x] `npm run release:current-only:verify` (um único Setup, da versão atual).
+- [x] `npm run diagnostic:packaged:source:verify` (main enxuto, preload, sem módulo nativo).
+- [x] `npm run diagnostic:e2e:verify` (app instalado abre e responde no modo permissivo de dev).
+- [ ] Versão **assinada** em `release/` (`npm run dist`): pendente de certificado Authenticode.
 
 ## 4. Evidências
 

@@ -111,7 +111,7 @@ assert.match(component, /usageInList = tabs\.length === 1 && tab\.usageInList/, 
 assert.match(component, /Em uso: \{usage\[editingRecord\.id\]\}/, 'registro aberto mostra a contagem de uso sob demanda');
 // Acima do limite: célula "—" com title explicativo, sem pílula de filtro e sem "…" permanente.
 assert.match(component, /const usageAvailable = usageAvailableFor\(usageInList, \(catalog\[tab\.id\] \|\| \[\]\)\.length\);/, 'disponibilidade da coluna "Em uso" decidida pelo tamanho da lista');
-assert.match(component, /\{usageAvailable \? \(\s*<MakFilterPill\s*label=\{USAGE_COLUMN\.label\}/, 'pílula "Em uso" só quando a contagem está disponível');
+assert.match(component, /if \(column\.id === '_uso' && !usageAvailable\) return null;/, 'pílula "Em uso" só quando a contagem está disponível');
 assert.match(component, /title=\{!usageAvailable \? USAGE_UNAVAILABLE_TITLE : undefined\}>\{!usageAvailable \? USAGE_UNAVAILABLE_TEXT : usage\[record\.id\] == null \? '…' : usage\[record\.id\]\}/, 'célula mostra "—" com title acima do limite; "…" só enquanto conta');
 assert.ok(!/\{usageInList \? \(\s*<MakFilterPill/.test(component), 'NEGATIVO: pílula não depende só de usageInList');
 // Inativar um padrão: o aviso do serviço chega à tela.
@@ -128,7 +128,11 @@ ok('componente');
 // ---------------------------------------------------------------------------
 const vazioMarca = emptyFor(MARCAS);
 assert.deepEqual(vazioMarca, { nome: '', abreviacao: '', proprietario_parceiro_id: '', propriedade_id: '', padrao: false, observacao: '', ativo: true }, 'marca vazia: ativo true, padrao false, referências vazias');
-assert.equal(emptyFor(CATEGORIAS_ANIMAL).sexo_aplicavel, 'AMBOS', 'categoria vazia herda o default visível da definição');
+// Categoria (16/09/2026): sexo obrigatório sem valor pré-escolhido; faixa de peso e era no formulário e na lista.
+assert.equal(emptyFor(CATEGORIAS_ANIMAL).sexo_aplicavel, '', 'categoria nova começa sem sexo: o operador escolhe Macho ou Fêmea');
+assert.deepEqual(CATEGORIAS_ANIMAL.campos.map((c) => c.id), ['nome', 'sexo_aplicavel', 'peso_min_kg', 'peso_max_kg', 'era', 'ordem', 'ativo'], 'campos da categoria');
+assert.deepEqual(CATEGORIAS_ANIMAL.colunas.map((c) => c.id), ['nome', 'sexo_aplicavel', 'peso_min_kg', 'peso_max_kg', 'era', 'ordem', 'ativo'], 'colunas da categoria');
+assert.ok(!CATEGORIAS_ANIMAL.campos.some((c) => /idade|nascimento/.test(c.id)), 'NEGATIVO: categoria não usa idade nem nascimento');
 assert.equal(emptyFor(PROPRIEDADES).tipo, 'PROPRIA');
 assert.equal(emptyFor(CAUSAS_MORTE).categoria, 'Outra');
 assert.deepEqual(emptyFor(PARCEIROS).papeis, [], 'papéis começam vazios (obrigatório: o operador escolhe)');
@@ -153,12 +157,13 @@ assert.equal(payloadFromForm(PARCEIROS, { ...formParceiro, rendimento_padrao: ''
 assert.ok(Number.isNaN(payloadFromForm(PARCEIROS, { ...formParceiro, rendimento_padrao: 'abc' }).rendimento_padrao), 'número inválido vira NaN para a definição recusar');
 assert.equal(payloadFromForm(MARCAS, { ...vazioMarca, nome: 'X' }).proprietario_parceiro_id, null, 'select vazio vira null');
 assert.equal(payloadFromForm(MARCAS, { ...vazioMarca, nome: 'X', propriedade_id: 'prop-1' }).propriedade_id, 'prop-1');
-assert.equal(payloadFromForm(CATEGORIAS_ANIMAL, { ...emptyFor(CATEGORIAS_ANIMAL), nome: 'Boi', idade_min_meses: '25' }).idade_min_meses, 25);
+assert.equal(payloadFromForm(CATEGORIAS_ANIMAL, { ...emptyFor(CATEGORIAS_ANIMAL), nome: 'Boi', peso_min_kg: '350,5' }).peso_min_kg, 350.5, 'peso da faixa com vírgula volta a número');
 assert.equal(payloadFromForm(CAUSAS_MORTE, { ...emptyFor(CAUSAS_MORTE), nome: 'Raio', exige_observacao: true }).exige_observacao, true);
 // NEGATIVO: o que a definição recusa a partir do formulário
 assert.ok(PARCEIROS.validar(payloadFromForm(PARCEIROS, { ...formParceiro, rendimento_padrao: 'abc' })).some((e) => /número válido/i.test(e)), 'número inválido é recusado pela definição');
 assert.ok(PARCEIROS.validar(payloadFromForm(PARCEIROS, { ...formParceiro, papeis: [] })).some((e) => /Papéis/.test(e)), 'parceiro sem papel é recusado');
-assert.ok(CATEGORIAS_ANIMAL.validar(payloadFromForm(CATEGORIAS_ANIMAL, { ...emptyFor(CATEGORIAS_ANIMAL), nome: 'Boi', idade_min_meses: '30', idade_max_meses: '20' })).some((e) => /mínima/.test(e)), 'faixa etária invertida é recusada');
+assert.ok(CATEGORIAS_ANIMAL.validar(payloadFromForm(CATEGORIAS_ANIMAL, { ...emptyFor(CATEGORIAS_ANIMAL), nome: 'Boi', sexo_aplicavel: 'M', peso_min_kg: '400', peso_max_kg: '300' })).some((e) => /Peso mínimo/.test(e)), 'faixa de peso invertida é recusada');
+assert.ok(CATEGORIAS_ANIMAL.validar(payloadFromForm(CATEGORIAS_ANIMAL, { ...emptyFor(CATEGORIAS_ANIMAL), nome: 'Boi' })).some((e) => /Sexo/.test(e)), 'categoria sem sexo é recusada');
 assert.equal(PARCEIROS.validar(payloadParceiro).length, 0, 'formulário válido passa na definição');
 assert.notEqual(NONE_OPTION, '', 'sentinela "Nenhum" nunca é o valor vazio (Radix não aceita item vazio)');
 ok('modelo-formulario');

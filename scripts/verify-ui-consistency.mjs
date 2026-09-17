@@ -73,20 +73,17 @@ assert.match(r29, /d17d-summary-panel__context\s*\{[\s\S]{0,80}text-align:\s*cen
 // R34 — Relação de Pesagens usa a Tela Mãe do ModeloBase1 (Cadastro de Empresas).
 const relationPage = readFileSync(join(root, 'src/pages/PesagensIndividuais.jsx'), 'utf8');
 assert.match(relationPage, /data-mak-region="toolbar"[\s\S]{0,400}className="mg-action-bar /, 'Relação usa a barra de ações mg-action-bar do modelo');
-assert.match(relationPage, /tb-btn tb-btn-ghost tb-btn-filter tb-btn-icon/, 'botão Filtrar segue as classes tb-btn do modelo');
+assert(!/aria-controls="filter-panel"/.test(relationPage), 'Relação não tem mais o botão do painel lateral de filtros (decisão de 15/09/2026)');
 assert.match(relationPage, /tb-btn tb-btn-labeled tb-btn-green"[^>]*title="Lançar pesagem"/, 'ação principal usa tb-btn-green');
 assert.match(relationPage, /<MgDesktopSearch[\s\S]{0,1400}onApplyAll=/, 'pesquisa expansível com resultados e "Buscar todos"');
 assert.match(relationPage, /<MgSpeedDialMenu[\s\S]{0,700}Atualizar[\s\S]{0,200}Exportar CSV[\s\S]{0,200}Importar CSV[\s\S]{0,200}Baixar modelo CSV/, 'Atualizar, exportar, importar e modelo ficam em "Mais opções"');
 assert.match(relationPage, /data-mak-region="panel-strip"[\s\S]{0,200}<MgTablePanelStrip onConfigColumns=/, 'faixa de pílulas com configuração de colunas à direita');
-assert.match(relationPage, /<MgFilterPanel[\s\S]{0,600}textFields=\{CAMPOS_TEXTO_PAINEL\}[\s\S]{0,120}dateFields=\{CAMPOS_DATA_PAINEL\}[\s\S]{0,120}selectFields=\{CAMPOS_SELECAO_PAINEL\}/, 'painel lateral de filtros com texto, datas e seleções');
+assert(!/MgFilterPanel/.test(relationPage), 'Relação filtra só pelas pílulas e menus de coluna (painel lateral removido)');
 assert(!/d17b-filter-card/.test(relationPage), 'cartão antigo de filtros foi removido da Relação');
 assert(!/d17c-quick-search/.test(relationPage), 'campo de pesquisa antigo foi removido da Relação');
-for (const file of ['MgFilterPanel.jsx', 'MgDesktopSearch.jsx', 'MgSearchResultsDropdown.jsx', 'MgSpeedDialMenu.jsx', 'MgTablePanelStrip.jsx', 'MgCmdSelect.jsx']) {
+for (const file of ['MgDesktopSearch.jsx', 'MgSearchResultsDropdown.jsx', 'MgSpeedDialMenu.jsx', 'MgTablePanelStrip.jsx', 'MgCmdSelect.jsx']) {
   assert.ok(existsSync(join(root, 'src/components/mak', file)), `componente do modelo portado: ${file}`);
 }
-const filterPanelSource = readFileSync(join(root, 'src/components/mak/MgFilterPanel.jsx'), 'utf8');
-assert.match(filterPanelSource, /<aside id="filter-panel" className=\{`filter-panel\$\{open \? " open" : ""\}`\}/, 'painel usa o aside .filter-panel do modelo');
-assert.match(filterPanelSource, /filter-panel__footer[\s\S]{0,300}tb-btn tb-btn-blue/, 'painel termina com Limpar/Aplicar do modelo');
 assert.match(visualCss, /D\.17D\.2R34[\s\S]{0,600}\.d17b-list-page\.d17b-list-page--mother\s*\{[\s\S]{0,120}display:\s*flex\s*!important/i, 'Relação empilha barra, faixa e corpo como a Tela Mãe');
 
 // R34 — os cadastros auxiliares (Parceiros, Mortalidade, Sanidade) usam a mesma Tela Mãe no modo de listagem.
@@ -95,8 +92,8 @@ assert.match(auxiliaryList, /\{!formOpen \? \([\s\S]{0,400}data-mak-region="tool
 assert.match(auxiliaryList, /tb-btn tb-btn-labeled tb-btn-green aux-new-button/, 'Novo dos cadastros usa tb-btn-green');
 assert.match(auxiliaryList, /<MgDesktopSearch[\s\S]{0,1400}onApplyAll=/, 'cadastros têm pesquisa expansível com resultados');
 assert.match(auxiliaryList, /<MgSpeedDialMenu[\s\S]{0,600}Atualizar[\s\S]{0,200}Configurar colunas[\s\S]{0,200}Mostrar todos os tipos/, 'cadastros concentram Atualizar, colunas e tipos em "Mais opções"');
-assert.match(auxiliaryList, /data-mak-region="panel-strip"[\s\S]{0,200}<MgTablePanelStrip onConfigColumns=[\s\S]{0,1400}\{listColumns\.map\(\(column\) => \([\s\S]{0,120}<MakFilterPill/, 'faixa dos cadastros tem uma pílula por coluna e configuração de colunas');
-assert.match(auxiliaryList, /<MgFilterPanel[\s\S]{0,600}textFields=\{panelTextFields\}[\s\S]{0,80}selectFields=\{panelSelectFields\}/, 'cadastros têm painel lateral com campos de texto e seleções');
+assert.match(auxiliaryList, /data-mak-region="panel-strip"[\s\S]{0,200}<MgTablePanelStrip onConfigColumns=[\s\S]{0,1400}\{tableColumns\.map\(\(column\) => \{[\s\S]{0,400}<MakFilterPill/, 'faixa dos cadastros tem uma pílula por coluna visível e configuração de colunas');
+assert(!/MgFilterPanel/.test(auxiliaryList), 'cadastros filtram só pelas pílulas e menus de coluna (painel lateral removido)');
 assert.match(auxiliaryList, /<MakColumnConfigDialog[\s\S]{0,400}onApply=\{applyColumnConfig\}/, 'cadastros permitem configurar colunas como o modelo');
 assert.match(auxiliaryList, /\{tableColumns\.map\(\(column\) => column\.id === '_typeLabel'/, 'tabela dos cadastros respeita ordem e visibilidade configuradas');
 assert(!/d17c-quick-search--actions aux-search/.test(auxiliaryList.split('{!formOpen ? (')[0]), 'campo de pesquisa antigo não fica fora do modo de registro');
@@ -137,8 +134,8 @@ const r32 = visualCss.slice(visualCss.indexOf('D.17D.2R32'));
 assert.match(r32, /d17d-field--date \.mak-date-control > :is\(input, button\)[\s\S]{0,180}border:\s*0\s*!important[\s\S]{0,160}background:\s*transparent\s*!important/i, 'data e calendário usam uma única superfície sem divisor');
 assert.match(r32, /d17d-field\.d17d-field--date \.mak-date-control > input\[type="text"\][\s\S]{0,240}border-radius:\s*0\s*!important[\s\S]{0,160}box-shadow:\s*none\s*!important/i, 'input da data não pode desenhar contorno arredondado ou sombra dentro do controle');
 const r33 = visualCss.slice(visualCss.indexOf('D.17D.2R33'));
-assert.match(r33, /emp-table-pro\.d17c-data-table :is\(th, th\.emp-th\)[\s\S]{0,260}color:\s*#374151\s*!important[\s\S]{0,80}font-size:\s*11px\s*!important[\s\S]{0,80}font-weight:\s*600\s*!important/i, 'cabeçalho do lançamento segue a tipografia da relação de pesagens');
-assert.match(r33, /emp-table-pro\.d17c-data-table :is\(td, td\.emp-td\)[\s\S]{0,420}color:\s*#46566c\s*!important[\s\S]{0,80}font-size:\s*11px\s*!important/i, 'linhas do lançamento seguem altura, cor e tipografia da relação de pesagens');
+assert.match(r33, /emp-table-pro\.d17c-data-table :is\(th, th\.emp-th\)[\s\S]{0,260}color:\s*#334155\s*!important[\s\S]{0,80}font-size:\s*12px\s*!important[\s\S]{0,80}font-weight:\s*600\s*!important/i, 'cabeçalho do lançamento segue a tipografia da relação de pesagens (ModeloBase1)');
+assert.match(r33, /emp-table-pro\.d17c-data-table :is\(td, td\.emp-td\)[\s\S]{0,420}color:\s*#6b7280\s*!important[\s\S]{0,80}font-size:\s*12px\s*!important/i, 'linhas do lançamento seguem altura, cor e tipografia da relação de pesagens (ModeloBase1)');
 assert.match(auxiliaryRegistry, /className="mg-panel-tabs-rail"[\s\S]{0,300}className="seg-control"[\s\S]{0,220}className="seg-tab-slider"/, 'lançamentos auxiliares reutilizam a estrutura oficial de abas do ModeloBase1');
 assert.match(auxiliaryRegistry, /className=\{`cmd-select aux-model-cmd-select[\s\S]{0,520}className="cmd-display aux-model-cmd-display"/, 'seleções dos lançamentos auxiliares usam a estrutura cmd-select do ModeloBase1');
 assert(!/emp-form-card emp-form-card--collapsible mg-emp-card aux-model-card/.test(auxiliaryRegistry), 'cards desktop dos lançamentos auxiliares não podem herdar o modo recolhível');

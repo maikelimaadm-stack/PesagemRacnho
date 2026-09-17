@@ -24,7 +24,7 @@ import {
   normalizeWeightWarningPolicy,
   resolveDefaultRegistry,
 } from '../src/modules/operations/application/operationalPolicies.js';
-import { suggestCategory } from '../src/modules/operations/domain/categorySuggestion.js';
+import { categoriesForSex, eraOfCategory, suggestCategory } from '../src/modules/operations/domain/categorySuggestion.js';
 import { collectRegistryTexts, countUnknownRegistries, splitImportRowsByRegistry } from '../src/modules/operations/domain/importRegistryResolution.js';
 import { DEFAULT_WEIGHT_WARNING_POLICY, buildWeightWarningPolicy, evaluateWeighingWarnings } from '../src/modules/weighing/domain/weighingWarnings.js';
 
@@ -123,18 +123,25 @@ assert.deepEqual(normalizeWeightWarningPolicy({ faixa_peso_min: 'abc', limite_gm
 assert.deepEqual(evaluateWeighingWarnings({ weight: 50, date: '2026-09-15', history: [], policy: null }).length, 0, 'política nula completa-se com os defaults');
 
 // ---------------------------------------------------------------------------
-// 4) Categoria sugerida por sexo + nascimento (ADR-028): nunca sobrescreve a manual — a UI só chama quando origem !== 'manual'.
+// 4) Categoria automática pelo PESO dentro do sexo (decisão de 16/09/2026; sem nascimento/idade).
 const categorias = [
-  { id: 'c-bezerro', nome: 'Bezerro', sexo_aplicavel: 'M', idade_min_meses: 0, idade_max_meses: 12, ativo: true },
-  { id: 'c-garrote', nome: 'Garrote', sexo_aplicavel: 'M', idade_min_meses: 13, idade_max_meses: 24, ativo: true },
-  { id: 'c-novilha', nome: 'Novilha', sexo_aplicavel: 'F', idade_min_meses: 13, idade_max_meses: 36, ativo: true },
-  { id: 'c-inativa', nome: 'Inativa', sexo_aplicavel: 'AMBOS', idade_min_meses: 0, idade_max_meses: null, ativo: false },
+  { id: 'c-garrote', nome: 'Garrote', sexo_aplicavel: 'M', peso_min_kg: 350, peso_max_kg: null, era: 24, ordem: 2, ativo: true },
+  { id: 'c-bezerro', nome: 'Bezerro', sexo_aplicavel: 'M', peso_min_kg: 300, peso_max_kg: 350, era: 12, ordem: 1, ativo: true },
+  { id: 'c-novilha', nome: 'Novilha', sexo_aplicavel: 'F', peso_min_kg: 250, peso_max_kg: 380, era: 24, ordem: 3, ativo: true },
+  { id: 'c-touro', nome: 'Touro', sexo_aplicavel: 'M', peso_min_kg: null, peso_max_kg: null, era: 36, ordem: 4, ativo: true },
+  { id: 'c-inativa', nome: 'Inativa', sexo_aplicavel: 'M', peso_min_kg: 0, peso_max_kg: null, era: 1, ordem: 0, ativo: false },
 ];
-assert.equal(suggestCategory({ categorias, sexo: 'M', nascimento: '2026-03-01', referenceDate: '2026-09-15' })?.id, 'c-bezerro', 'macho de 6 meses → Bezerro');
-assert.equal(suggestCategory({ categorias, sexo: 'F', nascimento: '2024-06-01', referenceDate: '2026-09-15' })?.id, 'c-novilha', 'fêmea de 27 meses → Novilha');
-assert.equal(suggestCategory({ categorias, sexo: 'F', nascimento: '2026-03-01', referenceDate: '2026-09-15' }), null, 'NEGATIVO: sem categoria compatível (fêmea de 6 meses, inativa ignorada) não há sugestão');
-assert.equal(suggestCategory({ categorias, sexo: 'M', nascimento: '', referenceDate: '2026-09-15' }), null, 'NEGATIVO: sem nascimento não há sugestão');
-assert.equal(suggestCategory({ categorias, sexo: 'M', nascimento: '2027-01-01', referenceDate: '2026-09-15' }), null, 'NEGATIVO: nascimento futuro não sugere');
+assert.equal(suggestCategory({ categorias, sexo: 'M', peso: 320 })?.id, 'c-bezerro', 'macho de 320 kg → Bezerro (300 a 350)');
+assert.equal(suggestCategory({ categorias, sexo: 'M', peso: '360,5' })?.id, 'c-garrote', 'macho acima de 350 kg → Garrote (peso em pt-BR)');
+assert.equal(suggestCategory({ categorias, sexo: 'M', peso: 350 })?.id, 'c-bezerro', 'faixas que se cruzam no limite: vale a menor ordem');
+assert.equal(suggestCategory({ categorias, sexo: 'F', peso: 300 })?.id, 'c-novilha', 'fêmea só considera categorias de fêmea');
+assert.equal(suggestCategory({ categorias, sexo: 'F', peso: 400 }), null, 'NEGATIVO: fora de toda faixa do sexo não há categoria');
+assert.equal(suggestCategory({ categorias, sexo: 'M', peso: 200 }), null, 'NEGATIVO: inativa e categoria sem faixa (Touro) nunca são automáticas');
+assert.equal(suggestCategory({ categorias, sexo: '', peso: 320 }), null, 'NEGATIVO: sem sexo não há categoria automática');
+assert.equal(suggestCategory({ categorias, sexo: 'M', peso: '' }), null, 'NEGATIVO: sem peso não há categoria automática');
+assert.deepEqual(categoriesForSex(categorias, 'M').map((c) => c.id), ['c-bezerro', 'c-garrote', 'c-touro'], 'lista do sexo: só ativas, na ordem do cadastro');
+assert.equal(eraOfCategory(categorias[1]), '12', 'era da categoria vira o texto gravado na pesagem');
+assert.equal(eraOfCategory(null), null);
 
 // ---------------------------------------------------------------------------
 // 5) Importação: marca/raça resolvidas por nome normalizado; desconhecidos nunca criados em silêncio.
@@ -184,16 +191,17 @@ assert.match(launch, /resolveDefaultRegistry\(marcas, carregadas\.defaults\.marc
 assert.match(launch, /resolveDefaultRegistry\(racas, carregadas\.defaults\.raca_padrao_id\)/, 'raça pré-selecionada por raca_padrao_id ou padrao=true');
 assert.match(launch, /d17d-field--brand[\s\S]{0,900}marcasAtivas\.map\(\(item\) => <SelectItem key=\{item\.id\} value=\{item\.id\}>/, 'Marca é um seletor alimentado pelo cadastro');
 assert.match(launch, /racasAtivas\.map\(\(item\) => <SelectItem key=\{item\.id\} value=\{item\.id\}>/, 'Raça é um seletor alimentado pelo cadastro');
-assert.match(launch, /d17d-field--category[\s\S]{0,900}categoriasAtivas\.map\(\(item\) => <SelectItem key=\{item\.id\} value=\{item\.id\}>/, 'Categoria é um seletor alimentado pelo cadastro');
-assert.match(launch, /suggestCategory\(\{ categorias: categoriasAtivas, sexo, nascimento, referenceDate: dataPesagem \}\)/, 'categoria sugerida por sexo + nascimento na data do lançamento');
-assert.match(launch, /if \(tipoManejo !== 'Cadastro' \|\| categoriaOrigem === 'manual'\) return;/, 'sugestão nunca sobrescreve a escolha manual');
-assert.match(launch, /categoriaOrigem === 'sugerida' \? <span[^>]*>\(sugerida\)<\/span>/, 'origem "sugerida" visível no rótulo');
-assert.match(launch, /d17d-field--birth[\s\S]{0,300}<MakDateControl value=\{nascimento\}/, 'Nascimento é um campo de data civil (MakDateControl)');
-assert.match(launch, /aria-label="Nascimento estimado"/, 'marcação "estimado" disponível quando há nascimento');
-assert.doesNotMatch(launch, /d17d-field--era/, 'NEGATIVO: o campo Era saiu do formulário');
-assert.match(launch, /case 'era':[\s\S]{0,80}p\.era/, 'a era legada continua exibida na grade');
-assert.match(launch, /categoria \|\| animalSelecionado\.era \|\| '-'/, 'faixa do animal mostra categoria (ou a era legada) somente leitura');
-assert.match(launch, /marca_id: perfilAnimal\.marca_id \|\| null,[\s\S]{0,60}raca_id: perfilAnimal\.raca_id \|\| null,[\s\S]{0,60}categoria_id: perfilAnimal\.categoria_id \|\| null,[\s\S]{0,60}nascimento: perfilAnimal\.nascimento \|\| null,[\s\S]{0,60}nascimento_estimado: perfilAnimal\.nascimento_estimado === true/, 'payload envia marca_id/raca_id/categoria_id/nascimento/nascimento_estimado além dos textos');
+assert.match(launch, /d17d-field--category[\s\S]{0,1400}<SelectItem value=\{CATEGORIA_AUTOMATICA\}>Automático<\/SelectItem>[\s\S]{0,120}categoriasDoSexo\.map\(\(item\) => <SelectItem key=\{item\.id\} value=\{item\.id\}>/, 'Categoria: "Automático" + só as categorias do sexo escolhido');
+assert.match(launch, /suggestCategory\(\{ categorias: categoriasAtivas, sexo, peso: parseBrazilianNumber\(peso\) \}\)/, 'categoria automática pelo sexo e pelo peso digitado');
+assert.match(launch, /categoriesForSex\(categoriasAtivas, sexo\)/, 'lista de categorias filtrada pelo sexo');
+assert.match(launch, /if \(!categoriasDoSexo\.some\(\(item\) => item\.id === categoriaSelecao\)\) setCategoriaSelecao\(CATEGORIA_AUTOMATICA\)/, 'trocar o sexo descarta categoria do outro sexo');
+// Ordem do Cadastro pedida em 16/09/2026: Data, Sexo, Categoria, Raça, Marca, Identificação, Peso, Observação.
+assert.match(launch, /d17d-field--date"[\s\S]*?d17d-field--sex[\s\S]*?d17d-field--category[\s\S]*?Raça do animal[\s\S]*?d17d-field--brand[\s\S]*?d17d-field--animal[\s\S]*?d17d-field--weight[\s\S]*?d17d-field--observation/, 'ordem dos campos: data, sexo, categoria, raça, marca, identificação, peso, observação');
+assert.doesNotMatch(launch, /nascimento|Nascimento|d17d-field--birth/, 'NEGATIVO: data de nascimento saiu do lançamento');
+assert.doesNotMatch(launch, /d17d-field--era/, 'NEGATIVO: Era não é digitada (vem da categoria)');
+assert.match(launch, /case 'era':[\s\S]{0,80}p\.era/, 'a era continua exibida na grade');
+assert.match(launch, /era: eraOfCategory\(categoriaEfetiva\) \?\? \(era \|\| null\)/, 'Cadastro grava a era da categoria');
+assert.match(launch, /marca_id: perfilAnimal\.marca_id \|\| null,[\s\S]{0,60}raca_id: perfilAnimal\.raca_id \|\| null,[\s\S]{0,60}categoria_id: perfilAnimal\.categoria_id \|\| null,[\s\S]{0,60}categoria_automatica: perfilAnimal\.categoria_automatica !== false/, 'payload envia marca_id/raca_id/categoria_id/categoria_automatica além dos textos');
 assert.match(launch, /if \(tipoManejo === 'Cadastro' && !isSN && !marcaId\)/, 'Cadastro exige marca SELECIONADA (id), não texto');
 assert.match(launch, /apartacaoSelecionada: carregadas\.defaults\.apartacao_padrao_id \|\| ''/, 'apartacao_padrao_id pré-seleciona a apartação');
 assert.match(launch, /aplicarPadroesEmpresa\(\);[\s\S]{0,120}setApartacaoSelecionada\(padroesEmpresaRef\.current\.apartacaoSelecionada\)/, 'limpar o formulário reaplica a apartação padrão');
@@ -209,8 +217,9 @@ assert.match(launch, /exitRequiresDocument\(motivoSaida, politicas\.sales\)/, 'S
 assert.match(launch, /<ConfirmarAnimalSnDialog[\s\S]{0,400}marcas=\{marcasAtivas\}[\s\S]{0,60}racas=\{racasAtivas\}[\s\S]{0,60}categorias=\{categoriasAtivas\}/, 'diálogo SN usa os mesmos cadastros do lançamento');
 assert.match(snDialog, /marcasAtivas\.map\(\(item\) => <SelectItem key=\{item\.id\} value=\{item\.id\}>/, 'diálogo SN seleciona a marca do cadastro');
 assert.match(snDialog, /racasAtivas\.map\(\(item\) => <SelectItem key=\{item\.id\} value=\{item\.id\}>/, 'diálogo SN seleciona a raça do cadastro');
-assert.match(snDialog, /suggestCategory\(/, 'diálogo SN sugere a categoria');
-assert.match(snDialog, /<MakDateControl value=\{form\.nascimento\}/, 'diálogo SN tem nascimento civil');
+assert.match(snDialog, /categoriesForSex\(categorias, form\.sexo\)/, 'diálogo SN lista só as categorias do sexo');
+assert.match(snDialog, /Automático \(pelo peso\)/, 'diálogo SN oferece a categoria automática');
+assert.doesNotMatch(snDialog, /nascimento/i, 'NEGATIVO: diálogo SN não pede nascimento');
 assert.doesNotMatch(snDialog, /\bera\b/, 'NEGATIVO: diálogo SN não pede Era');
 assert.match(closing, /exitRequiresDocument\(row\.motivo_saida, salesPolicy\)/, 'Fechamento só gera pendência "Doc" para Venda quando a política exigir (Abate sempre)');
 assert.match(closing, /session\?\.status === 'FECHADA'/, 'Fechamento lê o status de sessão no enum v7');

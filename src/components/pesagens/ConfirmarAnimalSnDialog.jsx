@@ -4,13 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import MakDateControl from '@/components/mak/MakDateControl';
-import { suggestCategory } from '@/modules/operations/domain/categorySuggestion';
+import { categoriesForSex } from '@/modules/operations/domain/categorySuggestion';
 
-// Perfil do animal SN: os mesmos seletores do Cadastro no Lançamento. Marca,
-// raça e categoria são SELECIONADAS dos cadastros mestres (nunca texto livre);
-// a categoria é sugerida por sexo + nascimento e a escolha manual prevalece.
-const EMPTY_PROFILE = { sexo: 'M', marca: '', marcaId: '', raca: '', racaId: '', categoriaId: '', categoriaOrigem: '', nascimento: '', nascimentoEstimado: false };
+// Perfil do animal SN: os mesmos seletores do Cadastro no Lançamento, na mesma
+// ordem (sexo, categoria, raça, marca). Tudo é SELECIONADO dos cadastros mestres
+// (nunca texto livre); "Automático" escolhe a categoria pelo peso ao salvar.
+const CATEGORIA_AUTOMATICA = '__auto__';
+const EMPTY_PROFILE = { sexo: 'M', marca: '', marcaId: '', raca: '', racaId: '', categoriaSelecao: CATEGORIA_AUTOMATICA };
 const NONE = '__none__';
 
 export default function ConfirmarAnimalSnDialog({
@@ -21,7 +21,6 @@ export default function ConfirmarAnimalSnDialog({
   marcas = [],
   racas = [],
   categorias = [],
-  referenceDate,
   onConfirm,
 }) {
   const [form, setForm] = useState(EMPTY_PROFILE);
@@ -35,17 +34,9 @@ export default function ConfirmarAnimalSnDialog({
 
   const marcasAtivas = useMemo(() => marcas.filter((item) => item && item.ativo !== false), [marcas]);
   const racasAtivas = useMemo(() => racas.filter((item) => item && item.ativo !== false), [racas]);
-  const categoriasAtivas = useMemo(() => categorias.filter((item) => item && item.ativo !== false), [categorias]);
-
-  // Sugestão automática: só quando a categoria não foi escolhida manualmente.
-  useEffect(() => {
-    if (!open || form.categoriaOrigem === 'manual') return;
-    const sugerida = suggestCategory({ categorias: categoriasAtivas, sexo: form.sexo, nascimento: form.nascimento, referenceDate });
-    const proximoId = sugerida?.id ?? '';
-    if (proximoId !== form.categoriaId || (proximoId && form.categoriaOrigem !== 'sugerida')) {
-      update({ categoriaId: proximoId, categoriaOrigem: proximoId ? 'sugerida' : '' });
-    }
-  }, [open, form.sexo, form.nascimento, form.categoriaOrigem, form.categoriaId, categoriasAtivas, referenceDate]);
+  const categoriasDoSexo = useMemo(() => categoriesForSex(categorias, form.sexo), [categorias, form.sexo]);
+  const categoriaValida = form.categoriaSelecao === CATEGORIA_AUTOMATICA
+    || categoriasDoSexo.some((item) => item.id === form.categoriaSelecao);
 
   const confirmar = () => {
     const marca = marcasAtivas.find((item) => item.id === form.marcaId);
@@ -62,17 +53,13 @@ export default function ConfirmarAnimalSnDialog({
       toast.error('Selecione a raça cadastrada do animal SN.');
       return;
     }
-    const categoria = categoriasAtivas.find((item) => item.id === form.categoriaId) || null;
     onConfirm({
       sexo: String(form.sexo).trim(),
       marca: marca.nome,
       marcaId: marca.id,
       raca: raca.nome,
       racaId: raca.id,
-      categoriaId: categoria?.id ?? '',
-      categoriaOrigem: categoria ? form.categoriaOrigem || 'manual' : '',
-      nascimento: form.nascimento || '',
-      nascimentoEstimado: Boolean(form.nascimento) && Boolean(form.nascimentoEstimado),
+      categoriaSelecao: categoriaValida ? form.categoriaSelecao : CATEGORIA_AUTOMATICA,
     });
   };
 
@@ -92,7 +79,7 @@ export default function ConfirmarAnimalSnDialog({
           <div className="space-y-1">
             <Label>Sexo</Label>
             <Select value={form.sexo} onValueChange={(value) => update({ sexo: value })}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectTrigger aria-label="Sexo do animal SN"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="M">M</SelectItem>
                 <SelectItem value="F">F</SelectItem>
@@ -100,12 +87,12 @@ export default function ConfirmarAnimalSnDialog({
             </Select>
           </div>
           <div className="space-y-1">
-            <Label>Marca</Label>
-            <Select value={form.marcaId || NONE} onValueChange={(value) => { const marca = marcasAtivas.find((item) => item.id === value); update({ marcaId: marca?.id ?? '', marca: marca?.nome ?? '' }); }}>
-              <SelectTrigger aria-label="Marca do animal SN"><SelectValue placeholder="Selecione a marca" /></SelectTrigger>
+            <Label>Categoria</Label>
+            <Select value={categoriaValida ? form.categoriaSelecao : CATEGORIA_AUTOMATICA} onValueChange={(value) => update({ categoriaSelecao: value })}>
+              <SelectTrigger aria-label="Categoria do animal SN"><SelectValue placeholder="Automático" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>Selecione a marca</SelectItem>
-                {marcasAtivas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
+                <SelectItem value={CATEGORIA_AUTOMATICA}>Automático (pelo peso)</SelectItem>
+                {categoriasDoSexo.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -120,22 +107,12 @@ export default function ConfirmarAnimalSnDialog({
             </Select>
           </div>
           <div className="space-y-1">
-            <Label>Nascimento <span className="text-slate-500 font-normal">(opcional)</span></Label>
-            <MakDateControl value={form.nascimento} onChange={(event) => update({ nascimento: event.target.value || '' })} ariaLabel="Data de nascimento do animal SN" />
-            {form.nascimento ? (
-              <label className="flex items-center gap-1 text-xs text-slate-600">
-                <input type="checkbox" checked={Boolean(form.nascimentoEstimado)} onChange={(event) => update({ nascimentoEstimado: event.target.checked })} aria-label="Nascimento estimado" />
-                Estimado
-              </label>
-            ) : null}
-          </div>
-          <div className="space-y-1">
-            <Label>Categoria {form.categoriaOrigem === 'sugerida' ? <span className="text-emerald-700 font-normal">(sugerida)</span> : form.categoriaOrigem === 'manual' ? <span className="text-slate-500 font-normal">(manual)</span> : null}</Label>
-            <Select value={form.categoriaId || NONE} onValueChange={(value) => update(value === NONE ? { categoriaId: '', categoriaOrigem: '' } : { categoriaId: value, categoriaOrigem: 'manual' })}>
-              <SelectTrigger aria-label="Categoria do animal SN"><SelectValue placeholder="Automática" /></SelectTrigger>
+            <Label>Marca</Label>
+            <Select value={form.marcaId || NONE} onValueChange={(value) => { const marca = marcasAtivas.find((item) => item.id === value); update({ marcaId: marca?.id ?? '', marca: marca?.nome ?? '' }); }}>
+              <SelectTrigger aria-label="Marca do animal SN"><SelectValue placeholder="Selecione a marca" /></SelectTrigger>
               <SelectContent>
-                <SelectItem value={NONE}>Automática (sexo e nascimento)</SelectItem>
-                {categoriasAtivas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
+                <SelectItem value={NONE}>Selecione a marca</SelectItem>
+                {marcasAtivas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>

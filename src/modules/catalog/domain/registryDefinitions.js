@@ -6,7 +6,7 @@ import { PARCEIRO_PAPEIS } from '../../../storage/indexedDb/schema.js';
 import { cleanText, normalizeDocument, normalizeName } from './normalize.js';
 
 export const RACA_GRUPOS = ['ZEBUINO', 'TAURINO', 'CRUZADO', 'OUTRO'];
-export const CATEGORIA_SEXOS = ['M', 'F', 'AMBOS'];
+export const CATEGORIA_SEXOS = ['M', 'F'];
 export const PARCEIRO_TIPOS_PESSOA = ['FISICA', 'JURIDICA'];
 export const PROPRIEDADE_TIPOS = ['PROPRIA', 'TERCEIRO'];
 export const CAUSA_MORTE_CATEGORIAS = ['Doença', 'Acidente', 'Predação', 'Parto', 'Desconhecida', 'Outra'];
@@ -20,7 +20,7 @@ export const PARCEIRO_PAPEL_LABELS = {
   PROPRIETARIO: 'Proprietário de marca',
 };
 const RACA_GRUPO_LABELS = { ZEBUINO: 'Zebuíno', TAURINO: 'Taurino', CRUZADO: 'Cruzado', OUTRO: 'Outro' };
-const SEXO_LABELS = { M: 'Macho', F: 'Fêmea', AMBOS: 'Ambos' };
+const SEXO_LABELS = { M: 'Macho', F: 'Fêmea' };
 const TIPO_PESSOA_LABELS = { FISICA: 'Pessoa física', JURIDICA: 'Pessoa jurídica' };
 const PROPRIEDADE_TIPO_LABELS = { PROPRIA: 'Própria', TERCEIRO: 'De terceiro' };
 
@@ -202,31 +202,36 @@ export const CATEGORIAS_ANIMAL = definicao({
   singular: 'categoria',
   plural: 'categorias',
   rotulo: 'Categorias',
-  descricao: 'Categorias do animal (bezerro, garrote, novilha, boi, vaca, touro…) com sexo aplicável e faixa etária para sugestão.',
+  descricao: 'Categorias do animal (bezerro, garrote, novilha, boi, vaca, touro…) por sexo, com faixa de peso para a escolha automática e a era gravada nas pesagens.',
   campos: [
     NOME('Categoria'),
-    campo('sexo_aplicavel', 'Sexo aplicável', { tipo: 'select', obrigatorio: true, opcoes: opcoes(CATEGORIA_SEXOS, SEXO_LABELS), defaultValue: 'AMBOS', compacto: true }),
-    campo('idade_min_meses', 'Idade mínima (meses)', { tipo: 'numero', compacto: true, ajuda: 'Opcional; usada só para sugerir a categoria pela idade.' }),
-    campo('idade_max_meses', 'Idade máxima (meses)', { tipo: 'numero', compacto: true, ajuda: 'Opcional; vazio significa sem limite.' }),
+    campo('sexo_aplicavel', 'Sexo', { tipo: 'select', obrigatorio: true, opcoes: opcoes(CATEGORIA_SEXOS, SEXO_LABELS), compacto: true, ajuda: 'No lançamento só aparecem as categorias do sexo escolhido.' }),
+    campo('peso_min_kg', 'Peso mínimo (kg)', { tipo: 'numero', compacto: true, ajuda: 'Faixa da categoria automática; vazio = sem mínimo.' }),
+    campo('peso_max_kg', 'Peso máximo (kg)', { tipo: 'numero', compacto: true, ajuda: 'Vazio = sem limite. Faixas que se cruzam: vale a menor ordem.' }),
+    campo('era', 'Era', { tipo: 'numero', compacto: true, ajuda: 'Gravada na pesagem quando o animal está nesta categoria.' }),
     ORDEM,
     ATIVO,
   ],
   colunas: [
     { id: 'nome', label: 'Categoria' },
     { id: 'sexo_aplicavel', label: 'Sexo', render: labelDe(SEXO_LABELS) },
-    { id: 'idade_min_meses', label: 'Idade mín. (meses)' },
-    { id: 'idade_max_meses', label: 'Idade máx. (meses)' },
+    { id: 'peso_min_kg', label: 'Peso mín. (kg)' },
+    { id: 'peso_max_kg', label: 'Peso máx. (kg)' },
+    { id: 'era', label: 'Era' },
     { id: 'ordem', label: 'Ordem' },
     { id: 'ativo', label: 'Situação', render: renderSituacao },
   ],
   regras: (r) => {
     const erros = [];
-    for (const id of ['idade_min_meses', 'idade_max_meses']) {
+    for (const id of ['peso_min_kg', 'peso_max_kg']) {
       const v = r[id];
-      if (v != null && !Number.isNaN(v) && (!isInt(v) || v < 0)) erros.push('Idade em meses deve ser um inteiro maior ou igual a zero.');
+      if (v != null && (Number.isNaN(v) || v < 0)) erros.push('Peso deve ser um número maior ou igual a zero.');
     }
-    if (r.idade_min_meses != null && r.idade_max_meses != null && r.idade_min_meses > r.idade_max_meses) {
-      erros.push('Idade mínima não pode ser maior que a idade máxima.');
+    if (r.peso_min_kg != null && r.peso_max_kg != null && r.peso_min_kg > r.peso_max_kg) {
+      erros.push('Peso mínimo não pode ser maior que o peso máximo.');
+    }
+    if (r.era != null && (Number.isNaN(r.era) || !isInt(r.era) || r.era < 0)) {
+      erros.push('Era deve ser um número inteiro maior ou igual a zero.');
     }
     return erros;
   },

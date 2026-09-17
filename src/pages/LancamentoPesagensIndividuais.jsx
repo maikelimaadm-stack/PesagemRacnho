@@ -58,14 +58,14 @@ import { brandService, breedService, categoryService } from "@/modules/catalog/a
 import { normalizeName } from "@/modules/catalog/domain/normalize";
 import { RENDIMENTO_ORIGEM_INFORMADO, RENDIMENTO_ORIGEM_PADRAO_EMPRESA, exitRequiresDocument, formatRendimento, loadOperationalPolicies, resolveDefaultRegistry } from "@/modules/operations/application/operationalPolicies";
 import { getAnimalRecord } from "@/modules/operations/application/operationalInsightsService";
-import { suggestCategory } from "@/modules/operations/domain/categorySuggestion";
+import { categoriesForSex, eraOfCategory, suggestCategory } from "@/modules/operations/domain/categorySuggestion";
 const formatarData = fmtDateBR;
 const n = fmtNum;
 const m = fmtCurrency;
 // Padrões da empresa (marca/raça/apartação/rendimento) vêm da configuração e dos
 // cadastros mestres; nunca de valores fixos no código (ADR-025, S-01.5).
 const PADROES_VAZIOS = Object.freeze({ marca: "", marcaId: "", raca: "", racaId: "", apartacaoSelecionada: "", rendimento: "" });
-const criarConfiguracaoPadraoMovimentacao = (padroes = PADROES_VAZIOS) => ({ sexo: "M", raca: padroes.raca, racaId: padroes.racaId, era: "", marca: padroes.marca, marcaId: padroes.marcaId, categoriaId: "", categoriaOrigem: "", nascimento: "", nascimentoEstimado: false, apartacaoSelecionada: padroes.apartacaoSelecionada, loteTransferencia: "", mostrarSequenciaBrinco: false, mostrarDadosCompra: false, valorPagoCabeca: "", origemAnimal: "", numeroGTA: "", numeroNFeCompra: "", valorFreteCompra: "", observacoesCompra: "", motivoSaida: "", causaMorte: "", mostrarDadosVenda: false, comprador: "", valorVendaTotal: "", valorArroba: "", rendimentoCarcacaVenda: padroes.rendimento, rendimentoOrigemVenda: RENDIMENTO_ORIGEM_PADRAO_EMPRESA, destinoVenda: "", numeroGTAVenda: "", numeroNFeVenda: "", valorFreteVenda: "", observacoesVenda: "", mostrarDadosAbate: false, frigorifico: "", valorArrobaAbate: "", rendimentoCarcacaAbate: padroes.rendimento, rendimentoOrigemAbate: RENDIMENTO_ORIGEM_PADRAO_EMPRESA, valorTotalAbate: "", numeroGTAAbate: "", observacoesAbate: "", embarqueSelecionadoDoc: "", documentoSelecionado: "" });
+const criarConfiguracaoPadraoMovimentacao = (padroes = PADROES_VAZIOS) => ({ sexo: "M", raca: padroes.raca, racaId: padroes.racaId, era: "", marca: padroes.marca, marcaId: padroes.marcaId, categoriaSelecao: CATEGORIA_AUTOMATICA, apartacaoSelecionada: padroes.apartacaoSelecionada, loteTransferencia: "", mostrarSequenciaBrinco: false, mostrarDadosCompra: false, valorPagoCabeca: "", origemAnimal: "", numeroGTA: "", numeroNFeCompra: "", valorFreteCompra: "", observacoesCompra: "", motivoSaida: "", causaMorte: "", mostrarDadosVenda: false, comprador: "", valorVendaTotal: "", valorArroba: "", rendimentoCarcacaVenda: padroes.rendimento, rendimentoOrigemVenda: RENDIMENTO_ORIGEM_PADRAO_EMPRESA, destinoVenda: "", numeroGTAVenda: "", numeroNFeVenda: "", valorFreteVenda: "", observacoesVenda: "", mostrarDadosAbate: false, frigorifico: "", valorArrobaAbate: "", rendimentoCarcacaAbate: padroes.rendimento, rendimentoOrigemAbate: RENDIMENTO_ORIGEM_PADRAO_EMPRESA, valorTotalAbate: "", numeroGTAAbate: "", observacoesAbate: "", embarqueSelecionadoDoc: "", documentoSelecionado: "" });
 const CATALOGOS_VAZIOS = Object.freeze({ marcas: [], racas: [], categorias: [] });
 const POLITICAS_INICIAIS = Object.freeze({
   defaults: { marca_padrao_id: null, raca_padrao_id: null, propriedade_padrao_id: null, apartacao_padrao_id: null },
@@ -74,6 +74,8 @@ const POLITICAS_INICIAIS = Object.freeze({
   weightWarningPolicy: DEFAULT_WEIGHT_WARNING_POLICY,
 });
 const SEM_SELECAO = '__none__';
+// Categoria do Cadastro: "Automático" escolhe pelo sexo e pela faixa de peso da categoria.
+const CATEGORIA_AUTOMATICA = '__auto__';
 const NUMBER_COLUMN_IDS = new Set(["numero_registro", "peso", "peso_anterior", "valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "doc_qtd", "dias", "ganho", "gmd"]);
 const DATE_COLUMN_IDS = new Set(["data_pesagem", "data_anterior"]);
 const getColumnFilterType = (id) => DATE_COLUMN_IDS.has(id) ? "date" : NUMBER_COLUMN_IDS.has(id) ? "number" : "text";
@@ -117,13 +119,9 @@ export default function LancamentoPesagensIndividuais() {
   const [racaId, setRacaId] = useState("");
   const [marca, setMarca] = useState("");
   const [marcaId, setMarcaId] = useState("");
-  // Era é legado somente-leitura: não é editada no formulário, só preservada
-  // ao editar registros antigos e exibida na grade/faixa.
+  // Era vem da categoria; o estado guarda a era de registros antigos sem categoria.
   const [era, setEra] = useState("");
-  const [categoriaId, setCategoriaId] = useState("");
-  const [categoriaOrigem, setCategoriaOrigem] = useState(""); // '' | 'sugerida' | 'manual'
-  const [nascimento, setNascimento] = useState("");
-  const [nascimentoEstimado, setNascimentoEstimado] = useState(false);
+  const [categoriaSelecao, setCategoriaSelecao] = useState(CATEGORIA_AUTOMATICA);
   const [catalogos, setCatalogos] = useState(CATALOGOS_VAZIOS);
   const [politicas, setPoliticas] = useState(POLITICAS_INICIAIS);
   const [animalRegistro, setAnimalRegistro] = useState(null);
@@ -242,6 +240,15 @@ export default function LancamentoPesagensIndividuais() {
   const marcaIdPorNome = (nome) => catalogos.marcas.find((item) => item.nome_normalizado === normalizeName(nome))?.id || '';
   const racaIdPorNome = (nome) => catalogos.racas.find((item) => item.nome_normalizado === normalizeName(nome))?.id || '';
   const nomeCategoria = (id) => catalogos.categorias.find((item) => item.id === id)?.nome || '';
+  // Só as categorias do sexo escolhido; "Automático" usa a faixa de peso delas.
+  const categoriasDoSexo = useMemo(() => categoriesForSex(categoriasAtivas, sexo), [categoriasAtivas, sexo]);
+  const categoriaAutomatica = useMemo(
+    () => suggestCategory({ categorias: categoriasAtivas, sexo, peso: parseBrazilianNumber(peso) }),
+    [categoriasAtivas, sexo, peso],
+  );
+  const categoriaEfetiva = categoriaSelecao === CATEGORIA_AUTOMATICA
+    ? categoriaAutomatica
+    : categoriasDoSexo.find((item) => item.id === categoriaSelecao) || null;
   const selecionarMarca = (id) => {
     const registro = marcasAtivas.find((item) => item.id === id) || null;
     setMarcaId(registro?.id || '');
@@ -253,13 +260,12 @@ export default function LancamentoPesagensIndividuais() {
     setRacaId(registro?.id || '');
     setRaca(registro?.nome || '');
   };
-  // Descrição do cadastro do animal na faixa (Manejo/Saída): categoria do
-  // registro v7 quando existe; a era legada só aparece quando não há categoria.
+  // Descrição do cadastro do animal na faixa (Manejo/Saída): categoria e era do registro v7.
   const descricaoCadastroAnimal = useMemo(() => {
     if (!animalSelecionado) return '';
     const categoria = animalRegistro?.categoria_id ? nomeCategoria(animalRegistro.categoria_id) : '';
-    const nasc = animalRegistro?.nascimento ? `nasc. ${fmtDateBR(animalRegistro.nascimento)}${animalRegistro.nascimento_estimado ? ' (est.)' : ''}` : '';
-    return [animalSelecionado.marca || 'Sem marca', animalSelecionado.raca || '-', categoria || animalSelecionado.era || '-', animalSelecionado.sexo || '-', nasc].filter(Boolean).join(' · ');
+    const eraAtual = animalRegistro?.era || animalSelecionado.era;
+    return [animalSelecionado.marca || 'Sem marca', animalSelecionado.raca || '-', categoria || '-', eraAtual ? `era ${eraAtual}` : '', animalSelecionado.sexo || '-'].filter(Boolean).join(' · ');
   }, [animalSelecionado, animalRegistro, catalogos.categorias]);
 
   const aplicarAnimalSelecionado = (animal) => {
@@ -283,7 +289,7 @@ export default function LancamentoPesagensIndividuais() {
     setRaca(padroes.raca); setRacaId(padroes.racaId);
     setRendimentoCarcacaVenda(padroes.rendimento); setRendimentoOrigemVenda(RENDIMENTO_ORIGEM_PADRAO_EMPRESA);
     setRendimentoCarcacaAbate(padroes.rendimento); setRendimentoOrigemAbate(RENDIMENTO_ORIGEM_PADRAO_EMPRESA);
-    setCategoriaId(''); setCategoriaOrigem(''); setNascimento(''); setNascimentoEstimado(false); setEra('');
+    setCategoriaSelecao(CATEGORIA_AUTOMATICA); setEra('');
   };
 
   useEffect(() => {
@@ -327,7 +333,7 @@ export default function LancamentoPesagensIndividuais() {
     if (padraoId && !editarId && !apartacaoSelecionada && apartacoes.some((item) => item.id === padraoId)) setApartacaoSelecionada(padraoId);
   }, [apartacoes, politicas]);
 
-  // Registro do animal (store `animais`): ids de cadastro, categoria e nascimento para a faixa e o payload.
+  // Registro do animal (store `animais`): ids de cadastro, categoria e era para a faixa e o payload.
   useEffect(() => {
     let ativo = true;
     if (!animalIdSelecionado) { setAnimalRegistro(null); return undefined; }
@@ -335,8 +341,8 @@ export default function LancamentoPesagensIndividuais() {
     return () => { ativo = false; };
   }, [animalIdSelecionado]);
 
-  // Edição de um Cadastro: categoria e nascimento vêm do registro v7 do animal
-  // (a categoria gravada conta como escolha manual; a sugestão não a sobrescreve).
+  // Edição de um Cadastro: a categoria vem do registro v7 do animal — automática
+  // continua automática; escolhida à mão volta selecionada.
   const registroRestauradoRef = useRef('');
   useEffect(() => {
     if (!editingId || tipoManejo !== 'Cadastro' || !animalRegistro) return;
@@ -345,21 +351,14 @@ export default function LancamentoPesagensIndividuais() {
     registroRestauradoRef.current = chave;
     if (animalRegistro.marca_id) { setMarcaId(animalRegistro.marca_id); }
     if (animalRegistro.raca_id) { setRacaId(animalRegistro.raca_id); }
-    setNascimento(animalRegistro.nascimento || '');
-    setNascimentoEstimado(Boolean(animalRegistro.nascimento) && animalRegistro.nascimento_estimado === true);
-    setCategoriaId(animalRegistro.categoria_id || '');
-    setCategoriaOrigem(animalRegistro.categoria_id ? 'manual' : '');
+    setCategoriaSelecao(animalRegistro.categoria_automatica === false && animalRegistro.categoria_id ? animalRegistro.categoria_id : CATEGORIA_AUTOMATICA);
   }, [editingId, tipoManejo, animalRegistro]);
 
-  // Sugestão de categoria por sexo + nascimento; a escolha manual nunca é sobrescrita.
+  // Trocar o sexo invalida uma categoria escolhida do outro sexo: volta para Automático.
   useEffect(() => {
-    if (tipoManejo !== 'Cadastro' || categoriaOrigem === 'manual') return;
-    const sugerida = suggestCategory({ categorias: categoriasAtivas, sexo, nascimento, referenceDate: dataPesagem });
-    const proximoId = sugerida?.id || '';
-    if (proximoId !== categoriaId) setCategoriaId(proximoId);
-    const proximaOrigem = proximoId ? 'sugerida' : '';
-    if (proximaOrigem !== categoriaOrigem) setCategoriaOrigem(proximaOrigem);
-  }, [tipoManejo, sexo, nascimento, dataPesagem, categoriasAtivas, categoriaOrigem, categoriaId]);
+    if (categoriaSelecao === CATEGORIA_AUTOMATICA || !categoriasAtivas.length) return;
+    if (!categoriasDoSexo.some((item) => item.id === categoriaSelecao)) setCategoriaSelecao(CATEGORIA_AUTOMATICA);
+  }, [categoriaSelecao, categoriasDoSexo, categoriasAtivas.length]);
 
   const resolverAnimalDigitado = (value = numeroAnimal) => {
     if (tipoManejo === 'Cadastro' || isSnIdentifier(value)) return true;
@@ -396,12 +395,12 @@ export default function LancamentoPesagensIndividuais() {
 
   const configuracoesPorTipoRef = useRef({ Cadastro: criarConfiguracaoPadraoMovimentacao(), Manejo: criarConfiguracaoPadraoMovimentacao(), Saída: criarConfiguracaoPadraoMovimentacao() });
   const salvarConfiguracaoTipoAtual = () => {
-    configuracoesPorTipoRef.current[tipoManejo] = { sexo, raca, racaId, era, marca, marcaId, categoriaId, categoriaOrigem, nascimento, nascimentoEstimado, apartacaoSelecionada, loteTransferencia, mostrarSequenciaBrinco, mostrarDadosCompra, valorPagoCabeca, origemAnimal, numeroGTA, numeroNFeCompra, valorFreteCompra, observacoesCompra, motivoSaida, causaMorte, mostrarDadosVenda, comprador, valorVendaTotal, valorArroba, rendimentoCarcacaVenda, rendimentoOrigemVenda, destinoVenda, numeroGTAVenda, numeroNFeVenda, valorFreteVenda, observacoesVenda, mostrarDadosAbate, frigorifico, valorArrobaAbate, rendimentoCarcacaAbate, rendimentoOrigemAbate, valorTotalAbate, numeroGTAAbate, observacoesAbate, embarqueSelecionadoDoc, documentoSelecionado };
+    configuracoesPorTipoRef.current[tipoManejo] = { sexo, raca, racaId, era, marca, marcaId, categoriaSelecao, apartacaoSelecionada, loteTransferencia, mostrarSequenciaBrinco, mostrarDadosCompra, valorPagoCabeca, origemAnimal, numeroGTA, numeroNFeCompra, valorFreteCompra, observacoesCompra, motivoSaida, causaMorte, mostrarDadosVenda, comprador, valorVendaTotal, valorArroba, rendimentoCarcacaVenda, rendimentoOrigemVenda, destinoVenda, numeroGTAVenda, numeroNFeVenda, valorFreteVenda, observacoesVenda, mostrarDadosAbate, frigorifico, valorArrobaAbate, rendimentoCarcacaAbate, rendimentoOrigemAbate, valorTotalAbate, numeroGTAAbate, observacoesAbate, embarqueSelecionadoDoc, documentoSelecionado };
   };
   const aplicarConfiguracaoTipo = (novoTipo) => {
     const padroes = padroesEmpresaRef.current;
     const config = configuracoesPorTipoRef.current[novoTipo] || criarConfiguracaoPadraoMovimentacao(padroes);
-    setSexo(config.sexo ?? "M"); setRaca(config.raca ?? padroes.raca); setRacaId(config.racaId ?? padroes.racaId); setEra(config.era ?? ""); setMarca(config.marca ?? padroes.marca); setMarcaId(config.marcaId ?? padroes.marcaId); setCategoriaId(config.categoriaId ?? ""); setCategoriaOrigem(config.categoriaOrigem ?? ""); setNascimento(config.nascimento ?? ""); setNascimentoEstimado(config.nascimentoEstimado ?? false); setApartacaoSelecionada(config.apartacaoSelecionada ?? padroes.apartacaoSelecionada); setLoteTransferencia(config.loteTransferencia ?? ""); setMostrarSequenciaBrinco(config.mostrarSequenciaBrinco ?? false); setMostrarDadosCompra(config.mostrarDadosCompra ?? false); setValorPagoCabeca(config.valorPagoCabeca ?? ""); setOrigemAnimal(config.origemAnimal ?? ""); setNumeroGTA(config.numeroGTA ?? ""); setNumeroNFeCompra(config.numeroNFeCompra ?? ""); setValorFreteCompra(config.valorFreteCompra ?? ""); setObservacoesCompra(config.observacoesCompra ?? ""); setMotivoSaida(config.motivoSaida ?? ""); setCausaMorte(config.causaMorte ?? ""); setMostrarDadosVenda(config.mostrarDadosVenda ?? false); setComprador(config.comprador ?? ""); setValorVendaTotal(config.valorVendaTotal ?? ""); setValorArroba(config.valorArroba ?? ""); setRendimentoCarcacaVenda(String(config.rendimentoCarcacaVenda ?? padroes.rendimento)); setRendimentoOrigemVenda(config.rendimentoOrigemVenda ?? RENDIMENTO_ORIGEM_PADRAO_EMPRESA); setDestinoVenda(config.destinoVenda ?? ""); setNumeroGTAVenda(config.numeroGTAVenda ?? ""); setNumeroNFeVenda(config.numeroNFeVenda ?? ""); setValorFreteVenda(config.valorFreteVenda ?? ""); setObservacoesVenda(config.observacoesVenda ?? ""); setMostrarDadosAbate(config.mostrarDadosAbate ?? false); setFrigorifico(config.frigorifico ?? ""); setValorArrobaAbate(config.valorArrobaAbate ?? ""); setRendimentoCarcacaAbate(String(config.rendimentoCarcacaAbate ?? padroes.rendimento)); setRendimentoOrigemAbate(config.rendimentoOrigemAbate ?? RENDIMENTO_ORIGEM_PADRAO_EMPRESA); setValorTotalAbate(config.valorTotalAbate ?? ""); setNumeroGTAAbate(config.numeroGTAAbate ?? ""); setObservacoesAbate(config.observacoesAbate ?? ""); setEmbarqueSelecionadoDoc(config.embarqueSelecionadoDoc ?? ""); setDocumentoSelecionado(config.documentoSelecionado ?? "");
+    setSexo(config.sexo ?? "M"); setRaca(config.raca ?? padroes.raca); setRacaId(config.racaId ?? padroes.racaId); setEra(config.era ?? ""); setMarca(config.marca ?? padroes.marca); setMarcaId(config.marcaId ?? padroes.marcaId); setCategoriaSelecao(config.categoriaSelecao ?? CATEGORIA_AUTOMATICA); setApartacaoSelecionada(config.apartacaoSelecionada ?? padroes.apartacaoSelecionada); setLoteTransferencia(config.loteTransferencia ?? ""); setMostrarSequenciaBrinco(config.mostrarSequenciaBrinco ?? false); setMostrarDadosCompra(config.mostrarDadosCompra ?? false); setValorPagoCabeca(config.valorPagoCabeca ?? ""); setOrigemAnimal(config.origemAnimal ?? ""); setNumeroGTA(config.numeroGTA ?? ""); setNumeroNFeCompra(config.numeroNFeCompra ?? ""); setValorFreteCompra(config.valorFreteCompra ?? ""); setObservacoesCompra(config.observacoesCompra ?? ""); setMotivoSaida(config.motivoSaida ?? ""); setCausaMorte(config.causaMorte ?? ""); setMostrarDadosVenda(config.mostrarDadosVenda ?? false); setComprador(config.comprador ?? ""); setValorVendaTotal(config.valorVendaTotal ?? ""); setValorArroba(config.valorArroba ?? ""); setRendimentoCarcacaVenda(String(config.rendimentoCarcacaVenda ?? padroes.rendimento)); setRendimentoOrigemVenda(config.rendimentoOrigemVenda ?? RENDIMENTO_ORIGEM_PADRAO_EMPRESA); setDestinoVenda(config.destinoVenda ?? ""); setNumeroGTAVenda(config.numeroGTAVenda ?? ""); setNumeroNFeVenda(config.numeroNFeVenda ?? ""); setValorFreteVenda(config.valorFreteVenda ?? ""); setObservacoesVenda(config.observacoesVenda ?? ""); setMostrarDadosAbate(config.mostrarDadosAbate ?? false); setFrigorifico(config.frigorifico ?? ""); setValorArrobaAbate(config.valorArrobaAbate ?? ""); setRendimentoCarcacaAbate(String(config.rendimentoCarcacaAbate ?? padroes.rendimento)); setRendimentoOrigemAbate(config.rendimentoOrigemAbate ?? RENDIMENTO_ORIGEM_PADRAO_EMPRESA); setValorTotalAbate(config.valorTotalAbate ?? ""); setNumeroGTAAbate(config.numeroGTAAbate ?? ""); setObservacoesAbate(config.observacoesAbate ?? ""); setEmbarqueSelecionadoDoc(config.embarqueSelecionadoDoc ?? ""); setDocumentoSelecionado(config.documentoSelecionado ?? "");
   };
   const handleTipoManejoChange = (novoTipo) => {
     if (novoTipo === tipoManejo) return;
@@ -835,7 +834,7 @@ export default function LancamentoPesagensIndividuais() {
       // nome normalizado nos cadastros ativos — sem cadastro, fica em branco.
       const inheritedProfile = ultimoPerfilSn
         ? { sexo: ultimoPerfilSn.sexo, marca: ultimoPerfilSn.marca, marcaId: marcaIdPorNome(ultimoPerfilSn.marca), raca: ultimoPerfilSn.raca, racaId: racaIdPorNome(ultimoPerfilSn.raca) }
-        : { sexo, raca, racaId, marca, marcaId, categoriaId, categoriaOrigem, nascimento, nascimentoEstimado };
+        : { sexo, raca, racaId, marca, marcaId, categoriaSelecao };
       setSnDialogInitialValue(inheritedProfile);
       setSnDialogInherited(Boolean(ultimoPerfilSn));
       setSnDialogOpen(true);
@@ -954,21 +953,27 @@ export default function LancamentoPesagensIndividuais() {
     // Perfil do animal: ids dos cadastros mestres + nomes (snapshot) + era
     // legada somente-leitura. Em Manejo/Saída tudo vem do Cadastro escolhido
     // (registro v7 `animais` quando existe, senão o snapshot do lançamento).
+    // Categoria do Cadastro/SN: "Automático" usa a faixa de peso do sexo; manual usa a escolhida.
+    // A era gravada é a da categoria (registros antigos sem categoria preservam a era).
+    const categoriaDoPerfil = (selecao, sexoPerfil) => (selecao && selecao !== CATEGORIA_AUTOMATICA
+      ? categoriesForSex(categoriasAtivas, sexoPerfil).find((item) => item.id === selecao) || null
+      : suggestCategory({ categorias: categoriasAtivas, sexo: sexoPerfil, peso: pesoNum }));
+    const categoriaSn = isSN ? categoriaDoPerfil(snProfile?.categoriaSelecao, snProfile?.sexo || sexo) : null;
     const perfilAnimal = isSN
-      ? { numero_animal: numeroDigitado, sexo: snProfile?.sexo || sexo, raca: snProfile?.raca || '', raca_id: snProfile?.racaId || null, era: null, marca: snProfile?.marca || '', marca_id: snProfile?.marcaId || null, categoria_id: snProfile?.categoriaId || null, nascimento: snProfile?.nascimento || null, nascimento_estimado: Boolean(snProfile?.nascimento) && Boolean(snProfile?.nascimentoEstimado) }
+      ? { numero_animal: numeroDigitado, sexo: snProfile?.sexo || sexo, raca: snProfile?.raca || '', raca_id: snProfile?.racaId || null, era: eraOfCategory(categoriaSn), marca: snProfile?.marca || '', marca_id: snProfile?.marcaId || null, categoria_id: categoriaSn?.id || null, categoria_automatica: (snProfile?.categoriaSelecao || CATEGORIA_AUTOMATICA) === CATEGORIA_AUTOMATICA }
       : tipoManejo === 'Cadastro'
-        ? { numero_animal: numeroDigitado, sexo, raca, raca_id: racaId || null, era: era || null, marca, marca_id: marcaId || null, categoria_id: categoriaId || null, nascimento: nascimento || null, nascimento_estimado: Boolean(nascimento) && nascimentoEstimado }
+        ? { numero_animal: numeroDigitado, sexo, raca, raca_id: racaId || null, era: eraOfCategory(categoriaEfetiva) ?? (era || null), marca, marca_id: marcaId || null, categoria_id: categoriaEfetiva?.id || null, categoria_automatica: categoriaSelecao === CATEGORIA_AUTOMATICA }
         : {
           numero_animal: animalSelecionado?.numero_animal || numeroDigitado,
           sexo: animalSelecionado?.sexo || sexo,
           raca: animalSelecionado?.raca || '',
           raca_id: animalRegistro?.raca_id || racaIdPorNome(animalSelecionado?.raca) || null,
-          era: animalSelecionado?.era || null,
+          // Animal automático: o gravador recalcula categoria e era pelo peso desta pesagem.
+          era: animalRegistro?.era || animalSelecionado?.era || null,
           marca: animalSelecionado?.marca || '',
           marca_id: animalRegistro?.marca_id || marcaIdPorNome(animalSelecionado?.marca) || null,
           categoria_id: animalRegistro?.categoria_id || null,
-          nascimento: animalRegistro?.nascimento || null,
-          nascimento_estimado: Boolean(animalRegistro?.nascimento) && animalRegistro?.nascimento_estimado === true,
+          categoria_automatica: animalRegistro?.categoria_automatica !== false,
         };
     // Origem do rendimento (docs 12 §4): INFORMADO quando digitado, senão o padrão da empresa.
     const rendimentoOrigem = tipoManejo === 'Saída' && ['Venda', 'Abate'].includes(motivoSaida)
@@ -994,8 +999,7 @@ export default function LancamentoPesagensIndividuais() {
     marca_id: perfilAnimal.marca_id || null,
     raca_id: perfilAnimal.raca_id || null,
     categoria_id: perfilAnimal.categoria_id || null,
-    nascimento: perfilAnimal.nascimento || null,
-    nascimento_estimado: perfilAnimal.nascimento_estimado === true,
+    categoria_automatica: perfilAnimal.categoria_automatica !== false,
       peso: pesoNum,
       observacao: observacao || null,
       alertas_confirmados: outlierWarnings.map((warning) => warning.code),
@@ -1062,9 +1066,9 @@ export default function LancamentoPesagensIndividuais() {
       }
 
       setEditingId(null); setAnimalIdSelecionado(""); setPeso("");
-      // Nascimento, categoria e era legada pertencem ao animal salvo: o próximo
-      // Cadastro começa sem eles (marca/raça padrão continuam por tipo).
-      if (tipoManejo === 'Cadastro') { setNascimento(''); setNascimentoEstimado(false); setCategoriaId(''); setCategoriaOrigem(''); setEra(''); }
+      // Categoria e era pertencem ao animal salvo: o próximo Cadastro volta para
+      // Automático (marca/raça padrão continuam por tipo).
+      if (tipoManejo === 'Cadastro') { setCategoriaSelecao(CATEGORIA_AUTOMATICA); setEra(''); }
       if (window.__sequenciaBrincos && tipoManejo === 'Cadastro') { const usadosAtualizados = new Set(numerosUsados); usadosAtualizados.add(numeroAnimal.trim()); const r = window.__sequenciaBrincos.avancar(usadosAtualizados); if (!r.ok) { toast.info("✅ Sequência finalizada!"); setNumeroAnimal(""); } else if (r.pulos > 0) toast.info(`⏭️ ${r.pulos} pulado(s)`); } else { setNumeroAnimal(""); }
       setObservacao("");
       setDocumentacao("");
@@ -1108,14 +1112,14 @@ export default function LancamentoPesagensIndividuais() {
     setPeso(String(p.peso ?? ""));
     setSexo(p.sexo || "M");
     // Marca/raça do registro: ids do cadastro resolvidos pelo nome normalizado;
-    // a era legada é preservada somente-leitura. Categoria e nascimento vêm do
-    // registro v7 do animal (efeito sobre animalRegistro).
+    // a era de registros antigos é preservada. A categoria vem do registro v7
+    // do animal (efeito sobre animalRegistro).
     setRaca(p.raca || "");
     setRacaId(p.raca_id || racaIdPorNome(p.raca));
     setEra(p.era || "");
     setMarca(p.marca || "");
     setMarcaId(p.marca_id || marcaIdPorNome(p.marca));
-    setCategoriaId(""); setCategoriaOrigem(""); setNascimento(""); setNascimentoEstimado(false);
+    setCategoriaSelecao(CATEGORIA_AUTOMATICA);
     setObservacao(p.observacao || "");
     setTipoManejo(p.tipo_manejo || 'Manejo');
     setMotivoSaida(p.motivo_saida || "");
@@ -1432,14 +1436,24 @@ export default function LancamentoPesagensIndividuais() {
           <div className={`d17d-launch-fields d17d-launch-fields--${tipoManejo === 'Cadastro' ? 'registration' : 'movement'} flex flex-wrap items-end gap-1`}>
             <div className="space-y-1 d17d-field d17d-field--date"><Label className="text-xs font-medium">Data <span className="text-red-500">*</span></Label><MakDateControl value={dataPesagem} onChange={(e) => setDataPesagem(e.target.value)} ariaLabel="Data da pesagem" /></div>
             {tipoManejo === 'Cadastro' && <>
-              <div className="space-y-1 d17d-field d17d-field--short d17d-field--sex"><Label className="text-xs font-medium">Sexo</Label><Select value={sexo} onValueChange={setSexo}><SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="M">M</SelectItem><SelectItem value="F">F</SelectItem></SelectContent></Select></div>
-              {/* Marca, raça e categoria são SELECIONADAS dos cadastros mestres (S-01.5): nunca texto livre, nunca criação a partir da tela. */}
-              <div className="space-y-1 d17d-field d17d-field--short d17d-field--brand"><Label className="text-xs font-medium">Marca <span className="text-red-500">*</span></Label>
-                <Select value={marcaId || SEM_SELECAO} onValueChange={(value) => { selecionarMarca(value === SEM_SELECAO ? '' : value); setTimeout(() => numeroInputRef.current?.focus(), 0); }}>
-                  <SelectTrigger className="h-9 text-sm" aria-label="Marca do animal"><SelectValue placeholder="Selecione a marca" /></SelectTrigger>
+              <div className="space-y-1 d17d-field d17d-field--short d17d-field--sex"><Label className="text-xs font-medium">Sexo <span className="text-red-500">*</span></Label><Select value={sexo} onValueChange={setSexo}><SelectTrigger className="h-9 text-sm" aria-label="Sexo do animal"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="M">M</SelectItem><SelectItem value="F">F</SelectItem></SelectContent></Select></div>
+              {/* Categoria, raça e marca são SELECIONADAS dos cadastros mestres (S-01.5): nunca texto livre, nunca criação a partir da tela. */}
+              <div className="space-y-1 d17d-field d17d-field--medium d17d-field--category">
+                <Label className="text-xs font-medium">
+                  Categoria{' '}
+                  {categoriaSelecao === CATEGORIA_AUTOMATICA ? (
+                    <span className={categoriaAutomatica ? 'text-emerald-700 font-normal' : 'text-slate-500 font-normal'}>
+                      {categoriaAutomatica
+                        ? `(${categoriaAutomatica.nome}${eraOfCategory(categoriaAutomatica) ? ` · era ${eraOfCategory(categoriaAutomatica)}` : ''})`
+                        : parseBrazilianNumber(peso) > 0 ? '(sem faixa para este peso)' : '(pelo peso)'}
+                    </span>
+                  ) : null}
+                </Label>
+                <Select value={categoriaSelecao} onValueChange={setCategoriaSelecao}>
+                  <SelectTrigger className="h-9 text-sm" aria-label="Categoria do animal"><SelectValue placeholder="Automático" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={SEM_SELECAO}>Selecione a marca</SelectItem>
-                    {marcasAtivas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
+                    <SelectItem value={CATEGORIA_AUTOMATICA}>Automático</SelectItem>
+                    {categoriasDoSexo.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -1452,25 +1466,15 @@ export default function LancamentoPesagensIndividuais() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-1 d17d-field d17d-field--date d17d-field--birth"><Label className="text-xs font-medium">Nascimento</Label>
-                <MakDateControl value={nascimento} onChange={(e) => { setNascimento(e.target.value || ''); if (!e.target.value) setNascimentoEstimado(false); }} ariaLabel="Data de nascimento (opcional)" />
-              </div>
-              <div className="space-y-1 d17d-field d17d-field--medium d17d-field--category">
-                <Label className="text-xs font-medium">Categoria {categoriaOrigem === 'sugerida' ? <span className="text-emerald-700 font-normal">(sugerida)</span> : categoriaOrigem === 'manual' ? <span className="text-slate-500 font-normal">(manual)</span> : null}</Label>
-                <Select value={categoriaId || SEM_SELECAO} onValueChange={(value) => { if (value === SEM_SELECAO) { setCategoriaId(''); setCategoriaOrigem(''); } else { setCategoriaId(value); setCategoriaOrigem('manual'); } }}>
-                  <SelectTrigger className="h-9 text-sm" aria-label="Categoria do animal"><SelectValue placeholder="Automática" /></SelectTrigger>
+              <div className="space-y-1 d17d-field d17d-field--short d17d-field--brand"><Label className="text-xs font-medium">Marca <span className="text-red-500">*</span></Label>
+                <Select value={marcaId || SEM_SELECAO} onValueChange={(value) => { selecionarMarca(value === SEM_SELECAO ? '' : value); setTimeout(() => numeroInputRef.current?.focus(), 0); }}>
+                  <SelectTrigger className="h-9 text-sm" aria-label="Marca do animal"><SelectValue placeholder="Selecione a marca" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={SEM_SELECAO}>Automática (sexo e nascimento)</SelectItem>
-                    {categoriasAtivas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
+                    <SelectItem value={SEM_SELECAO}>Selecione a marca</SelectItem>
+                    {marcasAtivas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              {nascimento ? (
-                <label className="d17d-field d17d-field--short flex items-center gap-1 text-xs text-slate-600 pb-2">
-                  <input type="checkbox" checked={nascimentoEstimado} onChange={(e) => setNascimentoEstimado(e.target.checked)} aria-label="Nascimento estimado" />
-                  Estimado
-                </label>
-              ) : null}
             </>}
             <div className="space-y-1 d17d-field d17d-field--animal">
               <Label className="text-xs font-medium">Nº Ident./Nome <span className="text-red-500">*</span></Label>
@@ -2385,13 +2389,11 @@ export default function LancamentoPesagensIndividuais() {
         marcas={marcasAtivas}
         racas={racasAtivas}
         categorias={categoriasAtivas}
-        referenceDate={dataPesagem}
         onConfirm={(profile) => {
           setSexo(profile.sexo);
           setRaca(profile.raca); setRacaId(profile.racaId || '');
           setMarca(profile.marca); setMarcaId(profile.marcaId || '');
-          setCategoriaId(profile.categoriaId || ''); setCategoriaOrigem(profile.categoriaOrigem || '');
-          setNascimento(profile.nascimento || ''); setNascimentoEstimado(Boolean(profile.nascimentoEstimado));
+          setCategoriaSelecao(profile.categoriaSelecao || CATEGORIA_AUTOMATICA);
           setEra('');
           setSnDialogOpen(false);
           void handleSalvar({ skipSnConfirmation: true, snProfile: profile });

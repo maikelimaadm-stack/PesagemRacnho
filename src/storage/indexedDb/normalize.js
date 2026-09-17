@@ -54,13 +54,3 @@ export function civilDateFromIso(value) {
   const text = String(value ?? '');
   return /^\d{4}-\d{2}-\d{2}/.test(text) ? text.slice(0, 10) : null;
 }
-
-/** Nascimento estimado: data civil de referência menos `era` em meses (ADR-028). Null quando não calculável. */
-export function estimateBirth(referenceCivilDate, eraMonths) {
-  const months = Number.parseInt(String(eraMonths ?? '').trim(), 10);
-  if (!referenceCivilDate || !Number.isFinite(months) || months <= 0 || months > 400) return null;
-  const date = new Date(`${referenceCivilDate}T00:00:00Z`);
-  if (Number.isNaN(date.getTime())) return null;
-  date.setUTCMonth(date.getUTCMonth() - months);
-  return date.toISOString().slice(0, 10);
-}

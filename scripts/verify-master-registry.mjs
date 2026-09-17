@@ -92,7 +92,7 @@ ok('definicoes');
 const casos = [
   { service: brandService, dados: { nome: 'Fazenda  Boa Vista', abreviacao: 'FBV' }, duplicado: ' fazenda boa  VISTA ', patch: { abreviacao: 'BV', observacao: 'marca principal' } },
   { service: breedService, dados: { nome: 'Angus', grupo: 'TAURINO', ordem: 2 }, duplicado: 'ANGUS', patch: { abreviacao: 'AN' } },
-  { service: categoryService, dados: { nome: 'Novilho', sexo_aplicavel: 'M', idade_min_meses: 13, idade_max_meses: 24 }, duplicado: 'novilho', patch: { idade_max_meses: 30 } },
+  { service: categoryService, dados: { nome: 'Novilho', sexo_aplicavel: 'M', peso_min_kg: 300, peso_max_kg: 350, era: 24 }, duplicado: 'novilho', patch: { peso_max_kg: 380 } },
   { service: partnerService, dados: { nome: 'Frigorífico Boi Gordo', papeis: ['FRIGORIFICO', 'COMPRADOR'], documento: '12.345.678/0001-90', registro_sif: 'SIF 1234' }, duplicado: 'FRIGORÍFICO  BOI GORDO', patch: { telefone: '(67) 99999-0000', uf: 'ms' } },
   { service: propertyService, dados: { nome: 'Sítio Recanto', tipo: 'TERCEIRO', municipio: 'Campo Grande', uf: 'MS' }, duplicado: 'sítio recanto', patch: { codigo_oficial: 'MS-001' } },
   { service: deathCauseService, dados: { nome: 'Acidente no curral', categoria: 'Acidente', exige_observacao: true }, duplicado: 'ACIDENTE NO CURRAL', patch: { descricao: 'Fraturas e quedas' } },
@@ -223,11 +223,15 @@ await rejects(brandService.create(GESTOR, { nome: 'Marca longa', abreviacao: 'AB
 await rejects(breedService.create(GESTOR, { nome: 'Raça X', grupo: 'ALIEN' }), 'REGISTRY_INVALID', 'grupo inválido');
 await rejects(breedService.create(GESTOR, { nome: 'Raça Y', ordem: 'abc' }), 'REGISTRY_INVALID', 'ordem não numérica');
 await rejects(categoryService.create(GESTOR, { nome: 'Cat sexo', sexo_aplicavel: 'X' }), 'REGISTRY_INVALID', 'sexo_aplicavel inválido');
-await rejects(categoryService.create(GESTOR, { nome: 'Cat faixa', sexo_aplicavel: 'F', idade_min_meses: 30, idade_max_meses: 12 }), 'REGISTRY_INVALID', 'faixa etária incoerente (min > max)');
-await rejects(categoryService.create(GESTOR, { nome: 'Cat negativa', sexo_aplicavel: 'F', idade_min_meses: -1 }), 'REGISTRY_INVALID', 'idade negativa');
-const catOk = await categoryService.create(GESTOR, { nome: 'Cat coerente', sexo_aplicavel: 'AMBOS', idade_min_meses: '12', idade_max_meses: '24' });
-assert.equal(catOk.idade_min_meses, 12, 'numero vindo como string é coagido');
-await rejects(categoryService.update(GESTOR, catOk.id, { idade_min_meses: 40 }), 'REGISTRY_INVALID', 'update com faixa incoerente');
+await rejects(categoryService.create(GESTOR, { nome: 'Cat ambos', sexo_aplicavel: 'AMBOS' }), 'REGISTRY_INVALID', 'NEGATIVO: categoria precisa ser de macho ou de fêmea');
+await rejects(categoryService.create(GESTOR, { nome: 'Cat sem sexo' }), 'REGISTRY_INVALID', 'NEGATIVO: sexo é obrigatório');
+await rejects(categoryService.create(GESTOR, { nome: 'Cat faixa', sexo_aplicavel: 'F', peso_min_kg: 400, peso_max_kg: 300 }), 'REGISTRY_INVALID', 'faixa de peso incoerente (min > max)');
+await rejects(categoryService.create(GESTOR, { nome: 'Cat negativa', sexo_aplicavel: 'F', peso_min_kg: -1 }), 'REGISTRY_INVALID', 'peso negativo');
+await rejects(categoryService.create(GESTOR, { nome: 'Cat era', sexo_aplicavel: 'M', era: '12,5' }), 'REGISTRY_INVALID', 'era não inteira');
+const catOk = await categoryService.create(GESTOR, { nome: 'Cat coerente', sexo_aplicavel: 'M', peso_min_kg: '300,5', peso_max_kg: '350', era: '12' });
+assert.equal(catOk.peso_min_kg, 300.5, 'peso em pt-BR vindo como string é coagido');
+assert.equal(catOk.era, 12, 'era vinda como string é coagida');
+await rejects(categoryService.update(GESTOR, catOk.id, { peso_min_kg: 400 }), 'REGISTRY_INVALID', 'update com faixa incoerente');
 await categoryService.remove(GESTOR, catOk.id);
 await rejects(partnerService.create(GESTOR, { nome: 'Parceiro sem papel', papeis: [] }), 'REGISTRY_INVALID', 'papéis vazios');
 await rejects(partnerService.create(GESTOR, { nome: 'Parceiro sem papel 2' }), 'REGISTRY_INVALID', 'papéis ausentes');
@@ -412,10 +416,10 @@ ok('vinculo-historico');
 // ---------------------------------------------------------------------------
 await deleteDbForTests();
 db = await ensureStorageReady();
-assert.deepEqual(CATEGORIAS_SEED.map((c) => [c.nome, c.sexo_aplicavel, c.idade_min_meses, c.idade_max_meses]), [
-  ['Bezerro', 'M', 0, 12], ['Bezerra', 'F', 0, 12], ['Garrote', 'M', 13, 24], ['Novilha', 'F', 13, 36],
-  ['Boi', 'M', 25, null], ['Vaca', 'F', 37, null], ['Touro', 'M', 25, null],
-], 'CATEGORIAS_SEED com sexo e faixas do contrato (docs 12 §3.1)');
+assert.deepEqual(CATEGORIAS_SEED.map((c) => [c.nome, c.sexo_aplicavel, c.peso_min_kg, c.peso_max_kg, c.era]), [
+  ['Bezerro', 'M', null, null, null], ['Bezerra', 'F', null, null, null], ['Garrote', 'M', null, null, null], ['Novilha', 'F', null, null, null],
+  ['Boi', 'M', null, null, null], ['Vaca', 'F', null, null, null], ['Touro', 'M', null, null, null],
+], 'CATEGORIAS_SEED com sexo; faixas de peso e era ficam para o responsável definir');
 assert.deepEqual(RACA_PADRAO_SEED, { nome: 'Nelore', grupo: 'ZEBUINO', ordem: 1 });
 assert.equal(PROPRIEDADE_PADRAO_SEED.tipo, 'PROPRIA');
 assert.ok(Object.isFrozen(CATEGORIAS_SEED) && CATEGORIAS_SEED.every((c) => Object.isFrozen(c)), 'seeds imutáveis');
@@ -428,7 +432,7 @@ assert.deepEqual(seed2, { categoriasAnimal: 0, racas: 0, propriedades: 0 }, 'seg
 const categorias = await categoryService.list();
 assert.deepEqual(categorias.map((c) => c.nome), ['Bezerro', 'Bezerra', 'Garrote', 'Novilha', 'Boi', 'Vaca', 'Touro'], 'categorias padrão na ordem');
 assert.ok(categorias.every((c) => c.id && c.id.length >= 32), 'ids gerados, nunca fixos');
-assert.ok(categorias.every((c) => c.idade_min_meses == null || c.idade_max_meses == null || c.idade_min_meses <= c.idade_max_meses), 'faixas coerentes');
+assert.ok(categorias.every((c) => ['M', 'F'].includes(c.sexo_aplicavel)), 'toda categoria padrão é de macho ou de fêmea');
 const nelore = await breedService.resolveByName('nelore');
 assert.equal(nelore?.padrao, true, 'Nelore é a raça padrão');
 const propPadrao = await propertyService.getDefault();
