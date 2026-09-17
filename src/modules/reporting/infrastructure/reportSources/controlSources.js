@@ -1,6 +1,7 @@
 // Fontes dos grãos LOT, LOT_STAY, SHIPMENT_DOCUMENT, AUDIT_ENTRY, DATA_ISSUE, BACKUP_ENTRY e
 // REGISTRY_ITEM. Leituras indexadas quando há índice útil; stores pequenas lidas inteiras.
 // Nenhuma fonte devolve credenciais (usuários: só campos seguros, montados aqui).
+import { readByKeys } from './readByKeys.js';
 import storage from '../../../../storage/storageAdapter.js';
 import { logicalIntegrity } from '../../../../storage/indexedDb/health/health.js';
 import { daysBetween } from '../../domain/reportPeriod.js';
@@ -68,10 +69,10 @@ export async function loadLotStayRows({ period, today } = {}) {
   const relevant = stays.filter((stay) => !stay.fim || stay.fim > period.from);
   const animalIds = [...new Set(relevant.map((stay) => stay.animal_id))];
   const [animals, lots, apartacoes, allStaysOfAnimals] = await Promise.all([
-    animalIds.length ? db.table('animais').where('id').anyOf(animalIds).toArray() : [],
+    readByKeys(db.table('animais'), 'id', animalIds),
     db.table('loteApartacoes').toArray(),
     db.table('apartacoes').toArray(),
-    animalIds.length ? db.table('animalLotes').where('animal_id').anyOf(animalIds).toArray() : [],
+    readByKeys(db.table('animalLotes'), 'animal_id', animalIds),
   ]);
   const animalById = byId(active(animals));
   const lotById = byId(active(lots));

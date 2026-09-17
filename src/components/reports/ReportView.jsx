@@ -183,7 +183,7 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
       label={visibleColumns.some((item) => item.id === column.id) ? column.label : `${column.label} (coluna oculta)`}
       value={state.uiFilters[column.id] || null}
       filterType={pillFilterType(column)}
-      listOptions={pillOptions(viewModel, column)}
+      listOptions={() => pillOptions(viewModel, column)}
       onChange={(value) => onFilter(column.id, value)}
     />
   ));

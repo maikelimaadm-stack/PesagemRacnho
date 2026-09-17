@@ -1,0 +1,111 @@
+# Permissões dos relatórios
+
+Fontes: `src/modules/auth/domain/permissionService.js` (`MATRIX`, `can`, `forbiddenError`) e
+`src/modules/reporting/domain/reportPermissions.js`. Permissões são **genéricas** (ações nomeadas),
+nunca uma por relatório. Nenhum `if (role === …)` fora do `permissionService`.
+
+## 1. Ações da MATRIX usadas pelos relatórios
+
+| Ação | ADMIN | GESTOR | OPERADOR | CONSULTA | Uso nos relatórios |
+|---|---|---|---|---|---|
+| `reports.read` | ✓ | ✓ | ✓ | ✓ | Menu Relatórios; exigida por toda definição e pelos modelos/favoritos/recentes |
+| `reports.export` | ✓ | ✓ | — | ✓ | CSV, XLSX, JSON, **impressão e PDF** |
+| `reports.templates.share` | ✓ | ✓ | — | — | Salvar/editar/excluir modelo compartilhado |
+| `commercial.values` | ✓ | ✓ | — | — | Colunas `commercial`; relatórios da família Comercial |
+| `audit.read` | ✓ | ✓ | — | — | Coluna `audit`; Trilha de auditoria |
+| `users.manage` | ✓ | — | — | — | Coluna `personal` (login); relatório Usuários |
+| `maintenance.backup` | ✓ | ✓ | — | — | Histórico de backups |
+| `session.close` | ✓ | ✓ | — | — | Fechamento do dia (imprimível) |
+| `weighing.read`, `animal.read`, `registry.read`, `shipment.read` | ✓ | ✓ | ✓ | ✓ | Relatórios operacionais (pesagens, rebanho, desempenho, movimentação, saídas, embarques, cadastros) |
+
+Ações de manutenção fora dos relatórios, para referência: `maintenance.restore`, `maintenance.clear`,
+`maintenance.reset` e `maintenance.migrate` são só ADMIN.
+
+## 2. Sensibilidade de coluna (`reportPermissions.js`)
+
+| `column.sensitive` | Ação exigida (`SENSITIVITY_PERMISSION`) |
+|---|---|
+| `commercial` | `commercial.values` |
+| `audit` | `audit.read` |
+| `personal` | `users.manage` |
+
+`canSeeColumn(column, role)`:
+
+1. id que casa com `FORBIDDEN_FIELD_PATTERN`
+   (`password|senha|salt|hash_senha|recovery|recuperacao|secret|segredo|token|credential`, sem distinção
+   de caixa) → **nunca** visível, para qualquer perfil;
+2. sem sensibilidade → visível;
+3. com sensibilidade → `can(role, ação)`.
+
+Além do padrão, as fontes não entregam segredos: `registry.usuarios` projeta só `id`, `nome`, `login`,
+`role`, `ativo`, `last_login_at`, `created_at`; a auditoria não devolve conteúdo anterior/posterior; os
+lookups de eventos guardam só o nome do usuário.
+
+## 3. Executar, exportar, imprimir
+
+| Função | Regra |
+|---|---|
+| `canRunReport(definition, role)` | não bloqueado **e** todas as ações de `requires` |
+| `assertCanRunReport` | `AUTH_FORBIDDEN` na primeira ação faltante; depois `REPORT_BLOCKED` se bloqueado |
+| `assertCanExport(definition, role, columnIds)` | `reports.export` → `assertCanRunReport` → nenhuma coluna pedida invisível ao papel (erro cita a ação da sensibilidade) |
+| `canShareTemplates(role)` | `reports.templates.share` |
+
+**Exportar = imprimir = PDF**: `reportExportService.prepareEmission` e
+`reportPrintService.preparePrint` chamam o mesmo `assertCanExport`. OPERADOR não imprime nem gera PDF.
+
+## 4. Onde a permissão é aplicada (serviço, não só tela)
+
+| Ponto | Aplicação |
+|---|---|
+| `reportService.listReports` | só relatórios executáveis pelo papel, **mais** os bloqueados (exibidos como indisponíveis para todos) |
+| `reportService.runReport` | ator com papel obrigatório; `assertCanRunReport` |
+| `reportService.resolveSelection` | remove colunas invisíveis (aviso `COLUMNS_HIDDEN_BY_PERMISSION`, lista em `hiddenByPermission`), remove filtros nelas (`FILTER_REMOVED_BY_PERMISSION`), ignora ordenação e totais nelas, restringe as colunas de pesquisa; agrupar por coluna invisível → `AUTH_FORBIDDEN` |
+| `viewModel.availableColumns` | só colunas visíveis ao papel (diálogos de Colunas, Agrupar e Totais) |
+| `reportExportService.prepareEmission` / `reportPrintService.preparePrint` | papel obrigatório; mesma sessão que gerou o view model; `assertCanExport` |
+| `reportTemplateService` | ver §5 |
+| UI (conforto) | item de menu com `reports.read`; botões **Imprimir** e **Exportar** só com `reports.export`; opção "Compartilhado" desabilitada sem `reports.templates.share`; excluir modelo só para dono (pessoal) ou quem compartilha |
+
+Mensagens de recusa na tela: "Seu perfil não pode abrir este relatório.", "Seu perfil não pode exportar
+este relatório.", "Seu perfil não pode imprimir ou exportar este relatório.", "Seu perfil não pode salvar
+este modelo."
+
+## 5. Modelos nunca ampliam permissão
+
+`reportTemplateService.js` (modelos em `appSettings`, só configuração, nunca dados):
+
+- toda operação exige ator com `id`, `role` e `reports.read`;
+- **listar**: só modelos de relatórios que o papel pode executar; pessoais do próprio usuário + todos os
+  compartilhados;
+- **salvar**: relatório base executável pelo papel; escopo `SHARED` exige `reports.templates.share`;
+  colunas, filtros ou grupos em colunas que o **autor** não vê → `AUTH_FORBIDDEN`; editar modelo
+  existente exige ser dono do pessoal ou ter `reports.templates.share` para o compartilhado; nome
+  obrigatório (≤ 80) e único por relatório/escopo;
+- **excluir**: mesma regra da edição;
+- **abrir** (`templateToRequest`): revalida contra a definição **atual** e o papel de **quem abre**:
+  colunas, filtros, grupos, ordenação e totais inexistentes ou invisíveis são descartados com aviso
+  `TEMPLATE_COLUMNS_REMOVED`; depois `runReport` aplica todas as regras de novo.
+
+Consequência: um modelo compartilhado por um GESTOR com colunas de valores, aberto por CONSULTA, abre
+sem essas colunas; aberto por OPERADOR, não aparece se o relatório base exigir `commercial.values`.
+
+## 6. Decisões por perfil
+
+| Perfil | Relatórios | Exportar / imprimir / PDF | Valores comerciais | Auditoria | Modelos |
+|---|---|---|---|---|---|
+| **ADMIN** | todos os disponíveis | sim | sim | sim | pessoal e compartilhado |
+| **GESTOR** | todos os disponíveis, **exceto "Usuários"** (`users.manage` é só ADMIN) | sim | sim | sim | pessoal e compartilhado |
+| **OPERADOR** | operacionais (pesagens, rebanho, desempenho, movimentação, saídas sem valores, embarques, qualidade dos dados, cadastros exceto usuários) | **não** | não (colunas ocultas; família Comercial indisponível) | não | só pessoal |
+| **CONSULTA** | os mesmos operacionais, sem dados sensíveis | **sim** (só o que vê; colunas sensíveis já saem ocultas) | não | não | só pessoal |
+
+Restrições de manutenção não mudam com relatórios: GESTOR não tem `maintenance.restore`,
+`maintenance.clear` nem `maintenance.reset`. CONSULTA não tem nenhuma ação `*.write`; no módulo de
+relatórios, CONSULTA (como todo perfil com `reports.read`) grava apenas configuração própria em
+`appSettings` — modelo pessoal, favoritos e recentes — nunca dados operacionais.
+
+Fechamento do dia (`session.close`), Histórico de backups (`maintenance.backup`) e Trilha de auditoria
+(`audit.read`) ficam restritos a ADMIN e GESTOR.
+
+## 7. Gates
+
+`reports:permissions:verify` e `reports:sensitive-data:verify`; `reports:print-contract:verify` e
+`reports:pdf-contract:verify` cobrem "OPERADOR não imprime" e "CONSULTA imprime sem valores".

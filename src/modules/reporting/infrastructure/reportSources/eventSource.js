@@ -5,6 +5,7 @@
 import storage from '../../../../storage/storageAdapter.js';
 import { buildAnimalIdentityIndex, buildEventLookups, enrichEventRows, storageRowToEventViewModel } from './eventRows.js';
 import { readAppSetting } from '../../../../storage/indexedDb/repositories/index.js';
+import { readByKeys } from './readByKeys.js';
 
 const instrumentation = { lastQuery: null };
 
@@ -14,9 +15,7 @@ export function lastEventQuery() {
 }
 
 async function activeByIds(table, ids) {
-  const unique = [...new Set(ids.filter(Boolean))];
-  if (!unique.length) return [];
-  return (await table.where('id').anyOf(unique).toArray()).filter((row) => !row.deleted_at);
+  return (await readByKeys(table, 'id', ids)).filter((row) => !row.deleted_at);
 }
 
 async function readAllActive(table) {

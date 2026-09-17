@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useMemo } from "react";
 import { ChevronDown, X } from "lucide-react";
 import MakColumnMenu, { isMakColumnFilterActive } from "./MakColumnMenu";
 
@@ -9,6 +9,8 @@ function describeFilter(label, filter) {
   if (filter?.value != null && String(filter.value).trim()) return `${label}: ${filter.value}`;
   return label;
 }
+
+const NO_OPTIONS = [];
 
 export default function MakFilterPill({
   label,
@@ -22,6 +24,11 @@ export default function MakFilterPill({
   const anchorRef = useRef(null);
   const [open, setOpen] = useState(false);
   const active = isMakColumnFilterActive(value);
+  // listOptions pode ser função: os valores únicos só são calculados quando a pílula abre.
+  const resolvedOptions = useMemo(
+    () => (open ? (typeof listOptions === "function" ? listOptions() : listOptions) : NO_OPTIONS),
+    [open, listOptions]
+  );
 
   useEffect(() => {
     if (openRequest) setOpen(true);
@@ -71,7 +78,7 @@ export default function MakFilterPill({
         label={label}
         valorFiltro={value}
         filterType={filterType}
-        listOptions={listOptions}
+        listOptions={resolvedOptions}
         onFiltrar={onChange}
         anchorRef={anchorRef}
         filterOnly

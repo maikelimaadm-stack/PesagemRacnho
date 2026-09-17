@@ -2,6 +2,7 @@
 // ANIMAL_PERIOD (eventos do período pelo índice data_pesagem, agregados por animal).
 import storage from '../../../../storage/storageAdapter.js';
 import { loadEventRows } from './eventSource.js';
+import { readByKeys } from './readByKeys.js';
 import { bandsFromCategories, buildAnimalLookups, toAnimalCurrentRows, toAnimalPeriodRows } from './animalRows.js';
 
 async function readAllActive(table) {
@@ -40,7 +41,7 @@ export async function loadAnimalPeriodRows({ empresaId, period, params } = {}) {
   const db = await storage.ensureReady();
   const startedAt = performance.now();
   const ids = [...new Set(events.rows.map((row) => row.animal_id || row.animal_id_resolvido).filter(Boolean))];
-  const animals = ids.length ? (await db.table('animais').where('id').anyOf(ids).toArray()).filter((row) => !row.deleted_at) : [];
+  const animals = (await readByKeys(db.table('animais'), 'id', ids)).filter((row) => !row.deleted_at);
   const { lookups, categorias } = await loadLookups(db);
   const { bands } = resolveBands(params, categorias);
   const rows = toAnimalPeriodRows(events.rows, new Map(animals.map((row) => [row.id, row])), lookups, { bands });

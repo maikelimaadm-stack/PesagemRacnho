@@ -58,6 +58,9 @@ function normalizeFilter(filter, filterType = "text") {
   };
 }
 
+// Lista de valores: renderiza no máximo este número de caixas (listas de 36 mil valores travam a tela).
+const MAX_RENDERED_OPTIONS = 500;
+
 function MakConditionSelect({ value, options, onChange, label }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -408,13 +411,14 @@ export default function MakColumnMenu({
                 />
                 <span>(Selecionar Tudo)</span>
               </label>
-              {visibleOptions.map((option) => (
+              {visibleOptions.slice(0, MAX_RENDERED_OPTIONS).map((option) => (
                 <label key={option} className="mak-column-filter__option">
                   <input type="checkbox" checked={draft.values.includes(option)} onChange={() => toggleOption(option)} />
                   <span title={option}>{formatOption(option)}</span>
                 </label>
               ))}
               {visibleOptions.length === 0 ? <p className="mak-column-filter__empty">Nenhum valor encontrado.</p> : null}
+              {visibleOptions.length > MAX_RENDERED_OPTIONS ? <p className="mak-column-filter__empty">Mostrando {MAX_RENDERED_OPTIONS} de {visibleOptions.length.toLocaleString("pt-BR")} valores — pesquise para refinar.</p> : null}
             </div>
           </div>
         ) : (

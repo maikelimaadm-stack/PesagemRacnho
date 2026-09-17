@@ -776,14 +776,24 @@ export default function PesagensIndividuais() {
       <ArrowDown className="w-3 h-3 ml-1 text-emerald-600" />;
   };
 
+  const uniqueOptionsCache = useMemo(() => new Map(), [pesagens]);
+  const uniqueOptionsOf = (columnId) => {
+    if (!uniqueOptionsCache.has(columnId)) {
+      const values = new Set();
+      for (const pesagem of pesagens) {
+        const value = getPesagemColumnValue(pesagem, columnId);
+        if (value !== null && value !== undefined && value !== "") values.add(value);
+      }
+      uniqueOptionsCache.set(columnId, [...values]);
+    }
+    return uniqueOptionsCache.get(columnId);
+  };
+
   // Uma pílula por coluna visível da tabela, na mesma ordem (ModeloBase1).
+  // Valores únicos: calculados sob demanda (ao abrir) e guardados até a lista de pesagens mudar.
   const renderQuickFilter = (coluna) => {
     const filterId = coluna.id;
-    const listOptions = [...new Set(
-      pesagens
-        .map((pesagem) => getPesagemColumnValue(pesagem, filterId))
-        .filter((value) => value !== null && value !== undefined && value !== "")
-    )];
+    const listOptions = () => uniqueOptionsOf(filterId);
     return (
       <MakFilterPill
         key={filterId}
@@ -933,7 +943,7 @@ export default function PesagensIndividuais() {
                           onFechar: () => setColunaMenuAberto(null),
                           valorFiltro: filtrosColuna[coluna.id] || "",
                           filterType: getColumnFilterType(coluna.id),
-                          listOptions: [...new Set(pesagens.map((item) => getPesagemColumnValue(item, coluna.id)).filter((value) => value !== null && value !== undefined && value !== ""))],
+                          listOptions: colunaMenuAberto === coluna.id ? uniqueOptionsOf(coluna.id) : [],
                           onFiltrar: (value) => { setFiltrosColuna((current) => ({ ...current, [coluna.id]: value })); setCurrentPage(1); },
                           onOcultar: () => ocultarColuna(coluna.id),
                         }}
