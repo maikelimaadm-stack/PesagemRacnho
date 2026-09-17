@@ -183,10 +183,9 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #cbd5e1 transparent;
-}
+/* Nada de scrollbar-width/scrollbar-color aqui: no Chromium 121+ isso troca a barra
+   estilizada do sistema (::-webkit-scrollbar, 10 px arredondada) pela barra nativa
+   quadrada de 15 px. A aparência oficial vem de styles/modelobase1/erp-scrollbar.css. */
 
 .overflow-auto,
 .overflow-y-auto,

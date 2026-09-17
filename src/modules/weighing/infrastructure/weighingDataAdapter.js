@@ -263,6 +263,37 @@ export async function rebuildAnimalStateProjection(db, animalId, timestamp = new
   return changes;
 }
 
+/**
+ * Animal sem nenhuma pesagem ativa deixa de existir: ele nasce do Cadastro e, sem nenhum
+ * evento, não há o que representar. Sem isso o registro continuava ATIVO depois de excluir
+ * todas as pesagens e o cadastro (marca, raça, categoria) seguia aparecendo "em uso".
+ * Fato histórico: exclusão lógica (deleted_at) no animal, nos identificadores, nas
+ * permanências de lote e nos movimentos, com auditoria.
+ */
+export async function removeOrphanAnimal(db, animalId, timestamp = new Date().toISOString()) {
+  if (!animalId) return false;
+  const animal = await db.table('animais').where('id').equals(animalId).first();
+  if (!animal || animal.deleted_at) return false;
+  const restantes = (await db.table('pesagens').where('animal_id').equals(animalId).toArray())
+    .filter((row) => !row.deleted_at);
+  if (restantes.length) return false;
+
+  await db.table('animais').update(animal.localId, { deleted_at: timestamp, updated_at: timestamp });
+  for (const [store, campo] of [['animalIdentificadores', 'animal_id'], ['animalLotes', 'animal_id'], ['movimentosAnimais', 'animal_id']]) {
+    const linhas = (await db.table(store).where(campo).equals(animalId).toArray()).filter((row) => !row.deleted_at);
+    for (const linha of linhas) await db.table(store).update(linha.localId, { deleted_at: timestamp, updated_at: timestamp });
+  }
+  await db.table('auditoria').add(auditRow({
+    entidade: 'animais',
+    entidade_id: animalId,
+    acao: 'CANCELAR',
+    antes: animal,
+    motivo: 'Animal sem pesagens após exclusão',
+    created_at: timestamp,
+  }));
+  return true;
+}
+
 export async function rebuildAnimalLotProjection(db, animalId, timestamp = new Date().toISOString()) {
   if (!animalId) return 0;
   const weighingTable = db.table('pesagens');
@@ -781,7 +812,7 @@ export async function bulkDeleteEntries(ids) {
   let removed = 0;
   const affectedAnimals = new Set();
   const removedIds = [];
-  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalLotes'), db.table('auditoria'), db.table('categoriasAnimal'), db.table(APLICACOES_STORE), async () => {
+  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalIdentificadores'), db.table('animalLotes'), db.table('movimentosAnimais'), db.table('auditoria'), db.table('categoriasAnimal'), db.table(APLICACOES_STORE), async () => {
     for (const id of ids) {
       const rows = await db.table('pesagens').where('id').equals(id).toArray();
       const existing = [...rows].reverse().find((row) => !row.deleted_at);
@@ -794,6 +825,8 @@ export async function bulkDeleteEntries(ids) {
     }
     await cancelApplicationsForWeighingsInTransaction(db, removedIds, { ts });
     for (const animalId of affectedAnimals) {
+      // Sem pesagem nenhuma, o animal sai junto (libera marca/raça/categoria do "Em uso").
+      if (await removeOrphanAnimal(db, animalId, ts)) continue;
       await rebuildAnimalLotProjection(db, animalId, ts);
       await rebuildAnimalStateProjection(db, animalId, ts);
     }

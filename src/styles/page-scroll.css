@@ -12,15 +12,6 @@
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
-  /* Mesma geometria e cor das tabelas no Chrome e no Electron instalado: a regra global
-     `* { scrollbar-width: thin }` do index.css faria o empacotado desenhar a barra nativa
-     clara, diferente do resto do sistema (mesmo contrato do bloco .d17c-table-scroll). */
-  scrollbar-width: auto;
-  scrollbar-color: #728195 #e8edf1;
-}
-
-html.dark .mb1-app-shell .mb1-operational-page {
-  scrollbar-color: var(--erp-scrollbar-thumb) var(--erp-scrollbar-track);
 }
 
 .mb1-app-shell .mb1-operational-page::-webkit-scrollbar { width: 10px; height: 10px; }
@@ -39,3 +30,14 @@ html.dark .mb1-app-shell .mb1-operational-page::-webkit-scrollbar-thumb { border
 
 /* Assistente de importação: a conferência pode ter centenas de linhas. */
 .importacao-page .importacao-body { min-height: 0; }
+
+/* Backup e Manutenção: os cartões herdavam `height: 100%; overflow: hidden` das telas de
+   tabela e cortavam o texto (ex.: o aviso do backup completo) sem barra nenhuma. Aqui eles
+   têm altura natural e quem rola é a página. */
+.mb1-app-shell .d17b-maintenance-page { align-items: start; }
+.mb1-app-shell .d17b-maintenance-page > .emp-content-card,
+.mb1-app-shell .d17b-maintenance-page .emp-content-card {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+}
