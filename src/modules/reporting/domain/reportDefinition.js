@@ -79,6 +79,8 @@ export function defineReport(spec) {
   const byId = indexColumns(columns);
   assertIds(spec.defaultColumns, byId, `${context} defaultColumns`);
   assertIds(spec.searchColumns, byId, `${context} searchColumns`);
+  assertIds(Object.keys(spec.defaultFilters || {}), byId, `${context} defaultFilters`);
+  if (spec.lockedFilters != null && typeof spec.lockedFilters !== 'function') throw new Error(`${context}: lockedFilters deve ser função (params) => filtros`);
   for (const sort of spec.defaultSort || []) {
     assertIds([sort.columnId], byId, `${context} defaultSort`);
     if (!byId.get(sort.columnId).sortable) throw new Error(`${context}: ${sort.columnId} não é ordenável`);

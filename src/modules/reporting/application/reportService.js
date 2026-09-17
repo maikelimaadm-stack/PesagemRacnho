@@ -61,7 +61,7 @@ export function resolveSelection(definition, selection = {}, role) {
   if (hiddenByPermission.length) warnings.push({ code: 'COLUMNS_HIDDEN_BY_PERMISSION', message: `${hiddenByPermission.length} coluna(s) oculta(s) pelo seu perfil`, columns: hiddenByPermission });
   const columns = requestedColumns.filter((id) => !hiddenByPermission.includes(id));
 
-  const filters = serializeFilters(selection.filters || {});
+  const filters = serializeFilters(selection.filters ?? definition.defaultFilters ?? {});
   for (const id of Object.keys(filters)) {
     const accessor = resolve(id);
     if (!accessor) throw new Error(`relatório ${definition.id}: filtro em coluna desconhecida (${id})`);
@@ -140,11 +140,14 @@ export async function runReport(definitionOrId, request = {}, actor) {
   const today = request.today || localToday();
   const params = resolveParams(definition, request.params, today);
   const selection = resolveSelection(definition, request.selection, role);
+  // Condição fixa do relatório (ex.: ganho < 0 em "perdendo peso"): sempre aplicada, sempre exibida.
+  const lockedFilters = definition.lockedFilters ? serializeFilters(definition.lockedFilters(params)) : {};
   const source = getReportSource(definition.source);
 
   const loaded = await source({ definition, params, empresaId: request.empresaId ?? 'local', today, deps: request.deps });
   const afterLoad = now();
-  const filtered = applyFilters(loaded.rows, { search: selection.search, searchColumnIds: selection.searchColumnIds, filters: selection.filters }, selection.resolve);
+  const locked = Object.keys(lockedFilters).length ? applyFilters(loaded.rows, { filters: lockedFilters }, selection.resolve) : loaded.rows;
+  const filtered = applyFilters(locked, { search: selection.search, searchColumnIds: selection.searchColumnIds, filters: selection.filters }, selection.resolve);
   const afterFilter = now();
   const sorted = sortRows(filtered, selection.sort, selection.resolve);
   const afterSort = now();
@@ -184,6 +187,7 @@ export async function runReport(definitionOrId, request = {}, actor) {
     hiddenByPermission: selection.hiddenByPermission,
     search: selection.search,
     filters: selection.filters,
+    lockedFilters,
     sort: selection.sort,
     groups: tree.levels,
     aggregates: selection.aggregates.map((spec) => ({ id: aggregateSpecId(spec), columnId: spec.columnId ?? null, op: spec.op })),
