@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { registerDialogIpc } = require('./ipc/dialogIpc.cjs');
+const { registerReportIpc } = require('./ipc/reportIpc.cjs');
 const appLogger = require('./logging/appLogger.cjs');
 const appRuntime = require('./appRuntime.cjs');
 const { buildDiagnosticInfo } = require('./diagnostics.cjs');
@@ -154,6 +155,8 @@ app.whenReady().then(() => {
   });
 
   registerDialogIpc(ipcMain, () => dataDir);
+  // Emissão de relatórios (PDF, impressão, salvar arquivo) — destino sempre escolhido no diálogo nativo.
+  registerReportIpc(ipcMain);
 
   createWindow();
 
