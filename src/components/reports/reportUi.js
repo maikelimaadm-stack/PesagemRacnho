@@ -27,9 +27,15 @@ export function pillFilterType(column) {
   return "text";
 }
 
-/** Opções da pílula: valores exibidos (nome para entidade, rótulo para enum) da população base. */
+const optionsCache = new WeakMap();
+
+/** Opções da pílula: valores exibidos (nome para entidade, rótulo para enum) da população base. Calculadas uma vez por execução. */
 export function pillOptions(viewModel, column, limit = 500) {
   if (!viewModel?.population) return [];
+  let perColumn = optionsCache.get(viewModel);
+  if (!perColumn) { perColumn = new Map(); optionsCache.set(viewModel, perColumn); }
+  const cached = perColumn.get(column.id);
+  if (cached) return cached;
   const accessor = viewModel.resolve(column.id);
   const seen = new Set();
   for (const row of viewModel.population) {
@@ -38,29 +44,22 @@ export function pillOptions(viewModel, column, limit = 500) {
     seen.add(column.type === "date" ? String(value).slice(0, 10) : value);
     if (seen.size >= limit) break;
   }
-  return [...seen].sort((a, b) => String(a).localeCompare(String(b), "pt-BR", { numeric: true }));
+  const options = [...seen].sort((a, b) => String(a).localeCompare(String(b), "pt-BR", { numeric: true }));
+  perColumn.set(column.id, options);
+  return options;
 }
 
 /**
- * Pílula (valores exibidos) → filtro do motor (códigos/ids). Para entidade/enum, cada rótulo
- * marcado vira todos os ids que exibem aquele rótulo na população base.
+ * Pílula (valores exibidos) → filtro do serviço. Enum/entidade vão com match "label": o serviço
+ * compara o rótulo exibido na própria população da execução (funciona já na primeira execução e
+ * em modelos salvos, sem depender da tela ter carregado antes).
  */
-export function toEngineFilters(uiFilters, viewModel, columns) {
+export function toServiceFilters(uiFilters, columns) {
   const out = {};
   for (const [columnId, filter] of Object.entries(uiFilters || {})) {
     if (!isFilterActive(filter)) continue;
     const column = columns.find((item) => item.id === columnId);
-    if (!column || !["entity", "enum"].includes(column.type) || !filter.values?.length || !viewModel?.population) {
-      out[columnId] = filter;
-      continue;
-    }
-    const accessor = viewModel.resolve(columnId);
-    const wanted = new Set(filter.values.map(String));
-    const ids = new Set();
-    for (const row of viewModel.population) {
-      if (wanted.has(String(accessor.displayOf(row)))) ids.add(String(accessor.valueOf(row)));
-    }
-    out[columnId] = { ...filter, operator: ["not_in", "not_equals", "not_contains"].includes(filter.operator) ? "not_in" : "in", values: ids.size ? [...ids] : ["__nenhum__"] };
+    out[columnId] = column && ["entity", "enum"].includes(column.type) && typeof filter === "object" ? { ...filter, match: "label" } : filter;
   }
   return out;
 }

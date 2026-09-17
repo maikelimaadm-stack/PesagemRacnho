@@ -11,7 +11,7 @@ import MakFilterPill from "@/components/mak/MakFilterPill";
 import MakFilterRail from "@/components/mak/MakFilterRail";
 import MgTablePanelStrip from "@/components/mak/MgTablePanelStrip";
 import { ModeloBase1PageContainer, ModeloBase1PageHeader } from "@/components/modelobase1";
-import { isFilterActive } from "@/modules/reporting/domain/filterEngine";
+import { describeFilter, isFilterActive } from "@/modules/reporting/domain/filterEngine";
 import { PERIOD_PRESETS, describePeriod } from "@/modules/reporting/domain/reportPeriod";
 import { REPORT_FAMILIES } from "@/modules/reporting/domain/reportDefinition";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
@@ -22,13 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { getFavorites, recordRecent, saveTemplate, templateToRequest, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportTable from "./ReportTable";
-import { pillFilterType, pillOptions, toEngineFilters, useCan } from "./reportUi";
-
-function describeFilterValue(filter) {
-  if (filter.values?.length) return filter.values.join(", ");
-  if (filter.valueTo) return `${filter.value} – ${filter.valueTo}`;
-  return `${filter.operator ?? ""} ${filter.value ?? ""}`.trim();
-}
+import { pillFilterType, pillOptions, toServiceFilters, useCan } from "./reportUi";
 
 function initialState(definition, template, role) {
   if (template) {
@@ -84,19 +78,19 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
     getFavorites(actor).then((ids) => setFavorite(ids.includes(reportId))).catch(() => {});
   }, [reportId, template?.id, actor]);
 
-  const engineFilters = useMemo(
-    () => toEngineFilters(state.uiFilters, lastViewModel.current, definition.columns),
-    [state.uiFilters, definition],
-  );
+  const serviceFilters = useMemo(() => toServiceFilters(state.uiFilters, definition.columns), [state.uiFilters, definition]);
 
-  const execute = useCallback(async () => {
+  // reload=false: mudou só seleção (filtro, coluna, grupo, total) → reaproveita as linhas já lidas
+  // se os parâmetros forem os mesmos. "Atualizar" sempre relê o banco.
+  const execute = useCallback(async ({ reload = false } = {}) => {
     const seq = ++runSeq.current;
     setLoading(true);
     setError(null);
     try {
       const result = await runReport(reportId, {
         params: state.params,
-        selection: { columns: state.columns, filters: engineFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort, search: state.search },
+        selection: { columns: state.columns, filters: serviceFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort, search: state.search },
+        reuse: reload ? null : lastViewModel.current,
       }, actor);
       if (seq !== runSeq.current) return;
       lastViewModel.current = result;
@@ -107,10 +101,10 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
     } finally {
       if (seq === runSeq.current) setLoading(false);
     }
-  }, [reportId, state, engineFilters, actor]);
+  }, [reportId, state, serviceFilters, actor]);
 
   useEffect(() => {
-    const timer = setTimeout(execute, 200);
+    const timer = setTimeout(() => execute(), 200);
     return () => clearTimeout(timer);
   }, [execute]);
 
@@ -165,6 +159,7 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
         id, name, scope, baseReportId: reportId,
         columns: state.columns, filters: state.uiFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort,
         search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)), widths: state.widths,
+        orientation,
       }, actor);
       setCurrentTemplate(saved);
       setDialog(null);
@@ -177,10 +172,15 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
     }
   };
 
-  const filterPills = visibleColumns.map((column) => (
+  // Pílulas: colunas visíveis + colunas ocultas que ainda filtram (um filtro nunca fica invisível).
+  const pillColumns = [
+    ...visibleColumns,
+    ...available.filter((column) => !visibleColumns.some((item) => item.id === column.id) && isFilterActive(state.uiFilters[column.id])),
+  ];
+  const filterPills = pillColumns.map((column) => (
     <MakFilterPill
       key={column.id}
-      label={column.label}
+      label={visibleColumns.some((item) => item.id === column.id) ? column.label : `${column.label} (coluna oculta)`}
       value={state.uiFilters[column.id] || null}
       filterType={pillFilterType(column)}
       listOptions={pillOptions(viewModel, column)}
@@ -204,7 +204,7 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
               <span>{REPORT_FAMILIES[definition.family]}</span> › <strong>{definition.title}</strong>
               {currentTemplate ? <em> · modelo “{currentTemplate.name}”</em> : null}
             </span>
-            <button type="button" className={`rpt-star${favorite ? " is-on" : ""}`} aria-pressed={favorite} title={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"} onClick={async () => setFavorite((await toggleFavorite(reportId, actor)).includes(reportId))}>
+            <button type="button" className={`rpt-star${favorite ? " is-on" : ""}`} aria-pressed={favorite} title={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"} aria-label={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"} onClick={async () => setFavorite((await toggleFavorite(reportId, actor)).includes(reportId))}>
               <Star className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
@@ -232,7 +232,7 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
             <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => setDialog("groups")}><Layers className="h-3.5 w-3.5" aria-hidden="true" />Agrupar</button>
             <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => setDialog("totals")}><Sigma className="h-3.5 w-3.5" aria-hidden="true" />Totais</button>
             <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => setDialog("columns")}><Columns3 className="h-3.5 w-3.5" aria-hidden="true" />Colunas</button>
-            <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={execute} title="Atualizar"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Atualizar</button>
+            <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => execute({ reload: true })} title="Reler os dados do banco"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Atualizar</button>
             <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => setDialog("save")}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar modelo</button>
             {can("reports.export") ? <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" disabled={!viewModel || loading} onClick={() => emitDocument("print")}><Printer className="h-3.5 w-3.5" aria-hidden="true" />Imprimir</button> : null}
             {can("reports.export") ? (
@@ -260,9 +260,10 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
       <div className="mak-mother-page__panel-strip" data-mak-region="panel-strip">
         <MgTablePanelStrip onConfigColumns={() => setDialog("columns")}>
           <MakFilterRail hasActiveFilters={hasActiveFilters} onClear={() => update({ uiFilters: {}, search: "" })}>
+            <Input type="search" className="rpt-search" aria-label="Pesquisar no relatório" placeholder="Pesquisar…" value={state.search} onChange={(event) => update({ search: event.target.value })} />
             {lockedEntries.map(([columnId, filter]) => (
               <span key={`locked-${columnId}`} className="rpt-locked-pill" title="Condição fixa do relatório">
-                <Lock className="h-3 w-3" aria-hidden="true" />{available.find((column) => column.id === columnId)?.label ?? columnId}: {describeFilterValue(filter)}
+                <Lock className="h-3 w-3" aria-hidden="true" />{available.find((column) => column.id === columnId)?.label ?? columnId} {describeFilter(filter, available.find((column) => column.id === columnId))}
               </span>
             ))}
             {filterPills}
@@ -276,10 +277,10 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
           <div className="rpt-card-head">
         <div className="rpt-context" aria-live="polite">
           <span><strong>Período:</strong> {viewModel?.period ? describePeriod(viewModel.period) : "—"}</span>
-          <span><strong>Grão:</strong> {viewModel?.grainLabel ?? "—"}</span>
+          <span>{viewModel?.grainLabel ? viewModel.grainLabel.charAt(0).toUpperCase() + viewModel.grainLabel.slice(1) : "—"}</span>
           {viewModel?.classification && viewModel.classification !== "CANÔNICO" ? <span className="rpt-legacy">{viewModel.classification}</span> : null}
           {viewModel?.groups?.length ? <span><strong>Agrupado por:</strong> {viewModel.groups.map((group) => group.label).join(" › ")}</span> : null}
-          {loading ? <span className="rpt-loading">Calculando…</span> : viewModel ? <span className="rpt-timing">{Math.round(viewModel.stats.timings.total)} ms · {viewModel.stats.strategy}</span> : null}
+          {loading ? <span className="rpt-loading">Calculando…</span> : viewModel ? <span className="rpt-timing" title={`Leitura: ${viewModel.stats.strategy}`}>{viewModel.rowCount.toLocaleString("pt-BR")} registro(s) · {Math.round(viewModel.stats.timings.total)} ms</span> : null}
         </div>
         {(viewModel?.warnings ?? []).map((warning) => (
           <div key={warning.code} className="rpt-warning" role="status"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />{warning.message}</div>
@@ -324,7 +325,7 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
             <DialogDescription>{printPrompt ? `${printPrompt.layout.columnCount} colunas não cabem em A4 ${printPrompt.layout.orientation === "landscape" ? "paisagem" : "retrato"}. Nenhuma coluna é escondida automaticamente.` : ""}</DialogDescription>
           </DialogHeader>
           <DialogFooter className="rpt-print-options">
-            {printPrompt?.layout.orientation === "portrait" ? <Button type="button" variant="outline" onClick={() => { setOrientation("landscape"); emitDocument(printPrompt.kind, { orientation: "landscape" }); }}>Usar paisagem</Button> : null}
+            {printPrompt?.layout.warning?.options?.includes("paisagem") ? <Button type="button" variant="outline" onClick={() => { setOrientation("landscape"); emitDocument(printPrompt.kind, { orientation: "landscape" }); }}>Usar paisagem</Button> : null}
             <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); setDialog("columns"); }}>Reduzir colunas</Button>
             {can("reports.export") ? <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); exportAs("csv"); }}>Exportar CSV</Button> : null}
             <Button type="button" className="emp-toolbar-btn-save" onClick={() => emitDocument(printPrompt.kind, { acceptTooWide: true })}>Continuar mesmo assim</Button>

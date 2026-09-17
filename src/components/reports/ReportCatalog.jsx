@@ -36,6 +36,7 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
   const [favorites, setFavorites] = useState([]);
   const [recents, setRecents] = useState([]);
   const [templates, setTemplates] = useState([]);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const reports = useMemo(() => listReports(actor), [actor]);
   const byId = useMemo(() => new Map(reports.map((report) => [report.id, report])), [reports]);
 
@@ -102,10 +103,18 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
                 <span className="rpt-card__desc">Baseado em {base.title} · {template.scope === "SHARED" ? `compartilhado por ${template.ownerName ?? "—"}` : "pessoal"}</span>
                 <span className="rpt-card__meta"><span>Atualizado em {fmtDateBR(template.updatedAt)}</span>{template.groups?.length ? <span>{template.groups.length} nível(is) de agrupamento</span> : null}</span>
               </button>
-              {canDelete ? (
-                <button type="button" className="rpt-star" aria-label={`Excluir modelo ${template.name}`} title="Excluir modelo" onClick={async () => {
-                  try { await deleteTemplate(template.id, actor); setTemplates(await listTemplates(actor)); toast.success("Modelo excluído."); } catch (err) { toast.error(err.message); }
-                }}><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
+              {canDelete && pendingDelete !== template.id ? (
+                <button type="button" className="rpt-star" aria-label={`Excluir modelo ${template.name}`} title="Excluir modelo" onClick={() => setPendingDelete(template.id)}><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
+              ) : null}
+              {canDelete && pendingDelete === template.id ? (
+                <span className="rpt-confirm" role="group" aria-label={`Confirmar exclusão do modelo ${template.name}`}>
+                  <span>{template.scope === "SHARED" ? "Excluir para todos?" : "Excluir modelo?"}</span>
+                  <button type="button" className="ios-btn tb-btn tb-btn-ghost" onClick={() => setPendingDelete(null)}>Cancelar</button>
+                  <button type="button" className="ios-btn tb-btn tb-btn-danger" onClick={async () => {
+                    setPendingDelete(null);
+                    try { await deleteTemplate(template.id, actor); setTemplates(await listTemplates(actor)); toast.success("Modelo excluído."); } catch (err) { toast.error(err.message); }
+                  }}>Excluir</button>
+                </span>
               ) : null}
             </li>
           );

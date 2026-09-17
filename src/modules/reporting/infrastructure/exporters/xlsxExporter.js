@@ -2,6 +2,7 @@
 // adaptado aos relatórios: ZIP "stored" + SpreadsheetML, números como números (nunca texto),
 // título, período, filtros e emissão no topo; mesma estrutura de linhas do CSV
 // (Tipo | Grupo | Métrica | Valor | colunas) e uma segunda aba com o manifesto.
+import { describeFilters } from './printDocument.js';
 import { describePeriod } from '../../domain/reportPeriod.js';
 import { buildReportLines } from './reportLayout.js';
 
@@ -68,8 +69,7 @@ export function buildSheetRows(viewModel) {
   const rows = [];
   rows.push({ kind: 'TITLE', cells: [[viewModel.reportName, STYLE.title]] });
   rows.push({ kind: 'META', cells: [['Período', STYLE.meta], [viewModel.period ? describePeriod(viewModel.period) : 'Estado atual', null]] });
-  const filters = [...Object.keys(viewModel.lockedFilters || {}), ...Object.keys(viewModel.filters || {})];
-  rows.push({ kind: 'META', cells: [['Filtros', STYLE.meta], [filters.length ? filters.join(', ') : 'Nenhum', null]] });
+  rows.push({ kind: 'META', cells: [['Filtros', STYLE.meta], [describeFilters(viewModel), null]] });
   rows.push({ kind: 'META', cells: [['Agrupado por', STYLE.meta], [viewModel.groups.length ? viewModel.groups.map((group) => group.label).join(' › ') : 'Sem agrupamento', null]] });
   rows.push({ kind: 'META', cells: [['Emissão', STYLE.meta], [`${viewModel.emissionId} · ${viewModel.generatedAt} · ${viewModel.emittedBy.nome ?? viewModel.emittedBy.id} (${viewModel.emittedBy.role}) · versão ${viewModel.appVersion}`, null]] });
   rows.push({ kind: 'BLANK', cells: [] });

@@ -128,7 +128,10 @@ function publicColumn(accessor) {
 /**
  * Executa um relatório.
  * @param {string|object} definitionOrId
- * @param {{ params?: object, selection?: object, empresaId?: string, today?: string }} request
+ * @param {{ params?: object, selection?: object, empresaId?: string, today?: string, reuse?: object }} request
+ *   reuse: view model anterior da MESMA tela. Se relatório, parâmetros, empresa e dia forem iguais,
+ *   as linhas canônicas já carregadas são reaproveitadas (mudou só filtro/coluna/grupo/total).
+ *   Não é cache persistido: vive só no objeto que a tela já segura.
  * @param {{ id: string, nome?: string, role: string }} actor
  */
 export async function runReport(definitionOrId, request = {}, actor) {
@@ -143,8 +146,13 @@ export async function runReport(definitionOrId, request = {}, actor) {
   // Condição fixa do relatório (ex.: ganho < 0 em "perdendo peso"): sempre aplicada, sempre exibida.
   const lockedFilters = definition.lockedFilters ? serializeFilters(definition.lockedFilters(params)) : {};
   const source = getReportSource(definition.source);
+  const empresaId = request.empresaId ?? 'local';
+  const sourceKey = JSON.stringify([definition.id, definition.version, empresaId, today, params, role]);
 
-  const loaded = await source({ definition, params, empresaId: request.empresaId ?? 'local', today, deps: request.deps });
+  const reusable = request.reuse && request.reuse.sourceKey === sourceKey && request.reuse.sourceLoaded;
+  const loaded = reusable
+    ? { ...request.reuse.sourceLoaded, strategy: `${request.reuse.sourceLoaded.strategy}+reuse`, timings: { query: 0, transform: 0 } }
+    : await source({ definition, params, empresaId, today, deps: request.deps });
   const afterLoad = now();
   const locked = Object.keys(lockedFilters).length ? applyFilters(loaded.rows, { filters: lockedFilters }, selection.resolve) : loaded.rows;
   const filtered = applyFilters(locked, { search: selection.search, searchColumnIds: selection.searchColumnIds, filters: selection.filters }, selection.resolve);
@@ -217,5 +225,7 @@ export async function runReport(definitionOrId, request = {}, actor) {
     // (opções das pílulas de filtro). Mesma referência de objetos — nenhuma cópia do dataset.
     resolve: selection.resolve,
     population: locked,
+    sourceKey,
+    sourceLoaded: { rows: loaded.rows, strategy: reusable ? request.reuse.sourceLoaded.strategy : loaded.strategy, rowsRead: loaded.rowsRead, warnings: loaded.warnings },
   };
 }

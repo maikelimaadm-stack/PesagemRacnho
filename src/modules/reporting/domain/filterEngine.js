@@ -6,7 +6,9 @@
 // - número aceita vírgula decimal em todos os operadores, inclusive "contém";
 // - tipos enum, boolean e entity (entidade compara o ID, nunca o nome);
 // - datas civis YYYY-MM-DD comparadas como texto (sem fuso), com between/not_between;
-// - filtros são objetos serializáveis { operator, value, valueTo, values }.
+// - filtros são objetos serializáveis { operator, value, valueTo, values, match? };
+//   match: 'label' (enum/entidade) compara o rótulo exibido — é o que a tela e os modelos salvos
+//   guardam; sem match, compara o código/id.
 // Função pura: o mesmo filtro produz a mesma população na tela, no relatório e na exportação.
 
 export const FILTER_OPERATORS = Object.freeze({
@@ -19,6 +21,29 @@ export const FILTER_OPERATORS = Object.freeze({
 });
 
 export const FILTER_TYPES = Object.freeze(Object.keys(FILTER_OPERATORS));
+
+/** Rótulos dos operadores para pessoas (tela, impressão, XLSX): nunca o código cru. */
+export const OPERATOR_LABELS = Object.freeze({
+  contains: 'contém', not_contains: 'não contém', equals: '=', not_equals: '≠', starts_with: 'começa com', ends_with: 'termina com',
+  greater: '>', greater_equal: '≥', less: '<', less_equal: '≤', between: 'entre', not_between: 'fora de', in: 'em', not_in: 'fora de',
+  empty: 'vazio', not_empty: 'preenchido', before: 'antes de', after: 'depois de', on_or_before: 'até', on_or_after: 'a partir de',
+});
+
+/** Texto legível de um filtro; códigos de enum viram rótulos pelas opções da coluna. */
+export function describeFilter(filter, column = null) {
+  if (!filter || typeof filter !== 'object') return String(filter ?? '');
+  const optionLabel = (value) => {
+    if (filter.match === 'label' || !Array.isArray(column?.options)) return value;
+    const option = column.options.find((item) => String(item.value ?? item.id) === String(value));
+    return option ? option.label : value;
+  };
+  const op = OPERATOR_LABELS[filter.operator];
+  if (filter.values?.length) return `${op ?? 'em'} ${filter.values.map(optionLabel).join(', ')}`;
+  if (['empty', 'not_empty'].includes(filter.operator)) return op;
+  if (typeof filter.value === 'boolean') return filter.value ? 'sim' : 'não';
+  if (filter.valueTo !== undefined && filter.valueTo !== null && filter.valueTo !== '') return `${op ?? ''} ${filter.value} e ${filter.valueTo}`.trim();
+  return `${op ?? ''} ${optionLabel(filter.value)}`.trim();
+}
 
 const NEGATIVE_LIST_OPERATORS = new Set(['not_in', 'not_equals', 'not_contains']);
 
@@ -75,6 +100,7 @@ export function normalizeFilter(filter, filterType = 'text') {
       value: filter.value ?? '',
       valueTo: filter.valueTo ?? '',
       values: Array.isArray(filter.values) ? filter.values.map((item) => (item === null || item === undefined ? '' : String(item))) : [],
+      ...(filter.match === 'label' ? { match: 'label' } : {}),
     };
   }
   return { operator: defaultOperatorFor(filterType), value: filter == null ? '' : String(filter), valueTo: '', values: [] };
@@ -191,6 +217,31 @@ const TEXT_ONLY_OPERATORS = new Set(['contains', 'not_contains', 'starts_with', 
  * código OU com o rótulo exibido; listas e igualdade continuam pelo código/id.
  */
 export function matchesAccessor(row, filter, accessor) {
+  return compileAccessorFilter(filter, accessor)(row);
+}
+
+function compileAccessorFilter(filter, accessor) {
+  const type = accessor.filterType;
+  const byLabel = (type === 'enum' || type === 'entity') && filter && typeof filter === 'object' && filter.match === 'label';
+  const normalized = normalizeFilter(filter, type);
+  const { operator } = normalized;
+  // Lista: o Set é montado uma vez por filtro, não por linha.
+  if (operator !== 'empty' && operator !== 'not_empty' && (normalized.values.length > 0 || operator === 'in' || operator === 'not_in')) {
+    const listType = byLabel ? 'text' : type;
+    const list = new Set(normalized.values.map((item) => comparableForList(item, listType)));
+    const negative = NEGATIVE_LIST_OPERATORS.has(operator);
+    const read = byLabel ? (row) => accessor.displayOf(row) : (row) => accessor.filterValueOf(row);
+    return (row) => {
+      const raw = read(row);
+      const found = !isEmptyValue(raw) && list.has(comparableForList(raw, listType));
+      return negative ? !found : found;
+    };
+  }
+  if (byLabel) return (row) => matchesFilter(accessor.displayOf(row), filter, 'text');
+  return (row) => matchesAccessorSlow(row, filter, accessor);
+}
+
+function matchesAccessorSlow(row, filter, accessor) {
   const raw = accessor.filterValueOf(row);
   const type = accessor.filterType;
   if ((type === 'enum' || type === 'entity') && filter && typeof filter === 'object' && TEXT_ONLY_OPERATORS.has(filter.operator) && !(filter.values?.length)) {
@@ -214,7 +265,7 @@ export function applyFilters(rows, criteria = {}, resolve) {
     .map(([columnId, filter]) => {
       const accessor = resolve(columnId);
       if (!accessor) throw new Error(`filtro: coluna desconhecida (${columnId})`);
-      return { filter, accessor };
+      return compileAccessorFilter(filter, accessor);
     });
   const term = normalizeText(criteria.search);
   const searchAccessors = term ? (criteria.searchColumnIds || []).map((columnId) => resolve(columnId)).filter(Boolean) : [];
@@ -224,8 +275,8 @@ export function applyFilters(rows, criteria = {}, resolve) {
       const haystack = normalizeText(searchAccessors.map((accessor) => accessor.displayOf(row) ?? '').join(' '));
       if (!haystack.includes(term)) return false;
     }
-    for (const { filter, accessor } of activeFilters) {
-      if (!matchesAccessor(row, filter, accessor)) return false;
+    for (const predicate of activeFilters) {
+      if (!predicate(row)) return false;
     }
     return true;
   });
@@ -242,6 +293,7 @@ export function serializeFilters(filters = {}) {
       value: source.value ?? '',
       valueTo: source.valueTo ?? '',
       values: Array.isArray(source.values) ? source.values.map((item) => (item === null || item === undefined ? '' : String(item))) : [],
+      ...(source.match === 'label' ? { match: 'label' } : {}),
     };
   }
   return out;

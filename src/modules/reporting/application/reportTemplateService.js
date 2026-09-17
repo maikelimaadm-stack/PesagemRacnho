@@ -47,7 +47,23 @@ export async function listTemplates(actor, { empresaId = 'local', reportId = nul
     const definition = getReportDefinition(template.baseReportId);
     if (!definition || !canRunReport(definition, actor.role)) return false;
     return template.scope === TEMPLATE_SCOPES.SHARED || template.ownerUserId === actor.id;
-  });
+  }).map((template) => sanitizeTemplateFor(template, actor.role));
+}
+
+/** Cópia do modelo sem colunas, filtros, grupos, ordenação e totais que o papel não vê. */
+function sanitizeTemplateFor(template, role) {
+  const definition = getReportDefinition(template.baseReportId);
+  const byId = new Map(definition.columns.map((column) => [column.id, column]));
+  const visible = (id) => byId.has(id) && canSeeColumn(byId.get(id), role);
+  return {
+    ...template,
+    columns: (template.columns || []).filter(visible),
+    filters: Object.fromEntries(Object.entries(template.filters || {}).filter(([id]) => visible(id))),
+    groups: (template.groups || []).filter((group) => visible(group.columnId)),
+    sort: (template.sort || []).filter((item) => visible(item.columnId)),
+    aggregates: (template.aggregates || []).filter((spec) => !spec.columnId || visible(spec.columnId)),
+    widths: Object.fromEntries(Object.entries(template.widths || {}).filter(([id]) => visible(id))),
+  };
 }
 
 /** Normaliza e valida a configuração contra a definição (ids desconhecidos são erro ao salvar). */

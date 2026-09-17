@@ -104,4 +104,23 @@ const menu = readFileSync(new URL('../src/components/mak/MakColumnMenu.jsx', imp
 assert.match(menu, /return matchesFilter\(rawValue, filter, filterType\);/, 'MakColumnMenu delega ao filterEngine');
 assert.match(menu, /return isFilterActive\(filter\);/);
 
+// Descrição legível (pílula fixa, impressão, XLSX): operador traduzido e código de enum → rótulo.
+{
+  const { describeFilter, applyFilters: apply } = await import('../src/modules/reporting/domain/filterEngine.js');
+  const sexo = { options: [{ value: 'M', label: 'Macho' }, { value: 'F', label: 'Fêmea' }] };
+  assert.equal(describeFilter({ operator: 'in', values: ['M'] }, sexo), 'em Macho');
+  assert.equal(describeFilter({ operator: 'less', value: '0' }), '< 0');
+  assert.equal(describeFilter({ operator: 'between', value: '1', valueTo: '5' }), 'entre 1 e 5');
+  assert.equal(describeFilter({ operator: 'not_empty' }), 'preenchido');
+  assert.equal(describeFilter({ operator: 'in', values: ['Fêmea'], match: 'label' }, sexo), 'em Fêmea');
+  // match "label": compara o rótulo exibido; sem ele, o id (contrato original).
+  const accessor = { filterType: 'entity', filterValueOf: (row) => row.id, valueOf: (row) => row.id, displayOf: (row) => row.nome };
+  const rows = [{ id: 'l1', nome: 'Lote Água' }, { id: 'l2', nome: 'Lote Seco' }, { id: 'l3', nome: null }];
+  const resolve = () => accessor;
+  assert.deepEqual(apply(rows, { filters: { lote: { operator: 'in', values: ['lote agua'], match: 'label' } } }, resolve).map((r) => r.id), ['l1']);
+  assert.deepEqual(apply(rows, { filters: { lote: { operator: 'not_in', values: ['Lote Água'], match: 'label' } } }, resolve).map((r) => r.id), ['l2', 'l3']);
+  assert.deepEqual(apply(rows, { filters: { lote: { operator: 'in', values: ['Lote Água'] } } }, resolve).map((r) => r.id), [], 'sem match: compara id');
+  assert.deepEqual(apply(rows, { filters: { lote: { operator: 'empty', match: 'label' } } }, resolve).map((r) => r.id), ['l3']);
+}
+
 console.log(JSON.stringify({ gate: 'reports:filters:verify', ok: true, checks }, null, 2));

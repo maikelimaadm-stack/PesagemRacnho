@@ -114,3 +114,8 @@ html.dark .rpt-card:hover { border-color: #444c56; }
 html.dark .rpt-star { color: #8b949e; }
 html.dark .rpt-star.is-on { color: #e3b341; }
 html.dark .rpt-dialog__row--wrap { border-bottom-color: #2d333b; }
+
+/* Confirmação inline de exclusão de modelo */
+.rpt-confirm { display: inline-flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 12px; white-space: nowrap; }
+.rpt-confirm .tb-btn-danger { color: #b91c1c; }
+.rpt-search { width: 180px; height: 28px; font-size: 12px; }

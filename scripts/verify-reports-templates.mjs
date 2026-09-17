@@ -81,6 +81,32 @@ assert.deepEqual(vm.groups.map((group) => group.columnId), ['lote']);
 assert.deepEqual(vm.rows.map((row) => row.animal_id).sort(), ['A1', 'A3'], 'filtro sexo = M aplicado');
 assert.equal(vm.period.from, '2026-08-01');
 
+// Revisão UX (bloqueante): modelo com filtro de lista por RÓTULO (como a tela grava) em entidade/enum
+// abre com a população correta já na primeira execução — sem depender de execução anterior da tela.
+const porRotulo = await saveTemplate({ ...config, name: 'ALFA machos', scope: 'PERSONAL', filters: { marca: { operator: 'in', values: ['ALFA'], match: 'label' }, sexo: { operator: 'in', values: ['Macho'], match: 'label' } } }, GESTOR);
+assert.deepEqual(porRotulo.filters.marca, { operator: 'in', value: '', valueTo: '', values: ['ALFA'], match: 'label' }, 'match "label" persiste no modelo');
+const reqRotulo = templateToRequest(porRotulo, 'GESTOR');
+const vmRotulo = await runReport(reqRotulo.reportId, { today: TODAY, params: reqRotulo.params, selection: reqRotulo.selection }, GESTOR);
+assert.deepEqual(vmRotulo.rows.map((row) => row.animal_id).sort(), ['A1', 'A3'], 'rótulo ALFA/Macho encontra os animais (antes: 0 linhas)');
+const vmFora = await runReport('desempenho.lote', { today: TODAY, params: reqRotulo.params, selection: { ...reqRotulo.selection, filters: { marca: { operator: 'not_in', values: ['alfa'], match: 'label' } } } }, GESTOR);
+assert.ok(vmFora.rows.length > 0 && vmFora.rows.every((row) => row.marca_id !== 'm-alfa'), 'not_in por rótulo, sem acento/caixa');
+const vmPorId = await runReport('desempenho.lote', { today: TODAY, params: reqRotulo.params, selection: { ...reqRotulo.selection, filters: { marca: { operator: 'in', values: ['ALFA'] } } } }, GESTOR);
+assert.equal(vmPorId.rowCount, 0, 'sem match "label" o contrato continua comparando o id');
+
+// Reaproveitamento na mesma tela: só mudou a seleção → mesmas linhas, sem reler; mudou parâmetro → relê.
+const reuso = await runReport(reqRotulo.reportId, { today: TODAY, params: reqRotulo.params, selection: { ...reqRotulo.selection, filters: {} }, reuse: vmRotulo }, GESTOR);
+assert.match(reuso.stats.strategy, /\+reuse$/);
+assert.equal(reuso.sourceLoaded.rows, vmRotulo.sourceLoaded.rows, 'mesma referência de linhas');
+const outroPeriodo = await runReport(reqRotulo.reportId, { today: TODAY, params: { periodo: { preset: 'personalizado', from: '2026-08-02', to: '2026-09-15' } }, selection: reqRotulo.selection, reuse: vmRotulo }, GESTOR);
+assert.doesNotMatch(outroPeriodo.stats.strategy, /reuse/, 'parâmetro diferente relê o banco');
+await deleteTemplate(porRotulo.id, GESTOR);
+
+// Listagem nunca entrega colunas/filtros que o papel não vê (modelo compartilhado com valor comercial).
+const listadoConsulta = (await listTemplates(CONSULTA)).find((template) => template.id === comercial.id);
+assert.deepEqual(listadoConsulta.columns, ['data_pesagem', 'numero_animal'], 'listagem sanitizada');
+assert.deepEqual(listadoConsulta.filters, {}, 'filtro comercial não vaza na listagem');
+assert.deepEqual((await listTemplates(ADMIN)).find((template) => template.id === comercial.id).columns, ['data_pesagem', 'numero_animal', 'valor_venda_total']);
+
 // Favoritos e recentes por usuário (appSettings)
 assert.deepEqual(await toggleFavorite('rebanho.inventario', GESTOR), ['rebanho.inventario']);
 assert.deepEqual(await getFavorites(OPERADOR), [], 'favoritos são por usuário');

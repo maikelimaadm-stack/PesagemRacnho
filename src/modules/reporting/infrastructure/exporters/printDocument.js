@@ -2,6 +2,7 @@
 // sem script, gerado do MESMO view model da tela (nenhuma conta nova): cabeçalho com sistema,
 // relatório, organização, período, filtros e emissão; tabela com cabeçalho repetido por página;
 // grupos, subtotais e total geral; rodapé com página X de Y, emissão e versão.
+import { describeFilter } from '../../domain/filterEngine.js';
 import { describePeriod } from '../../domain/reportPeriod.js';
 import { buildReportLines } from './reportLayout.js';
 
@@ -10,12 +11,6 @@ export const PRINT_LIMITS = Object.freeze({
   PORTRAIT_MAX_WIDTH: 1000, // soma das larguras (px de tela) que cabe em A4 retrato a 8,5 pt
   LANDSCAPE_MAX_WIDTH: 1520, // idem A4 paisagem
 });
-
-const OPERATOR_LABELS = {
-  contains: 'contém', not_contains: 'não contém', equals: '=', not_equals: '≠', starts_with: 'começa com', ends_with: 'termina com',
-  greater: '>', greater_equal: '≥', less: '<', less_equal: '≤', between: 'entre', not_between: 'fora de', in: 'em', not_in: 'fora de',
-  empty: 'vazio', not_empty: 'preenchido', before: 'antes de', after: 'depois de', on_or_before: 'até', on_or_after: 'a partir de',
-};
 
 export function escapeHtml(value) {
   return String(value ?? '')
@@ -50,17 +45,12 @@ export function decidePrintLayout(viewModel, { orientation = 'auto', widths = {}
   };
 }
 
-function describeFilters(viewModel) {
-  const label = (columnId) => viewModel.availableColumns.find((column) => column.id === columnId)?.label ?? columnId;
-  const text = (filter) => {
-    if (filter.values?.length) return `${OPERATOR_LABELS[filter.operator] ?? 'em'} ${filter.values.join(', ')}`;
-    if (['empty', 'not_empty'].includes(filter.operator)) return OPERATOR_LABELS[filter.operator];
-    if (filter.valueTo) return `${OPERATOR_LABELS[filter.operator] ?? ''} ${filter.value} e ${filter.valueTo}`;
-    return `${OPERATOR_LABELS[filter.operator] ?? filter.operator ?? ''} ${filter.value}`;
-  };
+export function describeFilters(viewModel) {
+  const columnOf = (columnId) => viewModel.availableColumns.find((column) => column.id === columnId) ?? null;
+  const label = (columnId) => columnOf(columnId)?.label ?? columnId;
   const parts = [
-    ...Object.entries(viewModel.lockedFilters || {}).map(([id, filter]) => `${label(id)} ${text(filter)} (fixo)`),
-    ...Object.entries(viewModel.filters || {}).map(([id, filter]) => `${label(id)} ${text(filter)}`),
+    ...Object.entries(viewModel.lockedFilters || {}).map(([id, filter]) => `${label(id)} ${describeFilter(filter, columnOf(id))} (fixo)`),
+    ...Object.entries(viewModel.filters || {}).map(([id, filter]) => `${label(id)} ${describeFilter(filter, columnOf(id))}`),
   ];
   if (viewModel.search) parts.push(`pesquisa “${viewModel.search}”`);
   return parts.length ? parts.join(' · ') : 'Nenhum';
@@ -147,9 +137,9 @@ html, body { margin: 0; padding: 0; background: #fff; color: #111; font: 8.5pt A
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 thead { display: table-header-group; }
 tfoot { display: table-footer-group; }
-th { background: #eef2f5; border-bottom: .8pt solid #666; padding: 1.2mm 1.4mm; text-align: left; font-size: 7.6pt; font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
-th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
-td { padding: .9mm 1.4mm; border-bottom: .3pt solid #d8dde3; vertical-align: top; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+th { background: #eef2f5; border-bottom: .8pt solid #666; padding: 1.2mm 1.4mm; text-align: left; font-size: 7.6pt; font-weight: 700; overflow-wrap: anywhere; }
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; overflow-wrap: normal; }
+td { padding: .9mm 1.4mm; border-bottom: .3pt solid #d8dde3; vertical-align: top; overflow-wrap: anywhere; white-space: normal; }
 tr { page-break-inside: avoid; break-inside: avoid; }
 tr.data:nth-child(even) td { background: #fafbfc; }
 tr.group td { background: #e7edf2; font-weight: 700; border-top: .6pt solid #9aa7b3; white-space: normal; }
