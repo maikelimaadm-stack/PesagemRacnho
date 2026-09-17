@@ -6,10 +6,10 @@ Status: **Candidato** — não promover a `v1.3.0` sem o teste físico (`RELEASE
 |---|---|
 | Tag | `v1.3.0-rc1` → `f10290a` (RC1 anterior, sem o assistente de importação: `98de70d`) |
 | Instalador | `release-unsigned/Pesagens Individuais Setup 1.3.0.exe` (cópia em `C:\Users\maike\Desktop\projeto\`) |
-| Tamanho | 92.134.488 bytes |
-| SHA-256 do Setup | `0978af11a10d0dd1bd2c850065a043d09edd29a4e8fcdc434964cc9f64020fd6` |
-| SHA-256 do `app.asar` | `f379d60611ed62e4837ca84f8cc2ffe6c8fec723445b5bf8af7d7d95ba21e842` |
-| Gerado em | 2026-09-17T18:35Z (`npm run dist:unsigned`, exit 0) |
+| Tamanho | 92.134.590 bytes |
+| SHA-256 do Setup | `a2f73211da49ba03ae3619131cc1bee2367d29911d952fd4f846741b7d3601b1` |
+| SHA-256 do `app.asar` | `5586c03f12e1a35e541e173d67b26ec221fe1259e5460c1fe18400b220315074` |
+| Gerado em | 2026-09-17T19:20Z (`npm run dist:unsigned`, exit 0) |
 | Manifesto | appVersion 1.3.0 · dbSchemaVersion 8 · backupFormatVersion 3 · dataBuildId schema-v8 · signed false |
 | gitCommit no manifesto | `f10290a` (árvore limpa) |
 
