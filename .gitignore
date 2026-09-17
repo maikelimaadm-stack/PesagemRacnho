@@ -4,6 +4,7 @@ dist/
 # Saídas do electron-builder, ancoradas na raiz: docs/release/ é documentação versionada
 /release/
 /release-unsigned/
+/release-archive/
 coverage/
 
 # Ambiente e segredos
