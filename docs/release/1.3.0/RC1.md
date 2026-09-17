@@ -9,7 +9,7 @@ Status: **Candidato** — não promover a `v1.3.0` sem o teste físico (`RELEASE
 | Tamanho | 92.134.488 bytes |
 | SHA-256 do Setup | `0978af11a10d0dd1bd2c850065a043d09edd29a4e8fcdc434964cc9f64020fd6` |
 | SHA-256 do `app.asar` | `f379d60611ed62e4837ca84f8cc2ffe6c8fec723445b5bf8af7d7d95ba21e842` |
-| Gerado em | 2026-09-17T12:27:06Z (`npm run dist:unsigned`, exit 0) |
+| Gerado em | 2026-09-17T18:35Z (`npm run dist:unsigned`, exit 0) |
 | Manifesto | appVersion 1.3.0 · dbSchemaVersion 8 · backupFormatVersion 3 · dataBuildId schema-v8 · signed false |
 | gitCommit no manifesto | `f10290a` (árvore limpa) |
 
