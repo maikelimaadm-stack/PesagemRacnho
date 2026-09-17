@@ -3,40 +3,34 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmtCurrency, fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
 import { calculateCarcassTrade } from "@/modules/weighing/domain/commercialCalculations";
+import { avg, sum, toFiniteNumber, weightedAvg } from "@/modules/reporting/domain/aggregateEngine";
 
 export default function ResumoVendaDia({ pesagens = [], dataPesagem }) {
   const vendasDia = useMemo(() => {
     return (pesagens || []).filter((p) => p.data_pesagem === dataPesagem && p.tipo_manejo === 'Saída' && p.motivo_saida === 'Venda');
   }, [pesagens, dataPesagem]);
 
+  // Contas pelo motor canônico: ausente ≠ 0; preço médio da @ ponderado pelas arrobas;
+  // carcaça/arrobas só com rendimento válido (1 @ = 15 kg de carcaça, sem 50 % implícito).
   const stats = useMemo(() => {
+    const comerciais = vendasDia.map((v) => {
+      const calc = calculateCarcassTrade({ weight: v.peso, yieldPercent: v.rendimento_carcaca, pricePerArroba: v.valor_arroba });
+      const informado = toFiniteNumber(v.valor_venda_total);
+      return { ...calc, valor: informado != null && informado > 0 ? informado : calc.estimatedValue, valor_arroba: toFiniteNumber(v.valor_arroba) };
+    });
     const total = vendasDia.length;
-    const pesoTotal = vendasDia.reduce((s, p) => s + (Number(p.peso) || 0), 0);
-    const pesoMedio = total ? pesoTotal / total : 0;
-
-    // média da arroba informada
-    const arrobasInformadas = vendasDia
-      .map((v) => Number(v.valor_arroba))
-      .filter((n) => !isNaN(n) && n > 0);
-    const mediaArroba = arrobasInformadas.length
-      ? arrobasInformadas.reduce((s, n) => s + n, 0) / arrobasInformadas.length
-      : 0;
-
-    // valor total: usar valor_venda_total se existir; senão, calcular por peso/30 * valor_arroba
-    const valorTotal = vendasDia.reduce((s, v) => {
-      const direto = Number(v.valor_venda_total);
-      if (!isNaN(direto) && direto > 0) return s + direto;
-      const calc = calculateCarcassTrade({ weight: v.peso, yieldPercent: v.rendimento_carcaca, pricePerArroba: v.valor_arroba }).estimatedValue;
-      return s + (Number.isFinite(calc) ? calc : 0);
-    }, 0);
-
-    const comerciais = vendasDia.map((v) => calculateCarcassTrade({ weight: v.peso, yieldPercent: v.rendimento_carcaca, pricePerArroba: v.valor_arroba }));
-    const arrobasTotal = comerciais.reduce((sum, item) => sum + (item.arrobas || 0), 0);
-    const carcaçaTotal = comerciais.reduce((sum, item) => sum + (item.carcassWeightKg || 0), 0);
-    const rendimentoMedio = total ? comerciais.reduce((sum, item) => sum + item.yieldPercent, 0) / total : 0;
-    const mediaArrobasPeso = total ? arrobasTotal / total : 0;
-
-    return { total, pesoTotal, pesoMedio, mediaArroba, mediaArrobasPeso, arrobasTotal, carcaçaTotal, rendimentoMedio, valorTotal };
+    const arrobasTotal = sum(comerciais, 'arrobas').value;
+    return {
+      total,
+      pesoTotal: sum(vendasDia, 'peso').value,
+      pesoMedio: avg(vendasDia, 'peso').value,
+      mediaArroba: weightedAvg(comerciais, { value: 'valor_arroba', weight: 'arrobas' }).value,
+      mediaArrobasPeso: avg(comerciais, 'arrobas').value,
+      arrobasTotal,
+      carcaçaTotal: sum(comerciais, 'carcassWeightKg').value,
+      rendimentoMedio: weightedAvg(comerciais, { value: 'yieldPercent', weight: 'liveWeightKg' }).value,
+      valorTotal: sum(comerciais, 'valor').value,
+    };
   }, [vendasDia]);
 
   return (

@@ -3,6 +3,7 @@ import { Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { loadOperationalCatalog } from '@/modules/operations/application/operationalInsightsService';
+import { calculateCarcassTrade } from '@/modules/weighing/domain/commercialCalculations';
 import '@/styles/operational-insights.css';
 
 const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -25,6 +26,8 @@ const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
 
 function buildProfiles(catalog) {
   const groups = new Map();
+  // Mapa por id: evita a busca linear por animal (O(n²) com dezenas de milhares de animais).
+  const animalsById = new Map(catalog.animais.map((item) => [item.id, item]));
   catalog.pesagens.forEach((row) => {
     const key = identityKey(row);
     if (!key) return;
@@ -36,7 +39,7 @@ function buildProfiles(catalog) {
     entries.sort((a, b) => String(a.data_pesagem).localeCompare(String(b.data_pesagem)) || String(a.created_date || '').localeCompare(String(b.created_date || '')));
     const registration = entries.find((row) => row.tipo_manejo === 'Cadastro') || entries[0];
     const latest = entries.at(-1);
-    const animal = catalog.animais.find((item) => item.id === latest.animal_id) || {};
+    const animal = animalsById.get(latest.animal_id) || {};
     return {
       key,
       entries,
@@ -108,15 +111,20 @@ export default function FichaAnimal() {
 
   if (!selected) return <main className="op-screen"><section className="op-card"><div className="op-empty">Nenhum animal cadastrado. Faça o primeiro lançamento para gerar a ficha.</div></section></main>;
 
-  const first = selected.entries[0];
+  // Peso atual, ganho e GMD usam só eventos COM peso (Saída sem peso não vira 0 kg).
+  const weighed = selected.entries.filter((row) => hasNumber(row.peso) && Number(row.peso) > 0);
+  const first = weighed[0];
   const latest = selected.entries.at(-1);
-  const totalGain = (Number(latest?.peso) || 0) - (Number(first?.peso) || 0);
-  const totalDays = first?.data_pesagem && latest?.data_pesagem ? dayDiff(first.data_pesagem, latest.data_pesagem) : 0;
-  const averageGmd = totalDays ? totalGain / totalDays : 0;
+  const latestWeighed = weighed.at(-1);
+  const totalGain = weighed.length >= 2 ? Number(latestWeighed.peso) - Number(first.peso) : null;
+  const totalDays = weighed.length >= 2 ? dayDiff(first.data_pesagem, latestWeighed.data_pesagem) : 0;
+  // GMD do animal no período = (peso final − peso inicial) ÷ dias (ponderado por construção).
+  const averageGmd = totalGain !== null && totalDays > 0 ? totalGain / totalDays : null;
+  const carcass = calculateCarcassTrade({ weight: latestWeighed?.peso, yieldPercent: latestWeighed?.rendimento_carcaca });
   const latestGmd = hasNumber(latest?.gmd) ? Number(latest.gmd) : null;
   const historyRows = [...selected.entries].reverse();
   const events = historyRows.map((row, index) => ({
-    title: `${row.tipo_manejo === 'Cadastro' ? 'Cadastro' : row.tipo_manejo === 'Saída' ? row.motivo_saida || 'Saída' : 'Pesagem'} ${nf.format(Number(row.peso) || 0)} kg`,
+    title: `${row.tipo_manejo === 'Cadastro' ? 'Cadastro' : row.tipo_manejo === 'Saída' ? row.motivo_saida || 'Saída' : 'Pesagem'}${hasNumber(row.peso) ? ` ${nf.format(Number(row.peso))} kg` : ''}`,
     date: row.data_pesagem,
     detail: [row.tipo_manejo, row.nome_lote, hasNumber(row.gmd) ? `GMD ${n3.format(Number(row.gmd))} kg/dia` : null].filter(Boolean).join(' · '),
     color: row.tipo_manejo === 'Saída' ? '#dc2626' : index === historyRows.length - 1 ? '#5b6b80' : '#40de63',
@@ -129,17 +137,17 @@ export default function FichaAnimal() {
   };
   const exportHistory = () => {
     const headers = ['Data', 'Tipo', 'Peso', 'Dias', 'Ganho', 'GMD', 'Lote', 'Apartação', 'Observação'];
-    const lines = historyRows.map((row) => [dateBr(row.data_pesagem), row.tipo_manejo, nf.format(Number(row.peso) || 0), row.dias, hasNumber(row.ganho) ? nf.format(Number(row.ganho)) : '', hasNumber(row.gmd) ? n3.format(Number(row.gmd)) : '', row.nome_lote, row.nome_apartacao, row.observacao].map(csvCell).join(';'));
+    const lines = historyRows.map((row) => [dateBr(row.data_pesagem), row.tipo_manejo, hasNumber(row.peso) ? nf.format(Number(row.peso)) : '', row.dias, hasNumber(row.ganho) ? nf.format(Number(row.ganho)) : '', hasNumber(row.gmd) ? n3.format(Number(row.gmd)) : '', row.nome_lote, row.nome_apartacao, row.observacao].map(csvCell).join(';'));
     download(`ficha-${selected.number}-${selected.brand}.csv`, `\ufeff${headers.map(csvCell).join(';')}\n${lines.join('\n')}`, 'text/csv;charset=utf-8');
     toast.success('Histórico do animal exportado.');
   };
 
   const kpis = [
-    ['Peso atual', nf.format(Number(latest?.peso) || 0), dateBr(latest?.data_pesagem), ''],
-    ['Ganho total', `${totalGain >= 0 ? '+' : ''}${nf.format(totalGain)}`, 'desde o cadastro', 'accent'],
-    ['GMD médio', n3.format(averageGmd), `kg/dia · ${ni.format(totalDays)} dias`, 'accent'],
+    ['Peso atual', latestWeighed ? nf.format(Number(latestWeighed.peso)) : '—', dateBr(latestWeighed?.data_pesagem), ''],
+    ['Ganho total', totalGain === null ? '—' : `${totalGain >= 0 ? '+' : ''}${nf.format(totalGain)}`, 'desde o cadastro', 'accent'],
+    ['GMD médio', averageGmd === null ? '—' : n3.format(averageGmd), `kg/dia · ${ni.format(totalDays)} dias`, 'accent'],
     ['GMD última', latestGmd !== null ? n3.format(latestGmd) : '—', latest?.data_anterior ? `vs. ${dateBr(latest.data_anterior)}` : 'primeira pesagem', 'accent'],
-    ['@ carcaça est.', nf.format((Number(latest?.peso) || 0) * .5 / 15), 'rendimento 50%', ''],
+    ['@ carcaça est.', carcass.arrobas === null ? '—' : nf.format(carcass.arrobas), carcass.yieldPercent === null ? 'sem rendimento informado' : `rendimento ${nf.format(carcass.yieldPercent)}% · 1 @ = 15 kg`, ''],
     ['Pesagens', ni.format(selected.entries.length), 'série completa', ''],
   ];
 

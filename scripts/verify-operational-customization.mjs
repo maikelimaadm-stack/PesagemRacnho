@@ -73,7 +73,7 @@ assert.equal(resolveDefaultRegistry([{ id: 'x', nome: 'X', ativo: true }], null)
 
 const antes = await loadOperationalPolicies(EMPRESA);
 assert.equal(antes.sales.exigir_documento_venda, false, 'sem configuração a venda não exige documento');
-assert.equal(antes.sales.rendimento_padrao, 50, 'rendimento padrão vem da configuração (default do serviço), com origem');
+assert.equal(antes.sales.rendimento_padrao, null, 'sem configuração explícita não há rendimento padrão (nunca 50 implícito)');
 assert.equal(antes.sales.rendimento_padrao_origem, RENDIMENTO_ORIGEM_PADRAO_EMPRESA);
 assert.deepEqual(antes.weightWarningPolicy, DEFAULT_WEIGHT_WARNING_POLICY, 'sem configuração a política de avisos é a default');
 
@@ -206,7 +206,7 @@ assert.match(launch, /if \(tipoManejo === 'Cadastro' && !isSN && !marcaId\)/, 'C
 assert.match(launch, /apartacaoSelecionada: carregadas\.defaults\.apartacao_padrao_id \|\| ''/, 'apartacao_padrao_id pré-seleciona a apartação');
 assert.match(launch, /aplicarPadroesEmpresa\(\);[\s\S]{0,120}setApartacaoSelecionada\(padroesEmpresaRef\.current\.apartacaoSelecionada\)/, 'limpar o formulário reaplica a apartação padrão');
 assert.match(launch, /rendimento: formatRendimento\(carregadas\.sales\.rendimento_padrao\)/, 'rendimento inicial vem de rendimento_padrao da configuração');
-assert.match(launch, /rendimento_origem: calculoComercial \? rendimentoOrigem : null/, 'payload envia rendimento_origem');
+assert.match(launch, /rendimento_origem: calculoComercial\?\.yieldPercent != null \? rendimentoOrigem : null/, 'payload envia rendimento_origem (só quando há rendimento válido)');
 assert.match(launch, /setRendimentoCarcacaVenda\(e\.target\.value\); setRendimentoOrigemVenda\(RENDIMENTO_ORIGEM_INFORMADO\)/, 'digitar o rendimento da venda marca origem INFORMADO');
 assert.match(launch, /setRendimentoCarcacaAbate\(e\.target\.value\); setRendimentoOrigemAbate\(RENDIMENTO_ORIGEM_INFORMADO\)/, 'digitar o rendimento do abate marca origem INFORMADO');
 assert.match(launch, /'\(informado\)' : '\(padrão da empresa\)'/, 'rótulo do rendimento mostra a origem');

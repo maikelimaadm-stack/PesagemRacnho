@@ -16,7 +16,9 @@ assert.equal(parseCivilDate('29/02/2024'), '2024-02-29');
 assert.equal(parseCivilDate('29/02/2026'), null);
 assert.equal(parseCivilDate('31/02/2026'), null);
 assert.equal(normalizeCarcassYield('52,5'), 52.5);
-assert.equal(normalizeCarcassYield('150'), 50);
+assert.equal(normalizeCarcassYield('150'), null, 'NEGATIVO: rendimento fora de (0,100] não vira 50');
+assert.equal(normalizeCarcassYield(''), null, 'sem rendimento não há padrão implícito');
+assert.deepEqual(calculateCarcassTrade({ weight: 450, yieldPercent: null, pricePerArroba: 300 }), { liveWeightKg: 450, yieldPercent: null, carcassWeightKg: null, arrobas: null, estimatedValue: null }, 'sem rendimento: carcaça, arrobas e valor ausentes (nunca 0 nem 50 %)');
 assert.deepEqual(calculateCarcassTrade({ weight: '450,00', yieldPercent: '50', pricePerArroba: '300,00' }), {
   liveWeightKg: 450,
   yieldPercent: 50,

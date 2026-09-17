@@ -29,8 +29,10 @@ export const OPERATIONAL_DEFAULTS = Object.freeze({
   propriedade_padrao_id: null,
   apartacao_padrao_id: null,
   intervalo_pesagem_dias: 30,
-  rendimento_padrao: 50,
-  rendimento_padrao_origem: 'PADRAO_EMPRESA', // nunca um 50 % silencioso (ADR-025)
+  // Sem configuração explícita não há rendimento (decisão §8 do programa reporting): arrobas ficam
+  // null ("—") até a empresa informar o padrão. Nunca um 50 % silencioso (ADR-025).
+  rendimento_padrao: null,
+  rendimento_padrao_origem: 'PADRAO_EMPRESA',
 });
 
 export const SALES_POLICY_DEFAULTS = Object.freeze({
@@ -128,10 +130,10 @@ const NORMALIZERS = {
       propriedade_padrao_id: idOrNull(raw.propriedade_padrao_id, 'propriedade_padrao_id'),
       apartacao_padrao_id: idOrNull(raw.apartacao_padrao_id, 'apartacao_padrao_id'),
       intervalo_pesagem_dias: integerAtLeast(raw.intervalo_pesagem_dias, 1, 'intervalo_pesagem_dias'),
-      rendimento_padrao: positiveNumber(raw.rendimento_padrao, 'rendimento_padrao'),
+      rendimento_padrao: raw.rendimento_padrao === null || raw.rendimento_padrao === undefined || raw.rendimento_padrao === '' ? null : positiveNumber(raw.rendimento_padrao, 'rendimento_padrao'),
       rendimento_padrao_origem: raw.rendimento_padrao_origem,
     };
-    if (config.rendimento_padrao > 100) throw configError('rendimento_padrao deve estar entre 0 e 100.', 'rendimento_padrao');
+    if (config.rendimento_padrao !== null && config.rendimento_padrao > 100) throw configError('rendimento_padrao deve estar entre 0 e 100.', 'rendimento_padrao');
     if (!RENDIMENTO_ORIGENS.includes(config.rendimento_padrao_origem)) throw configError('rendimento_padrao_origem inválida.', 'rendimento_padrao_origem');
     return config;
   },

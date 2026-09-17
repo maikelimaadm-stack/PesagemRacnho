@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
+import { sum } from "@/modules/reporting/domain/aggregateEngine";
 
 export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApartacaoAtual, pesagens, pesagensDia, dataPesagem }) {
   const [modoVisualizacao, setModoVisualizacao] = useState('dia');
@@ -20,7 +21,8 @@ export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApa
     const qtd = animaisLote.length;
     const pesoTotal = animaisLote.reduce((s, p) => s + (p.peso || 0), 0);
     const pesoMedio = qtd > 0 ? pesoTotal / qtd : 0;
-    const arrobasTotal = animaisLote.reduce((sum, row) => sum + (row.quantidade_arrobas != null ? Number(row.quantidade_arrobas) || 0 : (Number(row.peso) || 0) / 30), 0);
+    // Arrobas só as registradas no fato (1 @ = 15 kg de carcaça, com rendimento válido); sem nenhuma → null ("—").
+    const arrobasTotal = sum(animaisLote, "quantidade_arrobas").value;
     return { ...lote, quantidade_atual: qtd, peso_total: pesoTotal, peso_medio: pesoMedio, arrobas_total: arrobasTotal };
     }).sort((a, b) => (a.nome_lote || '').localeCompare(b.nome_lote || ''));
   }, [apartacaoSelecionada, lotesApartacaoAtual, pesagens, pesagensDia, modoVisualizacao]);
@@ -65,7 +67,7 @@ export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApa
                 </TableBody>
               </Table>
               <div className="d17d-summary-panel__totals mt-2 pt-2 border-t text-xs text-center text-slate-500">
-                Qtd. lançada: {fmtInt(resumoLotes.reduce((s, l) => s + (l.quantidade_atual || 0), 0))} | Arrobas estimadas de carcaça: {fmtNum(resumoLotes.reduce((s, l) => s + (l.arrobas_total || 0), 0))}
+                Qtd. lançada: {fmtInt(resumoLotes.reduce((s, l) => s + (l.quantidade_atual || 0), 0))} | Arrobas estimadas de carcaça: {fmtNum(sum(resumoLotes, "arrobas_total").value)}
               </div>
             </>
           ) : (

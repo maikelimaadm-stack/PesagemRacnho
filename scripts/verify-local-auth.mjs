@@ -296,7 +296,7 @@ assert.deepEqual(defaults, {
   propriedade_padrao_id: null,
   apartacao_padrao_id: null,
   intervalo_pesagem_dias: 30,
-  rendimento_padrao: 50,
+  rendimento_padrao: null,
   rendimento_padrao_origem: 'PADRAO_EMPRESA',
   exigir_documento_venda: false,
   faixa_peso_min: 20,
@@ -305,7 +305,7 @@ assert.deepEqual(defaults, {
   variacao_max_percent: 35,
 }, 'visão mesclada com os defaults dos quatro grupos');
 assert.equal(defaults.bloqueio_inatividade_minutos, undefined, 'campo da rev. 1 não existe mais');
-assert.deepEqual(await appConfig.getOperationalDefaults(), { versao: 1, marca_padrao_id: null, raca_padrao_id: null, propriedade_padrao_id: null, apartacao_padrao_id: null, intervalo_pesagem_dias: 30, rendimento_padrao: 50, rendimento_padrao_origem: 'PADRAO_EMPRESA' });
+assert.deepEqual(await appConfig.getOperationalDefaults(), { versao: 1, marca_padrao_id: null, raca_padrao_id: null, propriedade_padrao_id: null, apartacao_padrao_id: null, intervalo_pesagem_dias: 30, rendimento_padrao: null, rendimento_padrao_origem: 'PADRAO_EMPRESA' });
 assert.deepEqual(await appConfig.getSalesPolicy(), { versao: 1, exigir_documento_venda: false });
 assert.deepEqual(await appConfig.getWeightWarningPolicy(), { versao: 1, faixa_peso_min: 20, faixa_peso_max: 1500, limite_gmd_alerta: 5, variacao_max_percent: 35 });
 assert.deepEqual(await appConfig.getAuthPolicy(), { versao: 1, inactivity_lock_minutes: 30, failed_attempt_limit: 5, lock_minutes: 0.5 });
