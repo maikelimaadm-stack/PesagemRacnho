@@ -70,7 +70,7 @@ async function existingRegistryId(db, storeName, id) {
   return row ? row.id : null;
 }
 
-function auditRow(fields) {
+export function auditRow(fields) {
   return { id: crypto.randomUUID(), ...fields, ...getActor() };
 }
 
@@ -93,7 +93,7 @@ function changedFields(before, after) {
   return [...fields].sort();
 }
 
-function newSession({ data, operador, ts }) {
+export function newSession({ data, operador, ts }) {
   return {
     id: crypto.randomUUID(),
     data,
@@ -113,7 +113,7 @@ function newSession({ data, operador, ts }) {
   };
 }
 
-function newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao, origem, ts }) {
+export function newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao, origem, ts }) {
   return {
     id: animalId,
     empresa_id: ui.empresa_id || EMPRESA_ID,
@@ -141,7 +141,7 @@ function newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao, ori
   };
 }
 
-function newVisualIdentifier({ animalId, ui, marcaId, inicio, ts }) {
+export function newVisualIdentifier({ animalId, ui, marcaId, inicio, ts }) {
   return {
     id: crypto.randomUUID(),
     animal_id: animalId,
@@ -162,7 +162,7 @@ function newVisualIdentifier({ animalId, ui, marcaId, inicio, ts }) {
   };
 }
 
-async function validateAnimalChronology(db, { animalId, data, ui, ignoredEntryId = null }) {
+export async function validateAnimalChronology(db, { animalId, data, ui, ignoredEntryId = null }) {
   if (!animalId || !data) return;
   const events = (await db.table('pesagens').where('animal_id').equals(animalId).toArray())
     .filter((row) => !row.deleted_at && row.id !== ignoredEntryId);
@@ -194,7 +194,7 @@ async function validateAnimalChronology(db, { animalId, data, ui, ignoredEntryId
 // da faixa de peso daquele momento (a relação mostra a era de cada pesagem).
 // Sem peso (Saída por Morte/Doação/Transferência) ou peso fora de toda faixa, a pesagem
 // herda a última categoria válida do animal: ausência de peso nunca apaga classificação.
-async function stampAutomaticCategory(db, entry, { automatic, sexo, categoriaAtualId = null }) {
+export async function stampAutomaticCategory(db, entry, { automatic, sexo, categoriaAtualId = null }) {
   const ui = entry.legacy_payload;
   if (!automatic || !ui || typeof ui !== 'object') return;
   const peso = weightOf(entry);
@@ -207,12 +207,12 @@ async function stampAutomaticCategory(db, entry, { automatic, sexo, categoriaAtu
 }
 
 // Peso válido do evento (coluna ou payload); null quando ausente ou não positivo.
-function weightOf(row) {
+export function weightOf(row) {
   const value = Number(row?.peso_kg ?? weighingUi(row).peso);
   return row && (row.peso_kg != null || weighingUi(row).peso != null) && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date().toISOString()) {
+export async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date().toISOString()) {
   if (!animalId) return null;
   const animal = await db.table('animais').where('id').equals(animalId).first();
   if (!animal || animal.deleted_at) return null;
@@ -257,7 +257,7 @@ async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date()
   return changes;
 }
 
-async function rebuildAnimalLotProjection(db, animalId, timestamp = new Date().toISOString()) {
+export async function rebuildAnimalLotProjection(db, animalId, timestamp = new Date().toISOString()) {
   if (!animalId) return 0;
   const weighingTable = db.table('pesagens');
   const animalLotTable = db.table('animalLotes');

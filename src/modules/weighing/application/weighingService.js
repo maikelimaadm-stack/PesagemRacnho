@@ -145,7 +145,8 @@ export async function recalculateAllWeightSeries() {
   return recalculateWeightSeriesForKeys(null);
 }
 
-async function recalculateWeightSeriesForKeys(affectedKeys) {
+// Exportada para a importação: recalcula só as séries afetadas (nunca a base inteira).
+export async function recalculateWeightSeriesForKeys(affectedKeys) {
   const trace = globalThis.__MAK_PERF_TRACE__ === true;
   const startedAt = trace ? performance.now() : 0;
   let entries;
