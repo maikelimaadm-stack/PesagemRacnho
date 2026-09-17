@@ -48,9 +48,9 @@ function idbRequest(request) {
   });
 }
 
-function openBrowserBackupDb() {
+function openBackupDbAt(version) {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(BROWSER_BACKUP_DB, 1);
+    const request = version ? indexedDB.open(BROWSER_BACKUP_DB, version) : indexedDB.open(BROWSER_BACKUP_DB);
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(BROWSER_BACKUP_STORE)) request.result.createObjectStore(BROWSER_BACKUP_STORE, { keyPath: 'filename' });
     };
@@ -58,6 +58,24 @@ function openBrowserBackupDb() {
     request.onerror = () => reject(request.error || new Error('não foi possível abrir o banco de backups'));
     request.onblocked = () => reject(new Error('banco de backups bloqueado por outra aba'));
   });
+}
+
+/**
+ * Abre o banco de backups garantindo a store. Um banco já existente SEM a store (versão antiga,
+ * criação parcial ou limpeza) não dispara upgrade ao abrir na mesma versão: aí reabrimos uma
+ * versão acima para criá-la, em vez de falhar e bloquear a migração para sempre.
+ */
+async function openBrowserBackupDb() {
+  const db = await openBackupDbAt(null);
+  if (db.objectStoreNames.contains(BROWSER_BACKUP_STORE)) return db;
+  const proximaVersao = db.version + 1;
+  db.close();
+  const upgraded = await openBackupDbAt(proximaVersao);
+  if (!upgraded.objectStoreNames.contains(BROWSER_BACKUP_STORE)) {
+    upgraded.close();
+    throw new Error('não foi possível criar a área de backups do navegador');
+  }
+  return upgraded;
 }
 
 function transactionDone(tx) {

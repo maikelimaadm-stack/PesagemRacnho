@@ -315,7 +315,7 @@ assert.equal(writeStoredLaunchState(quebrado, chaveA, snapshot), false);
 assert.equal(readStoredLaunchState({ getItem: () => '{json inválido' }, chaveA), null);
 
 // ---------------------------------------------------------------------------
-// 11) Sequência de identificadores avança; Nº preenchido leva o foco ao Peso.
+// 11) Sequência de identificadores avança; o foco volta sempre para o Nº/Identificação.
 assert.deepEqual(parseSequenceIdentifier('br007'), { prefixo: 'BR', numero: 7, digitos: 3 }, 'prefixo normalizado em maiúsculas (B-08)');
 assert.equal(parseSequenceIdentifier('7-A'), null, 'NEGATIVO V-12: fora do formato não inicia sequência');
 const inicio = nextFreeIdentifier({ prefixo: '', inicio: 1, limite: 5, digitos: 3, usados: new Set(['001']) });
@@ -334,7 +334,7 @@ const decrescente = advanceIdentifierSequence({ prefixo: '', numeroAtual: 0, dig
 assert.equal(decrescente.ok, false, 'NEGATIVO B-08: decrescente sem final não gera número negativo');
 const cadastroSequencia = stateAfterSave('Cadastro', withAnimal(cadastroBase, { numeroAnimal: '003' }), { categoriaModo: 'MANUAL', sequenciaAtiva: true, proximoNumero: '004' });
 assert.equal(cadastroSequencia.numeroAnimal, '004', 'sequência preenche o próximo Nº');
-assert.equal(focusAfterSave('Cadastro', { sequenciaAtiva: true, proximoNumero: '004' }), 'peso', 'Nº preenchido pela sequência → foco no Peso');
+assert.equal(focusAfterSave('Cadastro', { sequenciaAtiva: true, proximoNumero: '004' }), 'numero', 'pedido de 17/09: depois de salvar o foco volta SEMPRE para o Nº/Identificação, mesmo com a sequência preenchendo o número');
 assert.equal(focusAfterSave('Cadastro', { sequenciaAtiva: false, proximoNumero: null }), 'numero', 'NEGATIVO B-10: sequência esgotada → foco no Nº');
 assert.equal(stateAfterSave('Manejo', withAnimal(manejoBase), { sequenciaAtiva: true, proximoNumero: '004' }).numeroAnimal, '', 'NEGATIVO: sequência só preenche Nº no Cadastro');
 assert.equal(endEdit(savedContext, { defaults: DEFAULTS, proximoNumero: '004' }).numeroAnimal, '004', 'fim da edição devolve o Nº atual da sequência');

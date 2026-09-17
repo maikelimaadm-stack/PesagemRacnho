@@ -43,6 +43,17 @@ assert.deepEqual((await reopened.table('backups').toCollection().primaryKeys()).
 ]);
 reopened.close();
 
+// 3b. Banco de backups já existente SEM a store (limpeza/criação parcial): a store é criada.
+{
+  const quebrado = new Dexie(BROWSER_BACKUP_DB);
+  quebrado.close();
+  await Dexie.delete(BROWSER_BACKUP_DB);
+  await new Promise((resolve, reject) => { const r = indexedDB.open(BROWSER_BACKUP_DB, 1); r.onupgradeneeded = () => {}; r.onsuccess = () => { r.result.close(); resolve(); }; r.onerror = () => reject(r.error); });
+  const recuperado = await createPreMigrationBackup({ sourceDb: source, sourceVersion: 7, targetVersion: 8, files: null, now: new Date(2026, 8, 17, 11, 0, 0) });
+  assert.equal(recuperado.storage, 'navegador', 'banco sem a store é recuperado em vez de bloquear');
+  assert.ok(recuperado.sha256);
+}
+
 // 4. Falha de gravação (ex.: sem espaço) bloqueia a migração.
 const realOpen = indexedDB.open.bind(indexedDB);
 indexedDB.open = (name, version) => {

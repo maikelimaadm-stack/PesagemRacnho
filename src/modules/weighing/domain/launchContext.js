@@ -351,9 +351,13 @@ export function stateAfterSave(mode, form, {
   return next;
 }
 
-/** Foco depois de salvar: Peso quando a sequência já preencheu o Nº; senão Nº/Identificação. */
-export function focusAfterSave(mode, { sequenciaAtiva = false, proximoNumero = null } = {}) {
-  return mode === 'Cadastro' && sequenciaAtiva && proximoNumero ? 'peso' : 'numero';
+/**
+ * Foco depois de salvar: SEMPRE o Nº/Identificação (pedido do responsável em 17/09/2026).
+ * Quem lança no curral digita o próximo animal em seguida; mesmo com a sequência de brincos
+ * preenchendo o Nº, o cursor volta para a identificação para conferir ou trocar.
+ */
+export function focusAfterSave() {
+  return 'numero';
 }
 
 /** Trocar o motivo da saída: causa recomeça; motivo sem embarque/documento solta esses vínculos (V-04). */
