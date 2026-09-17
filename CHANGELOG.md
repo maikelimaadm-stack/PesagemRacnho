@@ -3,7 +3,7 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
-## [1.2.0] — 2026-09-15
+## [1.2.0] — 2026-09-16
 
 Marco 1.2.0 do Programa Pesagens Individuais 2.0 (Fase 1). Esquema Dexie **7**,
 backup **formato 3** e login local. Instalador de diagnóstico (não assinado) em
@@ -36,6 +36,25 @@ backup **formato 3** e login local. Instalador de diagnóstico (não assinado) e
   pesagem (`categoria_id`, `categoria_automatica`).
 - Formulário de Cadastro do Lançamento na ordem Data, Sexo, Categoria, Raça, Marca,
   Identificação, Peso e Observação; a lista de categorias mostra só as do sexo escolhido.
+
+### Fixed
+- Restaurar backup, limpar dados, reset completo e continuar migração voltaram a ser
+  exclusivos do ADMIN: a verificação lia o perfil de um campo que não o trazia e o GESTOR
+  conseguia executá-las. A tela também deixa de oferecer essas ações a outros perfis.
+- Uma saída sem peso (morte, doação, transferência) não apaga mais a categoria, a era nem o
+  peso atual do animal: vale a última pesagem com peso. Peso fora de todas as faixas mantém
+  a última categoria válida.
+- Marca, raça, causa de morte (por id) e a origem do rendimento passam a ser gravadas na
+  pesagem em vez de descartadas; o cadastro usa a marca/raça escolhida antes de procurar pelo
+  texto.
+- Arroba única: 1 @ = 15 kg de carcaça, com o rendimento informado ou o padrão configurado.
+  Sem rendimento, carcaça e arrobas aparecem como "—" (acabaram o 50 % implícito, o peso/30
+  do resumo de lotes e o peso vivo/15). O rendimento padrão da empresa começa vazio.
+- Médias e somas dos resumos ignoram valores ausentes em vez de contá-los como zero; o GMD de
+  grupo é ponderado (soma dos ganhos ÷ soma dos dias) e o preço médio da arroba é ponderado
+  pelas arrobas.
+- Perfil Consulta não lança, edita, exclui nem importa pesagens (inclusive chamando o serviço).
+  Valores comerciais (compra, venda, preço/@, arrobas) só aparecem para Admin e Gestor.
 
 ### Removed
 - Painel lateral de filtros da Relação e dos cadastros (filtragem por pílulas e menu de
