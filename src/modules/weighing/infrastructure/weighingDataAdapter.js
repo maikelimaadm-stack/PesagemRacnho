@@ -62,6 +62,14 @@ async function resolveRegistryId(db, storeName, text, ts, { fallbackToDefault = 
   return record.id;
 }
 
+// Id escolhido na UI (marca_id/raca_id) vale quando existe e está ativo na store; só na
+// ausência dele o texto é resolvido (evita criar cadastro duplicado por grafia).
+async function existingRegistryId(db, storeName, id) {
+  if (!id) return null;
+  const row = (await db.table(storeName).where('id').equals(id).toArray()).find((candidate) => !candidate.deleted_at);
+  return row ? row.id : null;
+}
+
 function auditRow(fields) {
   return { id: crypto.randomUUID(), ...fields, ...getActor() };
 }
@@ -184,15 +192,24 @@ async function validateAnimalChronology(db, { animalId, data, ui, ignoredEntryId
 
 // Pesagem de animal com categoria automática: grava no payload a categoria e a era
 // da faixa de peso daquele momento (a relação mostra a era de cada pesagem).
-async function stampAutomaticCategory(db, entry, { automatic, sexo }) {
+// Sem peso (Saída por Morte/Doação/Transferência) ou peso fora de toda faixa, a pesagem
+// herda a última categoria válida do animal: ausência de peso nunca apaga classificação.
+async function stampAutomaticCategory(db, entry, { automatic, sexo, categoriaAtualId = null }) {
   const ui = entry.legacy_payload;
   if (!automatic || !ui || typeof ui !== 'object') return;
-  const categorias = await db.table('categoriasAnimal').toArray();
-  const categoria = suggestCategory({ categorias, sexo, peso: entry.peso_kg ?? ui.peso });
-  ui.categoria_id = categoria?.id ?? null;
+  const peso = weightOf(entry);
+  const categorias = peso == null ? [] : await db.table('categoriasAnimal').toArray();
+  const categoria = peso == null ? null : suggestCategory({ categorias, sexo, peso });
+  ui.categoria_id = categoria?.id ?? categoriaAtualId ?? ui.categoria_id ?? null;
   ui.categoria_automatica = true;
   const era = eraOfCategory(categoria);
   if (era) ui.era = era;
+}
+
+// Peso válido do evento (coluna ou payload); null quando ausente ou não positivo.
+function weightOf(row) {
+  const value = Number(row?.peso_kg ?? weighingUi(row).peso);
+  return row && (row.peso_kg != null || weighingUi(row).peso != null) && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date().toISOString()) {
@@ -211,13 +228,18 @@ async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date()
     .sort((left, right) => String(left.inicio || '').localeCompare(String(right.inicio || '')));
   const currentLot = openLots.at(-1) || null;
   const inactive = Boolean(latestExit);
+  // Último evento COM peso: Saída sem peso não zera peso atual nem categoria (R0 reporting).
+  const latestWeighed = [...events].reverse().find((row) => weightOf(row) != null) || null;
   const categoryChanges = {};
-  if (animal.categoria_automatica !== false && latest) {
+  if (animal.categoria_automatica !== false && latestWeighed) {
     const categorias = await db.table('categoriasAnimal').toArray();
-    const categoria = suggestCategory({ categorias, sexo: animal.sexo, peso: latest.peso_kg ?? latestUi.peso });
-    categoryChanges.categoria_id = categoria?.id ?? null;
-    const era = eraOfCategory(categoria);
-    if (era) categoryChanges.era = era;
+    const categoria = suggestCategory({ categorias, sexo: animal.sexo, peso: weightOf(latestWeighed) });
+    // Sem faixa correspondente, preserva a última categoria válida em vez de gravar null.
+    if (categoria) {
+      categoryChanges.categoria_id = categoria.id;
+      const era = eraOfCategory(categoria);
+      if (era) categoryChanges.era = era;
+    }
   }
   const changes = {
     ...categoryChanges,
@@ -225,8 +247,8 @@ async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date()
     situacao: inactive ? situacaoFromExitReason(exitUi.motivo_saida) : 'ATIVO',
     data_saida: inactive ? latestExit.data_pesagem : null,
     motivo_saida: inactive ? exitUi.motivo_saida || 'Saída' : null,
-    ultima_pesagem_data: latest?.data_pesagem || null,
-    ultimo_peso_kg: latest?.peso_kg ?? null,
+    ultima_pesagem_data: latestWeighed?.data_pesagem || latest?.data_pesagem || null,
+    ultimo_peso_kg: latestWeighed ? weightOf(latestWeighed) : null,
     lote_atual_id: inactive ? null : currentLot?.lote_id || latest?.lote_id || null,
     apartacao_atual_id: inactive ? null : currentLot?.apartacao_id || latestUi.apartacao_id || null,
     updated_at: timestamp,
@@ -309,13 +331,13 @@ export async function createEntry(payload) {
     const existingForCategory = !isRegistration && animalId ? await db.table('animais').where('id').equals(animalId).first() : null;
     await stampAutomaticCategory(db, entry, isRegistration
       ? { automatic: ui.categoria_automatica !== false, sexo: ui.sexo }
-      : { automatic: Boolean(existingForCategory) && existingForCategory.categoria_automatica !== false, sexo: existingForCategory?.sexo });
+      : { automatic: Boolean(existingForCategory) && existingForCategory.categoria_automatica !== false, sexo: existingForCategory?.sexo, categoriaAtualId: existingForCategory?.categoria_id ?? null });
     await db.table('pesagens').add(entry);
     if (isRegistration) {
       const existingAnimal = await db.table('animais').where('id').equals(animalId).first();
       if (!existingAnimal) {
-        const marcaId = await resolveRegistryId(db, 'marcas', ui.marca, ts, { fallbackToDefault: true });
-        const racaId = await resolveRegistryId(db, 'racas', ui.raca, ts);
+        const marcaId = await existingRegistryId(db, 'marcas', ui.marca_id) ?? await resolveRegistryId(db, 'marcas', ui.marca, ts, { fallbackToDefault: true });
+        const racaId = await existingRegistryId(db, 'racas', ui.raca_id) ?? await resolveRegistryId(db, 'racas', ui.raca, ts);
         const propriedadeId = await findDefaultRegistryId(db, 'propriedades');
         await db.table('animais').add(newAnimal({ animalId, ui, marcaId, racaId, propriedadeId, situacao: 'ATIVO', origem: null, ts }));
         await db.table('animalIdentificadores').add(newVisualIdentifier({ animalId, ui, marcaId, inicio: payload.data_pesagem, ts }));
@@ -377,13 +399,13 @@ export async function updateEntry(id, payload) {
     const isRegistration = ui.tipo_manejo === 'Cadastro';
     await stampAutomaticCategory(db, updated, isRegistration
       ? { automatic: ui.categoria_automatica !== false, sexo: ui.sexo ?? animalAtual?.sexo }
-      : { automatic: Boolean(animalAtual) && animalAtual.categoria_automatica !== false, sexo: animalAtual?.sexo });
+      : { automatic: Boolean(animalAtual) && animalAtual.categoria_automatica !== false, sexo: animalAtual?.sexo, categoriaAtualId: animalAtual?.categoria_id ?? null });
     await db.table('pesagens').update(existing.localId, updated);
     if (isRegistration && updated.animal_id) {
       const animal = animalAtual;
       if (animal) {
-        const marcaId = ui.marca ? await resolveRegistryId(db, 'marcas', ui.marca, ts) : animal.marca_id ?? null;
-        const racaId = ui.raca ? await resolveRegistryId(db, 'racas', ui.raca, ts) : animal.raca_id ?? null;
+        const marcaId = await existingRegistryId(db, 'marcas', ui.marca_id) ?? (ui.marca ? await resolveRegistryId(db, 'marcas', ui.marca, ts) : animal.marca_id ?? null);
+        const racaId = await existingRegistryId(db, 'racas', ui.raca_id) ?? (ui.raca ? await resolveRegistryId(db, 'racas', ui.raca, ts) : animal.raca_id ?? null);
         await db.table('animais').update(animal.localId, {
           numero_animal: ui.numero_animal || animal.numero_animal,
           identificacao_normalizada: String(ui.numero_animal || animal.numero_animal || '').trim().toUpperCase(),
