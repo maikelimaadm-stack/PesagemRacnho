@@ -113,12 +113,8 @@ export function resolveDefaultRegistry(rows = [], preferredId = null) {
  * documento; Venda só quando a política `exigir_documento_venda` está ligada.
  * Demais motivos (Morte, Doação, Transferência, Outros) nunca exigem.
  */
-export function exitRequiresDocument(motivoSaida, salesPolicy = {}) {
-  const motivo = String(motivoSaida ?? '').trim();
-  if (motivo === 'Abate') return true;
-  if (motivo === 'Venda') return salesPolicy?.exigir_documento_venda === true;
-  return false;
-}
+// Regra única no domínio (closingPendencies); reexportada para os importadores atuais.
+export { exitRequiresDocument } from '../domain/closingPendencies.js';
 
 /** Texto do rendimento para o campo (pt-BR): 52.5 → "52,5"; null → "". */
 export function formatRendimento(value) {

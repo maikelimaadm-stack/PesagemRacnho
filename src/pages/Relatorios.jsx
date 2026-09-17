@@ -16,6 +16,8 @@ export default function Relatorios() {
   const params = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const reportId = params.get("r");
   const templateId = params.get("m");
+  // Data civil (atalho do Fechamento do Dia): só pré-preenche o período; nunca filtros ou dados.
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(params.get("d") ?? "") ? params.get("d") : null;
   const [template, setTemplate] = useState(null);
   const [templateReady, setTemplateReady] = useState(!templateId);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -39,9 +41,10 @@ export default function Relatorios() {
     if (!templateReady) return null;
     return (
       <ReportView
-        key={`${reportId}:${templateId ?? ""}`}
+        key={`${reportId}:${templateId ?? ""}:${day ?? ""}`}
         reportId={reportId}
         template={template}
+        initialPeriod={day ? { preset: "personalizado", from: day, to: day } : null}
         actor={actor}
         onBack={() => navigate("/Relatorios")}
         onTemplateSaved={() => setRefreshKey((value) => value + 1)}

@@ -59,10 +59,14 @@ function initialState(definition, template, role) {
   };
 }
 
-export default function ReportView({ reportId, template, actor, onBack, onTemplateSaved }) {
+export default function ReportView({ reportId, template, actor, onBack, onTemplateSaved, initialPeriod = null }) {
   const can = useCan();
   const definition = getReportDefinition(reportId);
-  const [state, setState] = useState(() => initialState(definition, template, actor.role));
+  const [state, setState] = useState(() => {
+    const initial = initialState(definition, template, actor.role);
+    const periodParam = definition.params.find((param) => param.type === "period");
+    return initialPeriod && periodParam ? { ...initial, params: { ...initial.params, [periodParam.id]: initialPeriod } } : initial;
+  });
   const [viewModel, setViewModel] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
