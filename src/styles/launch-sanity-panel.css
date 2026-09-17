@@ -1,0 +1,86 @@
+/* Lançamento — painel de Sanidade em formato de tabela compacta (pedido 17/09/2026):
+   um cabeçalho, uma linha por aplicação, controles baixos e pouco espaçamento. */
+html body .d17d-detail-panel.d17d-sanity-panel {
+  margin-top: 6px !important;
+  padding: 6px 8px !important;
+  border: 1px solid rgba(39, 196, 91, .22) !important;
+  border-radius: 8px !important;
+  background: #f6fdf8 !important;
+}
+
+.d17d-sanity-panel__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  font-size: 12px;
+  color: #065f46;
+}
+.d17d-sanity-panel__head > strong { font-weight: 600; }
+.d17d-sanity-panel__count { color: #64748b; font-weight: 400; }
+.d17d-sanity-panel__actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+html body .d17d-sanity-panel__sequence {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  color: #334155;
+  white-space: nowrap;
+  cursor: pointer;
+}
+html body .d17d-sanity-panel__add { height: 26px !important; min-height: 26px !important; padding: 0 10px !important; font-size: 11px !important; gap: 4px; border-radius: 999px !important; }
+html body .d17d-sanity-panel__icon { height: 26px !important; width: 26px !important; min-height: 26px !important; }
+
+.d17d-sanity-panel__body { margin-top: 4px; }
+.d17d-sanity-panel__message { margin: 2px 0; font-size: 11px; color: #475569; }
+.d17d-sanity-panel__message.is-error { color: #b91c1c; }
+.d17d-sanity-panel__readonly { margin-top: 4px; font-size: 11px; color: #475569; }
+.d17d-sanity-panel__readonly ul { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; }
+
+html body .d17d-sanity-panel .d17d-sanity-table { width: 100% !important; margin-top: 4px; border-collapse: separate !important; border-spacing: 0 !important; table-layout: fixed; background: #fff !important; border: 1px solid #dfe5ec !important; border-radius: 6px !important; overflow: hidden; }
+.d17d-sanity-table col.is-program { width: 22%; }
+.d17d-sanity-table col.is-product { width: 22%; }
+.d17d-sanity-table col.is-dose { width: 72px; }
+.d17d-sanity-table col.is-unit { width: 92px; }
+.d17d-sanity-table col.is-via { width: 150px; }
+.d17d-sanity-table col.is-action { width: 30px; }
+html body .d17d-sanity-panel .d17d-sanity-table th {
+  padding: 4px 6px !important;
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  text-align: left;
+  background: #f1f5f9 !important;
+  border-bottom: 1px solid #dfe5ec !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+html body .d17d-sanity-panel .d17d-sanity-table td { padding: 2px 3px !important; border-bottom: 1px solid #eef2f6 !important; vertical-align: middle; }
+html body .d17d-sanity-panel .d17d-sanity-table tbody tr:last-child td { border-bottom: 0 !important; }
+html body .d17d-sanity-table td :is(input, button[role="combobox"]) {
+  height: 26px !important;
+  min-height: 26px !important;
+  width: 100% !important;
+  padding: 0 6px !important;
+  font-size: 12px !important;
+  border-radius: 5px !important;
+  box-shadow: none !important;
+}
+.d17d-sanity-table__empty { padding: 6px 8px !important; font-size: 11px; color: #64748b; }
+.d17d-sanity-table__hint td { padding: 0 6px 3px !important; font-size: 11px; color: #64748b; }
+.d17d-sanity-table__action { text-align: center; }
+.d17d-sanity-table__remove {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border: 0; border-radius: 999px; background: transparent; color: #64748b; cursor: pointer;
+}
+.d17d-sanity-table__remove:hover { background: #fee2e2; color: #b91c1c; }
+
+html.dark body .d17d-detail-panel.d17d-sanity-panel { background: #0d1117 !important; border-color: rgba(64, 222, 99, .25) !important; }
+html.dark .d17d-sanity-panel__head { color: #6ee7b7; }
+html.dark .d17d-sanity-panel__sequence, html.dark .d17d-sanity-panel__message, html.dark .d17d-sanity-panel__readonly { color: #cbd5e1; }
+html.dark body .d17d-sanity-panel .d17d-sanity-table { background: #111827 !important; border-color: #1f2937 !important; }
+html.dark body .d17d-sanity-panel .d17d-sanity-table th { background: #0f172a !important; color: #cbd5e1; border-color: #1f2937 !important; }
+html.dark body .d17d-sanity-panel .d17d-sanity-table td { border-color: #1f2937 !important; }
+html.dark .d17d-sanity-table__remove:hover { background: rgba(185, 28, 28, .25); color: #fca5a5; }
