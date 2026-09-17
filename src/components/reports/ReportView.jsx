@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Columns3, Download, FileJson, FileSpreadsheet, Layers, Lock, RefreshCw, Save, Sigma, Star } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Columns3, Download, FileJson, FileSpreadsheet, FileText, Layers, Lock, Printer, RefreshCw, Save, Sigma, Star } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +17,8 @@ import { REPORT_FAMILIES } from "@/modules/reporting/domain/reportDefinition";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { runReport } from "@/modules/reporting/application/reportService";
 import { emitReport } from "@/modules/reporting/application/reportExportService";
+import { exportPdf, printReport } from "@/modules/reporting/application/reportPrintService";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getFavorites, recordRecent, saveTemplate, templateToRequest, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportTable from "./ReportTable";
@@ -68,6 +70,8 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
   const [favorite, setFavorite] = useState(false);
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [currentTemplate, setCurrentTemplate] = useState(template ?? null);
+  const [printPrompt, setPrintPrompt] = useState(null);
+  const [orientation, setOrientation] = useState(template?.orientation ?? "auto");
   const lastViewModel = useRef(null);
   const runSeq = useRef(0);
 
@@ -135,6 +139,20 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
     }
   };
 
+  // Impressão/PDF: se as colunas não couberem, pergunta (paisagem, reduzir colunas ou exportar) — nunca corta em silêncio.
+  const emitDocument = async (kind, overrides = {}) => {
+    if (!viewModel) return;
+    const options = { orientation: overrides.orientation ?? orientation, widths: state.widths, acceptTooWide: overrides.acceptTooWide ?? false };
+    try {
+      const result = kind === "pdf" ? await exportPdf(viewModel, actor, options) : await printReport(viewModel, actor, options);
+      if (result.blocked) { setPrintPrompt({ kind, layout: result.layout }); return; }
+      setPrintPrompt(null);
+      if (kind === "pdf" && result.path) toast.success(`PDF gerado: ${result.path}`, { description: `SHA-256 ${result.sha256.slice(0, 16)}… · ${result.layout.orientation === "landscape" ? "paisagem" : "retrato"}` });
+      if (kind === "pdf" && result.fallback) toast.info("Sem o aplicativo desktop: use “Salvar como PDF” na janela de impressão.");
+    } catch (err) {
+      toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode imprimir ou exportar este relatório." : `Falha na emissão: ${err.message}`);
+    }
+  };
   const saveAsTemplate = async ({ id, name, scope }) => {
     setSavingTemplate(true);
     try {
@@ -211,6 +229,7 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
             <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => setDialog("columns")}><Columns3 className="h-3.5 w-3.5" aria-hidden="true" />Colunas</button>
             <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={execute} title="Atualizar"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Atualizar</button>
             <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => setDialog("save")}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar modelo</button>
+            {can("reports.export") ? <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" disabled={!viewModel || loading} onClick={() => emitDocument("print")}><Printer className="h-3.5 w-3.5" aria-hidden="true" />Imprimir</button> : null}
             {can("reports.export") ? (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -221,6 +240,10 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="text-xs" onClick={() => exportAs("csv")}><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />CSV (Excel pt-BR)</DropdownMenuItem>
                   <DropdownMenuItem className="text-xs" onClick={() => exportAs("json")}><FileJson className="h-3.5 w-3.5" aria-hidden="true" />JSON com manifesto</DropdownMenuItem>
+                  <DropdownMenuItem className="text-xs" onClick={() => emitDocument("pdf")}><FileText className="h-3.5 w-3.5" aria-hidden="true" />PDF (A4)</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs">Orientação: {orientation === "auto" ? "automática" : orientation === "landscape" ? "paisagem" : "retrato"}</DropdownMenuLabel>
+                  {["auto", "portrait", "landscape"].map((value) => <DropdownMenuItem key={value} className="text-xs" onClick={() => setOrientation(value)}>{value === "auto" ? "Automática" : value === "landscape" ? "Paisagem" : "Retrato"}{orientation === value ? " ✓" : ""}</DropdownMenuItem>)}
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
@@ -288,6 +311,20 @@ export default function ReportView({ reportId, template, actor, onBack, onTempla
       <ReportGroupingDialog open={dialog === "groups"} onOpenChange={(open) => !open && setDialog(null)} columns={available} groups={state.groups} onApply={(groups) => update({ groups })} />
       <ReportTotalsDialog open={dialog === "totals"} onOpenChange={(open) => !open && setDialog(null)} columns={available} aggregates={state.aggregates} animalColumnId={definition.animalColumnId} onApply={(aggregates) => update({ aggregates })} />
       <ReportSaveTemplateDialog open={dialog === "save"} onOpenChange={(open) => !open && setDialog(null)} current={currentTemplate && (currentTemplate.ownerUserId === actor.id || can("reports.templates.share")) ? currentTemplate : null} canShare={can("reports.templates.share")} onSave={saveAsTemplate} busy={savingTemplate} />
+      <Dialog open={Boolean(printPrompt)} onOpenChange={(open) => !open && setPrintPrompt(null)}>
+        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact rpt-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />Este relatório possui muitas colunas para impressão.</DialogTitle>
+            <DialogDescription>{printPrompt ? `${printPrompt.layout.columnCount} colunas não cabem em A4 ${printPrompt.layout.orientation === "landscape" ? "paisagem" : "retrato"}. Nenhuma coluna é escondida automaticamente.` : ""}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="rpt-print-options">
+            {printPrompt?.layout.orientation === "portrait" ? <Button type="button" variant="outline" onClick={() => { setOrientation("landscape"); emitDocument(printPrompt.kind, { orientation: "landscape" }); }}>Usar paisagem</Button> : null}
+            <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); setDialog("columns"); }}>Reduzir colunas</Button>
+            {can("reports.export") ? <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); exportAs("csv"); }}>Exportar CSV</Button> : null}
+            <Button type="button" className="emp-toolbar-btn-save" onClick={() => emitDocument(printPrompt.kind, { acceptTooWide: true })}>Continuar mesmo assim</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ModeloBase1PageContainer>
   );
 }
