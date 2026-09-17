@@ -13,6 +13,9 @@ export const LEGACY_PAYLOAD_ALLOWLIST = Object.freeze([
   'documento_embarque_id', 'documento_tipo', 'documento_numero', 'motorista_nome', 'placa_carreta',
   // Categoria do animal no momento da pesagem (automática pelo peso ou escolhida à mão).
   'categoria_id', 'categoria_automatica',
+  // Referências estruturais por id (R0 reporting): agrupamento histórico por marca/raça/causa sem
+  // depender do texto; origem do rendimento usado no cálculo de arrobas (informado × padrão).
+  'marca_id', 'raca_id', 'causa_morte_id', 'rendimento_origem',
 ]);
 
 // Proibidas em gravação nova: redundantes com colunas/timestamps do registro

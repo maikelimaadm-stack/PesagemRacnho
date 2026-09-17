@@ -132,6 +132,21 @@ assert.deepEqual(findDisallowedLegacyKeys(bad.legacy_payload).sort(), ['_localId
 await weighingService.updateEntry('raw-bad', { observacao: 'saneado' });
 assert.deepEqual(findDisallowedLegacyKeys((await db.table('pesagens').where('id').equals('raw-bad').first()).legacy_payload), [], 'regravar pela cadeia limpa o payload');
 
+// R0 reporting: ids estruturais atravessam a cadeia oficial (não são descartados em silêncio),
+// e a lista continua fechada (chave desconhecida ao lado deles segue descartada).
+for (const key of ['marca_id', 'raca_id', 'categoria_id', 'causa_morte_id', 'rendimento_origem', 'apartacao_id', 'sessao_id', 'embarque_id', 'documento_embarque_id']) {
+  assert.ok(LEGACY_PAYLOAD_ALLOWLIST.includes(key), `estrutural permitida: ${key}`);
+}
+const estrutural = await weighingService.createEntry({
+  id: 'estrutural', tipo_manejo: 'Cadastro', numero_animal: '77', marca: 'A', marca_id: 'marca-x', raca: 'Nelore', raca_id: 'raca-y', sexo: 'F',
+  data_pesagem: '2026-01-02', peso: 180, rendimento_origem: 'INFORMADO', causa_morte_id: null, id_invasor: 'zzz',
+});
+const estruturalRow = await db.table('pesagens').where('id').equals(estrutural.id).first();
+assert.equal(estruturalRow.legacy_payload.marca_id, 'marca-x', 'marca_id preservado no payload');
+assert.equal(estruturalRow.legacy_payload.raca_id, 'raca-y', 'raca_id preservado no payload');
+assert.equal(estruturalRow.legacy_payload.rendimento_origem, 'INFORMADO', 'rendimento_origem preservado no payload');
+assert.ok(!('id_invasor' in estruturalRow.legacy_payload), 'chave desconhecida continua descartada');
+
 await deleteDbForTests();
 console.log('OK verify-payload-allowlist');
 console.log(JSON.stringify({
