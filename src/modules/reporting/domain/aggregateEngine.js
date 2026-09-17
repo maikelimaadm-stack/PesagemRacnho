@@ -89,19 +89,28 @@ export function avg(rows, field) {
   return result(value, values.length, missing, rows.length);
 }
 
+// Laço simples: Math.min(...array) estoura a pilha acima de ~125 mil valores.
+function extremes(values) {
+  let low = Infinity;
+  let high = -Infinity;
+  for (const value of values) { if (value < low) low = value; if (value > high) high = value; }
+  return values.length ? { low, high } : null;
+}
+
 export function min(rows, field) {
   const { values, missing } = numericValues(rows, field);
-  return result(values.length ? Math.min(...values) : null, values.length, missing, rows.length);
+  return result(extremes(values)?.low ?? null, values.length, missing, rows.length);
 }
 
 export function max(rows, field) {
   const { values, missing } = numericValues(rows, field);
-  return result(values.length ? Math.max(...values) : null, values.length, missing, rows.length);
+  return result(extremes(values)?.high ?? null, values.length, missing, rows.length);
 }
 
 export function range(rows, field) {
   const { values, missing } = numericValues(rows, field);
-  return result(values.length ? Math.max(...values) - Math.min(...values) : null, values.length, missing, rows.length);
+  const bounds = extremes(values);
+  return result(bounds ? bounds.high - bounds.low : null, values.length, missing, rows.length);
 }
 
 /**

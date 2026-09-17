@@ -42,7 +42,8 @@ export function bandsFromCategories(categorias = []) {
 }
 
 function bandFor(weight, sexo, bands) {
-  const applicable = bands.filter((band) => !band.sexo || band.sexo === 'AMBOS' || !sexo || band.sexo === sexo);
+  // Sem sexo, faixa de categoria sexuada não se aplica (mesma regra da categoria automática).
+  const applicable = bands.filter((band) => !band.sexo || band.sexo === 'AMBOS' || (sexo && band.sexo === sexo));
   return weightBand(weight, applicable);
 }
 
@@ -88,7 +89,7 @@ const eventOrder = (left, right) => String(left.data_pesagem || '').localeCompar
 
 /** Chave do animal no período: id; legado sem id → número+marca normalizados. */
 export function animalKeyOf(event) {
-  return event.animal_id || `legado:${normalizeText(event.numero_animal)}::${normalizeText(event.marca)}`;
+  return event.animal_key || event.animal_id || `legado:${normalizeText(event.numero_animal)}::${normalizeText(event.marca)}`;
 }
 
 /**
@@ -115,13 +116,14 @@ export function toAnimalPeriodRows(events, animalsById, lookups, { bands = [] } 
     const hasPair = weighed.length >= 2;
     const dias = hasPair ? daysBetween(first.data_pesagem, last.data_pesagem) : null;
     const ganho = hasPair ? toFiniteNumber(last.peso) - toFiniteNumber(first.peso) : null;
-    const animal = latest.animal_id ? animalsById.get(latest.animal_id) : null;
+    const animalId = list.map((event) => event.animal_id || event.animal_id_resolvido).find(Boolean) || null;
+    const animal = animalId ? animalsById.get(animalId) : null;
     const loteId = latest.lote_id ?? null;
     const apartacaoId = latest.apartacao_id ?? (loteId ? lookups.loteApartacao.get(loteId) ?? null : null);
     const sexo = animal?.sexo ?? latest.sexo ?? null;
     rows.push({
       id: key,
-      animal_id: latest.animal_id ?? null,
+      animal_id: animalId,
       animal_key: key,
       numero_animal: animal?.numero_animal ?? latest.numero_animal ?? null,
       marca_id: animal?.marca_id ?? latest.marca_id ?? null,

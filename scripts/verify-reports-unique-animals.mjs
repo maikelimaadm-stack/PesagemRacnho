@@ -50,5 +50,19 @@ assert.equal(inventario.totals.animais.value, 2);
 const todos = await runReport('rebanho.inventario', { today: TODAY, selection: { filters: {} } }, ADMIN);
 assert.equal(todos.rowCount, 4, 'sem filtro: todos os animais, um por linha');
 
+// Registro legado SEM animal_id do mesmo animal (101/ALFA) + arroba legada sem rendimento (revisão matemática).
+const db = (await import('../src/storage/storageAdapter.js')).default;
+const store = await db.ensureReady();
+await store.table('pesagens').add({ id: 'legado-1', data_pesagem: '2026-07-20', peso_kg: 290, tipo_pesagem: 'Manejo', animal_id: null, legacy_payload: { empresa_id: 'local', tipo_manejo: 'Manejo', numero_animal: '101', marca: 'alfa', peso: 290, quantidade_arrobas: 9.67 }, created_at: '2026-07-20T00:00:00.000Z', updated_at: '2026-07-20T00:00:00.000Z', deleted_at: null });
+const comLegado = await runReport('pesagens.periodo', { today: TODAY, params: { periodo: { preset: 'personalizado', from: '2026-07-01', to: '2026-09-15' } }, selection: { columns: ['data_pesagem', 'numero_animal', 'quantidade_arrobas'] } }, ADMIN);
+assert.equal(comLegado.rowCount, 10);
+assert.equal(comLegado.uniqueAnimalCount, 4, 'legado resolvido para A1 por número+marca: continua 4 animais');
+assert.equal(comLegado.rows.find((row) => row.id === 'legado-1').quantidade_arrobas, null, 'arroba legada sem rendimento não entra');
+const desempenho = await runReport('desempenho.individual', { today: TODAY, params: { periodo: { preset: 'personalizado', from: '2026-07-01', to: '2026-09-15' } } }, ADMIN);
+const a1 = desempenho.rows.filter((row) => row.animal_id === 'A1');
+assert.equal(a1.length, 1, 'ANIMAL_PERIOD: uma linha para A1 (legado + novos)');
+assert.equal(a1[0].peso_inicial, 290);
+assert.equal(a1[0].ganho, 55);
+
 await resetDb();
 console.log(JSON.stringify({ gate: 'reports:unique-animals:verify', ok: true, porTipo }, null, 2));

@@ -369,6 +369,13 @@ export async function createEntry(payload) {
         deleted_at: null,
       });
     }
+    // Lançamento retroativo (data anterior a outro evento do animal): a permanência em lote é
+    // reconstruída a partir de todos os eventos, senão o lote atual e o histórico ficam errados.
+    if (animalId) {
+      const later = (await db.table('pesagens').where('animal_id').equals(animalId).toArray())
+        .some((row) => !row.deleted_at && row.id !== entryId && String(row.data_pesagem) > String(payload.data_pesagem));
+      if (later) await rebuildAnimalLotProjection(db, animalId, ts);
+    }
     await db.table('auditoria').add(auditRow({
       entidade: 'pesagens',
       entidade_id: entryId,

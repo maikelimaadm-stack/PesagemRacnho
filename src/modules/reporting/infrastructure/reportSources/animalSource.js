@@ -39,7 +39,7 @@ export async function loadAnimalPeriodRows({ empresaId, period, params } = {}) {
   const events = await loadEventRows({ from: period.from, to: period.to, empresaId });
   const db = await storage.ensureReady();
   const startedAt = performance.now();
-  const ids = [...new Set(events.rows.map((row) => row.animal_id).filter(Boolean))];
+  const ids = [...new Set(events.rows.map((row) => row.animal_id || row.animal_id_resolvido).filter(Boolean))];
   const animals = ids.length ? (await db.table('animais').where('id').anyOf(ids).toArray()).filter((row) => !row.deleted_at) : [];
   const { lookups, categorias } = await loadLookups(db);
   const { bands } = resolveBands(params, categorias);

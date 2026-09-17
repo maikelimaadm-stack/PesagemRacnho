@@ -27,7 +27,7 @@ export const GRAIN_LABELS = Object.freeze({
   LOT: 'uma linha por lote',
   LOT_STAY: 'uma linha por permanência do animal no lote',
   EXIT: 'uma linha por saída definitiva',
-  SHIPMENT_DOCUMENT: 'uma linha por animal do documento de embarque',
+  SHIPMENT_DOCUMENT: 'uma linha por documento de embarque',
   AUDIT_ENTRY: 'uma linha por registro de auditoria',
   DATA_ISSUE: 'uma linha por inconsistência encontrada',
   REGISTRY_ITEM: 'uma linha por item de cadastro',

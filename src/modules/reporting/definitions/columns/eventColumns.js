@@ -36,16 +36,16 @@ export const EVENT_COLUMNS = [
     id: 'numero_animal', label: 'Animal', type: 'identifier', grains: EVENT_GRAINS, defaultVisible: true, defaultWidth: 116,
     aggregations: ['count', 'countDistinct'],
     // Animais únicos: pelo id do animal; registro legado sem id cai em número+marca.
-    groupKey: (row) => row.animal_id || `legado:${normalizeText(row.numero_animal)}::${normalizeText(row.marca)}`,
+    groupKey: (row) => row.animal_key || row.animal_id || `legado:${normalizeText(row.numero_animal)}::${normalizeText(row.marca)}`,
   }),
   defineColumn({
     id: 'marca', label: 'Marca', type: 'text', grains: EVENT_GRAINS, groupable: true, defaultVisible: true,
-    groupKey: textKey('marca_id', 'marca'), groupLabel: (row) => row.marca_nome || row.marca,
+    groupKey: (row) => row.marca_grupo_id || textKey('marca_id', 'marca')(row), groupLabel: (row) => row.marca_nome || row.marca,
   }),
   defineColumn({ id: 'sexo', label: 'Sexo', type: 'enum', options: SEXO_OPTIONS, grains: EVENT_GRAINS, groupable: true, defaultVisible: true, defaultWidth: 92 }),
   defineColumn({
     id: 'raca', label: 'Raça', type: 'text', grains: EVENT_GRAINS, groupable: true, defaultVisible: true,
-    groupKey: textKey('raca_id', 'raca'), groupLabel: (row) => row.raca_nome || row.raca,
+    groupKey: (row) => row.raca_grupo_id || textKey('raca_id', 'raca')(row), groupLabel: (row) => row.raca_nome || row.raca,
   }),
   defineColumn({ id: 'era', label: 'Era', type: 'text', grains: EVENT_GRAINS, groupable: true, defaultVisible: true, defaultWidth: 88 }),
   defineColumn({
@@ -79,7 +79,8 @@ export const EVENT_COLUMNS = [
     weightedBy: 'quantidade_arrobas', aggregations: ['countValid', 'avg', 'min', 'max', 'weightedAvg'],
   }),
   defineColumn({ id: 'quantidade_arrobas', label: '@ carcaça estimada', type: 'number', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
-  defineColumn({ id: 'rendimento_carcaca', label: 'Rendimento', unit: '%', type: 'percentage', grains: EVENT_GRAINS, weightedBy: 'peso', aggregations: ['countValid', 'avg', 'min', 'max', 'weightedAvg'] }),
+  // Rendimento também é sensível: peso × rendimento ÷ 100 ÷ 15 recalcula as arrobas.
+  defineColumn({ id: 'rendimento_carcaca', label: 'Rendimento', unit: '%', type: 'percentage', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, weightedBy: 'peso', aggregations: ['countValid', 'avg', 'min', 'max', 'weightedAvg'] }),
   // Carcaça estimada é sensível: arrobas = carcaça ÷ 15 (seria canal lateral para o valor).
   defineColumn({ id: 'peso_carcaca_estimado', label: 'Carcaça estimada', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'frigorifico', label: 'Frigorífico', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'legado-texto' }),

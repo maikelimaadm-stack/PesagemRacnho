@@ -3,7 +3,7 @@
 // tela operacional) lê a store como a tela sempre fez. As entidades referenciadas (animais,
 // sessões) são buscadas por `anyOf` nos índices; cadastros são stores pequenas.
 import storage from '../../../../storage/storageAdapter.js';
-import { buildEventLookups, enrichEventRows, storageRowToEventViewModel } from './eventRows.js';
+import { buildAnimalIdentityIndex, buildEventLookups, enrichEventRows, storageRowToEventViewModel } from './eventRows.js';
 import { readAppSetting } from '../../../../storage/indexedDb/repositories/index.js';
 
 const instrumentation = { lastQuery: null };
@@ -32,14 +32,18 @@ export async function loadEventLookups(db, viewModels) {
     readAllActive(db.table('loteApartacoes')),
     readAllActive(db.table('usuarios')),
   ]);
-  const [sessoes, animais] = await Promise.all([
+  // Identidade de legados só quando há evento sem animal_id (evita ler todos os animais à toa).
+  const hasLegacy = viewModels.some((row) => !row.animal_id);
+  const [sessoes, animais, allAnimals] = await Promise.all([
     activeByIds(db.table('sessoesPesagem'), viewModels.map((row) => row.sessao_id)),
     activeByIds(db.table('animais'), viewModels.map((row) => row.animal_id)),
+    hasLegacy ? readAllActive(db.table('animais')) : [],
   ]);
+  const animalIdentity = hasLegacy ? buildAnimalIdentityIndex(allAnimals, new Map(marcas.map((row) => [row.id, row.nome]))) : null;
   // Política de vendas (documento obrigatório) para as pendências; sem configuração, sem exigência.
   const salesPolicy = (await readAppSetting('sales-policy:local').catch(() => null)) || {};
   // Usuários: só id e nome saem daqui (buildEventLookups descarta o resto).
-  return buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais, salesPolicy });
+  return buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais: hasLegacy ? allAnimals : animais, salesPolicy, animalIdentity });
 }
 
 /**

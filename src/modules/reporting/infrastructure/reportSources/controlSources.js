@@ -5,6 +5,7 @@ import storage from '../../../../storage/storageAdapter.js';
 import { logicalIntegrity } from '../../../../storage/indexedDb/health/health.js';
 import { daysBetween } from '../../domain/reportPeriod.js';
 import { toFiniteNumber } from '../../domain/aggregateEngine.js';
+import { dedupeById, storageRowToEventViewModel } from './eventRows.js';
 
 const active = (rows) => rows.filter((row) => !row.deleted_at);
 const byId = (rows) => new Map(rows.map((row) => [row.id, row]));
@@ -49,8 +50,8 @@ export async function loadLotRows({ empresaId } = {}) {
       animais_x100_com_capacidade: hasCapacity ? members.length * 100 : null,
       ocupacao: hasCapacity ? (members.length / capacity) * 100 : null,
       peso_medio_atual: weights.length ? weights.reduce((sum, value) => sum + value, 0) / weights.length : null,
-      peso_min_lote: weights.length ? Math.min(...weights) : null,
-      peso_max_lote: weights.length ? Math.max(...weights) : null,
+      peso_min_lote: weights.length ? weights.reduce((low, value) => (value < low ? value : low), Infinity) : null,
+      peso_max_lote: weights.length ? weights.reduce((high, value) => (value > high ? value : high), -Infinity) : null,
     };
   });
   return timed(startedAt, queriedAt, rows, 'stores:loteApartacoes+index:animais.situacao', lots.length + animais.length);
@@ -63,7 +64,8 @@ export async function loadLotStayRows({ period, today } = {}) {
   // `inicio` indexado: toda permanência que começou até o fim do período; as encerradas antes do início são descartadas.
   const stays = active(await db.table('animalLotes').where('inicio').belowOrEqual(period.to).toArray());
   const queriedAt = now();
-  const relevant = stays.filter((stay) => !stay.fim || stay.fim >= period.from);
+  // Encerrada no primeiro dia do período = mudou de lote nesse dia: não conta no lote anterior.
+  const relevant = stays.filter((stay) => !stay.fim || stay.fim > period.from);
   const animalIds = [...new Set(relevant.map((stay) => stay.animal_id))];
   const [animals, lots, apartacoes, allStaysOfAnimals] = await Promise.all([
     animalIds.length ? db.table('animais').where('id').anyOf(animalIds).toArray() : [],
@@ -89,7 +91,10 @@ export async function loadLotStayRows({ period, today } = {}) {
     const animal = animalById.get(stay.animal_id) || {};
     const previous = previousOf.get(stay.id) ?? null;
     const lot = lotById.get(stay.lote_id);
-    const end = stay.fim || today;
+    // Dias DENTRO do período: [max(início, de), min(fim ou hoje, até)].
+    const clipStart = stay.inicio > period.from ? stay.inicio : period.from;
+    const rawEnd = stay.fim || today;
+    const clipEnd = rawEnd && rawEnd < period.to ? rawEnd : period.to;
     return {
       id: stay.id,
       animal_id: stay.animal_id,
@@ -105,7 +110,7 @@ export async function loadLotStayRows({ period, today } = {}) {
       lote_origem: previous ? lotById.get(previous.lote_id)?.nome_lote ?? null : null,
       inicio: stay.inicio,
       fim: stay.fim ?? null,
-      dias_no_lote: end ? daysBetween(stay.inicio, end) : null,
+      dias_no_lote: clipEnd && clipEnd >= clipStart ? daysBetween(clipStart, clipEnd) : null,
       mudanca: Boolean(previous),
     };
   });
@@ -122,12 +127,12 @@ export async function loadShipmentDocumentRows({ period } = {}) {
   const queriedAt = now();
   const shipmentById = byId(active(shipments));
   const byDocument = new Map();
-  for (const exit of exits) {
-    const payload = typeof exit.legacy_payload === 'object' && exit.legacy_payload ? exit.legacy_payload : {};
-    const documentId = payload.documento_embarque_id;
+  // Mesma transformação das pesagens (payload em texto JSON incluído) e deduplicação por id.
+  for (const exit of dedupeById(exits.map(storageRowToEventViewModel).filter(Boolean))) {
+    const documentId = exit.documento_embarque_id;
     if (!documentId) continue;
     const list = byDocument.get(documentId) || [];
-    list.push({ sexo: payload.sexo ?? null, peso: toFiniteNumber(exit.peso_kg ?? payload.peso) });
+    list.push({ sexo: exit.sexo ?? null, peso: toFiniteNumber(exit.peso) });
     byDocument.set(documentId, list);
   }
   const rows = active(documents).map((document) => {
@@ -159,7 +164,8 @@ export async function loadShipmentDocumentRows({ period } = {}) {
       diferenca_total: prevTotal === null ? null : linked.length - prevTotal,
       peso_total_real: weights.length ? weights.reduce((sum, value) => sum + value, 0) : null,
     };
-  }).filter((row) => !period || !row.data_embarque || (row.data_embarque >= period.from && row.data_embarque <= period.to));
+  // Com período, documento sem data de embarque fica de fora (não infla todos os períodos).
+  }).filter((row) => !period || (row.data_embarque && row.data_embarque >= period.from && row.data_embarque <= period.to));
   return timed(startedAt, queriedAt, rows, 'stores:documentosEmbarque+index:pesagens.tipo_pesagem', documents.length + exits.length);
 }
 
@@ -214,7 +220,8 @@ export async function loadDataIssueRows() {
   const db = await storage.ensureReady();
   const startedAt = now();
   const result = await logicalIntegrity();
-  const issues = (result?.issues ?? result?.problems ?? (Array.isArray(result) ? result : [])).map((text, index) => ({ id: `integridade-${index}`, ...classifyIssue(text) }));
+  // Mensagens sobre usuários citam o login: removido (dado pessoal fora do relatório de usuários).
+  const issues = (result?.issues ?? result?.problems ?? (Array.isArray(result) ? result : [])).map((text, index) => ({ id: `integridade-${index}`, ...classifyIssue(String(text).replace(/\s*\([^)]*\)\s*$/, (match) => (/credencial/.test(text) ? '' : match))) }));
   const [animais, pesagens] = await Promise.all([db.table('animais').toArray(), db.table('pesagens').where('tipo_pesagem').anyOf(['Cadastro', 'Manejo']).toArray()]);
   const queriedAt = now();
   let seq = 0;

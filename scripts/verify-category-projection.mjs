@@ -60,5 +60,14 @@ const events = (await db.table('pesagens').where('animal_id').equals('a1').toArr
 const pesoDoUltimoEvento = events.at(-1).peso_kg ?? events.at(-1).legacy_payload.peso ?? null;
 assert.equal(pesoDoUltimoEvento, null, 'cenário reproduz a regressão (último evento sem peso)');
 
+// 7. Lançamento retroativo em outro lote não troca o lote atual nem quebra o histórico (revisão de dados).
+const lotBase = { ...base, numero_animal: '777', lote_id: 'L1', nome_lote: 'Lote 01' };
+await weighingService.createEntry({ ...lotBase, id: 'r1', animal_id: 'a7', tipo_manejo: 'Cadastro', data_pesagem: '2026-08-01', peso: 320, categoria_automatica: true });
+await weighingService.createEntry({ ...lotBase, id: 'r2', animal_id: 'a7', tipo_manejo: 'Manejo', data_pesagem: '2026-08-21', peso: 330 });
+await weighingService.createEntry({ ...lotBase, id: 'r3', animal_id: 'a7', tipo_manejo: 'Manejo', data_pesagem: '2026-08-03', peso: 322, lote_id: 'L2', nome_lote: 'Lote 02' });
+assert.equal((await animal('a7')).lote_atual_id, 'L1', 'retroativo em L2 não vira lote atual');
+const stays = (await db.table('animalLotes').where('animal_id').equals('a7').toArray()).filter((row) => !row.deleted_at).sort((x, y) => x.inicio.localeCompare(y.inicio));
+assert.deepEqual(stays.map((row) => [row.lote_id, row.inicio, row.fim]), [['L1', '2026-08-01', '2026-08-03'], ['L2', '2026-08-03', '2026-08-21'], ['L1', '2026-08-21', null]], 'histórico reconstruído em ordem');
+
 await deleteDbForTests();
 console.log(JSON.stringify({ gate: 'category-projection:verify', ok: true, cases: ['saida-sem-peso', 'edicao-da-saida', 'peso-fora-de-faixa', 'manual-preservada', 'cenario-da-regressao'] }, null, 2));

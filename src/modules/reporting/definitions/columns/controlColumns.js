@@ -31,7 +31,7 @@ export const LOT_STAY_COLUMNS = [
   defineColumn({ id: 'apartacao', label: 'Apartação', type: 'text', grains: g(GRAINS.LOT_STAY), groupable: true, defaultVisible: true, groupKey: (row) => row.apartacao_id }),
   defineColumn({ id: 'inicio', label: 'Entrada no lote', type: 'date', grains: g(GRAINS.LOT_STAY), groupable: true, defaultVisible: true }),
   defineColumn({ id: 'fim', label: 'Saída do lote', type: 'date', grains: g(GRAINS.LOT_STAY), defaultVisible: true }),
-  defineColumn({ id: 'dias_no_lote', label: 'Dias no lote', type: 'integer', grains: g(GRAINS.LOT_STAY), defaultVisible: true, aggregations: ['countValid', 'avg', 'min', 'max', 'sum'] }),
+  defineColumn({ id: 'dias_no_lote', label: 'Dias no lote (no período)', type: 'integer', grains: g(GRAINS.LOT_STAY), defaultVisible: true, aggregations: ['countValid', 'avg', 'min', 'max', 'sum'] }),
   defineColumn({ id: 'mudanca', label: 'Mudança de lote', type: 'boolean', grains: g(GRAINS.LOT_STAY), groupable: true, description: 'Verdadeiro quando o animal veio de outro lote (não é a primeira permanência).' }),
 ];
 
