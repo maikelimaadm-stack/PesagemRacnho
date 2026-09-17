@@ -1,10 +1,10 @@
-/* Lançamento — fonte de Nº Identificação e Peso em 15 px (pedido 17/09/2026).
+/* Lançamento — fonte de Nº Identificação e Peso em 18 px (pedido 17/09/2026).
    Só a fonte muda: altura e largura dos campos continuam as do modelo (R29–R31).
    Carregado depois de d17b-modelobase1.css, com os mesmos seletores. */
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-fields .d17d-field.d17d-field--animal > input:not([type="checkbox"]):not([type="radio"]),
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-fields .d17d-field.d17d-field--weight .d17d-weight-control > input {
-  font-size: 15px !important;
-  line-height: 18px !important;
+  font-size: 18px !important;
+  line-height: 22px !important;
 }
