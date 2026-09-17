@@ -8,6 +8,8 @@ import { animalIdentityKey, recalculateWeightSeries } from '../domain/weighingSe
 import { calculateWeightGain } from '../domain/weighingCalculations.js';
 import { getCurrentActor, hasActorProvider } from '../../../storage/indexedDb/auditActor.js';
 import { authorize, can, forbiddenError } from '../../auth/domain/permissionService.js';
+import { parseCivilDate } from '../domain/brazilianValues.js';
+import { SanityError, validateLaunchApplications } from '../../sanity/domain/sanityRules.js';
 
 // Escrita autorizada no SERVIÇO (não só na tela): com sessão, o papel precisa da ação
 // (weighing.write para lançar/importar; weighing.edit para editar/excluir). Com o módulo de
@@ -50,9 +52,17 @@ export async function detectStorageStatus() {
   };
 }
 
+// Aplicações de sanidade do lançamento (ADR-049): payload.aplicacoes_sanidade (0..N)
+// NUNCA vai para o legacy_payload (ADR-027); é validada antes de qualquer leitura e
+// gravada em `aplicacoesSanidade` na MESMA transação da pesagem (animal, data,
+// sessão e pesagem vêm da própria pesagem). Qualquer aplicação inválida: nada é gravado.
 export async function createEntry(rawPayload) {
-  const uiPayload = withoutCommercialInput(requireWeighingPermission('weighing.write'), rawPayload);
+  const { aplicacoes_sanidade: rawApplications, ...payloadWithoutSanity } = rawPayload || {};
+  const uiPayload = withoutCommercialInput(requireWeighingPermission('weighing.write'), payloadWithoutSanity);
   validateUiPayload(uiPayload);
+  const aplicacoesSanidade = validateLaunchApplications(rawApplications, {
+    data: parseCivilDate(uiPayload.data_pesagem || uiPayload.dataPesagem || uiPayload.data),
+  });
   try {
     const trace = globalThis.__MAK_PERF_TRACE__ === true;
     const startedAt = trace ? performance.now() : 0;
@@ -76,7 +86,7 @@ export async function createEntry(rawPayload) {
       gmd: derived.gmd,
     };
     const storageRecord = uiToStorageRecord(enrichedPayload);
-    const created = await weighingDataAdapter.createEntry(storageRecord);
+    const created = await weighingDataAdapter.createEntry(storageRecord, { aplicacoesSanidade });
     const createdAt = trace ? performance.now() : 0;
     const hasLaterEntries = existingSeries.some((entry) =>
       String(entry.data_pesagem || '') > String(created.data_pesagem || ''));
@@ -95,9 +105,9 @@ export async function createEntry(rawPayload) {
         getByIdMs: Number((performance.now() - recalculatedAt).toFixed(2)),
       });
     }
-    return result;
+    return { ...result, aplicacoes_sanidade: created.aplicacoes_sanidade || [] };
   } catch (err) {
-    if (err instanceof WeighingError) throw err;
+    if (err instanceof WeighingError || err instanceof SanityError) throw err;
     throw new WeighingError('WEIGHING_SAVE_001', toUserMessage(err));
   }
 }

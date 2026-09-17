@@ -1,0 +1,265 @@
+/* Sanidade (tela de abas + seção da Ficha do Animal). A composição da Tela Mãe, a tabela
+   e os diálogos vêm do ModeloBase1 (mg-layout.css, auxiliary-registries.css,
+   d17b-modelobase1.css); aqui ficam só as peças novas: faixa de abas na Tela Mãe, faixa
+   de filtros do histórico, busca de animal, distintivos de situação, grade dos
+   formulários e a tabela da ficha. Claro e escuro usam os mesmos tokens do shell. */
+
+/* Abas no topo da Tela Mãe: mesma altura das faixas de ação (36 px). */
+html body .d17b-shell .d17b-list-page--mother.sanidade-page > .sanidade-tabs {
+  flex: 0 0 36px;
+  min-height: 36px;
+  padding: 0 6px !important;
+}
+
+/* Distintivos (situação, origem). */
+.sanidade-status {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+.sanidade-status--active { border-color: #6ee7b7; background: #ecfdf5; color: #047857; }
+.sanidade-status--inactive { border-color: #e2e8f0; background: #f1f3f4; color: #6b7280; }
+.sanidade-status--cancelled { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
+.sanidade-status--launch { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
+.sanidade-status--standalone { border-color: #e2e8f0; background: #f8fafc; color: #475569; }
+
+.sanidade-data-table .sanidade-cell--number { text-align: right; font-variant-numeric: tabular-nums; }
+/* Linhas inativas/canceladas esmaecidas: precisa vencer a cor fixa das células da Tela Mãe (#root). */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .emp-table-pro.sanidade-data-table tbody tr:is(.sanidade-row--inactive, .sanidade-row--cancelled) > td.emp-td:not(.aux-check-cell) { color: #98a3b1 !important; }
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .emp-table-pro.sanidade-data-table tbody tr.sanidade-row--cancelled > td.emp-td:not(.aux-check-cell) { text-decoration: line-through; text-decoration-color: rgba(185, 28, 28, .35); }
+.sanidade-data-table tr.sanidade-row--cancelled .sanidade-status { display: inline-flex; text-decoration: none; }
+.sanidade-empty-row { white-space: normal !important; }
+
+/* Faixa de filtros do histórico de aplicações (altura mínima de 36 px, quebra em telas estreitas). */
+.sanidade-filter-strip {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 6px;
+}
+.sanidade-filter-bar {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  gap: 6px;
+}
+.sanidade-filter-strip__config { flex: 0 0 auto; align-self: flex-start; margin-left: auto; }
+.mg-empresas-scope .sanidade-filter-strip .mg-nav-btn:not(:disabled) svg { color: var(--mg-icon-color, #5b6b80) !important; stroke: var(--mg-icon-color, #5b6b80) !important; }
+
+.sanidade-filter-period {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 2px 0 10px;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--gray-fill, #f1f3f4);
+  color: var(--text-2, #6b7280);
+  font-size: 11px;
+}
+.sanidade-filter-period.is-active { border-color: var(--mg-focus-border, rgba(64, 222, 99, .35)); box-shadow: var(--mg-focus-ring, inset 0 0 0 1px rgba(64, 222, 99, .12)); }
+.sanidade-filter-period__label,
+.sanidade-filter-period__sep { white-space: nowrap; }
+/* Os campos da página recebem raio de 8 px e altura mínima globais (!important); os
+   controles da faixa de filtros mantêm a forma de pílula das pílulas do ModeloBase1. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-filter-period .mak-date-control.sanidade-filter-date {
+  width: 118px;
+  height: 24px !important;
+  min-height: 24px !important;
+  border-radius: 999px !important;
+  background: var(--bg-card, #fff);
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-filter-period .mak-date-control.sanidade-filter-date > input {
+  height: 22px !important;
+  min-height: 22px !important;
+  padding: 0 2px 0 9px !important;
+  font-size: 11px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-filter-period .mak-date-control.sanidade-filter-date > button { width: 24px; min-width: 24px; border-left: 0; }
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-filter-period .mak-date-control.sanidade-filter-date > button svg { width: 12px; height: 12px; }
+
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-filter-bar button.sanidade-filter-select {
+  width: auto;
+  min-width: 150px;
+  max-width: 220px;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 10px 0 12px;
+  gap: 6px;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  background: var(--gray-fill, #f1f3f4);
+  box-shadow: none;
+  color: var(--text-2, #6b7280) !important;
+  font-size: 11px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-filter-bar button.sanidade-filter-select.is-active {
+  border-color: var(--mg-focus-border, rgba(64, 222, 99, .35)) !important;
+  box-shadow: var(--mg-focus-ring, inset 0 0 0 1px rgba(64, 222, 99, .12));
+  color: var(--text-1, #111827) !important;
+}
+
+.sanidade-filter-check {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px 0 8px;
+  gap: 6px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--gray-fill, #f1f3f4);
+  color: var(--text-2, #6b7280);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.sanidade-filter-check.is-active { border-color: var(--mg-focus-border, rgba(64, 222, 99, .35)); box-shadow: var(--mg-focus-ring, inset 0 0 0 1px rgba(64, 222, 99, .12)); color: var(--text-1, #111827); }
+
+/* Busca de animal (faixa de filtros e diálogo de aplicação). */
+.sanidade-animal-search { position: relative; display: flex; align-items: center; width: 100%; min-width: 0; }
+.sanidade-animal-search--compact { width: 220px; flex: 0 0 220px; }
+.sanidade-animal-search__icon { position: absolute; left: 10px; z-index: 1; width: 13px; height: 13px; color: var(--mg-icon-color, #5b6b80); pointer-events: none; }
+html body .sanidade-animal-search > input.sanidade-animal-search__input { width: 100%; min-width: 0; padding: 0 28px 0 28px !important; font-size: 12px; }
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-animal-search--compact > input.sanidade-animal-search__input {
+  height: 28px !important;
+  min-height: 28px !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  outline: 0;
+  background: var(--gray-fill, #f1f3f4);
+  color: var(--text-1, #111827);
+  font-size: 11px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-animal-search--compact.has-value > input.sanidade-animal-search__input {
+  border-color: var(--mg-focus-border, rgba(64, 222, 99, .35)) !important;
+  box-shadow: var(--mg-focus-ring, inset 0 0 0 1px rgba(64, 222, 99, .12));
+  font-weight: 600;
+}
+.sanidade-animal-search__clear {
+  position: absolute;
+  right: 5px;
+  z-index: 1;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
+.sanidade-animal-search__clear:hover:not(:disabled) { background: rgba(15, 23, 42, .06); }
+.sanidade-animal-search__clear svg { width: 12px; height: 12px; }
+.sanidade-animal-search__results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  width: max(100%, 280px);
+  max-height: 240px;
+  padding: 4px;
+  overflow-y: auto;
+  border: 1px solid var(--mb1-border, #e7eaee);
+  border-radius: 10px;
+  background: var(--mb1-bg-card, #fff);
+  box-shadow: 0 14px 30px rgba(15, 23, 42, .18);
+}
+.sanidade-animal-search__option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 32px;
+  padding: 4px 8px;
+  gap: 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--mb1-text-1, #111827);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.sanidade-animal-search__option:hover,
+.sanidade-animal-search__option.is-active { background: rgba(64, 222, 99, .10); }
+.sanidade-animal-search__brand { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; border-radius: 999px; background: var(--mb1-bg-field, #f1f3f4); font-size: 10px; font-weight: 700; }
+.sanidade-animal-search__option small { margin-left: auto; color: var(--mb1-text-2, #6b7280); font-size: 10px; }
+.sanidade-animal-search__empty { padding: 12px 8px; color: var(--mb1-text-2, #6b7280); font-size: 11px; text-align: center; }
+
+/* Diálogos de formulário: largura média e altura pelo conteúdo (o corpo rola se faltar tela). */
+html body .d17b-dialog-content.d17b-standard-dialog.sanidade-dialog:not(.d17b-standard-dialog--compact) {
+  width: min(640px, calc(100vw - 20px)) !important;
+  max-width: 640px !important;
+  height: auto !important;
+}
+html body .sanidade-dialog .d17b-standard-dialog__body.sanidade-form { max-height: calc(100dvh - 150px); }
+
+/* Formulários dos diálogos: duas colunas (uma em telas estreitas). Campos seguem R20. */
+.sanidade-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 10px 12px; }
+.sanidade-form--single { grid-template-columns: minmax(0, 1fr); }
+.sanidade-form__field { display: grid; align-content: start; min-width: 0; gap: 4px; }
+.sanidade-form__field--wide { grid-column: 1 / -1; }
+.sanidade-form__label { color: #526277; font-size: 11px; font-weight: 600; }
+.sanidade-form__label.is-required::after { content: " *"; color: #dc2626; }
+.sanidade-form__control { width: 100%; min-width: 0; padding: 0 10px; font-size: 12px; }
+.sanidade-form__control--textarea { min-height: 64px; padding: 6px 10px; resize: vertical; font-family: inherit; }
+.sanidade-form__select { justify-content: space-between; }
+.sanidade-form__hint { margin: 0; color: #7a899b; font-size: 10px; line-height: 1.35; }
+.sanidade-dialog .mak-date-control.sanidade-form__date { width: 100%; }
+.sanidade-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; padding: 8px 10px; gap: 6px 12px; border: 1px solid #e5e9ee; border-radius: 10px; background: #f8fafb; }
+.sanidade-summary div { min-width: 0; }
+.sanidade-summary dt { color: #7a899b; font-size: 10px; font-weight: 600; }
+.sanidade-summary dd { margin: 0; overflow: hidden; color: #25354a; font-size: 12px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.sanidade-select-panel { z-index: 80; }
+
+/* Ficha do Animal: canceladas esmaecidas, motivo visível. */
+.sanidade-ficha-table tr.is-cancelled td { color: #98a3b1; }
+.sanidade-ficha-table tr.is-cancelled td:not(:nth-child(8)):not(.sanidade-ficha-table__note) { text-decoration: line-through; text-decoration-color: rgba(185, 28, 28, .35); }
+.sanidade-ficha-table__note { max-width: 320px; overflow: hidden; text-overflow: ellipsis; }
+
+/* Tema escuro. */
+html:is(.dark, .tema-escuro, .escuro) .sanidade-status--active { border-color: rgba(64, 222, 99, .35); background: rgba(64, 222, 99, .12); color: #70e889; }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-status--inactive,
+html:is(.dark, .tema-escuro, .escuro) .sanidade-status--standalone { border-color: #484f58; background: #21262d; color: #848d97; }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-status--cancelled { border-color: rgba(248, 113, 113, .40); background: rgba(220, 38, 38, .14); color: #fca5a5; }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-status--launch { border-color: rgba(96, 165, 250, .40); background: rgba(59, 130, 246, .14); color: #93c5fd; }
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .emp-table-pro.sanidade-data-table tbody tr:is(.sanidade-row--inactive, .sanidade-row--cancelled) > td.emp-td:not(.aux-check-cell) { color: #6e7681 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page :is(.sanidade-filter-period, .sanidade-filter-check, .sanidade-animal-search--compact > input.sanidade-animal-search__input, .sanidade-filter-bar button.sanidade-filter-select) {
+  border-color: #484f58 !important;
+  background: #21262d !important;
+  color: #e6edf3 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page :is(.sanidade-filter-period.is-active, .sanidade-filter-check.is-active, .sanidade-animal-search--compact.has-value > input.sanidade-animal-search__input, .sanidade-filter-bar button.sanidade-filter-select.is-active) {
+  border-color: rgba(64, 222, 99, .45) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-filter-period .mak-date-control.sanidade-filter-date { background: #161b22 !important; border-color: #30363d !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-filter-period .mak-date-control.sanidade-filter-date :is(input, button, svg) { color: #e6edf3 !important; }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-animal-search__results { border-color: #484f58; background: #161b22; box-shadow: 0 16px 36px rgba(0, 0, 0, .45); }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-animal-search__option { color: #e6edf3; }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-animal-search__brand { background: #21262d; color: #e6edf3; }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-animal-search__clear:hover:not(:disabled) { background: rgba(255, 255, 255, .08); }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-form__label { color: #c3cbd4; }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-form__hint,
+html:is(.dark, .tema-escuro, .escuro) .sanidade-summary dt { color: #8b98a8; }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-summary { border-color: #343b45; background: #171c23; }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-summary dd { color: #e6edf3; }
+html:is(.dark, .tema-escuro, .escuro) .sanidade-ficha-table tr.is-cancelled td { color: #6e7681; }
+
+@media (max-width: 850px) {
+  .sanidade-form { grid-template-columns: minmax(0, 1fr); }
+  .sanidade-animal-search--compact { flex: 1 1 100%; width: 100%; }
+  html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-filter-bar button.sanidade-filter-select { flex: 1 1 140px; max-width: none; }
+}

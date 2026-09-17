@@ -3,6 +3,41 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.3.0] — 2026-09-17
+
+Esquema Dexie **8** (aditivo), backup **formato 3**. Instalador candidato (não assinado) em
+`release-unsigned/`, tag `v1.3.0-rc1`; teste físico em máquina limpa NÃO EXECUTADO. Notas em
+`docs/release/1.3.0/RELEASE-NOTES.md`.
+
+### Added
+- **Sanidade** volta ao produto (ADR-049) em stores próprias: programas/procedimentos,
+  medicamentos/produtos e aplicações por animal. Tela Sanidade (abas Programas, Medicamentos e
+  Aplicações), histórico na Ficha do animal e painel opcional no Lançamento em formato de tabela,
+  com "Aplicar esta configuração aos próximos animais". A aplicação é gravada na mesma transação
+  da pesagem; cancelar a pesagem cancela as aplicações dela. Sem estoque, compras ou prescrição.
+- Relatórios (menu único): catálogo com famílias, filtros, agrupamento, totais, modelos
+  salvos, impressão, PDF, CSV, JSON e XLSX sobre a mesma população da tela.
+- Exportação da Relação em dois arquivos: relatório amigável e arquivo para reimportação.
+- Backup de segurança antes de atualizar o banco também quando o sistema é aberto sem o
+  aplicativo desktop (cópia validada por SHA-256 em banco separado do navegador).
+
+### Changed
+- Lançamento mantém o contexto da sequência depois de salvar (tipo, data, marca, raça, sexo,
+  categoria manual, apartação/lote, motivo de saída, embarque e sanidade marcada) e limpa só os
+  dados do animal (identificação, peso, observação, valores individuais, causa de morte não
+  repetida). Identificação e peso em fonte 18 px, identificação em negrito.
+- Modelo de planilha de importação só com colunas digitadas (Data, NumeroAnimal, Marca, Sexo,
+  Raça, Categoria, Peso, Apartação, Lote, Observação); peso anterior, dias, ganho e GMD são
+  sempre calculados pelo sistema.
+- Ordem canônica do histórico: data, depois Cadastro, Manejo e Saída no mesmo dia.
+- CSV com BOM, separador ";" e escape correto; campo vazio nunca vira 0.
+
+### Fixed
+- Saída sem peso deixava de contar como pesagem de 0 kg no cálculo de ganho/GMD.
+- Valores de venda/abate e causa de morte do animal anterior não passam mais para o próximo.
+- Serviços recusam gravação sem sessão quando o login está ativo; exportar e ver arrobas exigem
+  permissão; backup/exportação/importação da Manutenção exigem `maintenance.backup`.
+
 ## [1.2.0] — 2026-09-16
 
 Marco 1.2.0 do Programa Pesagens Individuais 2.0 (Fase 1). Esquema Dexie **7**,

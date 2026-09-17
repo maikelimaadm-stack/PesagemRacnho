@@ -1,7 +1,10 @@
-// Integridade lógica do modelo Dexie: IDs, duplicidades, datas, referências e
-// contrato v7 (enums, ids de cadastro, unicidade VISUAL por marca, usuários).
+// Integridade lógica do modelo Dexie: IDs, duplicidades, datas, referências,
+// contrato v7 (enums, ids de cadastro, unicidade VISUAL por marca, usuários) e
+// sanidade v8 (aplicações → animal, programa, medicamento, sessão e pesagem).
 import { ensureStorageReady, getDbVersion } from '../db.js';
-import { ANIMAL_SITUACOES, DOMAIN_STORES, IDENTIFICADOR_TIPOS, SESSAO_STATUS, STORE_NAMES, USERS_STORE } from '../schema.js';
+import {
+  ANIMAL_SITUACOES, DOMAIN_STORES, IDENTIFICADOR_TIPOS, SANITY_APPLICATIONS_STORE, SANITY_REGISTRY_STORES, SESSAO_STATUS, STORE_NAMES, USERS_STORE,
+} from '../schema.js';
 import { SESSION_OPERATOR_FIELD } from '../normalize.js';
 import { parseCivilDate } from '../../../modules/weighing/domain/brazilianValues.js';
 import { MIGRATION_STATUS, readMigrationState } from '../../migrations/migrationState.js';
@@ -137,7 +140,56 @@ export async function logicalIntegrity({ enforceV7 = null } = {}) {
     }
   }
 
+  await sanityIntegrity(db, { issues, animalIds, weighingIds, active });
+
   return { ok: issues.length === 0, result: issues.length === 0 ? 'ok' : 'issues', issues, v7Contract };
+}
+
+const ISO_CIVIL_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Sanidade (ADR-049). Ids nulos/duplicados das três stores já entram no laço de
+// DOMAIN_STORES. Aqui: nome ativo duplicado nos cadastros e referências das
+// aplicações. Programa/medicamento INATIVO continua referência válida (fato
+// histórico); aplicação cancelada pode apontar para pesagem cancelada e animal
+// excluído, mas a referência precisa existir. Aplicação ativa exige pesagem ativa.
+async function sanityIntegrity(db, { issues, animalIds, weighingIds, active }) {
+  const installed = new Set(db.tables.map((table) => table.name));
+  if (![...SANITY_REGISTRY_STORES, SANITY_APPLICATIONS_STORE].every((name) => installed.has(name))) return;
+
+  const registryIds = {};
+  for (const store of SANITY_REGISTRY_STORES) {
+    const rows = await active(store);
+    registryIds[store] = new Set(rows.map((row) => row.id));
+    const owners = new Map();
+    for (const row of rows) {
+      if (row.ativo === false || !row.nome_normalizado) continue;
+      const key = `${row.empresa_id ?? 'local'}::${row.nome_normalizado}`;
+      if (owners.has(key) && owners.get(key) !== row.id) issues.push(`${store} ${row.id}: nome ativo duplicado (${row.nome_normalizado})`);
+      else owners.set(key, row.id);
+    }
+  }
+
+  const applications = await active(SANITY_APPLICATIONS_STORE);
+  if (!applications.length) return;
+  const everyAnimalId = new Set((await db.table('animais').toArray()).map((row) => row.id));
+  const everyWeighingId = new Set((await db.table('pesagens').toArray()).map((row) => row.id));
+  const everySessionId = new Set((await db.table('sessoesPesagem').toArray()).map((row) => row.id));
+  const label = (row) => `${SANITY_APPLICATIONS_STORE} ${row.id}`;
+  for (const row of applications) {
+    const cancelled = Boolean(row.cancelled_at);
+    if (!row.animal_id) issues.push(`${label(row)}: sem animal_id`);
+    else if (!(cancelled ? everyAnimalId : animalIds).has(row.animal_id)) issues.push(`${label(row)}: animal_id órfão ${row.animal_id}`);
+    if (!row.programa_sanidade_id && !row.medicamento_id) issues.push(`${label(row)}: sem programa nem medicamento`);
+    if (row.programa_sanidade_id && !registryIds.programasSanidade.has(row.programa_sanidade_id)) issues.push(`${label(row)}: programa_sanidade_id órfão ${row.programa_sanidade_id}`);
+    if (row.medicamento_id && !registryIds.medicamentos.has(row.medicamento_id)) issues.push(`${label(row)}: medicamento_id órfão ${row.medicamento_id}`);
+    if (row.dose != null && !(typeof row.dose === 'number' && Number.isFinite(row.dose) && row.dose > 0)) issues.push(`${label(row)}: dose inválida (${row.dose})`);
+    if (!ISO_CIVIL_DATE.test(String(row.data ?? '')) || !parseCivilDate(row.data)) issues.push(`${label(row)}: data inválida`);
+    if (row.sessao_id && !everySessionId.has(row.sessao_id)) issues.push(`${label(row)}: sessao_id órfão ${row.sessao_id}`);
+    if (row.pesagem_id) {
+      if (!everyWeighingId.has(row.pesagem_id)) issues.push(`${label(row)}: pesagem_id órfão ${row.pesagem_id}`);
+      else if (!cancelled && !weighingIds.has(row.pesagem_id)) issues.push(`${label(row)}: aplicação ativa vinculada a pesagem cancelada ${row.pesagem_id}`);
+    }
+  }
 }
 
 export async function databaseStats() {

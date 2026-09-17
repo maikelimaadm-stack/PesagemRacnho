@@ -77,8 +77,22 @@ for (const fn of ['getVersionInfo', 'getMigrationStatus', 'dryRunMigration', 're
   assert(new RegExp(`export (async )?function ${fn}\\b`).test(svc), `service exports ${fn}`);
 }
 assert(svc.includes("CLEAR_CONFIRMATION_TEXT = 'LIMPAR'") && svc.includes("RESET_CONFIRMATION_TEXT = 'RESET'"), 'confirmation texts declared in the service');
-assert(/profile !== 'ADMIN'/.test(svc) && /function actorIdentity/.test(svc), 'service validates ADMIN profile via auditActor when an actor exists');
-assert(/getActor\(\)/.test(svc) && svc.includes("storage/indexedDb/auditActor.js"), 'service uses auditActor.getActor');
+// Desde 9349a8f a autorização é pela matriz de permissões (ADR-042/046), não pelo texto
+// antigo `profile !== 'ADMIN'`: requireMaintenanceAction consulta can(role, action) com o
+// ator de getCurrentActor() e falha fechada com provedor de ator e sem sessão.
+assert(/function requireMaintenanceAction\(operation, action\)/.test(svc), 'service authorizes through requireMaintenanceAction');
+assert(/can\(actor\.role, action\)/.test(svc) && svc.includes('auth/domain/permissionService.js'), 'service checks the permission matrix (permissionService.can)');
+assert(/getCurrentActor\(\)/.test(svc) && /hasActorProvider\(\)/.test(svc) && svc.includes("storage/indexedDb/auditActor.js"), 'service reads the actor via auditActor.getCurrentActor and fails closed with hasActorProvider');
+assert(!/profile !== 'ADMIN'|role === 'ADMIN'/.test(svc), 'teste negativo: no hard-coded role comparison in the service');
+for (const [operation, action] of [
+  ['Restauração', 'maintenance.restore'],
+  ['Continuar migração', 'maintenance.migrate'],
+  ['Limpar dados operacionais', 'maintenance.clear'],
+  ['Reset completo', 'maintenance.reset'],
+  ['Backup completo', 'maintenance.backup'],
+]) {
+  assert(svc.includes(`requireMaintenanceAction('${operation}', '${action}')`), `service requires ${action} for ${operation}`);
+}
 
 const adp = readFileSync(adapter, 'utf8');
 assert(adp.includes('describeVersions'), 'adapter uses describeVersions from versionInfo');

@@ -1,7 +1,7 @@
 // Gate storage:import-restore:verify — importação de pesagens (dry-run + apply,
 // hash idempotente) e restauração (backup completo → dry-run → apply), inclusive
-// restore de backup formato 2 (banco v6) que dispara o backfill v7 antes de
-// registrar sucesso. Testes negativos: apply sem evidência física, arquivo
+// restore de backup formato 2 (banco v6) que dispara a cadeia de backfills v7 e v8
+// (ADR-049) antes de registrar sucesso. Testes negativos: apply sem evidência física, arquivo
 // repetido, restore sem evidência, payload mutado entre dry-run e apply.
 import 'fake-indexeddb/auto';
 import { pathToFileURL } from 'url';
@@ -13,7 +13,7 @@ function assert(c, m) { if (!c) { console.error('FAIL:', m); process.exit(1); } 
 const imp = (rel) => import(pathToFileURL(join(root, rel)).href);
 
 const { deleteDbForTests, ensureStorageReady } = await imp('src/storage/indexedDb/db.js');
-const { BACKUP_FORMAT, STORES_V6 } = await imp('src/storage/indexedDb/schema.js');
+const { BACKUP_FORMAT, SANITY_STORES, STORES_V6 } = await imp('src/storage/indexedDb/schema.js');
 const { MIGRATION_STATUS, readMigrationState } = await imp('src/storage/migrations/migrationState.js');
 const storage = (await imp('src/storage/storageAdapter.js')).default;
 
@@ -99,6 +99,8 @@ assert(restoredV2.restored && restoredV2.schemaUpgradeRequired, 'restore v2 apli
 assert(restoredV2.backfill?.status === MIGRATION_STATUS.CONCLUIDA, 'backfill concluído antes de registrar sucesso');
 const db = await ensureStorageReady();
 assert((await readMigrationState(db, 7)).status === MIGRATION_STATUS.CONCLUIDA, 'estado técnico CONCLUIDA');
+assert((await readMigrationState(db, 8))?.status === MIGRATION_STATUS.CONCLUIDA, 'cadeia: v8 concluída após a v7 no restore cruzado');
+assert(SANITY_STORES.every((name) => dryV2.newStores.includes(name)), 'dry-run lista as stores de sanidade como novas (vazias)');
 const animais = await db.table('animais').toArray();
 assert(animais.length === 2 && animais.every((a) => a.marca_id) && new Set(animais.map((a) => a.marca_id)).size === 1, 'ALFA/alfa fundidas em uma marca_id');
 assert(animais.find((a) => a.id === 'v6-a2').situacao === 'ABATIDO', 'situacao derivada do motivo (Abate → ABATIDO)');
@@ -111,14 +113,14 @@ assert(await db.table('categoriasAnimal').count() === 7, 'seeds criados');
 const integV2 = await storage.logicalIntegrity();
 assert(integV2.ok && integV2.v7Contract === true, `integridade v7 após restore cruzado (${JSON.stringify(integV2.issues)})`);
 const history = (await db.table('backupHistory').toArray()).map((h) => h.tipo);
-assert(history.includes('restore') && history.includes('backfill-v7'), `histórico: ${history.join(',')}`);
+assert(history.includes('restore') && history.includes('backfill-v7') && history.includes('backfill-v8'), `histórico: ${history.join(',')}`);
 
 // Teste negativo: restore de backup da própria versão (sem conversão) não dispara
 // backfill. O restore é integral: backupHistory e appSettings voltam ao snapshot,
 // então só o registro 'restore' novo aparece.
 await storage.applyRestore(snapshot.backup, { safetyEvidence });
 const afterHistory = (await db.table('backupHistory').toArray()).map((h) => h.tipo);
-assert(!afterHistory.includes('backfill-v7') && afterHistory.at(-1) === 'restore', `restore da própria versão não roda backfill (${afterHistory.join(',')})`);
+assert(!afterHistory.includes('backfill-v7') && !afterHistory.includes('backfill-v8') && afterHistory.at(-1) === 'restore', `restore da própria versão não roda backfill (${afterHistory.join(',')})`);
 assert((await readMigrationState(db, 7)) === null, 'estado técnico do snapshot (inexistente) é restaurado como está');
 
 await deleteDbForTests();

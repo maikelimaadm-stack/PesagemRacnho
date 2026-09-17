@@ -1,43 +1,42 @@
-# Checklist de release — 1.3.0 (Relatórios profissionais)
+# Checklist da release 1.3.0 (RC1)
 
-Versão 1.3.0 · esquema Dexie 7 · backup formato 3 · `signed=false` (sem Authenticode).
+Versão 1.3.0 · esquema Dexie 8 · backup formato 3 · `signed=false` (sem Authenticode).
+Política: `docs/arquitetura-produto/13-VERSIONAMENTO-RELEASE.md` (ADR-039). Item automatizado só é
+marcado com o comando executado nesta árvore; item manual fica **MANUAL PENDENTE** até o teste físico.
 
-## Automatizado (agente)
+## 1. Versões e documentos
+- [ ] `package.json`, `package-lock.json` (inclusive `packages[""]`) e fallback de `src/lib/appVersion.js` em 1.3.0
+- [ ] `versionInfo.js`: `DB_SCHEMA_VERSION = 8`, `BACKUP_FORMAT_VERSION = 3`, `DATA_BUILD_ID = 'schema-v8'`
+- [ ] `CHANGELOG.md` com `## [1.3.0] — 2026-09-17`, sem bloco "Não lançado"
+- [ ] `RELEASE-NOTES.md` desta pasta e `RC1.md` com SHA-256 do Setup e do `app.asar`
 
-- [ ] `npm run lint` verde
-- [ ] `npm run build` verde
-- [ ] `npm run test:quick` verde (inclui todos os gates `reports:*` exceto performance)
-- [ ] `npm run reports:performance:verify` verde (36 mil) e medição 250 mil registrada
-- [ ] `npm run dist:unsigned` verde (checksum, manifesto, `packaged:source`, `packaged:build`, `installed-app-e2e`)
-- [ ] Manifesto: `appVersion 1.3.0`, `dbSchemaVersion 7`, `backupFormatVersion 3`, `gitCommit` sem `-dirty`, `signed false`
-- [ ] SHA-256 do Setup e do `app.asar` registrados em `RC1.md`
-- [ ] Tag `v1.3.0-rc1` (não promover a `v1.3.0` sem o teste físico)
+## 2. Gates automatizados
+- [ ] `npm run lint`
+- [ ] `npm run build`
+- [ ] `npm run test:quick`
+- [ ] `npm run dist:unsigned` (checksum, manifesto, `packaged:source`, `packaged:build`)
+- [ ] Manifesto: `appVersion 1.3.0`, `dbSchemaVersion 8`, `backupFormatVersion 3`, `signed false`
 
-## Teste físico (Windows real — responsável)
+## 3. Artefatos
+- [ ] `release-unsigned/Pesagens Individuais Setup 1.3.0.exe` + `.sha256` + `release-manifest.json`
+- [ ] Artefatos 1.2.0-rc1 arquivados em `release-archive/1.2.0-rc1/` (não sobrescritos)
+- [ ] Tag `v1.3.0-rc1` (não criar `v1.3.0` sem o teste físico)
 
-1. Instalar o Setup 1.3.0 RC (conferir SHA-256 com `certutil -hashfile ... SHA256`).
-2. Login ADMIN.
-3. Abrir **Relatórios** (menu lateral, uma entrada).
-4. Abrir **Pesagens por período**.
-5. Aplicar período (Personalizado).
-6. Aplicar filtros (pílula de Marca e menu da coluna Peso).
-7. Ocultar e reordenar colunas (Colunas).
-8. Agrupar **Apartação → Lote** (Agrupar).
-9. Configurar subtotais (Totais: animais únicos, peso médio, GMD ponderado).
-10. Conferir o **total geral** contra a soma manual de uma amostra pequena.
-11. **Salvar modelo** (pessoal).
-12. Fechar e abrir o aplicativo.
-13. Relatórios › Meus relatórios: modelo persistido e reaberto com a mesma configuração.
-14. Exportar **CSV** (abrir no Excel: acentos, separador, números).
-15. Exportar **JSON** (manifesto com SHA-256).
-16. **Imprimir** (diálogo do Windows; cabeçalho repetido nas páginas).
-17. Gerar **PDF** (escolher pasta; conferir “Página X de Y” e rodapé).
-18. Gerar **XLSX** (abrir no Excel; números à direita e somáveis).
-19. Login **CONSULTA**.
-20. Relação de Pesagens sem Lançar/Editar/Excluir/Importar.
-21. Exportar um relatório não sensível (ex.: Inventário atual).
-22. Tentar **Vendas do período**: não aparece no catálogo; colunas de valor não aparecem em Pesagens por período.
-23. Login **GESTOR**.
-24. **Vendas do período** e **Abates do período** abrem com valores.
-25. Manutenção: Restaurar / Limpar / Reset **não** aparecem.
-26. Fechar e reabrir; dados, modelos e favoritos preservados.
+## 4. Teste físico em máquina limpa — MANUAL PENDENTE
+1. Instalar `Pesagens Individuais Setup 1.3.0.exe` sobre a 1.2.0-rc1 com dados (ou restaurar um backup 1.2.0).
+2. Abrir: a atualização do banco 7 → 8 conclui; Manutenção mostra esquema 8 e o backup pré-migração.
+3. Conferir contagens de pesagens, animais e cadastros iguais às de antes.
+4. Sanidade › Programas: cadastrar "Vermifugação"; Medicamentos: "Produto X", dose 10 ml, via SC.
+5. Lançamento › Cadastro: escolher marca, raça, sexo, categoria manual e apartação; lançar 3 animais.
+   Após cada salvar, contexto permanece; identificação, peso e observação limpam.
+6. No 1º animal, abrir Sanidade, adicionar a aplicação e marcar "Aplicar aos próximos"; salvar os 3.
+   Sanidade › Aplicações mostra 3 aplicações, uma por animal, com o usuário logado.
+7. Manejo: lançar 2 animais com a mesma apartação; contexto permanece; ganho/GMD calculados.
+8. Saída: motivo Venda + embarque; lançar 2 animais; motivo e embarque permanecem; valores limpam.
+9. Ficha do animal mostra o histórico de pesagens e de sanidade.
+10. Relação › Mais opções › Baixar modelo CSV: só Data, NumeroAnimal, Marca, Sexo, Raça, Categoria, Peso, Apartação, Lote, Observação.
+11. Relação › Exportar relatório (CSV) e Exportar para reimportação (CSV): abrir no Excel, acentos e colunas corretos, vazio não vira 0.
+12. Manutenção: backup completo; restaurar esse backup; dados e sanidade preservados.
+13. Limpar dados operacionais: aplicações somem, programas e medicamentos ficam.
+14. Login com OPERADOR: lança e aplica sanidade; não edita programas/medicamentos; não exporta.
+15. Fechar e abrir: contexto do Lançamento da sessão anterior não traz dados de animal.

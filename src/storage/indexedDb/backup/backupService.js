@@ -8,7 +8,6 @@ import {
   APP_VERSION,
   BACKUP_FORMAT_VERSION,
   DATA_CONTRACT_VERSION,
-  DB_SCHEMA_VERSION,
   UI_BUILD_ID,
 } from '../../../versioning/versionInfo.js';
 
@@ -43,6 +42,10 @@ export async function recordBackupHistory(tipo, detalhes) {
  * versão de origem, usada pelo backup pré-migração). Formato da versão de origem:
  * bancos até a v6 geram formato 2; a partir da v7, formato 3 com os campos de
  * versionamento (schemaVersion, dataContractVersion, uiBuildId, appVersion).
+ * A v8 (ADR-049) não muda o formato: as stores vêm de STORE_NAMES/db.tables e as
+ * de sanidade entram sozinhas; leitores antigos as tratam como desconhecidas.
+ * `schemaVersion` descreve o esquema dos DADOS do arquivo (= dbVersion): no backup
+ * pré-migração de um banco v7 aberto pelo app v8 ele vale 7, não 8.
  */
 export async function createFullBackupFromDb(db, { reason = 'manual', automatic = false, dbVersion = getDbVersion(), storeNames = null } = {}) {
   const names = storeNames || db.tables.map((table) => table.name);
@@ -65,7 +68,7 @@ export async function createFullBackupFromDb(db, { reason = 'manual', automatic 
     counts,
     stores: [...names],
     ...(formatVersion >= 3
-      ? { schemaVersion: DB_SCHEMA_VERSION, dataContractVersion: DATA_CONTRACT_VERSION, uiBuildId: UI_BUILD_ID }
+      ? { schemaVersion: dbVersion, dataContractVersion: DATA_CONTRACT_VERSION, uiBuildId: UI_BUILD_ID }
       : {}),
   };
   const unsigned = {
@@ -225,25 +228,32 @@ export async function applyRestore(payload, { safetyEvidence = null, files = nul
       if (restoredCount !== b.stores[name].length) throw new Error(`Restauração abortada: contagem divergente em ${name}.`);
     }
   });
-  const { runPendingBackfills } = await migrationCoordinator();
+  const { runPendingBackfills, MIGRATION_CHAIN, chainVersionsAfter } = await migrationCoordinator();
   const { readMigrationState, writeMigrationState, MIGRATION_STATUS, clearWriteBlock } = await import('../../migrations/migrationState.js');
   let backfill = null;
   if (schemaUpgradeRequired) {
-    // O estado restaurado (se houver) pertence ao banco antigo: recomeça o backfill.
-    await writeMigrationState(db, getDbVersion(), {
-      status: MIGRATION_STATUS.PENDENTE, origem: `restore-v${sourceDbVersion}`, started_at: null, finished_at: null,
-      error: null, passos_concluidos: [], processed: 0, total: 0, cursor: null, passo: null, last_checkpoint: null,
-    });
+    // Cadeia (ADR-049): toda versão posterior à do backup recomeça PENDENTE — o
+    // estado restaurado dessas versões (se houver) pertence ao banco antigo. Backup
+    // v6 → v7 e v8; backup v7 → só v8 (o migration:v7 restaurado é mantido).
+    for (const version of chainVersionsAfter(sourceDbVersion)) {
+      await writeMigrationState(db, version, {
+        status: MIGRATION_STATUS.PENDENTE, origem: `restore-v${sourceDbVersion}`, started_at: null, finished_at: null,
+        error: null, passos_concluidos: [], processed: 0, total: 0, cursor: null, passo: null, last_checkpoint: null,
+      });
+    }
   }
-  // Backfill quando o backup é de esquema anterior ou quando o estado restaurado
-  // ficou pendente/em andamento/com falha (retomada). Backup da própria versão sem
-  // estado técnico (banco de gate) não dispara nada.
-  const restoredState = await readMigrationState(db, getDbVersion());
-  const pendingRestored = restoredState && restoredState.status !== MIGRATION_STATUS.CONCLUIDA;
+  // Backfill quando o backup é de esquema anterior ou quando algum estado restaurado
+  // da cadeia ficou pendente/em andamento/com falha (retomada). Backup da própria
+  // versão sem estado técnico (banco de gate) não dispara nada.
+  let pendingRestored = false;
+  for (const version of MIGRATION_CHAIN) {
+    const restoredState = await readMigrationState(db, version);
+    if (restoredState && restoredState.status !== MIGRATION_STATUS.CONCLUIDA) pendingRestored = true;
+  }
   if (schemaUpgradeRequired || pendingRestored) {
     backfill = await runPendingBackfills({ files, origem: `restore-v${sourceDbVersion}` });
   } else {
-    // Backup v7 CONCLUIDA (ou sem estado técnico): nada a migrar → libera a escrita.
+    // Backup da versão vigente CONCLUIDA (ou sem estado técnico): nada a migrar → libera a escrita.
     clearWriteBlock();
   }
   const usuariosRestaurados = Array.isArray(b.stores[USERS_STORE]) ? b.stores[USERS_STORE].length : 0;
@@ -258,13 +268,17 @@ export async function applyRestore(payload, { safetyEvidence = null, files = nul
     usuarios: usuariosRestaurados,
     backfill: backfill ? { completed: backfill.completed, relatorio: backfill.state?.relatorio || null } : null,
   });
-  if (backfill && !backfill.alreadyDone) await recordBackupHistory(`backfill-v${getDbVersion()}`, { origem: 'restore', relatorio: backfill.state?.relatorio || null });
+  for (const item of backfill?.results || []) {
+    if (!item.alreadyDone) await recordBackupHistory(`backfill-v${item.versao}`, { origem: 'restore', relatorio: backfill.states?.[item.versao]?.relatorio || null });
+  }
   return { ok: true, restored: true, preRestoreBackup: safetyEvidence, schemaUpgradeRequired, ignoredStores, newStores, usuarios: usuariosRestaurados, backfill: backfill ? backfill.state : null };
 }
 
 /**
  * "Limpar dados operacionais" (ADR-032): preserva usuários, configurações,
- * histórico de backups e cadastros mestres. Exige evidência de backup físico.
+ * histórico de backups e cadastros mestres — inclusive programas de sanidade e
+ * medicamentos; as aplicações de sanidade são operacionais e são apagadas
+ * (ADR-049). Exige evidência de backup físico.
  */
 export async function clearOperationalData({ safetyEvidence = null } = {}) {
   requireDurableSafetyEvidence(safetyEvidence, 'Limpeza');
@@ -286,7 +300,7 @@ export const clearAllData = clearOperationalData;
  * `usuarios`, por isso o app volta ao FIRST-RUN ADMIN SETUP (ADR-044). Exclusivo
  * do ADMIN com a senha reverificada (validados no serviço de manutenção); aqui
  * exige evidência de backup físico mais a confirmação explícita. Recria o estado
- * técnico e os seeds da v7 em seguida.
+ * técnico da cadeia (v7 com os seeds, depois v8) em seguida.
  */
 export async function resetAllData({ safetyEvidence = null, confirmedByAdmin = false, files = null } = {}) {
   requireDurableSafetyEvidence(safetyEvidence, 'Reset completo');

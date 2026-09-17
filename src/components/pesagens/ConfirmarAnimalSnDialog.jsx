@@ -5,11 +5,12 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { categoriesForSex } from '@/modules/operations/domain/categorySuggestion';
+import { CATEGORIA_AUTOMATICA } from '@/modules/weighing/domain/launchContext';
 
 // Perfil do animal SN: os mesmos seletores do Cadastro no Lançamento, na mesma
 // ordem (sexo, categoria, raça, marca). Tudo é SELECIONADO dos cadastros mestres
 // (nunca texto livre); "Automático" escolhe a categoria pelo peso ao salvar.
-const CATEGORIA_AUTOMATICA = '__auto__';
+// O perfil confirmado vale só para o SN salvo: não vira contexto do Cadastro (V-07).
 const EMPTY_PROFILE = { sexo: 'M', marca: '', marcaId: '', raca: '', racaId: '', categoriaSelecao: CATEGORIA_AUTOMATICA };
 const NONE = '__none__';
 

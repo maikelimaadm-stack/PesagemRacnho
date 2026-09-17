@@ -1,4 +1,4 @@
-import { BarChart3, CalendarCheck, Contact, Database, Dna, Handshake, Layers, ListChecks, MapPin, PlusCircle, Settings, Skull, Tag, Users } from "lucide-react";
+import { BarChart3, CalendarCheck, Contact, Database, Dna, Handshake, Layers, ListChecks, MapPin, PlusCircle, Settings, Skull, Syringe, Tag, Users } from "lucide-react";
 import { ModeloBase1AppShell } from "@/components/modelobase1";
 import RequirePermission from "@/components/auth/RequirePermission";
 import { useAuth } from "@/components/auth/useAuth";
@@ -33,6 +33,18 @@ const NAV_ITEMS = [
     url: "PesagensIndividuais",
     Icon: ListChecks,
     group: "operacao",
+    permission: "weighing.read",
+  },
+  // Sanidade: um único item (programas, medicamentos e aplicações em abas). Leitura por
+  // weighing.read; gravação decidida por ação dentro da tela e no sanityService.
+  {
+    id: "pec-sanidade",
+    title: "Sanidade",
+    longTitle: "Sanidade",
+    url: "Sanidade",
+    Icon: Syringe,
+    group: "operacao",
+    mobile: false,
     permission: "weighing.read",
   },
   {

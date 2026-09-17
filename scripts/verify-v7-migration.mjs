@@ -8,6 +8,12 @@
 // falha injetada (FALHOU → escrita bloqueada → retomada), bloqueio quando a porta
 // de arquivos falha ou corrompe, bloqueio sem porta, bloqueio com `lotes`
 // preenchida, banco novo (seeds) e, opcionalmente, massa 36k (MIGRATION_36K=1).
+//
+// Com a v8 (ADR-049) o coordenador roda a CADEIA v7 → v8: este gate continua
+// provando o caminho v6 → v7 e passou a ler o estado da v7 explicitamente
+// (result.states[7] / readMigrationState(db, 7)) em vez de supor DB_VERSION === 7.
+// O backup pré-migração é nomeado pela versão alvo (pre-migration-v8-…) e a v8
+// aditiva é coberta por migration:v8:verify.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -146,24 +152,29 @@ const summary = { casos: [] };
   const files = makeFilesPort();
   const progress = [];
   const result = await coordinator.openWithMigration({ files, onProgress: (p) => progress.push(p) });
+  const v7 = result.states[7];
   assert.equal(result.migrated, true);
   assert.equal(result.blocked, false, `migração bloqueada: ${JSON.stringify(result.error)}`);
   assert.equal(result.state.status, MIGRATION_STATUS.CONCLUIDA);
+  assert.equal(v7.status, MIGRATION_STATUS.CONCLUIDA, 'estado da v7 CONCLUIDA na cadeia');
+  assert.equal(v7.origem, 'upgrade-v6');
   assert.equal(isWriteBlocked(), false);
-  assert.ok(progress.length > 0 && progress.every((p) => V7_STEPS.includes(p.passo)), 'onProgress recebe passos B1..B12');
+  const progressV7 = progress.filter((p) => p.versao === 7);
+  assert.ok(progressV7.length > 0 && progressV7.every((p) => V7_STEPS.includes(p.passo)), 'onProgress recebe passos B1..B12 da v7');
+  assert.ok(progress.every((p) => p.versao === 7 || p.versao === DB_VERSION), 'progresso só da cadeia v7 → vigente');
 
-  // Backup pré-migração: nome, subdir, formato da versão de origem, validado por tamanho e SHA-256.
+  // Backup pré-migração: nome (versão alvo), subdir, formato da versão de origem, validado por tamanho e SHA-256.
   const backupFile = files.written.find((f) => f.subdir === 'backups');
   assert.ok(backupFile, 'backup pré-migração gravado em backups/');
-  assert.match(backupFile.filename, /^pre-migration-v7-\d{8}-\d{6}\.json$/);
+  assert.match(backupFile.filename, new RegExp(`^pre-migration-v${DB_VERSION}-\\d{8}-\\d{6}\\.json$`));
   const backupJson = JSON.parse(backupFile.content);
   assert.equal(backupJson.formatVersion, 2, 'backup pré-migração no formato da versão de origem');
   assert.equal(backupJson.manifest.dbVersion, 6);
   assert.ok(Array.isArray(backupJson.stores.lotes), 'backup pré-migração contém a store lotes da v6');
   assert.equal(backupJson.stores.animais.length, FIXTURE_ANIMALS.length);
-  assert.equal(result.state.backup.sha256, backupFile.sha256);
-  assert.equal(result.state.backup.size, backupFile.size);
-  assert.match(result.state.backup.path, /pre-migration-v7-/);
+  assert.equal(v7.backup.sha256, backupFile.sha256);
+  assert.equal(v7.backup.size, backupFile.size);
+  assert.match(v7.backup.path, new RegExp(`pre-migration-v${DB_VERSION}-`));
 
   const db = await ensureStorageReady();
   assert.equal(db.verno, DB_VERSION);
@@ -176,10 +187,10 @@ const summary = { casos: [] };
   assert.equal(alfa.length, 1, 'grafias sem colisão são fundidas');
   assert.equal(marcas.filter((m) => normalizeName(m.nome) === 'GAMA').length, 2, 'grafias em colisão viram marcas separadas');
   assert.equal(marcas.filter((m) => m.padrao === true).length, 1, 'uma marca padrão');
-  assert.equal(result.state.relatorio.colisoesMarca.length, 1);
-  assert.equal(result.state.relatorio.colisoesMarca[0].nome_normalizado, 'GAMA');
-  assert.deepEqual(result.state.relatorio.colisoesMarca[0].numeros.map((n) => n.numero), ['7']);
-  assert.equal(result.state.relatorio.marcas, 4);
+  assert.equal(v7.relatorio.colisoesMarca.length, 1);
+  assert.equal(v7.relatorio.colisoesMarca[0].nome_normalizado, 'GAMA');
+  assert.deepEqual(v7.relatorio.colisoesMarca[0].numeros.map((n) => n.numero), ['7']);
+  assert.equal(v7.relatorio.marcas, 4);
 
   const animais = await db.table('animais').toArray();
   const byId = new Map(animais.map((a) => [a.id, a]));
@@ -193,13 +204,13 @@ const summary = { casos: [] };
   assert.equal(byId.get('a3').situacao, 'VENDIDO');
   assert.equal(byId.get('a4').situacao, 'INATIVO', 'saída sem motivo mapeável → INATIVO');
   assert.equal(byId.get('a7').situacao, 'MORTO');
-  assert.equal(result.state.relatorio.saidasSemMotivo, 1);
+  assert.equal(v7.relatorio.saidasSemMotivo, 1);
   // 16/09/2026: nascimento não é usado — a migração nunca o estima a partir da era.
   assert.ok(animais.every((a) => a.nascimento === null && a.nascimento_estimado === false), 'nascimento fica vazio em todo animal migrado');
   assert.equal(byId.get('a1').era, '12', 'era legada preservada');
   assert.ok(animais.every((a) => a.categoria_automatica === true), 'animais migrados entram na categoria automática (pelo peso)');
   assert.equal(byId.get('a1').marca, 'ALFA', 'texto legado preservado');
-  assert.equal(result.state.relatorio.animaisAtualizados, FIXTURE_ANIMALS.length);
+  assert.equal(v7.relatorio.animaisAtualizados, FIXTURE_ANIMALS.length);
 
   // B2 raças: Nelore/nelore fundidas, Angus, Nelore padrão.
   const racas = await db.table('racas').toArray();
@@ -238,7 +249,7 @@ const summary = { casos: [] };
   assert.ok(identificadores.every((i) => !String(i.valor_normalizado).includes('::')), 'valor_normalizado sem ::MARCA');
   assert.ok(identificadores.every((i) => i.marca_id === byId.get(i.animal_id).marca_id), 'marca_id do identificador = do animal');
   assert.ok(identificadores.every((i) => i.inicio === '2026-01-10' && i.fim === null), 'inicio = data de created_at');
-  assert.equal(result.state.relatorio.identificadores, FIXTURE_ANIMALS.length);
+  assert.equal(v7.relatorio.identificadores, FIXTURE_ANIMALS.length);
 
   // B9 enums.
   const sessoes = await db.table('sessoesPesagem').toArray();
@@ -267,11 +278,11 @@ const summary = { casos: [] };
   const sanidadeFile = files.written.find((f) => f.subdir === 'exports');
   assert.ok(sanidadeFile && /^sanidade-export-.*\.json$/.test(sanidadeFile.filename), 'sanidade exportada em exports/');
   assert.equal(JSON.parse(sanidadeFile.content).chaves['cadastros-auxiliares:sanidade:local'].programasSanidade[0].id, 'ps-1');
-  assert.equal(result.state.relatorio.sanidade.exportado, true);
-  assert.equal(result.state.relatorio.chavesLegadasRemovidas.length, 4);
+  assert.equal(v7.relatorio.sanidade.exportado, true);
+  assert.equal(v7.relatorio.chavesLegadasRemovidas.length, 4);
 
   // B12 verificação + histórico + integridade com o contrato v7 ativo.
-  assert.equal(result.state.relatorio.integridade.ok, true, JSON.stringify(result.state.relatorio.integridade));
+  assert.equal(v7.relatorio.integridade.ok, true, JSON.stringify(v7.relatorio.integridade));
   const history = (await db.table('backupHistory').toArray()).map((h) => h.tipo);
   assert.ok(history.includes('pre-migration') && history.includes('migration-v7'), `backupHistory: ${history.join(',')}`);
   const integrity = await logicalIntegrity();
@@ -310,7 +321,7 @@ const summary = { casos: [] };
   const files = makeFilesPort();
   const prepared = await coordinator.prepareMigration({ files });
   assert.ok(prepared?.sha256, 'prepareMigration devolve o backup validado');
-  await ensureStorageReady(); // abre na v7 (upgrade estrutural) sem rodar o backfill
+  await ensureStorageReady(); // abre na versão vigente (upgrade estrutural) sem rodar os backfills
   const dry = await coordinator.dryRunBackfill();
   assert.equal(dry.pendente, true);
   assert.equal(dry.marcas.novas, 2);
@@ -425,8 +436,8 @@ const summary = { casos: [] };
     assert.equal(dev.migrated, true);
     assert.equal(dev.state.backup.skipped, true);
     assert.equal(dev.state.status, MIGRATION_STATUS.CONCLUIDA);
-    assert.equal(dev.state.relatorio.sanidade.exportado, false, 'sem porta, sanidade não é exportada');
-    assert.equal(dev.state.relatorio.sanidade.motivo, 'SEM_PORTA_DE_ARQUIVOS');
+    assert.equal(dev.states[7].relatorio.sanidade.exportado, false, 'sem porta, sanidade não é exportada');
+    assert.equal(dev.states[7].relatorio.sanidade.motivo, 'SEM_PORTA_DE_ARQUIVOS');
     const keys = (await (await ensureStorageReady()).table('appSettings').toArray()).map((r) => r.key);
     assert.ok(keys.includes('cadastros-auxiliares:sanidade:local'), 'chave de sanidade preservada quando não pôde ser exportada');
     assert.ok(!keys.includes('perfis-saida:local'), 'demais chaves legadas removidas');
@@ -464,6 +475,8 @@ const summary = { casos: [] };
   assert.equal(fresh.blocked, false);
   assert.equal(fresh.state.status, MIGRATION_STATUS.CONCLUIDA);
   assert.equal(fresh.state.origem, 'fresh');
+  assert.equal(fresh.states[7].status, MIGRATION_STATUS.CONCLUIDA, 'banco novo roda o backfill v7 (seeds) antes da v8');
+  assert.equal(fresh.states[7].origem, 'fresh');
   assert.equal(files.written.length, 0, 'banco novo não gera backup pré-migração');
   const db = await ensureStorageReady();
   assert.equal(await db.table('categoriasAnimal').count(), 7);
@@ -494,7 +507,7 @@ if (process.env.MIGRATION_36K === '1') {
   assert.equal(await db.table('animais').count(), mass.summary.animais);
   assert.equal((await db.table('animais').filter((a) => !a.marca_id).count()), 0, 'todos os animais com marca_id');
   assert.equal(await db.table('marcas').count(), 5);
-  assert.equal(result.state.relatorio.colisoesMarca.length, 0);
+  assert.equal(result.states[7].relatorio.colisoesMarca.length, 0);
   assert.deepEqual((await logicalIntegrity()).issues, []);
   summary.casos.push({ caso: 'massa-36k', pesagens: mass.summary.pesagens, animais: mass.summary.animais, tempoMs: elapsedMs });
   console.log(`[migration:v7] massa 36k migrada em ${elapsedMs} ms`);

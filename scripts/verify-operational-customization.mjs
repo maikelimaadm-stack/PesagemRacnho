@@ -199,12 +199,19 @@ assert.match(launch, /if \(!categoriasDoSexo\.some\(\(item\) => item\.id === cat
 assert.match(launch, /d17d-field--date"[\s\S]*?d17d-field--sex[\s\S]*?d17d-field--category[\s\S]*?Raça do animal[\s\S]*?d17d-field--brand[\s\S]*?d17d-field--animal[\s\S]*?d17d-field--weight[\s\S]*?d17d-field--observation/, 'ordem dos campos: data, sexo, categoria, raça, marca, identificação, peso, observação');
 assert.doesNotMatch(launch, /nascimento|Nascimento|d17d-field--birth/, 'NEGATIVO: data de nascimento saiu do lançamento');
 assert.doesNotMatch(launch, /d17d-field--era/, 'NEGATIVO: Era não é digitada (vem da categoria)');
-assert.match(launch, /case 'era':[\s\S]{0,80}p\.era/, 'a era continua exibida na grade');
+assert.match(launch, /coluna\.id === 'era'\) \{[\s\S]{0,120}p\.era/, 'a era continua exibida na grade');
 assert.match(launch, /era: eraOfCategory\(categoriaEfetiva\) \?\? \(era \|\| null\)/, 'Cadastro grava a era da categoria');
 assert.match(launch, /marca_id: perfilAnimal\.marca_id \|\| null,[\s\S]{0,60}raca_id: perfilAnimal\.raca_id \|\| null,[\s\S]{0,60}categoria_id: perfilAnimal\.categoria_id \|\| null,[\s\S]{0,60}categoria_automatica: perfilAnimal\.categoria_automatica !== false/, 'payload envia marca_id/raca_id/categoria_id/categoria_automatica além dos textos');
 assert.match(launch, /if \(tipoManejo === 'Cadastro' && !isSN && !marcaId\)/, 'Cadastro exige marca SELECIONADA (id), não texto');
 assert.match(launch, /apartacaoSelecionada: carregadas\.defaults\.apartacao_padrao_id \|\| ''/, 'apartacao_padrao_id pré-seleciona a apartação');
-assert.match(launch, /aplicarPadroesEmpresa\(\);[\s\S]{0,120}setApartacaoSelecionada\(padroesEmpresaRef\.current\.apartacaoSelecionada\)/, 'limpar o formulário reaplica a apartação padrão');
+// Missão 17/09 (contexto fixo do Lançamento): cancelar/atualizar edição volta ao contexto de antes
+// (launchContext.endEdit); sem contexto salvo, os padrões da empresa (inclusive a apartação) são reaplicados.
+assert.match(launch, /const cancelarEdicao = \(\) => \{[\s\S]{0,200}endEdit\(contextoAntesEdicaoRef\.current, \{ form: formRef\.current, defaults: padroesEmpresaRef\.current/, 'cancelar edição usa endEdit com os padrões da empresa');
+{
+  const { endEdit } = await import('../src/modules/weighing/domain/launchContext.js');
+  const semContexto = endEdit(null, { form: { tipoManejo: 'Manejo', apartacaoSelecionada: '' }, defaults: { apartacaoSelecionada: 'ap-padrao' } });
+  assert.equal(semContexto.apartacaoSelecionada, 'ap-padrao', 'limpar o formulário reaplica a apartação padrão');
+}
 assert.match(launch, /rendimento: formatRendimento\(carregadas\.sales\.rendimento_padrao\)/, 'rendimento inicial vem de rendimento_padrao da configuração');
 assert.match(launch, /rendimento_origem: calculoComercial\?\.yieldPercent != null \? rendimentoOrigem : null/, 'payload envia rendimento_origem (só quando há rendimento válido)');
 assert.match(launch, /setRendimentoCarcacaVenda\(e\.target\.value\); setRendimentoOrigemVenda\(RENDIMENTO_ORIGEM_INFORMADO\)/, 'digitar o rendimento da venda marca origem INFORMADO');

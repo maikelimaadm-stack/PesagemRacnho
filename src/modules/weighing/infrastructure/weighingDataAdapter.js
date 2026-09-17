@@ -13,6 +13,12 @@ import { getActor } from '../../../storage/indexedDb/auditActor.js';
 import { isOpenSessionStatus, normalizeName, situacaoFromExitReason } from '../../../storage/indexedDb/normalize.js';
 import { STORES } from '../../../storage/indexedDb/schema.js';
 import { eraOfCategory, suggestCategory } from '../../operations/domain/categorySuggestion.js';
+import {
+  APLICACOES_STORE,
+  LAUNCH_SANITY_TABLES,
+  cancelApplicationsForWeighingsInTransaction,
+  prepareApplicationRowsInTransaction,
+} from '../../sanity/infrastructure/sanityDataAdapter.js';
 
 const EMPRESA_ID = 'local';
 // Nome do campo do operador da sessão segue o índice declarado no esquema
@@ -294,7 +300,11 @@ export async function isStorageAvailable() {
   }
 }
 
-export async function createEntry(payload) {
+// `aplicacoesSanidade` (ADR-049): itens já validados pelo domínio de sanidade. As
+// stores de sanidade entram no escopo da transação e as aplicações (com auditoria
+// CRIAR_APLICACAO_SANIDADE) são gravadas junto da pesagem; referência inválida
+// aborta a transação inteira. O retorno traz `aplicacoes_sanidade` (linhas criadas).
+export async function createEntry(payload, { aplicacoesSanidade = [] } = {}) {
   storage.assertWritable('Lançamento de pesagem');
   const db = await storage.ensureReady();
   const ui = typeof payload.legacy_payload === 'object' ? payload.legacy_payload : {};
@@ -312,7 +322,10 @@ export async function createEntry(payload) {
   if (animalId) tableNames.push('animais', 'movimentosAnimais');
   if (isRegistration) tableNames.push('animalIdentificadores', 'marcas', 'racas', 'propriedades');
   if (movementType) tableNames.push('movimentosAnimais');
+  const sanityItems = Array.isArray(aplicacoesSanidade) ? aplicacoesSanidade : [];
+  if (sanityItems.length) tableNames.push(...LAUNCH_SANITY_TABLES);
   const tables = [...new Set(tableNames)].map((name) => db.table(name));
+  let sanityRows = [];
 
   await db.transaction('rw', tables, async () => {
     if (!sessionId) {
@@ -328,6 +341,10 @@ export async function createEntry(payload) {
       entry.sessao_id = sessionId;
     }
     if (await db.table('pesagens').where('id').equals(entryId).first()) throw new Error(`Pesagem duplicada (${entryId})`);
+    // Referências das aplicações resolvidas antes de gravar a pesagem: erro aborta tudo.
+    const sanity = await prepareApplicationRowsInTransaction(db, sanityItems, {
+      animalId, data: payload.data_pesagem, sessaoId: sessionId, pesagemId: entryId, empresaId: ui.empresa_id || EMPRESA_ID, ts, origem: 'lancamento',
+    });
     const existingForCategory = !isRegistration && animalId ? await db.table('animais').where('id').equals(animalId).first() : null;
     await stampAutomaticCategory(db, entry, isRegistration
       ? { automatic: ui.categoria_automatica !== false, sexo: ui.sexo }
@@ -385,9 +402,14 @@ export async function createEntry(payload) {
       operador: ui.operador || null,
       created_at: ts,
     }));
+    if (sanity.rows.length) {
+      await db.table(APLICACOES_STORE).bulkAdd(sanity.rows.map((row) => ({ ...row })));
+      await db.table('auditoria').bulkAdd(sanity.audits);
+      sanityRows = sanity.rows;
+    }
     await rebuildAnimalStateProjection(db, animalId, ts);
   });
-  return storageRecordToViewModel(entry);
+  return { ...storageRecordToViewModel(entry), aplicacoes_sanidade: sanityRows };
 }
 
 export async function updateEntry(id, payload) {
@@ -750,13 +772,16 @@ export async function bulkUpdateEntries(items, { audit = true, origin = 'edicao-
   return updatedCount;
 }
 
+// Cancelar a pesagem cancela, na mesma transação, as aplicações de sanidade
+// vinculadas por pesagem_id (cancelled_at + motivo "pesagem cancelada"; ADR-049).
 export async function bulkDeleteEntries(ids) {
   storage.assertWritable('Exclusão de pesagens');
   const db = await storage.ensureReady();
   const ts = new Date().toISOString();
   let removed = 0;
   const affectedAnimals = new Set();
-  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalLotes'), db.table('auditoria'), db.table('categoriasAnimal'), async () => {
+  const removedIds = [];
+  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalLotes'), db.table('auditoria'), db.table('categoriasAnimal'), db.table(APLICACOES_STORE), async () => {
     for (const id of ids) {
       const rows = await db.table('pesagens').where('id').equals(id).toArray();
       const existing = [...rows].reverse().find((row) => !row.deleted_at);
@@ -764,8 +789,10 @@ export async function bulkDeleteEntries(ids) {
       if (existing.animal_id) affectedAnimals.add(existing.animal_id);
       await db.table('pesagens').update(existing.localId, { deleted_at: ts, updated_at: ts });
       await db.table('auditoria').add(auditRow({ entidade: 'pesagens', entidade_id: id, acao: 'CANCELAR', antes: existing, motivo: 'Exclusão lógica pela interface', created_at: ts }));
+      removedIds.push(existing.id);
       removed += 1;
     }
+    await cancelApplicationsForWeighingsInTransaction(db, removedIds, { ts });
     for (const animalId of affectedAnimals) {
       await rebuildAnimalLotProjection(db, animalId, ts);
       await rebuildAnimalStateProjection(db, animalId, ts);

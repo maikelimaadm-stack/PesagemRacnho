@@ -1,10 +1,11 @@
 // Gate storage:backup:verify — backup completo formato 3 (docs 13 §2, 14 §6),
 // manifesto com schemaVersion/dataContractVersion/uiBuildId/appVersion,
 // usuariosLocais no backup, dry-run com schemaUpgradeRequired/ignoredStores/newStores,
-// restore de backup formato 2 (v6) → backfill v7 antes de registrar sucesso,
-// limpeza em dois níveis (ADR-032). Testes negativos: SHA divergente, dbVersion
-// maior que a do app, contagem divergente, restore/limpeza sem evidência física,
-// reset sem confirmação do ADMIN.
+// restore de backup formato 2 (v6) → cadeia de backfills v7 e v8 antes de registrar
+// sucesso, limpeza em dois níveis (ADR-032; v8/ADR-049: programas e medicamentos
+// preservados, aplicações de sanidade apagadas). Testes negativos: SHA divergente,
+// dbVersion maior que a do app, contagem divergente, restore/limpeza sem evidência
+// física, reset sem confirmação do ADMIN.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'url';
@@ -15,7 +16,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const imp = (rel) => import(pathToFileURL(join(root, rel)).href);
 
 const { deleteDbForTests, ensureStorageReady } = await imp('src/storage/indexedDb/db.js');
-const { BACKUP_FORMAT, MASTER_REGISTRY_STORES, PROTECTED_STORES, STORE_NAMES, STORES_V6 } = await imp('src/storage/indexedDb/schema.js');
+const { BACKUP_FORMAT, MASTER_REGISTRY_STORES, PROTECTED_STORES, SANITY_STORES, STORE_NAMES, STORES_V6 } = await imp('src/storage/indexedDb/schema.js');
 const { BACKUP_FORMAT_VERSION, DATA_CONTRACT_VERSION, DB_SCHEMA_VERSION, UI_BUILD_ID, APP_VERSION } = await imp('src/versioning/versionInfo.js');
 const { MIGRATION_STATUS, readMigrationState } = await imp('src/storage/migrations/migrationState.js');
 const storage = (await imp('src/storage/storageAdapter.js')).default;
@@ -49,6 +50,7 @@ assert.equal(bak.backup.manifest.uiBuildId, UI_BUILD_ID, 'manifesto traz uiBuild
 assert.equal(bak.backup.manifest.appVersion, APP_VERSION, 'manifesto traz appVersion');
 assert.equal(bak.backup.manifest.dbVersion, DB_SCHEMA_VERSION);
 assert.deepEqual(bak.backup.manifest.stores, STORE_NAMES, 'todas as stores vigentes entram no backup');
+for (const name of SANITY_STORES) assert.ok(Array.isArray(bak.backup.stores[name]), `store de sanidade v8 no backup (formato 3 inalterado): ${name}`);
 assert.equal(bak.counts.pesagens, 2);
 assert.equal(bak.counts.apartacoes, 1);
 assert.equal(bak.counts[USERS], 1, `${USERS} entra no backup como qualquer store`);
@@ -105,6 +107,7 @@ assert.equal(dryV2.sourceDbVersion, 6);
 assert.equal(dryV2.schemaUpgradeRequired, true, 'dry-run avisa conversão de esquema');
 assert.deepEqual(dryV2.ignoredStores, ['lotes'], 'store removida é listada como ignorada');
 assert.ok(dryV2.newStores.includes('marcas') && dryV2.newStores.includes(USERS), `stores novas listadas (${dryV2.newStores.join(',')})`);
+assert.ok(SANITY_STORES.every((name) => dryV2.newStores.includes(name)), 'stores de sanidade v8 nascem vazias no restore de backup v6');
 await assert.rejects(storage.applyRestore(v2Backup), /backup físico/, 'teste negativo: restore exige evidência física');
 
 const restored = await storage.applyRestore(v2Backup, { safetyEvidence });
@@ -115,6 +118,10 @@ const db = await ensureStorageReady();
 const migState = await readMigrationState(db, 7);
 assert.equal(migState.status, MIGRATION_STATUS.CONCLUIDA);
 assert.equal(migState.origem, 'restore-v6');
+const migStateV8 = await readMigrationState(db, 8);
+assert.equal(migStateV8?.status, MIGRATION_STATUS.CONCLUIDA, 'cadeia: restore v6 também conclui a v8');
+assert.equal(migStateV8.origem, 'restore-v6');
+for (const name of SANITY_STORES) assert.equal(await db.table(name).count(), 0, `${name} vazia após restore de backup v6`);
 const animal = await db.table('animais').where('id').equals('v6-a1').first();
 assert.equal(animal.situacao, 'ATIVO', 'enum convertido no restore');
 assert.ok(animal.marca_id, 'marca_id preenchido pelo backfill após o restore');
@@ -128,11 +135,14 @@ assert.ok(!('status_animal' in pes.legacy_payload) && !('_localId' in pes.legacy
 assert.equal(await db.table('causasMorte').count(), 1, 'catálogo legado do backup v6 migrado para store');
 assert.equal(await db.table(USERS).count(), 0, 'backup v2 não tem usuários: store nasce vazia (docs 11 §9)');
 const history = (await db.table('backupHistory').toArray()).map((h) => h.tipo);
-assert.ok(history.includes('restore') && history.includes('backfill-v7'), `histórico registra restore e backfill (${history.join(',')})`);
+assert.ok(history.includes('restore') && history.includes('backfill-v7') && history.includes('backfill-v8'), `histórico registra restore e backfills da cadeia (${history.join(',')})`);
 assert.deepEqual((await storage.logicalIntegrity()).issues, [], 'integridade após restore + backfill');
 
 // Limpeza em dois níveis (ADR-032).
 await storage.marcas.create({ id: 'm-keep', nome: 'MANTIDA', nome_normalizado: 'MANTIDA', ativo: true });
+await db.table('programasSanidade').add({ id: 'ps-keep', empresa_id: 'local', nome: 'Aftosa', nome_normalizado: 'AFTOSA', tipo: 'VACINACAO', ativo: true, created_at: 'x', updated_at: 'x', deleted_at: null });
+await db.table('medicamentos').add({ id: 'med-keep', empresa_id: 'local', nome: 'Ivermectina', nome_normalizado: 'IVERMECTINA', ativo: true, created_at: 'x', updated_at: 'x', deleted_at: null });
+await db.table('aplicacoesSanidade').add({ id: 'ap-clear', empresa_id: 'local', animal_id: 'v6-a1', programa_sanidade_id: 'ps-keep', medicamento_id: null, data: '2026-01-10', dose: null, cancelled_at: null, created_at: 'x', updated_at: 'x', deleted_at: null });
 await storage[USERS].create({ id: 'u2', nome: 'Gestor', login: 'gestor', login_normalizado: 'gestor', [HASH]: 'aA==', [SALT]: 'bB==', [ROLE]: 'GESTOR', ativo: true });
 await assert.rejects(storage.clearOperationalData({}), /backup físico/, 'teste negativo: limpeza exige evidência física');
 const cleared = await storage.clearOperationalData({ safetyEvidence });
@@ -141,6 +151,9 @@ for (const name of [...MASTER_REGISTRY_STORES, ...PROTECTED_STORES]) assert.ok(c
 assert.equal(await db.table('animais').count(), 0, 'dados operacionais apagados');
 assert.equal(await db.table('pesagens').count(), 0);
 assert.ok(await db.table('marcas').where('id').equals('m-keep').first(), 'cadastros mestres preservados');
+assert.ok(await db.table('programasSanidade').where('id').equals('ps-keep').first() && await db.table('medicamentos').where('id').equals('med-keep').first(), 'programas de sanidade e medicamentos preservados (ADR-049)');
+assert.equal(await db.table('aplicacoesSanidade').count(), 0, 'aplicações de sanidade apagadas pela limpeza operacional');
+assert.ok(cleared.cleared.includes('aplicacoesSanidade') && !cleared.cleared.includes('programasSanidade'), 'limpeza classifica aplicações como operacionais');
 assert.equal(await db.table(USERS).count(), 1, 'usuários preservados');
 assert.ok((await readMigrationState(db, 7)).status === MIGRATION_STATUS.CONCLUIDA, 'estado técnico preservado');
 assert.equal(typeof storage.clearAllData, 'function', 'clearAllData continua como alias');
@@ -156,6 +169,8 @@ assert.equal(await db.table(USERS).count(), 0, 'reset apaga usuários');
 assert.ok((await db.table('backupHistory').count()) > 0, 'histórico de backups preservado');
 assert.equal((await readMigrationState(db, 7)).status, MIGRATION_STATUS.CONCLUIDA, 'estado técnico recriado');
 assert.equal(await db.table('categoriasAnimal').count(), 7, 'seeds recriados após o reset');
+assert.equal((await readMigrationState(db, 8)).status, MIGRATION_STATUS.CONCLUIDA, 'estado técnico da v8 recriado pela cadeia');
+for (const name of SANITY_STORES) assert.equal(await db.table(name).count(), 0, `reset apaga ${name}`);
 
 await deleteDbForTests();
 console.log('OK verify-dexie-backup');

@@ -18,7 +18,10 @@ export class MigrationError extends Error {
   }
 }
 
-export function emptyMigrationReport() {
+// Relatório por versão: cada backfill tem o seu (o da v7 descreve a conversão dos
+// cadastros; o da v8 só as contagens das stores de sanidade criadas, ADR-049).
+export function emptyMigrationReport(version = 7) {
+  if (Number(version) >= 8) return emptyMigrationReportV8();
   return {
     marcas: 0,
     racas: 0,
@@ -40,6 +43,16 @@ export function emptyMigrationReport() {
   };
 }
 
+/** v8 aditiva: nada é convertido; o relatório registra as stores novas e suas contagens. */
+export function emptyMigrationReportV8() {
+  return {
+    storesCriadas: [],
+    programasSanidade: 0,
+    medicamentos: 0,
+    aplicacoesSanidade: 0,
+  };
+}
+
 export function emptyMigrationState(version, extra = {}) {
   return {
     versao: version,
@@ -55,7 +68,7 @@ export function emptyMigrationState(version, extra = {}) {
     finished_at: null,
     error: null,
     backup: null,
-    relatorio: emptyMigrationReport(),
+    relatorio: emptyMigrationReport(version),
     ...extra,
   };
 }

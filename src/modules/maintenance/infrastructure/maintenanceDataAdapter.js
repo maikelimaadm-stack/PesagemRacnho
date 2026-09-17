@@ -160,11 +160,33 @@ export async function resetAllData({ confirmedByAdmin = false } = {}) {
   return { ...result, backupPath: safety.path, safetyBackup: safetyEvidenceOf(safety) };
 }
 
-// Resumo do estado da migração sem dados de usuário.
+// Relatório resumido por versão: v7 descreve a conversão dos cadastros; v8
+// (ADR-049) só as contagens das stores de sanidade criadas.
+function reportSummary(relatorio) {
+  if (!relatorio) return null;
+  if (relatorio.storesCriadas !== undefined) {
+    return {
+      storesCriadas: relatorio.storesCriadas || [],
+      programasSanidade: relatorio.programasSanidade, medicamentos: relatorio.medicamentos, aplicacoesSanidade: relatorio.aplicacoesSanidade,
+    };
+  }
+  return {
+    marcas: relatorio.marcas, racas: relatorio.racas, categorias: relatorio.categorias,
+    causasMorte: relatorio.causasMorte, parceiros: relatorio.parceiros, propriedades: relatorio.propriedades,
+    animaisAtualizados: relatorio.animaisAtualizados, identificadores: relatorio.identificadores,
+    payloadsLimpos: relatorio.payloadsLimpos, colisoesMarca: (relatorio.colisoesMarca || []).length,
+    saidasSemMotivo: relatorio.saidasSemMotivo, chavesLegadasRemovidas: (relatorio.chavesLegadasRemovidas || []).length,
+    integridade: relatorio.integridade ? { ok: relatorio.integridade.ok, total: relatorio.integridade.total } : null,
+  };
+}
+
+// Resumo do estado da migração sem dados de usuário. `versao` é a versão em foco
+// (a primeira da cadeia não concluída ou a vigente); `cadeia` lista todas.
 function migrationSummary(status) {
   const state = status?.state || null;
   return {
     versao: status?.versao ?? null,
+    cadeia: (status?.cadeia || []).map((item) => ({ versao: item.versao, status: item.status || 'SEM_REGISTRO' })),
     status: state?.status || 'SEM_REGISTRO',
     origem: state?.origem || null,
     started_at: state?.started_at || null,
@@ -174,14 +196,7 @@ function migrationSummary(status) {
     total: state?.total ?? null,
     error: state?.error || null,
     backup: state?.backup ? { path: state.backup.path || null, size: state.backup.size ?? null, sha256: state.backup.sha256 || null, skipped: Boolean(state.backup.skipped) } : null,
-    relatorio: state?.relatorio ? {
-      marcas: state.relatorio.marcas, racas: state.relatorio.racas, categorias: state.relatorio.categorias,
-      causasMorte: state.relatorio.causasMorte, parceiros: state.relatorio.parceiros, propriedades: state.relatorio.propriedades,
-      animaisAtualizados: state.relatorio.animaisAtualizados, identificadores: state.relatorio.identificadores,
-      payloadsLimpos: state.relatorio.payloadsLimpos, colisoesMarca: (state.relatorio.colisoesMarca || []).length,
-      saidasSemMotivo: state.relatorio.saidasSemMotivo, chavesLegadasRemovidas: (state.relatorio.chavesLegadasRemovidas || []).length,
-      integridade: state.relatorio.integridade ? { ok: state.relatorio.integridade.ok, total: state.relatorio.integridade.total } : null,
-    } : null,
+    relatorio: reportSummary(state?.relatorio),
     writeBlocked: Boolean(status?.blocked),
     writeBlock: status?.writeBlock || null,
   };

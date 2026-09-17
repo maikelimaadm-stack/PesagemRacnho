@@ -5,6 +5,8 @@ import { toast } from 'sonner';
 import { loadOperationalCatalog } from '@/modules/operations/application/operationalInsightsService';
 import { calculateCarcassTrade } from '@/modules/weighing/domain/commercialCalculations';
 import { useAuth } from '@/components/auth/useAuth';
+import SanidadeAnimalCard from '@/components/sanidade/SanidadeAnimalCard';
+import { VIA_LABELS, listApplications } from '@/modules/sanity/application/sanityService';
 import '@/styles/operational-insights.css';
 
 const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -66,6 +68,7 @@ export default function FichaAnimal() {
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [range, setRange] = useState('all');
+  const [sanity, setSanity] = useState({ rows: [], loading: false, error: '' });
 
   useEffect(() => {
     loadOperationalCatalog().then((data) => setCatalog(data)).catch((error) => toast.error(error.message || 'Não foi possível carregar a ficha do animal.'));
@@ -78,6 +81,23 @@ export default function FichaAnimal() {
     window.dispatchEvent(new CustomEvent('mb1:breadcrumb-detail', { detail: selected ? `Animal ${selected.number} · ${selected.brand}` : 'Ficha do Animal' }));
     return () => window.dispatchEvent(new CustomEvent('mb1:breadcrumb-detail', { detail: '' }));
   }, [selected]);
+
+  // Sanidade do animal (weighing.read): aplicações da store aplicacoesSanidade, inclusive
+  // canceladas (marcadas na seção). Somente leitura aqui.
+  const canReadSanity = pode('weighing.read');
+  const selectedAnimalId = selected?.animalId || null;
+  useEffect(() => {
+    if (!canReadSanity || !selectedAnimalId) {
+      setSanity({ rows: [], loading: false, error: '' });
+      return undefined;
+    }
+    let active = true;
+    setSanity({ rows: [], loading: true, error: '' });
+    listApplications({ animalId: selectedAnimalId, includeCancelled: true })
+      .then((rows) => { if (active) setSanity({ rows: rows || [], loading: false, error: '' }); })
+      .catch((error) => { if (active) setSanity({ rows: [], loading: false, error: error?.message || 'Não foi possível carregar as aplicações de sanidade.' }); });
+    return () => { active = false; };
+  }, [canReadSanity, selectedAnimalId]);
 
   const results = useMemo(() => {
     const term = query.trim().toLocaleUpperCase('pt-BR');
@@ -170,6 +190,8 @@ export default function FichaAnimal() {
       </div>
 
       <section className="op-card"><header className="op-card__header"><h2>Histórico de pesagens</h2><span>{ni.format(historyRows.length)} registros</span></header><div className="op-table-scroll"><table className="op-table" style={{ minWidth: 820 }}><thead><tr><th>Data</th><th>Tipo</th><th className="is-number">Peso</th><th className="is-number">Dias</th><th className="is-number">Ganho</th><th className="is-number">GMD</th><th>Lote</th><th>Apartação</th><th>Observação</th></tr></thead><tbody>{historyRows.map((row) => { const gain = hasNumber(row.ganho) ? Number(row.ganho) : null; const gmd = hasNumber(row.gmd) ? Number(row.gmd) : null; return <tr key={row.id}><td>{dateBr(row.data_pesagem)}</td><td><span className={`op-type ${row.tipo_manejo === 'Cadastro' ? 'op-type--cadastro' : row.tipo_manejo === 'Saída' ? 'op-type--saida' : ''}`}>{row.tipo_manejo || 'Manejo'}</span></td><td className="is-number"><strong>{nf.format(Number(row.peso) || 0)}</strong></td><td className="is-number">{hasNumber(row.dias) ? ni.format(Number(row.dias)) : '—'}</td><td className={`is-number ${gain > 0 ? 'is-positive' : gain < 0 ? 'is-negative' : ''}`}>{gain !== null ? `${gain > 0 ? '+' : ''}${nf.format(gain)}` : '—'}</td><td className={`is-number ${gmd > 0 ? 'is-positive' : gmd < 0 ? 'is-negative' : ''}`}>{gmd !== null ? n3.format(gmd) : '—'}</td><td>{row.nome_lote || '—'}</td><td>{row.nome_apartacao || '—'}</td><td>{row.observacao || '—'}</td></tr>; })}</tbody></table></div></section>
+
+      {canReadSanity ? <SanidadeAnimalCard applications={sanity.rows} loading={sanity.loading} error={sanity.error} viaLabels={VIA_LABELS} /> : null}
     </main>
   );
 }

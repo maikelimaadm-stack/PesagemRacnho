@@ -9,6 +9,10 @@ import { loadOperationalPolicies, normalizeSalesPolicy } from '@/modules/operati
 import { pendenciesOf } from '@/modules/operations/domain/closingPendencies';
 import { avg, sum, weightedGmd } from '@/modules/reporting/domain/aggregateEngine';
 import { calculateCarcassTrade } from '@/modules/weighing/domain/commercialCalculations';
+import { compareWeighingEvents } from '@/modules/weighing/domain/weighingSeries';
+import { exportWeighingCsv } from '@/modules/weighing/export/weighingExportService';
+import { downloadCsvFile } from '@/modules/weighing/export/csvDownload';
+import { useAuth } from '@/components/auth/useAuth';
 import '@/styles/operational-insights.css';
 
 const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -29,10 +33,15 @@ const download = (name, content, type) => {
   link.click();
   URL.revokeObjectURL(url);
 };
-const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+// CSV do fechamento pelo contrato de colunas de pesagens (BOM, ';', CRLF, escape e proteção contra
+// fórmula; peso ausente vazio, nunca 0; datas dd/mm/aaaa). Tipo e Motivo da saída identificam cada linha.
+const FECHAMENTO_CSV_COLUMNS = ['data_pesagem', 'numero_animal', 'marca', 'tipo_manejo', 'motivo_saida', 'peso', 'gmd', 'nome_apartacao', 'nome_lote', 'observacao'];
 
 export default function FechamentoDia() {
   const navigate = useNavigate();
+  // Fora do AuthGate (harness de UI) não há sessão: nada é restringido; o serviço repete a checagem.
+  const auth = useAuth();
+  const podeExportar = auth ? Boolean(auth.can?.('reports.export')) : true;
   const [catalog, setCatalog] = useState({ pesagens: [], apartacoes: [], lotes: [], animais: [], sessoes: [] });
   const [date, setDate] = useState(today);
   const [apartacaoId, setApartacaoId] = useState('');
@@ -124,10 +133,14 @@ export default function FechamentoDia() {
   }, [rows]);
 
   const exportCsv = () => {
-    const headers = ['Data', 'Animal', 'Marca', 'Tipo', 'Peso', 'GMD', 'Apartação', 'Lote', 'Observação'];
-    const lines = rows.map((row) => [row.data_pesagem, row.numero_animal, row.marca, row.tipo_manejo, nf.format(Number(row.peso) || 0), hasNumber(row.gmd) ? n3.format(Number(row.gmd)) : '', row.nome_apartacao, row.nome_lote, row.observacao].map(csvCell).join(';'));
-    download(`fechamento-${date}.csv`, `\ufeff${headers.map(csvCell).join(';')}\n${lines.join('\n')}`, 'text/csv;charset=utf-8');
-    toast.success(`${ni.format(rows.length)} registros exportados.`);
+    try {
+      // Linhas do dia na cronologia canônica (Cadastro, Manejo, Saída; depois gravação).
+      const arquivo = exportWeighingCsv([...rows].sort(compareWeighingEvents), { columns: FECHAMENTO_CSV_COLUMNS, fileBase: `fechamento-${date}` });
+      downloadCsvFile(arquivo);
+      toast.success(`${ni.format(arquivo.rowCount)} registros exportados.`);
+    } catch (error) {
+      toast.error(error.message || 'Não foi possível exportar.');
+    }
   };
 
   const backupDay = () => {
@@ -183,7 +196,7 @@ export default function FechamentoDia() {
         </div>
         <span className={`op-pill ${pending.length ? 'op-pill--warn' : 'op-pill--active'}`}><AlertTriangle size={14} />{pending.length ? `${ni.format(pending.length)} pendências` : 'Conferido'}</span>
         <div className="op-toolbar-actions">
-          <button className="op-button" type="button" onClick={exportCsv} disabled={!rows.length}>Exportar CSV</button>
+          {podeExportar ? <button className="op-button" type="button" onClick={exportCsv} disabled={!rows.length}>Exportar CSV</button> : null}
           <button className="op-button" type="button" onClick={() => navigate(`/Relatorios?r=controle.fechamento-dia&d=${date}`)} disabled={!rows.length} title="Relatório imprimível com as mesmas regras de pendência">Imprimir fechamento</button>
           <button className="op-button" type="button" onClick={backupDay} disabled={!rows.length}>Backup do dia</button>
           <button className="op-button op-button--primary" type="button" onClick={toggleClosed} disabled={loading || !rows.length}>{isClosed ? 'Reabrir o dia' : 'Fechar o dia'}</button>

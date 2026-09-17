@@ -2,11 +2,12 @@
 // sem app.asar.unpacked. O banco NASCE automaticamente na primeira abertura:
 // Dexie cria o database e os object stores ao abrir. O usuário não configura nada.
 //
-// Versões declaradas: 5 (histórica), 6 (1.1.17) e 7 (Programa 2.0). O upgrade
-// do Dexie executa apenas transformações leves e idempotentes; o backfill
-// pesado (cadastros a partir de texto livre, ids em animais/identificadores,
-// limpeza de legacy_payload) é resumível e roda após a abertura pelo
-// migrationCoordinator (docs/arquitetura-produto/14-MIGRACOES.md).
+// Versões declaradas: 5 (histórica), 6 (1.1.17), 7 (Programa 2.0) e 8 (sanidade
+// mínima, ADR-049). O upgrade do Dexie executa apenas transformações leves e
+// idempotentes; o backfill pesado (cadastros a partir de texto livre, ids em
+// animais/identificadores, limpeza de legacy_payload) é resumível e roda após a
+// abertura pelo migrationCoordinator, em cadeia v7 → v8
+// (docs/arquitetura-produto/14-MIGRACOES.md).
 import Dexie from 'dexie';
 import {
   DB_NAME,
@@ -16,6 +17,7 @@ import {
   STORES_V5,
   STORES_V6,
   STORES_V7,
+  STORES_V8,
 } from './schema.js';
 
 let _db = null;
@@ -63,6 +65,9 @@ export function getDb() {
         if (row.ativo === undefined) row.ativo = true;
       });
     });
+  // v8 aditiva: só cria as stores de sanidade (vazias). Sem upgrade(): nenhum dado
+  // existente é tocado; o estado técnico migration:v8 é registrado pelo backfill.
+  db.version(8).stores(STORES_V8);
   _db = db;
   return db;
 }

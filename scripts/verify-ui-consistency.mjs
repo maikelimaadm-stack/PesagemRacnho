@@ -17,7 +17,18 @@ const auxiliaryRegistryCss = readFileSync(join(root, 'src/styles/auxiliary-regis
 const deathCausesPage = readFileSync(join(root, 'src/pages/CausasMorte.jsx'), 'utf8');
 const columnDeclaration = launchPage.match(/const COLUNAS_DISPONIVEIS = \[([\s\S]*?)\];/)?.[1] || '';
 
-assert(!/sanidade|sanit[aá]ri/i.test(launchPage), 'lançamento não pode expor controles ou configurações de Sanidade');
+// ADR-049 (substitui ADR-007/ADR-022 no ponto "sanidade fora do produto"): a proibição de
+// sanidade no Lançamento deixou de valer. O que continua valendo: as aplicações vão pelo
+// contrato próprio (payload.aplicacoes_sanidade → store aplicacoesSanidade, via
+// sanityService/weighingService) e nunca pelas chaves legadas do legacy_payload nem por appSettings.
+const launchLocalImports = [...launchPage.matchAll(/from\s+['"]@\/(components\/[^'"]+)['"]/g)]
+  .map(([, rel]) => ['.jsx', '.js', '/index.js'].map((ext) => join(root, 'src', `${rel}${ext}`)).find((file) => existsSync(file)))
+  .filter(Boolean)
+  .map((file) => readFileSync(file, 'utf8'));
+assert.match(launchPage, /aplicacoes_sanidade/, 'Lançamento envia as aplicações de sanidade em payload.aplicacoes_sanidade (ADR-049)');
+assert([launchPage, ...launchLocalImports].some((source) => /sanityService/.test(source)), 'Lançamento (ou componente importado por ele) usa o sanityService para programas/medicamentos (ADR-049)');
+assert(!/sanidade_ids|\bsanidades\b/.test(launchPage), 'Lançamento não usa as chaves legadas sanidade_ids/sanidades (ADR-027)');
+assert(!/cadastros-auxiliares:sanidade|appSettings/.test(launchPage), 'Lançamento não lê sanidade de appSettings (ADR-049)');
 assert(!/\.d17b-icon-button:hover\s*\{\s*background:\s*#fff/i.test(visualCss), 'hover do botão do shell não pode ficar branco');
 assert(!/\.mb1-shell-icon-button:hover\s*\{\s*background:\s*#fff/i.test(shellCss), 'hover do botão do ModeloBase1 não pode ficar branco');
 assert.match(visualCss, /\.d17d-icon-action:hover:not\(:disabled\)[\s\S]{0,220}background:\s*#e8edf1/i, 'ações de ícone usam hover neutro padronizado');
@@ -76,7 +87,7 @@ assert.match(relationPage, /data-mak-region="toolbar"[\s\S]{0,400}className="mg-
 assert(!/aria-controls="filter-panel"/.test(relationPage), 'Relação não tem mais o botão do painel lateral de filtros (decisão de 15/09/2026)');
 assert.match(relationPage, /tb-btn tb-btn-labeled tb-btn-green"[^>]*title="Lançar pesagem"/, 'ação principal usa tb-btn-green');
 assert.match(relationPage, /<MgDesktopSearch[\s\S]{0,1400}onApplyAll=/, 'pesquisa expansível com resultados e "Buscar todos"');
-assert.match(relationPage, /<MgSpeedDialMenu[\s\S]{0,700}Atualizar[\s\S]{0,200}Exportar CSV[\s\S]{0,200}Importar CSV[\s\S]{0,200}Baixar modelo CSV/, 'Atualizar, exportar, importar e modelo ficam em "Mais opções"');
+assert.match(relationPage, /<MgSpeedDialMenu[\s\S]{0,700}Atualizar[\s\S]{0,200}Exportar relatório \(CSV\)[\s\S]{0,200}Exportar para reimportação \(CSV\)[\s\S]{0,300}Importar CSV[\s\S]{0,200}Baixar modelo CSV/, 'Atualizar, exportar (relatório e reimportação), importar e modelo ficam em "Mais opções"');
 assert.match(relationPage, /data-mak-region="panel-strip"[\s\S]{0,200}<MgTablePanelStrip onConfigColumns=/, 'faixa de pílulas com configuração de colunas à direita');
 assert(!/MgFilterPanel/.test(relationPage), 'Relação filtra só pelas pílulas e menus de coluna (painel lateral removido)');
 assert(!/d17b-filter-card/.test(relationPage), 'cartão antigo de filtros foi removido da Relação');
@@ -86,7 +97,7 @@ for (const file of ['MgDesktopSearch.jsx', 'MgSearchResultsDropdown.jsx', 'MgSpe
 }
 assert.match(visualCss, /D\.17D\.2R34[\s\S]{0,600}\.d17b-list-page\.d17b-list-page--mother\s*\{[\s\S]{0,120}display:\s*flex\s*!important/i, 'Relação empilha barra, faixa e corpo como a Tela Mãe');
 
-// R34 — os cadastros auxiliares (Parceiros, Mortalidade, Sanidade) usam a mesma Tela Mãe no modo de listagem.
+// R34 — os cadastros auxiliares (Parceiros, Mortalidade…) usam a mesma Tela Mãe no modo de listagem.
 const auxiliaryList = readFileSync(join(root, 'src/components/cadastros/CadastroAuxiliarPage.jsx'), 'utf8');
 assert.match(auxiliaryList, /\{!formOpen \? \([\s\S]{0,400}data-mak-region="toolbar"[\s\S]{0,400}className="mg-action-bar /, 'listagem dos cadastros usa a barra de ações mg-action-bar');
 assert.match(auxiliaryList, /tb-btn tb-btn-labeled tb-btn-green aux-new-button/, 'Novo dos cadastros usa tb-btn-green');
@@ -182,7 +193,9 @@ for (const page of ['Marcas', 'Racas', 'Categorias', 'Parceiros', 'Propriedades'
   assert.match(source, /<CadastroAuxiliarPage /, `${page} usa a página genérica de cadastro do ModeloBase1`);
 }
 assert.doesNotMatch(auxiliaryRegistry, /registryService/, 'cadastros não dependem mais do registry em appSettings (ADR-018)');
-assert.ok(!existsSync(join(root, 'src/pages/ConfiguracoesSanidade.jsx')), 'tela de sanidade removida (ADR-022)');
+// ADR-049: a sanidade voltou em stores próprias; a tela legada que gravava em
+// appSettings (`cadastros-auxiliares:sanidade:*`, ADR-022) continua fora do produto.
+assert.ok(!existsSync(join(root, 'src/pages/ConfiguracoesSanidade.jsx')), 'tela legada de sanidade em appSettings não volta (ADR-022/ADR-049)');
 assert.ok(!existsSync(join(root, 'src/pages/CadastrosComerciais.jsx')), 'cadastros comerciais migraram para Parceiros (ADR-024)');
 const settingsPage = readFileSync(join(root, 'src/pages/Configuracoes.jsx'), 'utf8');
 assert.match(settingsPage, /<RequirePermission permission="settings\.(manage|operational)">/, 'Configurações exige permissão de configurações (settings.operational/manage)');
@@ -230,7 +243,7 @@ console.log(JSON.stringify({
   seamlessLaunchDateControl: true,
   launchTableMatchesWeighingList: true,
   deferredBrandChoiceOnFieldCompletion: true,
-  healthFeatureRemoved: true,
+  sanityLaunchUsesOwnStores: true,
   auxiliaryLaunchUsesModeloBase1Tabs: true,
   auxiliaryLaunchUsesModeloBase1Selects: true,
   auxiliaryLaunchUsesModeloBase1Cards: true,

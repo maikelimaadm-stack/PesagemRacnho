@@ -16,6 +16,9 @@ export const LEGACY_PAYLOAD_ALLOWLIST = Object.freeze([
   // Referências estruturais por id (R0 reporting): agrupamento histórico por marca/raça/causa sem
   // depender do texto; origem do rendimento usado no cálculo de arrobas (informado × padrão).
   'marca_id', 'raca_id', 'causa_morte_id', 'rendimento_origem',
+  // Rastro da importação conciliada (src/modules/import): job de origem e fingerprint canônico
+  // do evento (empresa | animal | data | tipo | peso [| id_externo]). `id_externo` já consta acima.
+  'importacao_id', 'import_fingerprint',
 ]);
 
 // Proibidas em gravação nova: redundantes com colunas/timestamps do registro

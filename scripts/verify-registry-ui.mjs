@@ -77,6 +77,15 @@ for (const [page, definition, service, newLabel] of PAGES) {
 for (const removed of ['src/pages/CadastrosComerciais.jsx', 'src/pages/ConfiguracoesSanidade.jsx']) {
   assert.equal(existsSync(join(root, removed)), false, `${removed} removida`);
 }
+// ADR-049: a sanidade voltou ao produto em stores próprias da v8 (programasSanidade,
+// medicamentos, aplicacoesSanidade). A proibição da ADR-022 continua valendo no ponto do
+// registry: nada de sanidade em appSettings (`cadastros-auxiliares:sanidade:*`) nem no
+// registry mestre genérico.
+assert.ok(!/sanidade|medicamento/i.test(read('src/modules/catalog/domain/registryDefinitions.js')), 'registry mestre não ganha grupo de sanidade (stores próprias, ADR-049)');
+for (const file of ['src/modules/sanity/application/sanityService.js', 'src/modules/sanity/infrastructure/sanityDataAdapter.js']) {
+  if (!existsSync(join(root, file))) continue;
+  assert.ok(!/table\(['"]appSettings['"]\)|storage\.settings|writeAppSetting|readAppSetting|cadastros-auxiliares|registryService/.test(read(file)), `${file}: sanidade não grava em appSettings nem no registry legado`);
+}
 ok('paginas');
 
 // ---------------------------------------------------------------------------

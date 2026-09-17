@@ -339,3 +339,92 @@ Registrar contexto, opções, decisão, consequências, migração, rollback, im
 em dados, segurança, testes e documentação. Alteração de uma decisão aceita não é
 uma edição silenciosa: criar nova ADR que substitui a anterior.
 
+## ADRs da reconciliação operacional (17/09/2026, ADR-049 e DEC-031)
+
+Origem: preflight `docs/evidence/operational-reconciliation-preflight/` (SANITY-CURRENT-STATE,
+CURRENT-SCHEMA) e decisões do responsável em 17/09/2026. Seguem o processo acima: nada das ADRs
+anteriores é editado; os pontos substituídos são indicados.
+
+## ADR-049 — Sanidade mínima operacional em stores próprias (substitui ADR-007 e ADR-022 no ponto "sanidade fora do produto"; revisa a numeração de ADR-034)
+
+**Status:** aceita.
+**Contexto:** ADR-007 retirou o domínio de sanidade (stores da v5 apagadas na v6) e ADR-022 retirou
+a reintrodução em `appSettings` (tela "Configurações de Sanidade", grupo `sanidade` do registry e chave
+`cadastros-auxiliares:sanidade:*`, exportada e removida pelo passo B11 da v7). O curral precisa
+registrar vacinação, vermifugação e tratamento por animal, inclusive durante a pesagem.
+**Opções:** (a) manter fora do produto; (b) voltar ao registry em `appSettings` (formato 1.1.17);
+(c) stores Dexie próprias e versionadas. **Escolhida: (c).**
+**Decisão:**
+- **Escopo permitido:** cadastro de programas de sanidade (nome, tipo `VACINACAO`/`VERMIFUGACAO`/
+  `TRATAMENTO`/`PREVENTIVO`/`OUTRO`, descrição, ordem, ativo); cadastro de medicamentos (nome,
+  princípio ativo, fabricante, unidade padrão, dose padrão como texto livre de referência, via de
+  aplicação, carência em dias apenas informativa, observação, ativo); aplicação por animal (programa
+  e/ou medicamento, data, dose opcional, unidade, via, observação), avulsa ou registrada no Lançamento
+  junto da pesagem.
+- **Fora do escopo:** estoque/saldo/lote de produto, contas, compras, calendário ou agenda de
+  protocolos, prescrição, diagnóstico, prontuário, integração externa (órgãos oficiais, veterinário,
+  SISBOV), financeiro/custo e fiscal. Sem cálculo de dose por peso. ADR-019 continua valendo:
+  "estoque" significa somente identificadores.
+- **Armazenamento:** esquema Dexie **v8 aditivo** com `programasSanidade`, `medicamentos` e
+  `aplicacoesSanidade` (`STORES_V8 = { ...STORES_V7, … }`; `STORES_V7` nunca é editada no lugar). Os
+  nomes são **diferentes** dos da v5: `configuracoesSanidade`, `itensSanidade` e `sanidadesAnimal`
+  continuam removidas e não são restauradas (backup antigo que as contenha tem essas stores
+  ignoradas). Nada de sanidade em `appSettings`, no registry mestre genérico ou no `legacy_payload`
+  (`sanidade_ids`/`sanidades` continuam proibidas, ADR-027).
+- **Aplicação é fato histórico:** grava o snapshot do nome do programa/medicamento, o ator
+  (`created_by`, `created_by_nome`) e, quando vem do Lançamento, `sessao_id` e `pesagem_id`. Nunca é
+  apagada: é cancelada (`cancelled_at`, `motivo_cancelamento`). Cadastro inativo continua válido nas
+  aplicações já gravadas e não aceita aplicação nova. Cancelar/excluir a pesagem cancela, na mesma
+  transação, as aplicações vinculadas (motivo "pesagem cancelada"). Cronologia da aplicação avulsa:
+  data não futura, não anterior ao Cadastro do animal e não posterior à saída definitiva (o dia da
+  saída é aceito). Pendência conhecida: editar data ou animal de uma pesagem não altera as aplicações
+  já vinculadas a ela.
+- **Lançamento:** `payload.aplicacoes_sanidade` (0..N) é validado antes de qualquer leitura e gravado
+  na **mesma transação Dexie** da pesagem (animal, data, sessão e pesagem vêm da própria pesagem);
+  qualquer aplicação inválida aborta tudo.
+- **Permissões reutilizadas** (nenhuma ação nova na matriz): cadastros com `registry.read`/
+  `registry.write`; aplicações com `weighing.write` para registrar, `weighing.edit` para cancelar e
+  `weighing.read` para ler. Verificação no serviço com falha fechada, no mesmo padrão de
+  `requireWeighingPermission`.
+- **Limpeza (ADR-032):** "Limpar dados operacionais" preserva `programasSanidade` e `medicamentos`
+  (incluídas em `MASTER_REGISTRY_STORES`) e apaga `aplicacoesSanidade`; "Reset completo" apaga tudo.
+- **Numeração (revisa ADR-034):** a v8 passa a ser a sanidade mínima; operações comerciais,
+  embarques com estados e colunas promovidas previstos para a v8 passam para a próxima versão do
+  esquema (v9).
+**Migração (ADR-038):** o coordenador roda a **cadeia** de backfills pendentes em ordem crescente
+(v7 → v8) em banco novo, upgrade v6 → v8, v7 → v8, restore de backup v5/v6/v7 e reset. Cada versão tem
+estado próprio (`migration:v7`, `migration:v8`), PENDENTE gravado antes de abrir, FALHOU com escrita
+bloqueada e "Continuar migração"; a primeira falha para a cadeia. Backup pré-migração automático e
+fail closed (`pre-migration-v8-*.json`). O backfill v8 é mínimo (passo S1: confere as stores criadas e
+registra as contagens, sem reescrever dados). A chave legada `cadastros-auxiliares:sanidade:*` não é
+convertida: continua tratada pelo B11 da v7 (exportada para `exports/` e removida; retida só sem porta
+de arquivos).
+**Formato e versões:** `BACKUP_FORMAT_VERSION` continua 3 — a estrutura do JSON não muda e as stores
+vêm de `STORE_NAMES`; `manifest.schemaVersion` passa a refletir o esquema dos dados do arquivo.
+`DATA_BUILD_ID = 'schema-v8'`. Backup de banco mais novo continua recusado.
+**Rollback:** backup pré-migração validado. Limitação conhecida: o app 1.2.0-rc1 (v7) abre um banco v8
+sem erro (o Dexie 4 aceita versão instalada maior) e ignora as stores de sanidade em backup, restore e
+limpeza; voltar à v7 exige restaurar o backup pré-migração num app v7 com banco limpo, perdendo as
+aplicações registradas depois da atualização.
+**Integridade:** `logicalIntegrity` verifica as aplicações (animal, programa, medicamento, sessão e
+pesagem existentes; dose nula ou maior que zero; data válida; aplicação ativa não aponta para pesagem
+cancelada) e nome ativo duplicado nos cadastros; ids nulos/duplicados das stores novas entram na
+verificação geral.
+**Segurança e auditoria (ADR-046):** `auditoria` registra `CRIAR_`/`EDITAR_`/`INATIVAR_`/
+`REATIVAR_PROGRAMA_SANIDADE`, `CRIAR_`/`EDITAR_`/`INATIVAR_`/`REATIVAR_MEDICAMENTO`,
+`CRIAR_APLICACAO_SANIDADE` e `CANCELAR_APLICACAO_SANIDADE` com `usuario_id`/`usuario_nome_snapshot`,
+sem segredos.
+**Testes:** `sanity:registry:verify`, `sanity:application:verify` e `migration:v8:verify`; gates de
+storage, backup, restore e versão atualizados para a v8; `migration:v7:verify` continua provando
+v6 → v7 dentro da cadeia.
+
+### DEC-031 — Manejo reclassifica a categoria automática (confirmado em 17/09/2026; complementa ADR-028)
+
+Regra vigente confirmada pelo responsável: no Cadastro com categoria "Automático" a categoria é
+escolhida pela faixa de peso das categorias do sexo do animal (`categorySuggestion.js`; a faixa etária
+de ADR-028 foi substituída pelo peso em 16/09/2026); cada Manejo de animal com categoria automática
+**reclassifica** o animal pelo peso do evento, e a pesagem grava a categoria/era daquele momento.
+Categoria escolhida à mão nunca muda. Pesagem sem peso (saída por morte, doação ou transferência) ou
+com peso fora de toda faixa preserva a última categoria válida. Gates: `category-projection:verify` e
+`animal:history-integrity:verify`.
+

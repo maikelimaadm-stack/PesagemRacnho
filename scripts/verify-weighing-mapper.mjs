@@ -65,6 +65,12 @@ assert(!('chave_nova' in dirty.legacy_payload), 'teste negativo: chave desconhec
 assert(findDisallowedLegacyKeys(dirty.legacy_payload).length === 0, 'snapshot só com chaves permitidas');
 assert(findDisallowedLegacyKeys({ marca: 'A', chave_nova: 1, _localId: 2 }).join(',') === 'chave_nova,_localId', 'findDisallowedLegacyKeys aponta as chaves fora da lista');
 assert(Object.keys(filterLegacyPayload({ marca: 'A', chave_nova: 1 })).join(',') === 'marca', 'filterLegacyPayload mantém só permitidas');
+// Rastro da importação conciliada (importacao_id, import_fingerprint, id_externo) é permitido.
+const imported = uiToStorageRecord({ ...uiPayload, importacao_id: 'job-1', import_fingerprint: 'local|a|2026-07-09|Manejo|320.50', id_externo: 'EXT-1', importacao_linha: 3 });
+assert(imported.legacy_payload.importacao_id === 'job-1', 'importacao_id no snapshot');
+assert(imported.legacy_payload.import_fingerprint === 'local|a|2026-07-09|Manejo|320.50', 'import_fingerprint no snapshot');
+assert(imported.legacy_payload.id_externo === 'EXT-1', 'id_externo no snapshot');
+assert(!('importacao_linha' in imported.legacy_payload), 'teste negativo: chave de importação não listada é descartada');
 
 // Edição: o service mescla o view model (peso_kg antigo) com o payload novo (peso).
 const edited = uiToStorageRecord({ peso_kg: 260, peso: 265, data_pesagem: '2026-07-09', tipo_manejo: 'Manejo' }, { isUpdate: true, id: 'x' });

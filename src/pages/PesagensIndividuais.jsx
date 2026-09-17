@@ -27,7 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  Upload, Search, Trash2, FileSpreadsheet, Download, 
+  Upload, Search, Trash2, FileSpreadsheet, Download, FileDown,
   ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X, Scale,
   AlertTriangle, CheckCircle2, Settings, MoreVertical, Layers, ListFilter, ChevronLeft, ChevronRight
 } from "lucide-react";
@@ -42,8 +42,8 @@ import {
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import { fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
+import { TEMPLATE_KINDS, buildImportTemplateCsv } from "@/modules/import/domain/spreadsheetTemplate";
 import { buildDeletionPlan } from "@/modules/animals/domain/animalHistory";
 import { deleteEntriesRespectingHistory } from "@/modules/animals/application/animalHistoryService";
 import { applyImportLotSelection, importLotKey } from "@/modules/weighing/domain/importLotSelection";
@@ -59,6 +59,9 @@ import { EVENT_COLUMNS, RELATION_COLUMN_IDS } from "@/modules/reporting/definiti
 import { SENSITIVITY } from "@/modules/reporting/domain/columnDefinition";
 import { relationPopulation, resolveEventColumn } from "@/modules/reporting/application/relationPopulation";
 import { loadEventRows } from "@/modules/reporting/infrastructure/reportSources/eventSource";
+import { EXPORT_PROFILES } from "@/modules/weighing/export/weighingExportContract";
+import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
+import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
 import { REGISTRY_WRITE_PERMISSION, brandService, breedService, resolveMany } from "@/modules/catalog/application/index";
 import { collectRegistryTexts, countUnknownRegistries, splitImportRowsByRegistry } from "@/modules/operations/domain/importRegistryResolution";
 
@@ -700,53 +703,35 @@ export default function PesagensIndividuais() {
     return { items, total: lista.length };
   }, [pesagens, searchInput]);
 
+  // Modelo só com o que se digita; peso anterior, dias, ganho e GMD são calculados na importação.
   const baixarModelo = () => {
-    const headers = ['ID', 'ID_Externo', 'Data', 'NumeroAnimal', 'Sexo', 'Raça', 'Era', 'Marca', 'Peso', 'Lote', 'Apartação', 'Observação', 'DataAnterior', 'PesoAnterior', 'Dias', 'Ganho', 'GMD'];
-    const exemplo1 = ['', '22207', '01/12/2025', '4368', 'M', 'Nelore', '2A', 'ABC', '206', 'MEIO', 'ROTINA', '', '15/11/2025', '180', '16', '26', '1.625'];
-    const exemplo2 = ['', '22206', '01/12/2025', '4369', 'M', 'Nelore', '3A', 'XYZ', '287', 'BOIADA', 'ROTINA', '', '15/11/2025', '260', '16', '27', '1.687'];
-    const exemplo3 = ['', '22205', '01/12/2025', '4370', 'F', 'Nelore', '1A', '', '212', 'MEIO', 'ROTINA', '', '', '', '', '', ''];
-    
-    const csv = [headers.join(';'), exemplo1.join(';'), exemplo2.join(';'), exemplo3.join(';')].join('\n');
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+    const { content, fileName } = buildImportTemplateCsv(TEMPLATE_KINDS.PESAGENS);
+    const blob = new Blob([content], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'modelo_pesagens_individuais.csv';
+    a.download = fileName;
     a.click();
     URL.revokeObjectURL(url);
     toast.success('Modelo baixado!');
   };
 
-  const exportarCSV = () => {
-    const headers = ['ID', 'ID_Externo', 'Data', 'NumeroAnimal', 'Sexo', 'Raça', 'Era', 'Marca', 'Peso', 'Lote', 'Apartação', 'Observação', 'DataAnterior', 'PesoAnterior', 'Dias', 'Ganho', 'GMD'];
-    const rows = pesagensFiltradas.map(p => [
-      p.id || '',
-      p.id_externo || '',
-      fmtDateBR(p.data_pesagem),
-      p.numero_animal || '',
-      p.sexo || '',
-      p.raca || '',
-      p.era || '',
-      p.marca || '',
-      p.peso != null ? fmtNum(p.peso) : '',
-      p.nome_lote || '',
-      p.nome_apartacao || '',
-      p.observacao || '',
-      fmtDateBR(p.data_anterior),
-      p.peso_anterior != null ? fmtNum(p.peso_anterior) : '',
-      p.dias != null ? fmtInt(p.dias) : '',
-      p.ganho != null ? fmtNum(p.ganho) : '',
-      p.gmd != null ? fmtNum(p.gmd, 3) : '',
-    ]);
-
-    const csv = [headers.join(';'), ...rows.map(r => r.join(';'))].join('\n');
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pesagens_individuais_${format(new Date(), 'yyyyMMdd')}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  // Exportação pelo contrato de colunas de pesagens (src/modules/weighing/export): a população é
+  // a mesma da tela (pesquisa, filtros e ordenação, todas as páginas). O relatório leva as colunas
+  // visíveis na ordem da tela (Tipo e Motivo da saída sempre; valores só com commercial.values);
+  // a reimportação leva o contrato técnico fixo, sem derivados. O serviço repete reports.export.
+  const exportarCSV = (profile) => {
+    try {
+      const arquivo = exportWeighingCsv(pesagensFiltradas, {
+        profile,
+        columns: colunasOrdenadas.map((coluna) => coluna.id),
+        canSeeCommercial: podeVerValores,
+      });
+      downloadCsvFile(arquivo);
+      toast.success(`${fmtInt(arquivo.rowCount)} registro(s) exportado(s).`);
+    } catch (error) {
+      toast.error(error.message || 'Não foi possível exportar.');
+    }
   };
 
   const toggleSelectAll = () => {
@@ -879,7 +864,10 @@ export default function PesagensIndividuais() {
                 onOpenChange={setMoreOpen}
                 items={[
                   { id: "atualizar", label: "Atualizar", icon: RefreshCw, onClick: () => refetch() },
-                  ...(podeExportar ? [{ id: "exportar", label: "Exportar CSV", icon: Download, onClick: exportarCSV }] : []),
+                  ...(podeExportar ? [
+                    { id: "exportar", label: "Exportar relatório (CSV)", icon: Download, onClick: () => exportarCSV(EXPORT_PROFILES.FRIENDLY) },
+                    { id: "exportar-reimportacao", label: "Exportar para reimportação (CSV)", icon: FileDown, onClick: () => exportarCSV(EXPORT_PROFILES.REIMPORT) },
+                  ] : []),
                   ...(podeImportar ? [
                     { id: "importar", label: "Importar CSV", icon: Upload, onClick: () => importInputRef.current?.click() },
                     { id: "modelo", label: "Baixar modelo CSV", icon: FileSpreadsheet, onClick: baixarModelo },

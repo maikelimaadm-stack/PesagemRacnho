@@ -8,8 +8,8 @@ import assert from 'node:assert/strict';
 import 'fake-indexeddb/auto';
 import { deleteDbForTests, ensureStorageReady } from '../src/storage/indexedDb/db.js';
 import { USERS_STORE } from '../src/storage/indexedDb/schema.js';
-import { getActor as getStorageActor, getActorRole, getCurrentActor as getStorageCurrentActor, setActorProvider } from '../src/storage/indexedDb/auditActor.js';
-import { clearWriteBlock, setWriteBlocked } from '../src/storage/migrations/migrationState.js';
+import { getActor as getStorageActor, getActorRole, getCurrentActor as getStorageCurrentActor, hasActorProvider, setActorProvider } from '../src/storage/indexedDb/auditActor.js';
+import { clearWriteBlock, isWriteBlockExempt, setWriteBlocked } from '../src/storage/migrations/migrationState.js';
 import { setPasswordPolicyForTests } from '../src/modules/auth/domain/passwordPolicy.js';
 import * as auth from '../src/modules/auth/application/localAuthService.js';
 import * as session from '../src/modules/auth/application/authSession.js';
@@ -44,10 +44,23 @@ assert.equal(getActorRole(), null);
 assert.deepEqual(actorFields(null), NULL_ACTOR);
 assert.deepEqual(actorFields({ id: 'u1', nome: 'X' }), { usuario_id: 'u1', usuario_nome_snapshot: 'X' }, 'ator explícito prevalece');
 
-await weighingService.createEntry(entry('p-sem-sessao', '1', '2026-08-01', 200));
+// Desde a falha fechada do serviço (075bfc5): com o módulo de autenticação carregado — o
+// authSession registra o provedor de ator ao ser importado, exatamente como no app — e sem
+// sessão, o lançamento é RECUSADO e nada é gravado. Ator nulo na auditoria só existe em
+// contexto sem autenticação (migração/gates: nenhum provedor registrado).
+assert.equal(hasActorProvider(), true, 'authSession registrou o provedor de ator (como o app)');
+await rejectsWithCode(weighingService.createEntry(entry('p-recusada', '9', '2026-08-01', 200)), 'AUTH_FORBIDDEN', 'app sem sessão: lançamento recusado (falha fechada)');
+assert.equal(await db.table('pesagens').where('id').equals('p-recusada').count(), 0, 'lançamento recusado não grava pesagem');
+assert.equal(await db.table('auditoria').where('entidade_id').equals('p-recusada').count(), 0, 'lançamento recusado não grava auditoria');
+setActorProvider(null);
+try {
+  await weighingService.createEntry(entry('p-sem-sessao', '1', '2026-08-01', 200));
+} finally {
+  setActorProvider(session.getSessionActor); // registra o provedor de volta, como o app faz
+}
 const semSessao = await db.table('auditoria').where('entidade_id').equals('p-sem-sessao').first();
-assert.ok(semSessao, 'pesagem sem sessão gera auditoria');
-assert.equal(semSessao.usuario_id, null, 'usuario_id nulo sem sessão');
+assert.ok(semSessao, 'pesagem sem provedor de ator (migração/gate) gera auditoria');
+assert.equal(semSessao.usuario_id, null, 'usuario_id nulo sem ator');
 assert.equal(semSessao.usuario_nome_snapshot, null);
 
 const { user: admin } = await auth.bootstrapFirstAdmin({ nome: 'Ana Souza', login: 'ana', senha: 'Forte#2026' });
@@ -153,7 +166,12 @@ try {
   const user = await auth.authenticate('ana', 'Forte#2026');
   assert.equal(user.id, admin.id, 'login PROSSEGUE sob bloqueio de migração');
   const afterBlock = await db.table(USERS_STORE).where('id').equals(admin.id).first();
-  assert.equal(afterBlock.last_login_at, beforeBlock.last_login_at, 'last_login_at não gravado (best-effort)');
+  // A store `usuarios` é ISENTA do bloqueio (migrationState.WRITE_BLOCK_EXEMPT_STORES, docs 11 §5):
+  // last_login_at/failed_login_count continuam gravados para o bloqueio por tentativas não ser
+  // contornável durante uma migração pendente. A expectativa antiga ("não gravado") contradizia
+  // essa isenção, criada no mesmo commit; só a AUDITORIA de acesso é descartada sob bloqueio.
+  assert.ok(isWriteBlockExempt(USERS_STORE), 'usuarios é store isenta do bloqueio de migração');
+  assert.notEqual(afterBlock.last_login_at, beforeBlock.last_login_at, 'last_login_at gravado sob bloqueio (store isenta)');
   assert.equal(await db.table('auditoria').count(), countBefore, 'evento de login descartado sob bloqueio');
   assert.equal(await tryRecordAccessEvent({ acao: ACCESS_EVENTS.LOGOUT, usuario: admin, resumo: 'x' }), null, 'tryRecordAccessEvent devolve null sob bloqueio');
   await rejectsWithCode(recordAccessEvent({ acao: ACCESS_EVENTS.LOGOUT, usuario: admin, resumo: 'x' }), 'MIGRATION_BLOCKED', 'recordAccessEvent direto propaga o bloqueio');

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ensureEmpresaId } from "@/api/db";
 import * as weighingService from "@/modules/weighing/application/weighingService";
 import * as apartacaoService from "@/modules/auxiliary/application/apartacaoService";
@@ -22,7 +22,8 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Eye, EyeOff } from "lucide-react";
-import { Scale, Save, RefreshCw, Settings, Plus, ChevronLeft, ChevronRight, MoreVertical, X, ArrowUpDown, ArrowUp, ArrowDown, Truck, FolderOpen, Tag, AlertTriangle } from "lucide-react";
+import { Scale, Save, RefreshCw, Settings, Plus, ChevronLeft, ChevronRight, MoreVertical, X, ArrowUpDown, ArrowUp, ArrowDown, Truck, FolderOpen, Tag, AlertTriangle, Syringe } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,14 +61,47 @@ import { normalizeName } from "@/modules/catalog/domain/normalize";
 import { RENDIMENTO_ORIGEM_INFORMADO, RENDIMENTO_ORIGEM_PADRAO_EMPRESA, exitRequiresDocument, formatRendimento, loadOperationalPolicies, resolveDefaultRegistry } from "@/modules/operations/application/operationalPolicies";
 import { getAnimalRecord } from "@/modules/operations/application/operationalInsightsService";
 import { categoriesForSex, eraOfCategory, suggestCategory } from "@/modules/operations/domain/categorySuggestion";
+import SanidadeLancamentoPanel from "../components/pesagens/SanidadeLancamentoPanel";
+import { listApplications, listMedicamentos, listProgramas } from "@/modules/sanity/application/sanityService";
+import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
+import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
+// Contexto fixo por sequência: o que fica e o que sai entre um animal e o próximo
+// é decidido pelo módulo puro launchContext (matriz STICKY_FIELDS/ANIMAL_FIELDS por modo).
+import {
+  CATEGORIA_AUTOMATICA,
+  FORM_FIELDS,
+  beginEdit,
+  buildSanityPayload,
+  changeExitReason,
+  endEdit,
+  exitReasonUsesShipment,
+  focusAfterSave,
+  launchContextStorageKey,
+  mergeDefaults,
+  modeSupportsSanity,
+  readStoredLaunchState,
+  restoreLaunchState,
+  serializeLaunchState,
+  stateAfterSave,
+  switchMode,
+  writeStoredLaunchState,
+} from "@/modules/weighing/domain/launchContext";
 const formatarData = fmtDateBR;
 const n = fmtNum;
 const m = fmtCurrency;
 // Padrões da empresa (marca/raça/apartação/rendimento) vêm da configuração e dos
 // cadastros mestres; nunca de valores fixos no código (ADR-025, S-01.5).
 const PADROES_VAZIOS = Object.freeze({ marca: "", marcaId: "", raca: "", racaId: "", apartacaoSelecionada: "", rendimento: "" });
-const criarConfiguracaoPadraoMovimentacao = (padroes = PADROES_VAZIOS) => ({ sexo: "M", raca: padroes.raca, racaId: padroes.racaId, era: "", marca: padroes.marca, marcaId: padroes.marcaId, categoriaSelecao: CATEGORIA_AUTOMATICA, apartacaoSelecionada: padroes.apartacaoSelecionada, loteTransferencia: "", mostrarSequenciaBrinco: false, mostrarDadosCompra: false, valorPagoCabeca: "", origemAnimal: "", numeroGTA: "", numeroNFeCompra: "", valorFreteCompra: "", observacoesCompra: "", motivoSaida: "", causaMorte: "", mostrarDadosVenda: false, comprador: "", valorVendaTotal: "", valorArroba: "", rendimentoCarcacaVenda: padroes.rendimento, rendimentoOrigemVenda: RENDIMENTO_ORIGEM_PADRAO_EMPRESA, destinoVenda: "", numeroGTAVenda: "", numeroNFeVenda: "", valorFreteVenda: "", observacoesVenda: "", mostrarDadosAbate: false, frigorifico: "", valorArrobaAbate: "", rendimentoCarcacaAbate: padroes.rendimento, rendimentoOrigemAbate: RENDIMENTO_ORIGEM_PADRAO_EMPRESA, valorTotalAbate: "", numeroGTAAbate: "", observacoesAbate: "", embarqueSelecionadoDoc: "", documentoSelecionado: "" });
 const CATALOGOS_VAZIOS = Object.freeze({ marcas: [], racas: [], categorias: [] });
+const CATALOGO_SANIDADE_VAZIO = Object.freeze({ programas: [], medicamentos: [], carregado: false, erro: false });
+// sessionStorage pode faltar (ou lançar) fora do Electron/navegador: o contexto só não persiste.
+const armazenamentoSessao = () => {
+  try {
+    return typeof window !== "undefined" ? window.sessionStorage : null;
+  } catch {
+    return null;
+  }
+};
 const POLITICAS_INICIAIS = Object.freeze({
   defaults: { marca_padrao_id: null, raca_padrao_id: null, propriedade_padrao_id: null, apartacao_padrao_id: null },
   sales: { exigir_documento_venda: false, rendimento_padrao: null, rendimento_padrao_origem: RENDIMENTO_ORIGEM_PADRAO_EMPRESA },
@@ -75,8 +109,7 @@ const POLITICAS_INICIAIS = Object.freeze({
   weightWarningPolicy: DEFAULT_WEIGHT_WARNING_POLICY,
 });
 const SEM_SELECAO = '__none__';
-// Categoria do Cadastro: "Automático" escolhe pelo sexo e pela faixa de peso da categoria.
-const CATEGORIA_AUTOMATICA = '__auto__';
+// Categoria do Cadastro (CATEGORIA_AUTOMATICA, de launchContext): "Automático" escolhe pelo sexo e pela faixa de peso da categoria.
 const COMMERCIAL_VALUE_FIELDS = new Set(["valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "valor_arroba_abate", "valor_total_abate", "peso_carcaca_estimado", "rendimento_carcaca"]);
 const NUMBER_COLUMN_IDS = new Set(["numero_registro", "peso", "peso_anterior", "valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "doc_qtd", "dias", "ganho", "gmd"]);
 const DATE_COLUMN_IDS = new Set(["data_pesagem", "data_anterior"]);
@@ -92,6 +125,21 @@ export default function LancamentoPesagensIndividuais() {
   const editarId = urlParams.get('editar');
 
   const [dbReady, setDbReady] = useState(true);
+  const auth = useAuth();
+  // Painel de Sanidade só para quem registra pesagens (o serviço repete a verificação).
+  const podeRegistrarSanidade = auth ? Boolean(auth.can?.('weighing.write')) : true;
+
+  // Contexto da sequência guardado na sessão (R-03): por empresa + usuário, só campos
+  // de contexto (serializeLaunchState nunca leva dado do animal). Lido uma vez na montagem.
+  const chaveContextoSessao = launchContextStorageKey({ empresaId: empresaSelecionadaId, usuarioId: auth?.user?.id });
+  const contextoSessaoRef = useRef(undefined);
+  if (contextoSessaoRef.current === undefined) {
+    contextoSessaoRef.current = restoreLaunchState(readStoredLaunchState(armazenamentoSessao(), chaveContextoSessao));
+  }
+  // Contexto de cada modo já visitado (troca de modo guarda/restaura) e contexto anterior à edição.
+  const contextosPorModoRef = useRef(contextoSessaoRef.current?.contexts || {});
+  const contextoAntesEdicaoRef = useRef(null);
+  const sequenciaBrincosRef = useRef(null);
 
   // Refs para navegação rápida
   const numeroInputRef = useRef(null);
@@ -136,15 +184,21 @@ export default function LancamentoPesagensIndividuais() {
   const [tipoManejo, setTipoManejo] = useState('Manejo');
   const [motivoSaida, setMotivoSaida] = useState("");
   const [causaMorte, setCausaMorte] = useState("");
+  // Causa da morte só segue para o próximo animal com esta opção marcada (V-03).
+  const [repetirCausaMorte, setRepetirCausaMorte] = useState(false);
   const [auxiliaryCatalogs, setAuxiliaryCatalogs] = useState({ compradores: [], vendedores: [], frigorificos: [], causasMorte: [] });
 
-
+  // Sanidade: rascunhos de aplicação do animal atual, sequência e cadastros ativos.
+  const [mostrarSanidade, setMostrarSanidade] = useState(false);
+  const [sanidadeSequencia, setSanidadeSequencia] = useState(false);
+  const [sanidadeAplicacoes, setSanidadeAplicacoes] = useState([]);
+  const [catalogoSanidade, setCatalogoSanidade] = useState(CATALOGO_SANIDADE_VAZIO);
+  const [aplicacoesRegistradasEdicao, setAplicacoesRegistradasEdicao] = useState([]);
 
   const [mostrarDadosCompra, setMostrarDadosCompra] = useState(false);
   const [mostrarSequenciaBrinco, setMostrarSequenciaBrinco] = useState(false);
   const [valorPagoCabeca, setValorPagoCabeca] = useState("");
   const [origemAnimal, setOrigemAnimal] = useState("");
-  const [documentacao, setDocumentacao] = useState("");
   const [numeroGTA, setNumeroGTA] = useState("");
   const [numeroNFeCompra, setNumeroNFeCompra] = useState("");
   const [valorFreteCompra, setValorFreteCompra] = useState("");
@@ -199,6 +253,36 @@ export default function LancamentoPesagensIndividuais() {
 
   // Painel direito: modo de visualização (apartacao | venda | abate)
   const [painelResumoTipo, setPainelResumoTipo] = useState('apartacao');
+
+  // ========== CONTEXTO DA SEQUÊNCIA ==========
+  // Snapshot dos estados do formulário (chaves = FORM_FIELDS de launchContext) e
+  // aplicação de um formulário calculado pelo módulo. A página não decide o que fica
+  // entre animais: stateAfterSave, switchMode, beginEdit/endEdit e mergeDefaults decidem.
+  const formularioAtual = { editingId, tipoManejo, dataPesagem, numeroAnimal, animalIdSelecionado, peso, observacao, avisoTela, era, sexo, raca, racaId, marca, marcaId, categoriaSelecao, apartacaoSelecionada, loteTransferencia, mostrarSequenciaBrinco, mostrarDadosCompra, valorPagoCabeca, origemAnimal, numeroGTA, numeroNFeCompra, valorFreteCompra, observacoesCompra, motivoSaida, causaMorte, repetirCausaMorte, mostrarDadosVenda, comprador, valorVendaTotal, valorArroba, rendimentoCarcacaVenda, rendimentoOrigemVenda, destinoVenda, numeroGTAVenda, numeroNFeVenda, valorFreteVenda, observacoesVenda, mostrarDadosAbate, frigorifico, valorArrobaAbate, rendimentoCarcacaAbate, rendimentoOrigemAbate, valorTotalAbate, numeroGTAAbate, observacoesAbate, embarqueSelecionadoDoc, documentoSelecionado, mostrarSanidade, sanidadeSequencia, sanidadeAplicacoes };
+  const formRef = useRef(formularioAtual);
+  formRef.current = formularioAtual;
+  const settersFormulario = { editingId: setEditingId, tipoManejo: setTipoManejo, dataPesagem: setDataPesagem, numeroAnimal: setNumeroAnimal, animalIdSelecionado: setAnimalIdSelecionado, peso: setPeso, observacao: setObservacao, avisoTela: setAvisoTela, era: setEra, sexo: setSexo, raca: setRaca, racaId: setRacaId, marca: setMarca, marcaId: setMarcaId, categoriaSelecao: setCategoriaSelecao, apartacaoSelecionada: setApartacaoSelecionada, loteTransferencia: setLoteTransferencia, mostrarSequenciaBrinco: setMostrarSequenciaBrinco, mostrarDadosCompra: setMostrarDadosCompra, valorPagoCabeca: setValorPagoCabeca, origemAnimal: setOrigemAnimal, numeroGTA: setNumeroGTA, numeroNFeCompra: setNumeroNFeCompra, valorFreteCompra: setValorFreteCompra, observacoesCompra: setObservacoesCompra, motivoSaida: setMotivoSaida, causaMorte: setCausaMorte, repetirCausaMorte: setRepetirCausaMorte, mostrarDadosVenda: setMostrarDadosVenda, comprador: setComprador, valorVendaTotal: setValorVendaTotal, valorArroba: setValorArroba, rendimentoCarcacaVenda: setRendimentoCarcacaVenda, rendimentoOrigemVenda: setRendimentoOrigemVenda, destinoVenda: setDestinoVenda, numeroGTAVenda: setNumeroGTAVenda, numeroNFeVenda: setNumeroNFeVenda, valorFreteVenda: setValorFreteVenda, observacoesVenda: setObservacoesVenda, mostrarDadosAbate: setMostrarDadosAbate, frigorifico: setFrigorifico, valorArrobaAbate: setValorArrobaAbate, rendimentoCarcacaAbate: setRendimentoCarcacaAbate, rendimentoOrigemAbate: setRendimentoOrigemAbate, valorTotalAbate: setValorTotalAbate, numeroGTAAbate: setNumeroGTAAbate, observacoesAbate: setObservacoesAbate, embarqueSelecionadoDoc: setEmbarqueSelecionadoDoc, documentoSelecionado: setDocumentoSelecionado, mostrarSanidade: setMostrarSanidade, sanidadeSequencia: setSanidadeSequencia, sanidadeAplicacoes: setSanidadeAplicacoes };
+  const aplicarForm = (form) => {
+    if (!form) return;
+    const atual = formRef.current;
+    for (const campo of FORM_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(form, campo) && form[campo] !== atual[campo]) settersFormulario[campo](form[campo]);
+    }
+  };
+
+  // Restauração do contexto da sessão antes da primeira pintura; a gravação só
+  // começa depois, para o formulário padrão da montagem não sobrescrever o guardado.
+  const [contextoSessaoAplicado, setContextoSessaoAplicado] = useState(!contextoSessaoRef.current);
+  useLayoutEffect(() => {
+    if (!contextoSessaoRef.current) return;
+    aplicarForm(contextoSessaoRef.current.form);
+    setContextoSessaoAplicado(true);
+  }, []);
+  const contextoSerializado = JSON.stringify(serializeLaunchState({ form: formularioAtual, contexts: contextosPorModoRef.current, savedContext: contextoAntesEdicaoRef.current }));
+  useEffect(() => {
+    if (!contextoSessaoAplicado) return;
+    writeStoredLaunchState(armazenamentoSessao(), chaveContextoSessao, JSON.parse(contextoSerializado));
+  }, [contextoSessaoAplicado, chaveContextoSessao, contextoSerializado]);
 
   const animaisCadastrados = useMemo(() => getRegisteredAnimals(pesagens), [pesagens]);
   const animalLookupIndex = useMemo(() => buildAnimalLookupIndex(animaisCadastrados), [animaisCadastrados]);
@@ -270,28 +354,30 @@ export default function LancamentoPesagensIndividuais() {
     return [animalSelecionado.marca || 'Sem marca', animalSelecionado.raca || '-', categoria || '-', eraAtual ? `era ${eraAtual}` : '', animalSelecionado.sexo || '-'].filter(Boolean).join(' · ');
   }, [animalSelecionado, animalRegistro, catalogos.categorias]);
 
+  // Perfil do animal selecionado (Manejo/Saída) fica em animalSelecionado/animalRegistro:
+  // sexo, raça, marca e era do animal NÃO são escritos nos estados de contexto do
+  // Cadastro (V-08) — o payload lê o perfil direto do cadastro escolhido.
   const aplicarAnimalSelecionado = (animal) => {
     if (!animal) return false;
     setAnimalIdSelecionado(animal.animal_id || animal.id);
     setNumeroAnimal(normalizeAnimalIdentifier(animal.numero_animal));
-    setSexo(animal.sexo || 'M');
-    setRaca(animal.raca || '');
-    setRacaId(racaIdPorNome(animal.raca));
-    setEra(animal.era || '');
-    setMarca(animal.marca || '');
-    setMarcaId(marcaIdPorNome(animal.marca));
     setAvisoTela(criarMensagemAnimal({ numero: animal.numero_animal, dadosCadastro: animal, ultimo: animal, tipoManejo, editingId, formatarData }));
     setTimeout(() => pesoInputRef.current?.focus(), 0);
     return true;
   };
 
-  // Aplica os padrões da empresa ao formulário (abertura da tela e "limpar").
-  const aplicarPadroesEmpresa = (padroes = padroesEmpresaRef.current) => {
-    setMarca(padroes.marca); setMarcaId(padroes.marcaId);
-    setRaca(padroes.raca); setRacaId(padroes.racaId);
-    setRendimentoCarcacaVenda(padroes.rendimento); setRendimentoOrigemVenda(RENDIMENTO_ORIGEM_PADRAO_EMPRESA);
-    setRendimentoCarcacaAbate(padroes.rendimento); setRendimentoOrigemAbate(RENDIMENTO_ORIGEM_PADRAO_EMPRESA);
-    setCategoriaSelecao(CATEGORIA_AUTOMATICA); setEra('');
+  // Padrões da empresa chegando depois da abertura (R-04): só trocam o que ainda está
+  // com o padrão anterior — no formulário (ou no contexto guardado antes de uma edição)
+  // e nos contextos por modo. Contexto restaurado da sessão já foi escolhido: fica.
+  const aplicarPadroesEmpresa = (padroes, padroesAnteriores) => {
+    if (contextoSessaoRef.current) return;
+    contextosPorModoRef.current = Object.fromEntries(Object.entries(contextosPorModoRef.current)
+      .map(([modo, contexto]) => [modo, mergeDefaults(contexto, padroesAnteriores, padroes)]));
+    if (contextoAntesEdicaoRef.current) {
+      contextoAntesEdicaoRef.current = { ...contextoAntesEdicaoRef.current, context: mergeDefaults(contextoAntesEdicaoRef.current.context, padroesAnteriores, padroes) };
+      return;
+    }
+    aplicarForm(mergeDefaults(formRef.current, padroesAnteriores, padroes));
   };
 
   useEffect(() => {
@@ -315,10 +401,10 @@ export default function LancamentoPesagensIndividuais() {
           apartacaoSelecionada: carregadas.defaults.apartacao_padrao_id || '',
           rendimento: formatRendimento(carregadas.sales.rendimento_padrao),
         };
+        const padroesAnteriores = padroesEmpresaRef.current;
         padroesEmpresaRef.current = padroes;
-        configuracoesPorTipoRef.current = { Cadastro: criarConfiguracaoPadraoMovimentacao(padroes), Manejo: criarConfiguracaoPadraoMovimentacao(padroes), Saída: criarConfiguracaoPadraoMovimentacao(padroes) };
-        // Um registro em edição (?editar=) não é sobrescrito pelos padrões.
-        if (!editarId) aplicarPadroesEmpresa(padroes);
+        // Um registro em edição (?editar=) não é sobrescrito: os padrões vão para o contexto guardado.
+        aplicarPadroesEmpresa(padroes, padroesAnteriores);
       } catch (error) {
         if (ativo) toast.error(error.message || 'Não foi possível carregar os cadastros e a configuração da empresa.');
       }
@@ -332,7 +418,7 @@ export default function LancamentoPesagensIndividuais() {
     if (apartacaoPadraoAplicadaRef.current || !apartacoes.length || !politicas.weightWarnings) return;
     apartacaoPadraoAplicadaRef.current = true;
     const padraoId = politicas.defaults.apartacao_padrao_id;
-    if (padraoId && !editarId && !apartacaoSelecionada && apartacoes.some((item) => item.id === padraoId)) setApartacaoSelecionada(padraoId);
+    if (padraoId && !editarId && !contextoSessaoRef.current && !apartacaoSelecionada && apartacoes.some((item) => item.id === padraoId)) setApartacaoSelecionada(padraoId);
   }, [apartacoes, politicas]);
 
   // Registro do animal (store `animais`): ids de cadastro, categoria e era para a faixa e o payload.
@@ -395,21 +481,54 @@ export default function LancamentoPesagensIndividuais() {
     setPainelResumoTipo('personalizado');
   };
 
-  const configuracoesPorTipoRef = useRef({ Cadastro: criarConfiguracaoPadraoMovimentacao(), Manejo: criarConfiguracaoPadraoMovimentacao(), Saída: criarConfiguracaoPadraoMovimentacao() });
-  const salvarConfiguracaoTipoAtual = () => {
-    configuracoesPorTipoRef.current[tipoManejo] = { sexo, raca, racaId, era, marca, marcaId, categoriaSelecao, apartacaoSelecionada, loteTransferencia, mostrarSequenciaBrinco, mostrarDadosCompra, valorPagoCabeca, origemAnimal, numeroGTA, numeroNFeCompra, valorFreteCompra, observacoesCompra, motivoSaida, causaMorte, mostrarDadosVenda, comprador, valorVendaTotal, valorArroba, rendimentoCarcacaVenda, rendimentoOrigemVenda, destinoVenda, numeroGTAVenda, numeroNFeVenda, valorFreteVenda, observacoesVenda, mostrarDadosAbate, frigorifico, valorArrobaAbate, rendimentoCarcacaAbate, rendimentoOrigemAbate, valorTotalAbate, numeroGTAAbate, observacoesAbate, embarqueSelecionadoDoc, documentoSelecionado };
-  };
-  const aplicarConfiguracaoTipo = (novoTipo) => {
-    const padroes = padroesEmpresaRef.current;
-    const config = configuracoesPorTipoRef.current[novoTipo] || criarConfiguracaoPadraoMovimentacao(padroes);
-    setSexo(config.sexo ?? "M"); setRaca(config.raca ?? padroes.raca); setRacaId(config.racaId ?? padroes.racaId); setEra(config.era ?? ""); setMarca(config.marca ?? padroes.marca); setMarcaId(config.marcaId ?? padroes.marcaId); setCategoriaSelecao(config.categoriaSelecao ?? CATEGORIA_AUTOMATICA); setApartacaoSelecionada(config.apartacaoSelecionada ?? padroes.apartacaoSelecionada); setLoteTransferencia(config.loteTransferencia ?? ""); setMostrarSequenciaBrinco(config.mostrarSequenciaBrinco ?? false); setMostrarDadosCompra(config.mostrarDadosCompra ?? false); setValorPagoCabeca(config.valorPagoCabeca ?? ""); setOrigemAnimal(config.origemAnimal ?? ""); setNumeroGTA(config.numeroGTA ?? ""); setNumeroNFeCompra(config.numeroNFeCompra ?? ""); setValorFreteCompra(config.valorFreteCompra ?? ""); setObservacoesCompra(config.observacoesCompra ?? ""); setMotivoSaida(config.motivoSaida ?? ""); setCausaMorte(config.causaMorte ?? ""); setMostrarDadosVenda(config.mostrarDadosVenda ?? false); setComprador(config.comprador ?? ""); setValorVendaTotal(config.valorVendaTotal ?? ""); setValorArroba(config.valorArroba ?? ""); setRendimentoCarcacaVenda(String(config.rendimentoCarcacaVenda ?? padroes.rendimento)); setRendimentoOrigemVenda(config.rendimentoOrigemVenda ?? RENDIMENTO_ORIGEM_PADRAO_EMPRESA); setDestinoVenda(config.destinoVenda ?? ""); setNumeroGTAVenda(config.numeroGTAVenda ?? ""); setNumeroNFeVenda(config.numeroNFeVenda ?? ""); setValorFreteVenda(config.valorFreteVenda ?? ""); setObservacoesVenda(config.observacoesVenda ?? ""); setMostrarDadosAbate(config.mostrarDadosAbate ?? false); setFrigorifico(config.frigorifico ?? ""); setValorArrobaAbate(config.valorArrobaAbate ?? ""); setRendimentoCarcacaAbate(String(config.rendimentoCarcacaAbate ?? padroes.rendimento)); setRendimentoOrigemAbate(config.rendimentoOrigemAbate ?? RENDIMENTO_ORIGEM_PADRAO_EMPRESA); setValorTotalAbate(config.valorTotalAbate ?? ""); setNumeroGTAAbate(config.numeroGTAAbate ?? ""); setObservacoesAbate(config.observacoesAbate ?? ""); setEmbarqueSelecionadoDoc(config.embarqueSelecionadoDoc ?? ""); setDocumentoSelecionado(config.documentoSelecionado ?? "");
-  };
+  // Cadastros ativos de sanidade para os seletores do painel. A chegada tardia não
+  // mexe nos rascunhos já escolhidos; programa/medicamento inativo é recusado ao salvar.
+  useEffect(() => {
+    if (!podeRegistrarSanidade) return undefined;
+    let ativo = true;
+    Promise.all([
+      listProgramas({ empresaId: empresaSelecionadaId }),
+      listMedicamentos({ empresaId: empresaSelecionadaId }),
+    ])
+      .then(([programas, medicamentos]) => {
+        if (ativo) setCatalogoSanidade({ programas: programas || [], medicamentos: medicamentos || [], carregado: true, erro: false });
+      })
+      .catch(() => {
+        if (ativo) setCatalogoSanidade({ ...CATALOGO_SANIDADE_VAZIO, carregado: true, erro: true });
+      });
+    return () => { ativo = false; };
+  }, [empresaSelecionadaId, podeRegistrarSanidade]);
+
+  // Em edição, o painel mostra (somente leitura) as aplicações gravadas com esta pesagem.
+  useEffect(() => {
+    if (!editingId || !animalIdSelecionado || !podeRegistrarSanidade) {
+      setAplicacoesRegistradasEdicao([]);
+      return undefined;
+    }
+    let ativo = true;
+    listApplications({ animalId: animalIdSelecionado, includeCancelled: true, empresaId: empresaSelecionadaId })
+      .then((linhas) => {
+        if (ativo) setAplicacoesRegistradasEdicao((linhas || []).filter((linha) => linha.pesagem_id === editingId));
+      })
+      .catch(() => {
+        if (ativo) setAplicacoesRegistradasEdicao([]);
+      });
+    return () => { ativo = false; };
+  }, [editingId, animalIdSelecionado, empresaSelecionadaId, podeRegistrarSanidade]);
+
+  // Troca de modo: guarda o contexto do modo atual e restaura o do novo (switchMode).
+  // Com uma edição aberta a troca é recusada: nada da edição se perde (R-02).
   const handleTipoManejoChange = (novoTipo) => {
     if (novoTipo === tipoManejo) return;
-    salvarConfiguracaoTipoAtual();
-    setTipoManejo(novoTipo);
-    aplicarConfiguracaoTipo(novoTipo);
-    setEditingId(null); setNumeroAnimal(""); setAnimalIdSelecionado(""); setPeso(""); setObservacao(""); setAvisoTela(null);
+    if (editingId) {
+      toast.warning('Conclua (Atualizar) ou cancele a edição antes de trocar o tipo de movimentação.');
+      return;
+    }
+    const proximoNumero = novoTipo === 'Cadastro' ? sequenciaBrincosRef.current?.atual?.() || null : null;
+    const { form, contexts } = switchMode(formRef.current, novoTipo, contextosPorModoRef.current, { defaults: padroesEmpresaRef.current, proximoNumero });
+    contextosPorModoRef.current = contexts;
+    aplicarForm(form);
+    setTimeout(() => (proximoNumero ? pesoInputRef : numeroInputRef).current?.focus(), 0);
   };
 
   // Configuração de colunas
@@ -448,7 +567,6 @@ export default function LancamentoPesagensIndividuais() {
   { id: 'gmd', label: 'GMD', default: true },
   { id: 'observacao', label: 'Observação', default: false }];
 
-  const auth = useAuth();
   const podeVerValores = auth ? Boolean(auth.can?.('commercial.values')) : true;
   const COLUMN_MODEL_VERSION = 'd17d2r31';
   const defaultVisibleColumns = COLUNAS_DISPONIVEIS.filter((column) => column.default).map((column) => column.id);
@@ -831,7 +949,22 @@ export default function LancamentoPesagensIndividuais() {
         return;
       }
     }
+    // Sanidade (opcional): aplicações do painel viram payload.aplicacoes_sanidade do
+    // createEntry, gravadas na mesma transação da pesagem. Edição não regrava aplicações.
+    const sanidadeNoLancamento = !editingId && podeRegistrarSanidade && modeSupportsSanity(tipoManejo);
+    const sanidadeValidada = sanidadeNoLancamento
+      ? buildSanityPayload(sanidadeAplicacoes, catalogoSanidade.carregado && !catalogoSanidade.erro
+        ? { programaIds: catalogoSanidade.programas.map((item) => item.id), medicamentoIds: catalogoSanidade.medicamentos.map((item) => item.id) }
+        : {})
+      : { ok: true, errors: [], payload: [] };
+    if (!sanidadeValidada.ok) {
+      setMostrarSanidade(true);
+      toast.error(sanidadeValidada.errors[0]);
+      return;
+    }
 
+    // Snapshot submetido: o contexto seguinte nasce dele, nunca de um fechamento antigo (V-01).
+    const formularioSubmetido = formRef.current;
     const isSN = isSnIdentifier(numeroAnimal);
     const numeroDigitado = normalizeAnimalIdentifier(numeroAnimal).trim();
     const numeroNorm = normalizeAnimalText(numeroDigitado);
@@ -950,6 +1083,7 @@ export default function LancamentoPesagensIndividuais() {
       ? calculateCarcassTrade({ weight: pesoNum, yieldPercent: rendimentoInformado, pricePerArroba: precoArrobaInformado })
       : null;
 
+    const usaEmbarque = tipoManejo === 'Saída' && exitReasonUsesShipment(motivoSaida);
     const selectedDoc = documentosEmbarque.find(d => d.id === documentoSelecionado);
     const selectedEmb = embarques.find(e => e.id === embarqueSelecionadoDoc);
     const registroOriginal = editingId ? pesagens.find((entry) => entry.id === editingId) : null;
@@ -971,7 +1105,8 @@ export default function LancamentoPesagensIndividuais() {
         ? { numero_animal: numeroDigitado, sexo, raca, raca_id: racaId || null, era: eraOfCategory(categoriaEfetiva) ?? (era || null), marca, marca_id: marcaId || null, categoria_id: categoriaEfetiva?.id || null, categoria_automatica: categoriaSelecao === CATEGORIA_AUTOMATICA }
         : {
           numero_animal: animalSelecionado?.numero_animal || numeroDigitado,
-          sexo: animalSelecionado?.sexo || sexo,
+          // Sem fallback para o formulário: os seletores de sexo/raça/marca são contexto do Cadastro (V-08).
+          sexo: animalSelecionado?.sexo || null,
           raca: animalSelecionado?.raca || '',
           raca_id: animalRegistro?.raca_id || racaIdPorNome(animalSelecionado?.raca) || null,
           // Animal automático: o gravador recalcula categoria e era pelo peso desta pesagem.
@@ -1036,14 +1171,14 @@ export default function LancamentoPesagensIndividuais() {
       frigorifico: tipoManejo === 'Saída' && motivoSaida === 'Abate' ? frigorifico : null,
       valor_arroba_abate: tipoManejo === 'Saída' && motivoSaida === 'Abate' && valorArrobaAbate ? parseBrazilianNumber(valorArrobaAbate) : null,
       valor_total_abate: tipoManejo === 'Saída' && motivoSaida === 'Abate' && valorTotalAbate ? parseBrazilianNumber(valorTotalAbate) : null,
-      // Embarque/documentação
-      embarque_id: tipoManejo === 'Saída' ? (embarqueSelecionadoDoc || null) : null,
-      embarque_nome: tipoManejo === 'Saída' ? (selectedEmb?.nome || null) : null,
-      documento_embarque_id: tipoManejo === 'Saída' ? (documentoSelecionado || null) : null,
-      documento_tipo: tipoManejo === 'Saída' ? (selectedDoc?.tipo_documento || null) : null,
-      documento_numero: tipoManejo === 'Saída' ? (selectedDoc ? (selectedDoc.tipo_documento === 'GTA+NF-e' ? `GTA: ${selectedDoc.numero_gta || '-'} | NF-e: ${selectedDoc.numero_nfe || '-'}` : (selectedDoc.numero_gta || selectedDoc.numero_nfe || null)) : null) : null,
-      motorista_nome: tipoManejo === 'Saída' ? (selectedDoc?.motorista_nome || null) : null,
-      placa_carreta: tipoManejo === 'Saída' ? (selectedDoc?.placa_carreta || null) : null,
+      // Embarque/documentação: só nos motivos que usam embarque (Venda/Abate) (V-04).
+      embarque_id: usaEmbarque ? (embarqueSelecionadoDoc || null) : null,
+      embarque_nome: usaEmbarque ? (selectedEmb?.nome || null) : null,
+      documento_embarque_id: usaEmbarque ? (documentoSelecionado || null) : null,
+      documento_tipo: usaEmbarque ? (selectedDoc?.tipo_documento || null) : null,
+      documento_numero: usaEmbarque ? (selectedDoc ? (selectedDoc.tipo_documento === 'GTA+NF-e' ? `GTA: ${selectedDoc.numero_gta || '-'} | NF-e: ${selectedDoc.numero_nfe || '-'}` : (selectedDoc.numero_gta || selectedDoc.numero_nfe || null)) : null) : null,
+      motorista_nome: usaEmbarque ? (selectedDoc?.motorista_nome || null) : null,
+      placa_carreta: usaEmbarque ? (selectedDoc?.placa_carreta || null) : null,
       // Cadastro e Saída não têm ganho de peso
       data_anterior: tipoManejo === 'Manejo' ? dataAnterior : null,
       peso_anterior: tipoManejo === 'Manejo' ? pesoAnterior : null,
@@ -1054,8 +1189,9 @@ export default function LancamentoPesagensIndividuais() {
 
     try {
       if (!editingId) {
-        const savedEntry = await weighingService.createEntry(data);
-        toast.success('✓ Salvo!');
+        const savedEntry = await weighingService.createEntry({ ...data, aplicacoes_sanidade: sanidadeValidada.payload });
+        const aplicacoesGravadas = Array.isArray(savedEntry?.aplicacoes_sanidade) ? savedEntry.aplicacoes_sanidade.length : 0;
+        toast.success(aplicacoesGravadas > 0 ? `✓ Salvo! ${fmtInt(aplicacoesGravadas)} ${aplicacoesGravadas === 1 ? 'aplicação' : 'aplicações'} de sanidade.` : '✓ Salvo!');
         await refreshAnimalSeries(savedEntry?.animal_id || data.animal_id);
       } else {
         const updatedEntry = await weighingService.updateEntry(editingId, data);
@@ -1071,16 +1207,37 @@ export default function LancamentoPesagensIndividuais() {
         );
       }
 
-      setEditingId(null); setAnimalIdSelecionado(""); setPeso("");
-      // Categoria e era pertencem ao animal salvo: o próximo Cadastro volta para
-      // Automático (marca/raça padrão continuam por tipo).
-      if (tipoManejo === 'Cadastro') { setCategoriaSelecao(CATEGORIA_AUTOMATICA); setEra(''); }
-      if (window.__sequenciaBrincos && tipoManejo === 'Cadastro') { const usadosAtualizados = new Set(numerosUsados); usadosAtualizados.add(numeroAnimal.trim()); const r = window.__sequenciaBrincos.avancar(usadosAtualizados); if (!r.ok) { toast.info("✅ Sequência finalizada!"); setNumeroAnimal(""); } else if (r.pulos > 0) toast.info(`⏭️ ${r.pulos} pulado(s)`); } else { setNumeroAnimal(""); }
-      setObservacao("");
-      setDocumentacao("");
-      setAvisoTela(null);
-      salvarConfiguracaoTipoAtual();
-      if (window.__sequenciaBrincos && tipoManejo === 'Cadastro') setTimeout(() => pesoInputRef.current?.focus(), 100); else numeroInputRef.current?.focus();
+      // Próximo animal: o módulo launchContext mantém o contexto e limpa o animal.
+      // Novo lançamento → stateAfterSave (a sequência de identificadores avança);
+      // Atualizar → endEdit volta ao contexto de antes da edição (V-05, R-01).
+      const eraEdicao = Boolean(editingId);
+      const sequencia = tipoManejo === 'Cadastro' || contextoAntesEdicaoRef.current?.mode === 'Cadastro' ? sequenciaBrincosRef.current : null;
+      let proximoNumero = null;
+      if (sequencia && !eraEdicao) {
+        const usadosAtualizados = new Set(numerosUsados);
+        usadosAtualizados.add(numeroDigitado);
+        const r = sequencia.avancar(usadosAtualizados);
+        if (!r.ok) toast.info("✅ Sequência finalizada!");
+        else {
+          proximoNumero = r.formatado;
+          if (r.pulos > 0) toast.info(`⏭️ ${r.pulos} pulado(s)`);
+        }
+      } else if (sequencia) {
+        proximoNumero = sequencia.atual();
+      }
+      const opcoesSequencia = { sequenciaAtiva: Boolean(proximoNumero), proximoNumero };
+      const proximoFormulario = eraEdicao
+        ? endEdit(contextoAntesEdicaoRef.current, { form: formularioSubmetido, defaults: padroesEmpresaRef.current, proximoNumero })
+        : stateAfterSave(tipoManejo, formularioSubmetido, {
+          ...opcoesSequencia,
+          categoriaModo: categoriaSelecao === CATEGORIA_AUTOMATICA ? 'AUTOMATICA' : 'MANUAL',
+          repetirCausaMorte,
+          sanidadeSequencia,
+        });
+      const foco = focusAfterSave(proximoFormulario.tipoManejo, opcoesSequencia);
+      contextoAntesEdicaoRef.current = null;
+      aplicarForm(proximoFormulario);
+      if (foco === 'peso') setTimeout(() => pesoInputRef.current?.focus(), 100); else setTimeout(() => numeroInputRef.current?.focus(), 0);
     } catch (error) {
       toast.error('Erro: ' + error.message);
     } finally {
@@ -1108,7 +1265,14 @@ export default function LancamentoPesagensIndividuais() {
   // ========== EDITAR PESAGEM ==========
   // Restaura o registro INTEIRO no formulário. Campos não restaurados seriam
   // gravados como null ao salvar, apagando dados do lançamento em silêncio.
+  // Antes, beginEdit guarda o contexto da sequência e limpa o formulário: o registro
+  // não herda apartação/lote do contexto (V-06) e, ao Atualizar ou Cancelar, endEdit
+  // devolve exatamente o contexto anterior (V-05, R-01). Editar outra linha durante
+  // uma edição mantém o contexto guardado da primeira.
   const handleEditar = (p) => {
+    const { form: formularioEdicao, savedContext } = beginEdit(formRef.current, { defaults: padroesEmpresaRef.current });
+    if (!contextoAntesEdicaoRef.current) contextoAntesEdicaoRef.current = savedContext;
+    aplicarForm(formularioEdicao);
     setEditingId(p.id || null);
     setNumeroAnimal(normalizeAnimalIdentifier(p.numero_animal));
     const cadastroRelacionado = animalLookupIndex.byId.get(String(p.animal_id))
@@ -1162,6 +1326,17 @@ export default function LancamentoPesagensIndividuais() {
     numeroInputRef.current?.focus();
   };
 
+  // Cancelar a edição: volta ao contexto de antes da edição (R-01), sem padrões fixos.
+  const cancelarEdicao = () => {
+    const sequencia = contextoAntesEdicaoRef.current?.mode === 'Cadastro' ? sequenciaBrincosRef.current : null;
+    const proximoNumero = sequencia?.atual?.() || null;
+    const formulario = endEdit(contextoAntesEdicaoRef.current, { form: formRef.current, defaults: padroesEmpresaRef.current, proximoNumero });
+    contextoAntesEdicaoRef.current = null;
+    aplicarForm(formulario);
+    const foco = focusAfterSave(formulario.tipoManejo, { sequenciaAtiva: Boolean(proximoNumero), proximoNumero });
+    setTimeout(() => (foco === 'peso' ? pesoInputRef : numeroInputRef).current?.focus(), 50);
+  };
+
   // ========== NAVEGAÇÃO POR TECLAS ==========
   const handleKeyDown = (e, nextAction) => {
     if (e.key === 'Enter') {
@@ -1175,100 +1350,26 @@ export default function LancamentoPesagensIndividuais() {
   };
 
   // ========== EXPORTAR EXCEL ==========
+  // Relatório amigável pelo contrato de colunas de pesagens (src/modules/weighing/export):
+  // colunas visíveis na ordem da grade (Tipo e Motivo da saída sempre; valores só com
+  // commercial.values), BOM/";"/escape canônicos. O serviço repete reports.export.
   const exportarExcel = () => {
-    // Usa as colunas visíveis e na ordem atual da tabela (exceto Ações)
-    const visibleCols = colunasOrdenadas.filter(c => c.id !== 'acoes');
-    const headers = visibleCols.map(c => c.label);
-
-    const val = (v) => {
-      if (v === null || v === undefined) return '';
-      if (typeof v === 'number') return String(v).replace('.', ',');
-      const s = String(v);
-      return s.replaceAll(';', ',');
-    };
-    const money = (value) => (value !== null && value !== undefined) ? fmtCurrency(value) : '';
-    const date = (d) => formatarData(d);
-
-    const rows = pesagensDia.map((p) => visibleCols.map((col) => {
-      switch (col.id) {
-        case 'numero_registro':
-          return val(p._numero_registro || '');
-        case 'tipo_manejo':
-          return val(p.tipo_manejo || '');
-        case 'motivo_saida':
-          return val(p.motivo_saida || '');
-        case 'numero_animal':
-          return val(p.numero_animal || '');
-        case 'peso':
-          return p.peso != null ? val(fmtNum(p.peso)) : '';
-        case 'data_pesagem':
-          return val(date(p.data_pesagem));
-        case 'sexo':
-          return val(p.sexo || '');
-        case 'raca':
-          return val(p.raca || '');
-        case 'era':
-          return val(p.era || '');
-        case 'marca':
-          return val(p.marca || '');
-        case 'nome_apartacao':
-          return val(p.nome_apartacao || '');
-        case 'nome_lote':
-          return val(p.nome_lote || '');
-        case 'valor_pago_cabeca':
-          return money(p.valor_pago_cabeca);
-        case 'origem_animal':
-          return val(p.origem_animal || '');
-        case 'comprador':
-          return val(p.comprador || '');
-        case 'destino_venda':
-          return val(p.destino_venda || '');
-        case 'valor_venda_total':
-          return money(p.valor_venda_total);
-        case 'valor_arroba':
-          return money(p.valor_arroba);
-        case 'quantidade_arrobas':
-          return p.quantidade_arrobas != null ? val(fmtNum(p.quantidade_arrobas)) : '';
-        case 'frigorifico':
-          return val(p.frigorifico || '');
-        case 'embarque_nome':
-          return val(p.embarque_nome || '');
-        case 'documento_tipo':
-          return val(p.documento_tipo || '');
-        case 'documento_numero':
-          return val(p.documento_numero || '');
-        case 'motorista_nome':
-          return val(p.motorista_nome || '');
-        case 'placa_carreta':
-          return val(p.placa_carreta || '');
-        case 'doc_qtd':
-          return p.documento_embarque_id ? val(fmtInt(docCountsDia[p.documento_embarque_id] || 0)) : '';
-        case 'data_anterior':
-          return val(date(p.data_anterior));
-        case 'peso_anterior':
-          return p.peso_anterior != null ? val(fmtNum(p.peso_anterior)) : '';
-        case 'dias':
-          return p.dias != null ? val(fmtInt(p.dias)) : '';
-        case 'ganho':
-          return p.ganho != null ? val(fmtNum(p.ganho)) : '';
-        case 'gmd':
-          return p.gmd != null ? val(fmtNum(p.gmd, 3)) : '';
-        case 'observacao':
-          return val(p.observacao || '');
-        default:
-          return '';
-      }
-    }));
-
-    const csv = [headers.join(';'), ...rows.map((r) => r.join(';'))].join('\n');
-    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `pesagens_${dataPesagem}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success('Exportado!');
+    try {
+      const linhas = pesagensDia.map((p) => ({
+        ...p,
+        doc_qtd: p.documento_embarque_id ? (docCountsDia[p.documento_embarque_id] || 0) : null,
+      }));
+      const arquivo = exportWeighingCsv(linhas, {
+        profile: 'FRIENDLY',
+        columns: colunasOrdenadas.map((coluna) => coluna.id),
+        canSeeCommercial: podeVerValores,
+        fileBase: `pesagens-${dataPesagem}`,
+      });
+      downloadCsvFile(arquivo);
+      toast.success(`${fmtInt(arquivo.rowCount)} registro(s) exportado(s).`);
+    } catch (error) {
+      toast.error(error.message || 'Não foi possível exportar.');
+    }
   };
 
   return (
@@ -1316,7 +1417,7 @@ export default function LancamentoPesagensIndividuais() {
             {tipoManejo === 'Saída' &&
             <>
                 <Label className="text-xs font-medium">Motivo da Saída <span className="text-red-500">*</span></Label>
-                <Select value={motivoSaida} onValueChange={(value) => { setMotivoSaida(value); setCausaMorte(''); }}>
+                <Select value={motivoSaida} onValueChange={(value) => aplicarForm(changeExitReason(formRef.current, value))}>
                   <SelectTrigger className="h-8 text-xs w-44">
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
@@ -1340,6 +1441,10 @@ export default function LancamentoPesagensIndividuais() {
                         {auxiliaryCatalogs.causasMorte.filter((item) => item.ativo !== false).map((item) => <SelectItem key={item.id} value={item.nome}>{item.nome}</SelectItem>)}
                       </SelectContent>
                     </Select>
+                    <Label htmlFor="repetir-causa-morte" className="text-xs font-medium flex items-center gap-1">
+                      <Checkbox id="repetir-causa-morte" checked={repetirCausaMorte} onCheckedChange={(checked) => setRepetirCausaMorte(checked === true)} aria-label="Repetir causa para os próximos" />
+                      <span>Repetir causa para os próximos</span>
+                    </Label>
                   </>
                 )}
 
@@ -1381,9 +1486,22 @@ export default function LancamentoPesagensIndividuais() {
               </Button>
             </>}
             
-            {(tipoManejo === 'Cadastro' || tipoManejo === 'Manejo') && <>
-
-            </>}
+            {podeRegistrarSanidade && modeSupportsSanity(tipoManejo) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => setMostrarSanidade((visivel) => !visivel)}
+                className="d17d-icon-action d17d-sanity-toggle relative h-8 w-8"
+                aria-pressed={mostrarSanidade}
+                aria-label={mostrarSanidade ? 'Ocultar Sanidade' : 'Sanidade'}
+                title={sanidadeAplicacoes.length > 0 ? `Sanidade: ${fmtInt(sanidadeAplicacoes.length)} ${sanidadeAplicacoes.length === 1 ? 'aplicação' : 'aplicações'} neste lançamento` : (mostrarSanidade ? 'Ocultar Sanidade' : 'Sanidade')}>
+                <Syringe className="w-4 h-4" aria-hidden="true" />
+                {!mostrarSanidade && sanidadeAplicacoes.length > 0 && (
+                  <span className="d17d-sanity-toggle__count absolute -top-1 -right-1 rounded-full bg-emerald-600 px-1 text-[9px] font-semibold leading-4 text-white">{fmtInt(sanidadeAplicacoes.length)}</span>
+                )}
+              </Button>
+            )}
             
 
 
@@ -1550,22 +1668,7 @@ export default function LancamentoPesagensIndividuais() {
               {editingId &&
               <Button
                 variant="outline"
-                onClick={() => {
-                  setEditingId(null);
-                  setNumeroAnimal("");
-                  setAnimalIdSelecionado("");
-                  setPeso("");
-                  setObservacao("");
-                  setLoteTransferencia("");
-                  setMotivoSaida("");
-                  setCausaMorte("");
-                  setAvisoTela(null);
-                  setSexo("M");
-                  // Limpar volta aos padrões da empresa (marca/raça/apartação/rendimento).
-                  aplicarPadroesEmpresa();
-                  if (padroesEmpresaRef.current.apartacaoSelecionada) setApartacaoSelecionada(padroesEmpresaRef.current.apartacaoSelecionada);
-                  setTimeout(() => numeroInputRef.current?.focus(), 50);
-                }}
+                onClick={cancelarEdicao}
                 size="sm"
                 className="d17d-launch-cancel text-xs">
                   Cancelar
@@ -1577,15 +1680,12 @@ export default function LancamentoPesagensIndividuais() {
 
           {/* Informações e avisos ficam em uma faixa única, sempre abaixo dos campos. */}
           <div className="d17d-launch-feedbacks" aria-live="polite">
-            {avisoTela && (avisoTela.opcoes?.length > 0 || avisoTela.tipo === 'erro' || avisoTela.tipo === 'alerta') && (
+            {avisoTela && (avisoTela.tipo === 'erro' || avisoTela.tipo === 'alerta') && (
               <div className={`d17d-launch-message d17d-launch-message--${avisoTela.tipo || 'info'}`}>
                 <span>{avisoTela.mensagem}</span>
                 <div className="d17d-launch-message__actions">
-                  {avisoTela.opcoes?.map((opcao) => (
-                    <button key={opcao.marca} type="button" onClick={() => { const d = opcao.dados; setSexo(d?.sexo || "M"); setRaca(d?.raca || ""); setRacaId(racaIdPorNome(d?.raca)); setEra(d?.era || ""); setMarca(d?.marca || opcao.marca); setMarcaId(marcaIdPorNome(d?.marca || opcao.marca)); setAvisoTela(criarMensagemAnimal({ numero: numeroAnimal.trim(), dadosCadastro: d, ultimo: opcao.ultimo, tipoManejo, editingId, formatarData })); setTimeout(() => pesoInputRef.current?.focus(), 0); }}>
-                      {opcao.marca}
-                    </button>
-                  ))}
+                  {/* A escolha entre marcas é feita no SelecionarAnimalDialog; o antigo ramo de botões
+                      por marca (inalcançável, D-02) copiava o perfil do animal para o contexto (V-08). */}
                   <button type="button" onClick={() => setAvisoTela(null)} className="d17d-launch-message__close" aria-label="Fechar aviso">
                     <X aria-hidden="true" />
                   </button>
@@ -1628,7 +1728,7 @@ export default function LancamentoPesagensIndividuais() {
             )}
           </div>
 
-          <SequenciaBrincos visivel={tipoManejo === 'Cadastro' && mostrarSequenciaBrinco} brincoAtual={numeroAnimal} onSetNumeroAnimal={setNumeroAnimal} numerosUsados={numerosUsados} onFocusPeso={() => setTimeout(() => pesoInputRef.current?.focus(), 100)} />
+          <SequenciaBrincos visivel={tipoManejo === 'Cadastro' && mostrarSequenciaBrinco} brincoAtual={numeroAnimal} onSetNumeroAnimal={setNumeroAnimal} numerosUsados={numerosUsados} onFocusPeso={() => setTimeout(() => pesoInputRef.current?.focus(), 100)} controllerRef={sequenciaBrincosRef} />
           {tipoManejo === 'Cadastro' && mostrarDadosCompra &&
           <div className="d17d-detail-panel mt-3 p-3 border-t bg-slate-50 rounded">
               <h3 className="text-xs font-semibold text-slate-700 mb-3 flex items-center gap-2">
@@ -1697,6 +1797,22 @@ export default function LancamentoPesagensIndividuais() {
                 </div>
               </div>
             </div>
+          }
+
+          {/* Sanidade (Cadastro/Manejo; somente com weighing.write): aplicações vão em aplicacoes_sanidade do createEntry. */}
+          {podeRegistrarSanidade && modeSupportsSanity(tipoManejo) && mostrarSanidade &&
+          <SanidadeLancamentoPanel
+            aplicacoes={sanidadeAplicacoes}
+            onAplicacoesChange={setSanidadeAplicacoes}
+            sequencia={sanidadeSequencia}
+            onSequenciaChange={setSanidadeSequencia}
+            programas={catalogoSanidade.programas}
+            medicamentos={catalogoSanidade.medicamentos}
+            catalogoCarregado={catalogoSanidade.carregado}
+            erroCatalogo={catalogoSanidade.erro}
+            modoEdicao={Boolean(editingId)}
+            aplicacoesRegistradas={aplicacoesRegistradasEdicao}
+            onRecolher={() => setMostrarSanidade(false)} />
           }
 
           {/* Dados de Saída (Venda) */}
@@ -2404,11 +2520,8 @@ export default function LancamentoPesagensIndividuais() {
         racas={racasAtivas}
         categorias={categoriasAtivas}
         onConfirm={(profile) => {
-          setSexo(profile.sexo);
-          setRaca(profile.raca); setRacaId(profile.racaId || '');
-          setMarca(profile.marca); setMarcaId(profile.marcaId || '');
-          setCategoriaSelecao(profile.categoriaSelecao || CATEGORIA_AUTOMATICA);
-          setEra('');
+          // O perfil do SN vai só no snProfile deste salvamento: não é copiado para o
+          // contexto do Cadastro, e os próximos animais não herdam o SN (V-07).
           setSnDialogOpen(false);
           void handleSalvar({ skipSnConfirmation: true, snProfile: profile });
         }}

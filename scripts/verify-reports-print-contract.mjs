@@ -25,7 +25,7 @@ const vm = await runReport('pesagens.periodo', {
 const { html, layout, stats, manifest } = preparePrint(vm, ADMIN, { organization: 'Fazenda Modelo' });
 
 // Cabeçalho
-for (const text of ['Pesagens Individuais', 'Fazenda Modelo', escapeHtml('Pesagens por período'), 'Período', 'Filtros', 'Marca contém alfa', 'Agrupado por', 'Apartação › Lote', 'Emitido em', 'por Ana Admin (ADMIN)', `Versão ${vm.appVersion}`, 'esquema 7', `Emissão ${vm.emissionId.slice(0, 8)}`]) {
+for (const text of ['Pesagens Individuais', 'Fazenda Modelo', escapeHtml('Pesagens por período'), 'Período', 'Filtros', 'Marca contém alfa', 'Agrupado por', 'Apartação › Lote', 'Emitido em', 'por Ana Admin (ADMIN)', `Versão ${vm.appVersion}`, 'esquema 8', `Emissão ${vm.emissionId.slice(0, 8)}`]) {
   assert.ok(html.includes(text), `cabeçalho contém: ${text}`);
 }
 assert.ok(html.includes('01/08/2026 a 15/09/2026'), 'período resolvido');

@@ -147,6 +147,21 @@ assert.equal(estruturalRow.legacy_payload.raca_id, 'raca-y', 'raca_id preservado
 assert.equal(estruturalRow.legacy_payload.rendimento_origem, 'INFORMADO', 'rendimento_origem preservado no payload');
 assert.ok(!('id_invasor' in estruturalRow.legacy_payload), 'chave desconhecida continua descartada');
 
+// Importação conciliada (src/modules/import): rastro do job e fingerprint canônico do evento
+// atravessam a cadeia oficial; a lista continua fechada.
+for (const key of ['importacao_id', 'import_fingerprint', 'id_externo']) {
+  assert.ok(LEGACY_PAYLOAD_ALLOWLIST.includes(key), `rastro de importação permitido: ${key}`);
+}
+const importado = await weighingService.createEntry({
+  id: 'importado', tipo_manejo: 'Cadastro', numero_animal: '78', marca: 'A', sexo: 'M', data_pesagem: '2026-01-03', peso: 181,
+  importacao_id: 'job-1', import_fingerprint: 'local|animal|2026-01-03|Cadastro|181.00', id_externo: 'EXT-9', importacao_linha: 7,
+});
+const importadoRow = await db.table('pesagens').where('id').equals(importado.id).first();
+assert.equal(importadoRow.legacy_payload.importacao_id, 'job-1', 'importacao_id preservado');
+assert.equal(importadoRow.legacy_payload.import_fingerprint, 'local|animal|2026-01-03|Cadastro|181.00', 'import_fingerprint preservado');
+assert.equal(importadoRow.legacy_payload.id_externo, 'EXT-9');
+assert.ok(!('importacao_linha' in importadoRow.legacy_payload), 'NEGATIVO: chave vizinha não listada é descartada');
+
 await deleteDbForTests();
 console.log('OK verify-payload-allowlist');
 console.log(JSON.stringify({

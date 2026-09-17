@@ -3,7 +3,7 @@
 // compatibilidade dos registros locais entre versões do aplicativo.
 // Contrato: docs/arquitetura-produto/12-MODELO-DADOS-V7-V8.md (Programa 2.0).
 export const DB_NAME = 'pesagens-individuais';
-export const DB_VERSION = 7; // v7: cadastros mestres, identidade, identificadores, usuários locais (ADR-018/034)
+export const DB_VERSION = 8; // v8: sanidade mínima em stores próprias (ADR-049); v7: cadastros mestres, identidade, usuários (ADR-018/034)
 export const BACKUP_FORMAT = 'pesagens-individuais-indexeddb-backup';
 
 // ---------------------------------------------------------------------------
@@ -85,8 +85,32 @@ export const REMOVED_STORES_V7 = {
   lotes: null,
 };
 
+// ---------------------------------------------------------------------------
+// v8 (ADR-049): sanidade mínima operacional. Versão ADITIVA: só acrescenta três
+// stores (nenhuma removida, nenhum índice alterado nas existentes). Os nomes são
+// DIFERENTES dos da v5 (configuracoesSanidade/itensSanidade/sanidadesAnimal
+// continuam removidas): backup antigo com as stores v5 é ignorado no restore em
+// vez de despejar linhas no formato legado dentro das stores novas.
+// NUNCA editar STORES_V7 no lugar: o Dexie "remendaria" o esquema sem backup
+// pré-migração nem estado técnico (preflight CURRENT-SCHEMA.md §3.6).
+// ---------------------------------------------------------------------------
+export const STORES_V8 = {
+  ...STORES_V7,
+  // cadastros de sanidade (preservados por "Limpar dados operacionais")
+  programasSanidade: '++localId, &id, empresa_id, nome_normalizado, tipo, ativo, ordem, created_at, updated_at, deleted_at',
+  medicamentos: '++localId, &id, empresa_id, nome_normalizado, ativo, created_at, updated_at, deleted_at',
+  // aplicações por animal: fato histórico (cancelado, nunca apagado; store operacional)
+  aplicacoesSanidade:
+    '++localId, &id, empresa_id, animal_id, data, [animal_id+data], programa_sanidade_id, medicamento_id, pesagem_id, sessao_id, cancelled_at, created_at, updated_at, deleted_at',
+};
+
+// Stores acrescentadas pela v8 (serviço de sanidade, migração, integridade e gates).
+export const SANITY_REGISTRY_STORES = Object.freeze(['programasSanidade', 'medicamentos']);
+export const SANITY_APPLICATIONS_STORE = 'aplicacoesSanidade';
+export const SANITY_STORES = Object.freeze([...SANITY_REGISTRY_STORES, SANITY_APPLICATIONS_STORE]);
+
 // Esquema vigente.
-export const STORES = STORES_V7;
+export const STORES = STORES_V8;
 
 // Stores que entram no backup completo (todas as vigentes).
 export const STORE_NAMES = Object.keys(STORES);
@@ -95,6 +119,8 @@ export const STORE_NAMES = Object.keys(STORES);
 export const DOMAIN_STORES = STORE_NAMES.filter((name) => !['appSettings', 'backupHistory'].includes(name));
 
 // Stores de cadastro mestre (preservadas por "Limpar dados operacionais" — ADR-032).
+// v8 (ADR-049): programas de sanidade e medicamentos são cadastros e sobrevivem à
+// limpeza; `aplicacoesSanidade` é operacional e é apagada junto com as pesagens.
 export const MASTER_REGISTRY_STORES = [
   'marcas',
   'racas',
@@ -104,6 +130,7 @@ export const MASTER_REGISTRY_STORES = [
   'causasMorte',
   'faixasIdentificadores',
   'excecoesIdentificadores',
+  ...SANITY_REGISTRY_STORES,
 ];
 
 // Stores de segurança/configuração preservadas por qualquer limpeza não destrutiva.

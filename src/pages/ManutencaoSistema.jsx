@@ -408,6 +408,8 @@ export default function ManutencaoSistema() {
             <li>Apartações: {stats?.apartacoes != null ? fmtInt(stats.apartacoes) : "—"}</li>
             <li>Embarques: {stats?.shipments != null ? fmtInt(stats.shipments) : "—"}</li>
             <li>Animais: {stats?.counts?.animais != null ? fmtInt(stats.counts.animais) : "—"}</li>
+            <li>Aplicações de sanidade: {stats?.counts?.aplicacoesSanidade != null ? fmtInt(stats.counts.aplicacoesSanidade) : "—"}</li>
+            <li>Programas de sanidade: {stats?.counts?.programasSanidade != null ? fmtInt(stats.counts.programasSanidade) : "—"}</li>
             <li className="col-span-2">
               Armazenamento: {stats?.dbType || "IndexedDB local (Dexie)"}
             </li>
@@ -442,6 +444,11 @@ export default function ManutencaoSistema() {
               Migração v{migration?.versao ?? versions?.dbSchema ?? "—"}:{" "}
               <span className={migrationTone(migrationStatus)}>{migrationLabel(migrationStatus)}</span>
             </p>
+            {(migration?.cadeia || []).length > 1 && (
+              <p className="text-xs text-slate-500">
+                Cadeia: {migration.cadeia.map((item) => `v${item.versao} ${migrationLabel(item.status || "SEM_REGISTRO")}`).join(" · ")}
+              </p>
+            )}
             {migrationState?.last_checkpoint && <p className="text-xs text-slate-500">Checkpoint: {migrationState.last_checkpoint}</p>}
             {migrationState?.processed != null && migrationState?.total > 0 && (
               <p className="text-xs text-slate-500">Progresso: {fmtInt(migrationState.processed)} de {fmtInt(migrationState.total)} registros</p>
@@ -466,6 +473,14 @@ export default function ManutencaoSistema() {
           {relatorio && (
             <div className="border border-slate-200 rounded-md p-3 bg-slate-50 text-xs text-slate-600 space-y-1">
               <p className="font-semibold text-slate-700">Relatório da migração</p>
+              {relatorio.storesCriadas !== undefined ? (
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                <li className="col-span-2">Stores criadas: {(relatorio.storesCriadas || []).join(", ") || "—"}</li>
+                <li>Programas de sanidade: {fmtInt(relatorio.programasSanidade || 0)}</li>
+                <li>Medicamentos: {fmtInt(relatorio.medicamentos || 0)}</li>
+                <li>Aplicações de sanidade: {fmtInt(relatorio.aplicacoesSanidade || 0)}</li>
+              </ul>
+              ) : (
               <ul className="grid grid-cols-2 gap-x-4 gap-y-0.5">
                 <li>Marcas criadas: {fmtInt(relatorio.marcas || 0)}</li>
                 <li>Raças criadas: {fmtInt(relatorio.racas || 0)}</li>
@@ -479,6 +494,7 @@ export default function ManutencaoSistema() {
                 <li>Colisões de marca: {fmtInt((relatorio.colisoesMarca || []).length)}</li>
                 <li className="col-span-2">Chaves legadas removidas: {fmtInt((relatorio.chavesLegadasRemovidas || []).length)}</li>
               </ul>
+              )}
               {(relatorio.colisoesMarca || []).length > 0 && (
                 <div className="pt-1">
                   <p className="font-semibold text-amber-700">Grafias de marca mantidas separadas (revisar no cadastro de marcas):</p>
@@ -507,6 +523,11 @@ export default function ManutencaoSistema() {
                 <li>Sessões a converter: {fmtInt(migrationDry.sessoes?.pendentes || 0)}</li>
                 <li>Saídas sem motivo: {fmtInt(migrationDry.animais?.saidasSemMotivo || 0)}</li>
                 <li>Chaves legadas: {fmtInt((migrationDry.chavesLegadas || []).length)}</li>
+                {(migrationDry.cadeia || []).length > 0 && (
+                  <li className="col-span-2">
+                    Cadeia: {migrationDry.cadeia.map((item) => `v${item.versao} ${item.pendente ? "pendente" : "concluída"}`).join(" · ")}
+                  </li>
+                )}
               </ul>
             </div>
           )}
@@ -636,7 +657,7 @@ export default function ManutencaoSistema() {
           <div className="space-y-2 border border-slate-200 rounded-md p-3">
             <p className="font-medium">Limpar dados operacionais</p>
             <p className="text-xs text-slate-500">
-              Apaga pesagens, animais, sessões, lotes e embarques. Preserva usuários, configurações, histórico de backups e os cadastros (marcas, raças, categorias, parceiros, propriedades, causas de morte). Um backup físico é criado e validado antes.
+              Apaga pesagens, animais, sessões, lotes, embarques e aplicações de sanidade. Preserva usuários, configurações, histórico de backups e os cadastros (marcas, raças, categorias, parceiros, propriedades, causas de morte, programas de sanidade e medicamentos). Um backup físico é criado e validado antes.
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <Input

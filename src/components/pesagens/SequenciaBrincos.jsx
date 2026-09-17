@@ -7,21 +7,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ChevronRight, RotateCcw } from "lucide-react";
 import { fmtInt } from "@/components/common/formatNumber";
 import { toast } from "sonner";
+import {
+  advanceIdentifierSequence,
+  formatSequenceIdentifier,
+  nextFreeIdentifier,
+  parseSequenceIdentifier,
+} from "@/modules/weighing/domain/launchContext";
 
-const extrairPartes = (valor) => {
-  if (!valor) return null;
-  const match = valor.trim().match(/^([A-Za-z]*)(\d+)$/);
-  if (match) {
-    return { prefixo: match[1], numero: parseInt(match[2]), digitos: match[2].length };
-  }
-  return null;
-};
-
-const formatarBrinco = (prefixo, numero, digitos) => {
-  return prefixo + String(numero).padStart(digitos, '0');
-};
-
-export default function SequenciaBrincos({ visivel = true, brincoAtual, onSetNumeroAnimal, numerosUsados, onFocusPeso, onAtivoChange }) {
+// Sequência automática de identificadores do Cadastro. As regras (formato
+// prefixo + dígitos, próximo livre, avanço) vivem em launchContext; o componente
+// guarda só o cursor. A página recebe o controle por `controllerRef` (sem ponte
+// global em window) e decide, com stateAfterSave, o Nº e o foco depois de salvar.
+export default function SequenciaBrincos({ visivel = true, brincoAtual, onSetNumeroAnimal, numerosUsados, onFocusPeso, onAtivoChange, controllerRef }) {
   const [usarSequencia, setUsarSequencia] = useState(false);
   const [brincoInicial, setBrincoInicial] = useState("");
   const [brincoFinal, setBrincoFinal] = useState("");
@@ -35,35 +32,6 @@ export default function SequenciaBrincos({ visivel = true, brincoAtual, onSetNum
   useEffect(() => {
     numerosUsadosRef.current = numerosUsados || new Set();
   }, [numerosUsados]);
-
-  const encontrarProximoLivre = useCallback((prefixo, inicio, limite, digitos, usados, direcaoAtual) => {
-    let atual = inicio;
-    let pulosCount = 0;
-    const passo = direcaoAtual === "decrescente" ? -1 : 1;
-    const dentroDoLimite = (numero) => limite === null ? true : direcaoAtual === "decrescente" ? numero >= limite : numero <= limite;
-
-    while (dentroDoLimite(atual)) {
-      const formatado = formatarBrinco(prefixo, atual, digitos);
-      if (!usados.has(formatado)) {
-        return { numero: atual, formatado, pulos: pulosCount };
-      }
-      pulosCount++;
-      atual += passo;
-    }
-
-    if (limite === null) {
-      while (pulosCount < 10) {
-        const formatado = formatarBrinco(prefixo, atual, digitos);
-        if (!usados.has(formatado)) {
-          return { numero: atual, formatado, pulos: pulosCount };
-        }
-        pulosCount++;
-        atual += passo;
-      }
-    }
-
-    return null;
-  }, []);
 
   const pararSequencia = useCallback(() => {
     sequenciaRef.current = null;
@@ -81,20 +49,20 @@ export default function SequenciaBrincos({ visivel = true, brincoAtual, onSetNum
   const iniciarSequencia = () => {
     if (!usarSequencia || !brincoInicial.trim()) return;
 
-    const partes = extrairPartes(brincoInicial);
+    const partes = parseSequenceIdentifier(brincoInicial);
     if (!partes) {
-      sequenciaRef.current = null;
-      setAtivoInterno(true);
-      setPulados(0);
-      onAtivoChange?.(true);
-      onSetNumeroAnimal?.(brincoInicial.trim());
-      onFocusPeso?.();
+      // Fora do formato não há como avançar: antes a sequência ficava "ativa" sem
+      // cursor e cada Cadastro mostrava "Sequência finalizada!" (V-12).
+      toast.error("Brinco inicial deve ter letras opcionais seguidas de números (ex.: 7000 ou BR007).");
       return;
     }
-
-    const partesFinal = brincoFinal.trim() ? extrairPartes(brincoFinal) : null;
+    const partesFinal = brincoFinal.trim() ? parseSequenceIdentifier(brincoFinal) : null;
+    if (brincoFinal.trim() && !partesFinal) {
+      toast.error("Brinco final deve ter letras opcionais seguidas de números.");
+      return;
+    }
     const limite = partesFinal ? partesFinal.numero : null;
-    const livre = encontrarProximoLivre(partes.prefixo, partes.numero, limite, partes.digitos, numerosUsadosRef.current, direcao);
+    const livre = nextFreeIdentifier({ prefixo: partes.prefixo, inicio: partes.numero, limite, digitos: partes.digitos, usados: numerosUsadosRef.current, direcao });
 
     if (!livre) {
       toast.info("Todos os números do intervalo já estão cadastrados!");
@@ -118,44 +86,38 @@ export default function SequenciaBrincos({ visivel = true, brincoAtual, onSetNum
   };
 
   useEffect(() => {
-    if (ativoInterno) {
-      window.__sequenciaBrincos = {
-        avancar: (usadosAtualizado) => {
-          const seq = sequenciaRef.current;
-          if (!seq) return { ok: false };
-
-          const usados = usadosAtualizado || numerosUsadosRef.current;
-          const atualFormatado = formatarBrinco(seq.prefixo, seq.numeroAtual, seq.digitos);
-          usados.add(atualFormatado);
-          numerosUsadosRef.current = usados;
-
-          const proximoNumero = seq.numeroAtual + (seq.direcao === "decrescente" ? -1 : 1);
-          const livre = encontrarProximoLivre(seq.prefixo, proximoNumero, seq.numeroFinal, seq.digitos, usados, seq.direcao);
-
-          if (!livre) {
-            sequenciaRef.current = null;
-            setAtivoInterno(false);
-            setPulados(0);
-            onAtivoChange?.(false);
-            return { ok: false };
-          }
-
-          seq.numeroAtual = livre.numero;
-          setPulados((prev) => prev + livre.pulos);
-          onSetNumeroAnimal?.(livre.formatado);
-          onFocusPeso?.();
-          return { ok: true, formatado: livre.formatado, pulos: livre.pulos };
-        },
-        getState: () => sequenciaRef.current,
-      };
-    } else {
-      delete window.__sequenciaBrincos;
+    if (!controllerRef) return undefined;
+    if (!ativoInterno) {
+      controllerRef.current = null;
+      return undefined;
     }
-
-    return () => {
-      delete window.__sequenciaBrincos;
+    controllerRef.current = {
+      // Identificador atual do cursor (para devolver o Nº depois de uma edição).
+      atual: () => {
+        const seq = sequenciaRef.current;
+        return seq ? formatSequenceIdentifier(seq.prefixo, seq.numeroAtual, seq.digitos) : null;
+      },
+      // Marca o atual como usado e devolve o próximo; quem aplica Nº e foco é a página.
+      avancar: (usadosAtualizado) => {
+        const resultado = advanceIdentifierSequence(sequenciaRef.current, usadosAtualizado || numerosUsadosRef.current);
+        if (resultado.usados) numerosUsadosRef.current = resultado.usados;
+        if (!resultado.ok) {
+          sequenciaRef.current = null;
+          setAtivoInterno(false);
+          setPulados(0);
+          onAtivoChange?.(false);
+          return { ok: false };
+        }
+        sequenciaRef.current = resultado.state;
+        setPulados((prev) => prev + resultado.pulos);
+        return { ok: true, formatado: resultado.formatado, pulos: resultado.pulos };
+      },
+      getState: () => sequenciaRef.current,
     };
-  }, [ativoInterno, encontrarProximoLivre, onAtivoChange, onFocusPeso, onSetNumeroAnimal]);
+    return () => {
+      controllerRef.current = null;
+    };
+  }, [ativoInterno, controllerRef, onAtivoChange]);
 
   return (
     <div className={visivel ? "mt-2 p-3 border-t bg-slate-50 rounded" : "hidden"}>
