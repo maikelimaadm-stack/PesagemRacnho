@@ -27,4 +27,4 @@ Status: **Candidato** — não promover a `v1.3.0` sem o teste físico (`RELEASE
 
 ## Assistente de importação
 Incluído: tela Importação (7 etapas) com a pergunta de conciliação automática entre Cadastro e Manejo,
-aferição de animais repetidos no arquivo, mapeamento de colunas só com campos digitáveis, dry-runloqueante e relatórios. A importação antiga da Relação foi removida.
+aferição de animais repetidos no arquivo, mapeamento de colunas só com campos digitáveis, dry-run bloqueante e relatórios. A importação antiga da Relação foi removida.
