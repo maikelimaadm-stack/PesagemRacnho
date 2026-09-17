@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import MakTh, { makRowClass } from "@/components/mak/MakTh";
-import { matchesMakColumnFilter, isMakColumnFilterActive } from "@/components/mak/MakColumnMenu";
+import { isMakColumnFilterActive } from "@/components/mak/MakColumnMenu";
 import MakColumnConfigDialog from "@/components/mak/MakColumnConfigDialog";
 import MakDateControl from "@/components/mak/MakDateControl";
 import MakFilterRail from "@/components/mak/MakFilterRail";
@@ -9,7 +9,6 @@ import MakTableSelectCheck from "@/components/mak/MakTableSelectCheck";
 import MgDesktopSearch from "@/components/mak/MgDesktopSearch";
 import MgSpeedDialMenu from "@/components/mak/MgSpeedDialMenu";
 import MgTablePanelStrip from "@/components/mak/MgTablePanelStrip";
-import { normalizeSearchQuery } from "@/components/mak/mgSearchHighlight";
 import {
   ModeloBase1ActionBar,
   ModeloBase1PageContainer,
@@ -44,7 +43,7 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { fmtCurrency, fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
+import { fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
 import { buildDeletionPlan } from "@/modules/animals/domain/animalHistory";
 import { deleteEntriesRespectingHistory } from "@/modules/animals/application/animalHistoryService";
 import { applyImportLotSelection, importLotKey } from "@/modules/weighing/domain/importLotSelection";
@@ -54,6 +53,11 @@ import { isSnIdentifier, normalizeAnimalIdentifier } from "@/modules/animals/dom
 import { sha256Hex } from "@/lib/sha256";
 import { useAuth } from "@/components/auth/useAuth";
 import { avg as avgValues, sum as sumValues, weightedGmd } from "@/modules/reporting/domain/aggregateEngine";
+import { normalizeText } from "@/modules/reporting/domain/filterEngine";
+import { formatCell } from "@/modules/reporting/domain/reportFormatting";
+import { RELATION_COLUMN_IDS } from "@/modules/reporting/definitions/columns/eventColumns";
+import { relationPopulation, resolveEventColumn } from "@/modules/reporting/application/relationPopulation";
+import { loadEventRows } from "@/modules/reporting/infrastructure/reportSources/eventSource";
 import { REGISTRY_WRITE_PERMISSION, brandService, breedService, resolveMany } from "@/modules/catalog/application/index";
 import { collectRegistryTexts, countUnknownRegistries, splitImportRowsByRegistry } from "@/modules/operations/domain/importRegistryResolution";
 
@@ -64,49 +68,29 @@ import { collectRegistryTexts, countUnknownRegistries, splitImportRowsByRegistry
 // gravação das pesagens. Nenhuma criação silenciosa.
 const RESOLUCAO_CADASTROS_VAZIA = Object.freeze({ resolved: {}, desconhecidos: { marcas: [], racas: [] }, rejeitadas: [] });
 
+// Colunas da Relação = ColumnDefinition compartilhada do grão EVENT (mesma definição dos
+// relatórios): filtro, ordenação e formatação vêm do núcleo de reporting.
+
 const COLUNAS_DISPONIVEIS = [
   { id: "selecao", label: "Seleção", default: true, fixo: true },
   { id: "acoes", label: "Ações", default: true, fixo: true },
-  { id: "data_pesagem", label: "Data", default: true, sortable: true, align: "left" },
-  { id: "tipo_manejo", label: "Tipo", default: true, sortable: true, align: "left" },
-  { id: "motivo_saida", label: "Tipo de Saída", default: true, sortable: true, align: "left" },
-  { id: "numero_animal", label: "Animal", default: true, sortable: true, align: "left" },
-  // A identidade do animal é o par (número, marca): sem a marca, dois animais
-  // diferentes com o mesmo número ficam indistinguíveis na listagem.
-  { id: "marca", label: "Marca", default: true, sortable: true, align: "left" },
-  { id: "sexo", label: "Sexo", default: true, sortable: true, align: "left" },
-  { id: "raca", label: "Raça", default: true, sortable: true, align: "left" },
-  { id: "era", label: "Era", default: true, sortable: true, align: "left" },
-  { id: "peso", label: "Peso", default: true, sortable: true, align: "right" },
-  { id: "nome_lote", label: "Lote", default: true, sortable: true, align: "left" },
-  { id: "nome_apartacao", label: "Apartação", default: true, sortable: true, align: "left" },
-  { id: "valor_pago_cabeca", label: "Valor Compra", default: false, sortable: true, align: "right" },
-  { id: "origem_animal", label: "Origem", default: false, sortable: true, align: "left" },
-  { id: "comprador", label: "Comprador", default: false, sortable: true, align: "left" },
-  { id: "destino_venda", label: "Destino", default: false, sortable: true, align: "left" },
-  { id: "valor_venda_total", label: "Valor Venda", default: false, sortable: true, align: "right" },
-  { id: "valor_arroba", label: "Preço/@ carcaça", default: false, sortable: true, align: "right" },
-  { id: "quantidade_arrobas", label: "@ carcaça estimada", default: false, sortable: true, align: "right" },
-  { id: "frigorifico", label: "Frigorífico", default: false, sortable: true, align: "left" },
-  { id: "embarque_nome", label: "Embarque", default: false, sortable: true, align: "left" },
-  { id: "documento_tipo", label: "Doc", default: false, sortable: true, align: "left" },
-  { id: "documento_numero", label: "Nº Doc", default: false, sortable: true, align: "left" },
-  { id: "motorista_nome", label: "Motorista", default: false, sortable: true, align: "left" },
-  { id: "placa_carreta", label: "Placa", default: false, sortable: true, align: "left" },
-  { id: "doc_qtd", label: "Qtd Doc (Dia)", default: false, sortable: true, align: "right" },
-  { id: "dias", label: "Dias", default: false, sortable: true, align: "right" },
-  { id: "ganho", label: "Ganho", default: false, sortable: true, align: "right" },
-  { id: "gmd", label: "GMD", default: true, sortable: true, align: "right" },
-  { id: "observacao", label: "Observação", default: false, sortable: true, align: "left" },
+  ...RELATION_COLUMN_IDS.map((id) => {
+    const { column } = resolveEventColumn(id);
+    return { id, label: column.label, default: column.defaultVisible, sortable: column.sortable, align: column.align };
+  }),
 ];
 
 // Valores comerciais (preço, valor, arrobas): só perfis com commercial.values os veem, filtram
 // ou exportam; as demais colunas comerciais (comprador, destino, frigorífico) são texto operacional.
 const COMMERCIAL_VALUE_COLUMN_IDS = new Set(["valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas"]);
 
-const NUMBER_COLUMN_IDS = new Set(["peso", "peso_anterior", "valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "doc_qtd", "dias", "ganho", "gmd"]);
-const DATE_COLUMN_IDS = new Set(["data_pesagem", "data_anterior"]);
-const getColumnFilterType = (id) => DATE_COLUMN_IDS.has(id) ? "date" : NUMBER_COLUMN_IDS.has(id) ? "number" : "text";
+
+
+// Controles de filtro da tela conhecem texto/número/data; enum e entidade usam o controle de texto.
+const getColumnFilterType = (id) => {
+  const type = resolveEventColumn(id)?.filterType ?? "text";
+  return type === "number" || type === "date" ? type : "text";
+};
 const COLUMN_WIDTHS = {
   // Colunas de controle não recebem a folga padrão das colunas de texto:
   // o checkbox fica centralizado, com apenas a área clicável necessária.
@@ -127,12 +111,7 @@ const COLUMN_WIDTHS = {
   placa_carreta: 108,
 };
 const getColumnWidth = (id) => COLUMN_WIDTHS[id] || 138;
-const getPesagemColumnValue = (pesagem, columnId, documentCounts = {}) => {
-  if (columnId === "doc_qtd") {
-    return pesagem.documento_embarque_id ? documentCounts[pesagem.documento_embarque_id] || 0 : "";
-  }
-  return pesagem[columnId];
-};
+const getPesagemColumnValue = (pesagem, columnId) => resolveEventColumn(columnId)?.valueOf(pesagem);
 
 const CAMPOS_RESULTADO_PESQUISA = [
   { key: "marca", label: "Marca" },
@@ -141,7 +120,7 @@ const CAMPOS_RESULTADO_PESQUISA = [
   { key: "lote", label: "Lote" },
   { key: "apartacao", label: "Apartação" },
 ];
-const textoContem = (value, term) => normalizeSearchQuery(value).includes(normalizeSearchQuery(term));
+const textoContem = (value, term) => normalizeText(value).includes(normalizeText(term));
 
 export default function PesagensIndividuais() {
   const empresaSelecionadaId = ensureEmpresaId();
@@ -298,20 +277,13 @@ export default function PesagensIndividuais() {
   const { data: pesagens = [], isLoading, refetch } = useQuery({
     queryKey: ['pesagens-individuais', empresaSelecionadaId],
     queryFn: async () => {
-      return weighingService.listEntries({ empresaId: empresaSelecionadaId });
+      // Mesma transformação dos relatórios (deduplicação, nomes de cadastro, doc_qtd).
+      return (await loadEventRows({ empresaId: empresaSelecionadaId })).rows;
     },
     enabled: !!empresaSelecionadaId,
   });
 
-  const documentCounts = useMemo(() => {
-    const counts = {};
-    pesagens.forEach((pesagem) => {
-      if (pesagem.documento_embarque_id) {
-        counts[pesagem.documento_embarque_id] = (counts[pesagem.documento_embarque_id] || 0) + 1;
-      }
-    });
-    return counts;
-  }, [pesagens]);
+
 
   // Valores únicos para filtros e autocomplete
   const lotesUnicos = [...new Set(pesagens.map(p => p.nome_lote).filter(Boolean))].sort();
@@ -322,44 +294,10 @@ export default function PesagensIndividuais() {
 
   // Filtrar e ordenar
   const pesagensFiltradas = useMemo(() => {
-    let filtered = pesagens.filter(p => {
-      if (searchTerm) {
-        const alvo = [p.numero_animal, p.marca, p.nome_lote, p.nome_apartacao, p.raca].map((value) => String(value ?? "")).join(" ");
-        if (!textoContem(alvo, searchTerm)) return false;
-      }
-      for (const [columnId, value] of Object.entries(filtrosColuna)) {
-        if (!isMakColumnFilterActive(value)) continue;
-        if (!matchesMakColumnFilter(getPesagemColumnValue(p, columnId, documentCounts), value, getColumnFilterType(columnId))) return false;
-      }
-      return true;
-    });
+    // Motor compartilhado: pesquisa + filtros de coluna (AND) e ordenação com ausentes por último.
+    return relationPopulation(pesagens, { searchTerm, filtrosColuna, sortConfig });
+  }, [pesagens, searchTerm, filtrosColuna, sortConfig]);
 
-    // Ordenar
-    filtered.sort((a, b) => {
-      let aVal = getPesagemColumnValue(a, sortConfig.key, documentCounts);
-      let bVal = getPesagemColumnValue(b, sortConfig.key, documentCounts);
-      
-      if (sortConfig.key === 'data_pesagem' || sortConfig.key === 'data_anterior') {
-        aVal = aVal ? new Date(aVal) : new Date(0);
-        bVal = bVal ? new Date(bVal) : new Date(0);
-      } else if (NUMBER_COLUMN_IDS.has(sortConfig.key)) {
-        aVal = parseFloat(aVal) || 0;
-        bVal = parseFloat(bVal) || 0;
-      } else {
-        aVal = String(aVal || '').toLowerCase();
-        bVal = String(bVal || '').toLowerCase();
-      }
-
-      if (aVal < bVal) return sortConfig.direction === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortConfig.direction === 'asc' ? 1 : -1;
-      return 0;
-    });
-
-    return filtered;
-  }, [pesagens, documentCounts, searchTerm, filtrosColuna, sortConfig]);
-
-  // Contagem estável por documento (também usada por filtro, ordenação e célula).
-  const docCounts = documentCounts;
 
   // Paginação
   const totalPages = Math.ceil(pesagensFiltradas.length / itemsPerPage);
@@ -841,7 +779,7 @@ export default function PesagensIndividuais() {
     const filterId = coluna.id;
     const listOptions = [...new Set(
       pesagens
-        .map((pesagem) => getPesagemColumnValue(pesagem, filterId, documentCounts))
+        .map((pesagem) => getPesagemColumnValue(pesagem, filterId))
         .filter((value) => value !== null && value !== undefined && value !== "")
     )];
     return (
@@ -993,7 +931,7 @@ export default function PesagensIndividuais() {
                           onFechar: () => setColunaMenuAberto(null),
                           valorFiltro: filtrosColuna[coluna.id] || "",
                           filterType: getColumnFilterType(coluna.id),
-                          listOptions: [...new Set(pesagens.map((item) => getPesagemColumnValue(item, coluna.id, documentCounts)).filter((value) => value !== null && value !== undefined && value !== ""))],
+                          listOptions: [...new Set(pesagens.map((item) => getPesagemColumnValue(item, coluna.id)).filter((value) => value !== null && value !== undefined && value !== ""))],
                           onFiltrar: (value) => { setFiltrosColuna((current) => ({ ...current, [coluna.id]: value })); setCurrentPage(1); },
                           onOcultar: () => ocultarColuna(coluna.id),
                         }}
@@ -1074,16 +1012,18 @@ export default function PesagensIndividuais() {
                             </TableCell>
                           );
                         }
-                        if (coluna.id === 'data_pesagem') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{fmtDateBR(p.data_pesagem)}</TableCell>;
-                        }
+                        // Célula genérica: valor e formatação da ColumnDefinition compartilhada
+                        // (mesma formatação da emissão); só a apresentação visual fica aqui.
+                        const accessor = resolveEventColumn(coluna.id);
+                        const texto = accessor ? formatCell(accessor.column, accessor.column.type === 'entity' ? accessor.displayOf(p) : accessor.valueOf(p), 'screen') : '—';
+                        const alinhamento = coluna.align === 'right' ? ' text-right font-mono' : '';
                         if (coluna.id === 'tipo_manejo') {
                           return (
                             <TableCell key={coluna.id} className="text-xs py-2 px-3">
-                              <Badge 
-                                variant="outline" 
+                              <Badge
+                                variant="outline"
                                 className={`text-[10px] ${
-                                  p.tipo_manejo === 'Cadastro' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' : 
+                                  p.tipo_manejo === 'Cadastro' ? 'bg-emerald-50 text-emerald-700 border-emerald-300' :
                                   p.tipo_manejo === 'Saída' ? 'bg-red-50 text-red-700 border-red-300' :
                                   'bg-blue-50 text-blue-700 border-blue-300'
                                 }`}
@@ -1093,96 +1033,19 @@ export default function PesagensIndividuais() {
                             </TableCell>
                           );
                         }
-                        if (coluna.id === 'motivo_saida') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.motivo_saida || '-'}</TableCell>;
-                        }
                         if (coluna.id === 'numero_animal') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 font-semibold">{p.numero_animal}</TableCell>;
-                        }
-                        if (coluna.id === 'sexo') {
-                          return (
-                            <TableCell key={coluna.id} className="text-xs py-2 px-3">
-                              {p.sexo === 'M' ? 'Macho' : p.sexo === 'F' ? 'Fêmea' : '-'}
-                            </TableCell>
-                          );
-                        }
-                        if (coluna.id === 'valor_pago_cabeca') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 text-right font-mono">{p.valor_pago_cabeca != null ? fmtCurrency(p.valor_pago_cabeca) : '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'origem_animal') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.origem_animal || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'comprador') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.comprador || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'destino_venda') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.destino_venda || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'valor_venda_total') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 text-right font-mono">{p.valor_venda_total != null ? fmtCurrency(p.valor_venda_total) : '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'valor_arroba') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 text-right font-mono">{p.valor_arroba != null ? fmtCurrency(p.valor_arroba) : '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'quantidade_arrobas') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 text-right font-mono">{p.quantidade_arrobas != null ? fmtNum(p.quantidade_arrobas) : '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'frigorifico') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.frigorifico || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'embarque_nome') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.embarque_nome || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'documento_tipo') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.documento_tipo || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'documento_numero') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.documento_numero || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'motorista_nome') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.motorista_nome || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'placa_carreta') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 uppercase">{p.placa_carreta || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'doc_qtd') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 text-center">{p.documento_embarque_id ? fmtInt(docCounts[p.documento_embarque_id] || 0) : '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'raca') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.raca || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'era') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.era || '-'}</TableCell>;
+                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 font-semibold">{texto}</TableCell>;
                         }
                         if (coluna.id === 'peso') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 text-right font-mono font-semibold">{fmtNum(p.peso)}</TableCell>;
-                        }
-                        if (coluna.id === 'nome_lote') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.nome_lote || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'nome_apartacao') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.nome_apartacao || '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'dias') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 text-right font-mono">{p.dias != null ? fmtInt(p.dias) : '-'}</TableCell>;
-                        }
-                        if (coluna.id === 'ganho') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 text-right font-mono">{p.ganho != null ? fmtNum(p.ganho) : '-'}</TableCell>;
+                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 text-right font-mono font-semibold">{texto}</TableCell>;
                         }
                         if (coluna.id === 'gmd') {
-                          return (
-                            <TableCell key={coluna.id} className={`text-xs py-2 px-3 text-right font-mono ${p.gmd && p.gmd > 0 ? 'text-emerald-600' : p.gmd && p.gmd < 0 ? 'text-red-600' : ''}`}>
-                              {p.gmd != null ? fmtNum(p.gmd, 3) : '-'}
-                            </TableCell>
-                          );
+                          return <TableCell key={coluna.id} className={`text-xs py-2 px-3 text-right font-mono ${p.gmd && p.gmd > 0 ? 'text-emerald-600' : p.gmd && p.gmd < 0 ? 'text-red-600' : ''}`}>{texto}</TableCell>;
                         }
-                        if (coluna.id === 'marca') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.marca || '-'}</TableCell>;
+                        if (coluna.id === 'placa_carreta') {
+                          return <TableCell key={coluna.id} className="text-xs py-2 px-3 uppercase">{texto}</TableCell>;
                         }
-                        if (coluna.id === 'observacao') {
-                          return <TableCell key={coluna.id} className="text-xs py-2 px-3">{p.observacao || '-'}</TableCell>;
-                        }
-                        return <TableCell key={coluna.id} className="text-xs py-2 px-3">-</TableCell>;
+                        return <TableCell key={coluna.id} className={`text-xs py-2 px-3${alinhamento}`}>{texto}</TableCell>;
                       })}
                     </TableRow>
                   ))

@@ -79,7 +79,10 @@ for (const campo of ['setTipoManejo', 'setMotivoSaida', 'setComprador', 'setFrig
   assert.match(launch, new RegExp(`${campo}\\(p\\.`), `handleEditar restaura ${campo}`);
 }
 // A marca faz parte da identidade: precisa ser coluna visível na Relação.
-assert.match(relation, /id: "marca", label: "Marca", default: true/, 'Relação mostra a coluna Marca por padrão');
+// Colunas da Relação vêm da ColumnDefinition compartilhada do grão EVENT (programa reporting).
+const { EVENT_COLUMNS, RELATION_COLUMN_IDS } = await import('../src/modules/reporting/definitions/columns/eventColumns.js');
+assert.ok(RELATION_COLUMN_IDS.includes('marca') && EVENT_COLUMNS.find((column) => column.id === 'marca')?.defaultVisible === true, 'Relação mostra a coluna Marca por padrão');
+assert.match(relation, /default: column\.defaultVisible/, 'Relação usa a visibilidade padrão da definição compartilhada');
 assert.match(summaries, /RESUMO_GROUPS/);
 assert.match(summaries, /Mover métrica para cima/);
 
