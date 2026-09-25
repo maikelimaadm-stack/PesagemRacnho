@@ -1,0 +1,156 @@
+{
+  "base": "http://127.0.0.1:5173/.tmp/e1-harness/index.html",
+  "files": [
+    {
+      "name": "a1-pesagens-por-apartacao-data-paisagem-tela.png",
+      "size": {
+        "width": 1582,
+        "height": 927
+      }
+    },
+    {
+      "name": "a2-pesagens-por-apartacao-data-paisagem-total-por-lote.png",
+      "size": {
+        "width": 1582,
+        "height": 927
+      }
+    },
+    {
+      "name": "a3-pesagens-por-apartacao-data-paisagem-tela-escuro.png",
+      "size": {
+        "width": 1582,
+        "height": 927
+      }
+    },
+    {
+      "name": "b-pesagens-por-apartacao-data-a4-retrato.pdf",
+      "bytes": 267802,
+      "pages": 12
+    },
+    {
+      "name": "c-propriedade-cabecalho-logo-previa.png",
+      "size": {
+        "width": 1440,
+        "height": 900
+      }
+    }
+  ],
+  "steps": [
+    {
+      "pesagens": true
+    },
+    {
+      "pesagens:Período": "Últimos 365 dias"
+    },
+    {
+      "pesagens:Tipo de relatório": "Por apartação (resumo por data)"
+    },
+    {
+      "pesagens:Orientação": "Paisagem"
+    },
+    {
+      "rolarTotalPor": "TOTAL POR LOTE – ENGORDA"
+    },
+    {
+      "pesagensEscuro": true
+    },
+    {
+      "pesagensEscuro:Período": "Últimos 365 dias"
+    },
+    {
+      "pesagensEscuro:Tipo de relatório": "Por apartação (resumo por data)"
+    },
+    {
+      "pesagensEscuro:Orientação": "Paisagem"
+    },
+    {
+      "propriedades": true
+    },
+    {
+      "abrirFicha": "ficha aberta"
+    }
+  ],
+  "errors": [
+    "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://",
+    "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://",
+    "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://",
+    "%cElectron Security Warning (Insecure Content-Security-Policy) font-weight: bold; This renderer process has either no Content Security\n  Policy set or a policy with \"unsafe-eval\" enabled. This exposes users of\n  this app to unnecessary security risks.\n\nFor more information and help, consult\nhttps://"
+  ],
+  "dataset": {
+    "pesagens": 300,
+    "animais": 100,
+    "sessoes": 201,
+    "apartacoes": 3,
+    "lotes": 9,
+    "animalLotes": 120,
+    "marcas": 5,
+    "racas": 5,
+    "categorias": 7,
+    "parceiros": 3,
+    "propriedades": 2,
+    "causasMorte": 4
+  },
+  "property": {
+    "ok": true,
+    "id": "631c635a-7795-4609-84eb-907fdff51c05",
+    "logoBytes": 2934
+  },
+  "screen": {
+    "tipo": "Por apartação (resumo por data)",
+    "orientacao": "Paisagem",
+    "larguraFolha": 1045,
+    "secoes": 0,
+    "temTotalPor": true,
+    "temTotalGeral": true,
+    "cabecalho": "PRODUTOR DE TESTE FAZENDA BOA VISTA (TESTE) ESTRADA VICINAL KM 12 - ZONA RURAL, MUNICÍPIO DE TESTE-MT CNPJ 11.222.333/0001-81 · IE ISENTO Tel. (65) 0000-0000 Período: 26/09/2025 a 25/09/2026 Emitido em 25/09/2026 13:22"
+  },
+  "print": {
+    "layout": {
+      "orientation": "portrait",
+      "fits": true,
+      "sizeClass": "xs",
+      "columnCount": 17,
+      "totalWidth": 679,
+      "widths": [
+        112,
+        34,
+        44,
+        34,
+        34,
+        34,
+        34,
+        49,
+        39,
+        34,
+        34,
+        44,
+        34,
+        37,
+        47,
+        37,
+        37
+      ],
+      "warning": null
+    },
+    "stats": {
+      "sections": 79,
+      "tables": 80,
+      "groupRows": 81,
+      "subtotalRows": 76,
+      "leafTotalRows": 6,
+      "totalRows": 3,
+      "dataRows": 0,
+      "grandRows": 1,
+      "summaryRows": 81
+    },
+    "fileName": "pesagens_20260925-172249_9cac1775.pdf",
+    "grupos": 160,
+    "registros": 87,
+    "pdfBytes": 267802,
+    "pdfPages": 12
+  },
+  "propertyPreview": {
+    "logoNaFicha": true,
+    "texto": "Assim vai sair nos relatórios PRODUTOR DE TESTE FAZENDA BOA VISTA (TESTE) ESTRADA VICINAL KM 12 - ZONA RURAL, MUNICÍPIO DE TESTE-MT CNPJ 11.222.333/0001-81 · IE ISENTO Tel. (65) 0000-0000 Período: 01/09/2026 – 25/09/2026 Emitido em 25/09/2026 Vale para a propriedade marcada como Padrão e para o rela"
+  }
+}
