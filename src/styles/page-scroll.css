@@ -35,6 +35,10 @@ html.dark .mb1-app-shell .mb1-operational-page::-webkit-scrollbar-thumb { border
    tabela e cortavam o texto (ex.: o aviso do backup completo) sem barra nenhuma. Aqui eles
    têm altura natural e quem rola é a página. */
 .mb1-app-shell .d17b-maintenance-page { align-items: start; }
+/* 25/09/2026 (E1): com a altura da página fixa e `min-height: 0` nos cartões, as linhas `auto` da
+   grade encolhiam abaixo do conteúdo e os cartões se sobrepunham (Status × Backup, Limpeza ×
+   Diagnóstico — medido em 1440×900 na 1.3.2). Linha do tamanho do conteúdo; quem rola é a página. */
+.mb1-app-shell .d17b-maintenance-page { grid-auto-rows: max-content; align-content: start; }
 .mb1-app-shell .d17b-maintenance-page > .emp-content-card,
 .mb1-app-shell .d17b-maintenance-page .emp-content-card {
   height: auto !important;

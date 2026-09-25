@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Clock, FileText, Lock, Search, Star, Trash2, Users } from "lucide-react";
+import { Clock, FileText, History, Lock, Search, Star, Trash2, Users } from "lucide-react";
 import { ModeloBase1PageContainer, ModeloBase1PageHeader } from "@/components/modelobase1";
 import { Input } from "@/components/ui/input";
 import { fmtDateBR } from "@/components/common/formatNumber";
 import { REPORT_FAMILIES } from "@/modules/reporting/domain/reportDefinition";
-import { GRAIN_LABELS } from "@/modules/reporting/domain/reportGrain";
 import { normalizeText } from "@/modules/reporting/domain/filterEngine";
+import { LEGACY_REPORT_ALIASES, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
+import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { listReports } from "@/modules/reporting/application/reportService";
-import { deleteTemplate, getFavorites, getRecents, listTemplates, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
+import { deleteTemplate, favoriteKey, getFavorites, getRecents, listTemplates, parseFavoriteKey, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
 import { FAMILY_ORDER, useCan } from "./reportUi";
 
 const TABS = [
@@ -21,13 +22,27 @@ const TABS = [
 const PERMISSION_LABELS = {
   "commercial.values": "Valores comerciais",
   "audit.read": "Auditoria",
-  "users.manage": "Usuários",
   "weighing.read": "Pesagens",
   "animal.read": "Animais",
   "registry.read": "Cadastros",
   "shipment.read": "Embarques",
   "session.close": "Fechamento",
 };
+
+// Nomes dos relatórios antigos que cada relatório novo absorveu (a busca por "mortes" acha "Saídas").
+const OLD_TITLES = Object.values(LEGACY_REPORT_ALIASES).reduce((acc, alias) => {
+  acc[alias.id] = `${acc[alias.id] ?? ""} ${alias.title}`;
+  return acc;
+}, {});
+
+/** Descrição curta de uma visão antiga: "Rebanho atual · agrupado por Raça". */
+function presetDescription(report, preset) {
+  const columns = getReportDefinition(report.id)?.columns ?? [];
+  const label = (columnId) => columns.find((column) => column.id === columnId)?.label ?? columnId;
+  const groups = preset.groups.map((group) => label(group.columnId)).join(" › ");
+  const filters = Object.keys(preset.filters).map(label);
+  return `${report.title}${groups ? ` · agrupado por ${groups}` : ""}${filters.length ? ` · filtro em ${filters.join(", ")}` : ""}`;
+}
 
 export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
   const can = useCan();
@@ -47,11 +62,11 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
   }, [actor, refreshKey]);
 
   const term = normalizeText(query);
-  const matches = (report) => !term || normalizeText(`${report.title} ${report.description} ${REPORT_FAMILIES[report.family]}`).includes(term);
+  const matches = (report, extra = "") => !term || normalizeText(`${report.title} ${report.description} ${REPORT_FAMILIES[report.family]} ${OLD_TITLES[report.id] ?? ""} ${extra}`).includes(term);
   const lastUse = (reportId) => recents.find((item) => item.reportId === reportId)?.at ?? null;
 
-  const star = async (reportId) => {
-    try { setFavorites(await toggleFavorite(reportId, actor)); } catch (err) { toast.error(err.message); }
+  const star = async (key) => {
+    try { setFavorites(await toggleFavorite(key, actor)); } catch (err) { toast.error(err.message); }
   };
 
   const card = (report) => (
@@ -60,7 +75,7 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
         <span className="rpt-card__title"><FileText className="h-3.5 w-3.5" aria-hidden="true" />{report.title}</span>
         <span className="rpt-card__desc">{report.available ? report.description : `Indisponível: ${report.blockedReason}`}</span>
         <span className="rpt-card__meta">
-          <span>{GRAIN_LABELS[report.grain]}</span>
+          <span className={`rpt-badge${report.defaultMode === "RESUMIDO" ? " rpt-badge--summary" : ""}`}>{report.defaultMode === "RESUMIDO" ? "Abre resumido" : "Abre detalhado"}</span>
           {report.metrics?.length ? <span>{report.metrics.join(" · ")}</span> : null}
           {report.requires.filter((action) => PERMISSION_LABELS[action] && action !== "weighing.read" && action !== "animal.read").map((action) => <span key={action} className="rpt-badge"><Lock className="h-3 w-3" aria-hidden="true" />{PERMISSION_LABELS[action]}</span>)}
           {report.classification && report.classification !== "CANÔNICO" ? <span className="rpt-badge rpt-badge--legacy">{report.classification}</span> : null}
@@ -75,20 +90,61 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
     </li>
   );
 
+  // Favorito de uma visão antiga ("Rebanho por raça"): abre o relatório novo com a mesma seleção.
+  const presetCard = (key) => {
+    const { reportId, presetId } = parseFavoriteKey(key);
+    const report = byId.get(reportId);
+    const preset = getLegacyAlias(presetId);
+    if (!report || !preset) return null;
+    return (
+      <li key={key} className="rpt-card">
+        <button type="button" className="rpt-card__main" onClick={() => onOpen({ reportId, presetId })}>
+          <span className="rpt-card__title"><History className="h-3.5 w-3.5" aria-hidden="true" />{preset.title}</span>
+          <span className="rpt-card__desc">{presetDescription(report, preset)}</span>
+          <span className="rpt-card__meta"><span className="rpt-badge">Visão salva de antes da 1.4.0</span></span>
+        </button>
+        <button type="button" className="rpt-star is-on" aria-pressed="true" aria-label={`Favorito: ${preset.title}`} onClick={() => star(key)}>
+          <Star className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </li>
+    );
+  };
+
+  const favoriteCards = favorites
+    .filter((key) => {
+      const { reportId, presetId } = parseFavoriteKey(key);
+      const report = byId.get(reportId);
+      if (!report?.available) return false;
+      return matches(report, presetId ? getLegacyAlias(presetId)?.title ?? "" : "");
+    })
+    .map((key) => (key.includes("#") ? presetCard(key) : card(byId.get(key))))
+    .filter(Boolean);
+
   const families = (list) => FAMILY_ORDER
     .map((family) => ({ family, items: list.filter((report) => report.family === family && matches(report)) }))
     .filter((group) => group.items.length);
 
   let content;
-  if (tab === "todos" || tab === "favoritos") {
-    const list = tab === "favoritos" ? reports.filter((report) => favorites.includes(report.id)) : reports;
-    const groups = families(list);
-    content = groups.length ? groups.map((group) => (
-      <section key={group.family} className="rpt-family" aria-labelledby={`fam-${group.family}`}>
-        <h2 id={`fam-${group.family}`}>{REPORT_FAMILIES[group.family]}</h2>
-        <ul className="rpt-card-list">{group.items.map(card)}</ul>
-      </section>
-    )) : <p className="rpt-empty">{tab === "favoritos" ? "Nenhum favorito ainda. Use a estrela para marcar." : "Nenhum relatório encontrado."}</p>;
+  if (tab === "todos") {
+    const groups = families(reports);
+    content = (
+      <>
+        {favoriteCards.length ? (
+          <section className="rpt-family rpt-family--favorites" aria-labelledby="fam-favoritos">
+            <h2 id="fam-favoritos"><Star className="h-3 w-3" aria-hidden="true" /> Favoritos</h2>
+            <ul className="rpt-card-list">{favoriteCards}</ul>
+          </section>
+        ) : null}
+        {groups.length ? groups.map((group) => (
+          <section key={group.family} className="rpt-family" aria-labelledby={`fam-${group.family}`}>
+            <h2 id={`fam-${group.family}`}>{REPORT_FAMILIES[group.family]}</h2>
+            <ul className="rpt-card-list">{group.items.map(card)}</ul>
+          </section>
+        )) : <p className="rpt-empty">Nenhum relatório encontrado.</p>}
+      </>
+    );
+  } else if (tab === "favoritos") {
+    content = favoriteCards.length ? <ul className="rpt-card-list">{favoriteCards}</ul> : <p className="rpt-empty">Nenhum favorito ainda. Use a estrela para marcar.</p>;
   } else if (tab === "meus") {
     const list = templates.filter((template) => byId.has(template.baseReportId) && (!term || normalizeText(template.name).includes(term)));
     content = list.length ? (
@@ -101,7 +157,12 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
               <button type="button" className="rpt-card__main" onClick={() => onOpen({ reportId: template.baseReportId, template })}>
                 <span className="rpt-card__title">{template.scope === "SHARED" ? <Users className="h-3.5 w-3.5" aria-hidden="true" /> : <FileText className="h-3.5 w-3.5" aria-hidden="true" />}{template.name}</span>
                 <span className="rpt-card__desc">Baseado em {base.title} · {template.scope === "SHARED" ? `compartilhado por ${template.ownerName ?? "—"}` : "pessoal"}</span>
-                <span className="rpt-card__meta"><span>Atualizado em {fmtDateBR(template.updatedAt)}</span>{template.groups?.length ? <span>{template.groups.length} nível(is) de agrupamento</span> : null}</span>
+                <span className="rpt-card__meta">
+                  <span>Atualizado em {fmtDateBR(template.updatedAt)}</span>
+                  {template.groups?.length ? <span>{template.groups.length} nível(is) de agrupamento</span> : null}
+                  {template.mode ? <span className="rpt-badge">{template.mode === "RESUMIDO" ? "Resumido" : "Detalhado"}</span> : null}
+                  {template.migratedFrom ? <span className="rpt-badge">Convertido na 1.4.0</span> : null}
+                </span>
               </button>
               {canDelete && pendingDelete !== template.id ? (
                 <button type="button" className="rpt-star" aria-label={`Excluir modelo ${template.name}`} title="Excluir modelo" onClick={() => setPendingDelete(template.id)}><Trash2 className="h-4 w-4" aria-hidden="true" /></button>
@@ -128,10 +189,12 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
         {list.map((item) => {
           const report = byId.get(item.reportId);
           const template = item.templateId ? templates.find((candidate) => candidate.id === item.templateId) : null;
+          const preset = !template && item.presetId ? getLegacyAlias(item.presetId) : null;
+          const title = template ? `${template.name} (${report.title})` : preset ? `${preset.title} (${report.title})` : report.title;
           return (
-            <li key={`${item.reportId}-${item.templateId}-${item.at}`} className="rpt-card">
-              <button type="button" className="rpt-card__main" onClick={() => onOpen({ reportId: item.reportId, template })}>
-                <span className="rpt-card__title"><Clock className="h-3.5 w-3.5" aria-hidden="true" />{template ? `${template.name} (${report.title})` : report.title}</span>
+            <li key={`${favoriteKey(item.reportId, item.presetId)}-${item.templateId}-${item.at}`} className="rpt-card">
+              <button type="button" className="rpt-card__main" onClick={() => onOpen({ reportId: item.reportId, template, presetId: preset ? item.presetId : null })}>
+                <span className="rpt-card__title"><Clock className="h-3.5 w-3.5" aria-hidden="true" />{title}</span>
                 <span className="rpt-card__desc">Aberto em {fmtDateBR(item.at)}</span>
               </button>
             </li>
@@ -143,7 +206,7 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
 
   return (
     <ModeloBase1PageContainer variant="table" className="d17b-page d17b-list-page cadastro-emp-scope mg-empresas-scope rpt-page rpt-catalog">
-      <ModeloBase1PageHeader title="Relatórios" visuallyHidden description="Catálogo de relatórios profissionais." />
+      <ModeloBase1PageHeader title="Relatórios" visuallyHidden description="Catálogo de relatórios." />
       <div className="mak-mother-page__toolbar mg-subtoolbar-stack" data-mak-region="toolbar">
         <div data-template-id="action-bar" className="mg-action-bar canva-section flex w-full shrink-0 items-center rpt-toolbar" style={{ background: "var(--bg-card)" }}>
           <div className="rpt-tabs" role="tablist" aria-label="Visões do catálogo">

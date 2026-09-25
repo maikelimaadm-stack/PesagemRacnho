@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import * as maintenanceService from "@/modules/maintenance/application/maintenanceService";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,6 +13,19 @@ import {
 import { fmtDateTimeBR, fmtInt } from "@/components/common/formatNumber";
 import ConfirmActionDialog from "@/components/common/ConfirmActionDialog";
 import { useAuth } from "@/components/auth/useAuth";
+import MakSegTabs from "@/components/mak/MakSegTabs";
+import MaintenanceControlReports from "@/components/reports/MaintenanceControlReports";
+import ReportView from "@/components/reports/ReportView";
+import { useReportActor } from "@/components/reports/reportUi";
+import { resolveReportId } from "@/modules/reporting/definitions/reportCatalog";
+import { createPageUrl } from "@/utils";
+
+// Abas (E1 1.4.0): "Sistema" = banco, backup, migração e diagnóstico (como antes); "Controle" =
+// relatórios de conferência que saíram do catálogo de Relatórios, abertos na mesma tela de relatório.
+const MANUTENCAO_ABAS = [
+  { id: "sistema", label: "Sistema" },
+  { id: "controle", label: "Controle" },
+];
 
 function fileLabel(result) {
   return result?.backupPath || result?.filePath || result?.path || result?.fileName || "";
@@ -35,7 +49,7 @@ function migrationTone(status) {
   return "font-semibold text-amber-700";
 }
 
-export default function ManutencaoSistema() {
+function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
   // Ações destrutivas seguem a matriz (maintenance.restore/clear/reset/migrate = ADMIN);
   // o serviço recusa de novo — esconder aqui só evita oferecer o que será negado.
   const auth = useAuth();
@@ -381,7 +395,11 @@ export default function ManutencaoSistema() {
           </Button>
         }
       />
+      <MakSegTabs tabs={MANUTENCAO_ABAS} activeTab={aba} onChange={onAba} idPrefix="manutencao" label="Seções da Manutenção" className="manutencao-tabs" />
 
+      {aba === "controle" ? (
+        <MaintenanceControlReports actor={actor} onOpen={onOpenReport} />
+      ) : (<>
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
           <CardTitle className="text-xs font-semibold uppercase tracking-wide">Status do banco</CardTitle>
@@ -738,6 +756,7 @@ export default function ManutencaoSistema() {
           )}
         </CardContent>
       </Card>
+      </>)}
       <ConfirmActionDialog
         open={Boolean(confirmation)}
         onOpenChange={(nextOpen) => { if (!nextOpen) setConfirmation(null); }}
@@ -751,5 +770,36 @@ export default function ManutencaoSistema() {
         onConfirm={confirmation === 'restore' ? applyRestoreConfirmed : applyImportConfirmed}
       />
     </ModeloBase1PageContainer>
+  );
+}
+
+// `?aba=controle` abre a aba Controle; `&r=<relatório>` abre um relatório de controle na mesma tela
+// de relatório (a URL leva só identificadores, como em Relatórios).
+export default function ManutencaoSistema() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const actor = useReportActor();
+  const query = new URLSearchParams(location.search);
+  const aba = query.get("aba") === "controle" ? "controle" : "sistema";
+  const base = createPageUrl("ManutencaoSistema");
+  const report = aba === "controle" && query.get("r") ? resolveReportId(query.get("r")) : null;
+  if (report?.definition && actor) {
+    return (
+      <ReportView
+        key={report.definition.id}
+        reportId={report.definition.id}
+        actor={actor}
+        backLabel="Manutenção"
+        onBack={() => navigate(`${base}?aba=controle`)}
+      />
+    );
+  }
+  return (
+    <ManutencaoSistemaPainel
+      aba={aba}
+      actor={actor}
+      onAba={(id) => navigate(id === "controle" ? `${base}?aba=controle` : base)}
+      onOpenReport={(id) => navigate(`${base}?aba=controle&r=${encodeURIComponent(id)}`)}
+    />
   );
 }
