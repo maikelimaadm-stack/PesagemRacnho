@@ -157,6 +157,8 @@ const NAV_ITEMS = [
     mobile: false,
     permission: "users.manage",
   },
+  // Configurações: a mesma permissão da página (ADMIN e GESTOR). O GESTOR vê só a seção
+  // Relatórios (divisor da @, E1C); as demais seções são filtradas dentro da tela.
   {
     id: "pec-configuracoes",
     title: "Configurações",
@@ -165,7 +167,7 @@ const NAV_ITEMS = [
     Icon: Settings,
     group: "sistema",
     mobile: false,
-    permission: "settings.manage",
+    permission: "settings.operational",
   },
   {
     id: "pec-manutencao",

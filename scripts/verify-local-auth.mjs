@@ -331,6 +331,7 @@ await rejectsWithCode(appConfig.updateAppConfig(actorAdmin, { chave_desconhecida
 await rejectsWithCode(appConfig.updateAppConfig(actorAdmin, { bloqueio_inatividade_minutos: 10 }), 'CONFIG_INVALID', 'chave da rev. 1 recusada no patch');
 await rejectsWithCode(appConfig.updateAppConfig(actorAdmin, { arroba_divisor: 20 }), 'CONFIG_INVALID', 'divisor da @ só 30 ou 15');
 await rejectsWithCode(appConfig.updateAppConfig({ id: 'o1', role: 'OPERADOR' }, { arroba_divisor: 15 }), 'AUTH_FORBIDDEN', 'OPERADOR não altera o divisor da @');
+await rejectsWithCode(appConfig.updateAppConfig({ id: 'c1', role: 'CONSULTA' }, { arroba_divisor: 15 }), 'AUTH_FORBIDDEN', 'CONSULTA não altera o divisor da @ (E1C: settings.reports)');
 assert.deepEqual(await appConfig.getAppConfig('local'), defaults, 'patches recusados não alteram nada');
 
 const updated = await appConfig.updateAppConfig(actorAdmin, { intervalo_pesagem_dias: 15, inactivity_lock_minutes: 0, exigir_documento_venda: true, rendimento_padrao: 52.5, rendimento_padrao_origem: 'INFORMADO', variacao_max_percent: 40 });
@@ -357,7 +358,7 @@ assert.ok(configAudit.every((row) => row.acao === 'ATUALIZAR'));
 assert.equal(configAudit.find((row) => row.entidade_id === 'auth-policy:local').usuario_id, admin.id);
 assert.equal(configAudit.find((row) => row.entidade_id === 'weight-warning-policy:local' && row.campos_alterados.includes('faixa_peso_min')).usuario_id, 'g1');
 assert.equal(await appConfig.updateAppConfig(actorAdmin, { intervalo_pesagem_dias: 15 }).then(() => db2.table('auditoria').where('entidade').equals('appSettings').count()), 5, 'patch sem mudança não audita');
-// E1B: GESTOR troca o divisor da @ (grupo report-settings, settings.operational), auditado.
+// E1B/E1C: GESTOR troca o divisor da @ (grupo report-settings, settings.reports), auditado.
 const divisor15 = await appConfig.updateAppConfig(actorGestor, { arroba_divisor: 15 });
 assert.equal(divisor15.arroba_divisor, 15);
 assert.deepEqual(await appConfig.getReportSettings('local'), { versao: 1, arroba_divisor: 15 });

@@ -2,8 +2,10 @@
 // ModeloBase1 e página Configurações (rev. 2: quatro chaves versionadas, seções por
 // permissão, parser pt-BR do Lançamento). Verificação textual dos contratos de UI
 // (doc 10 §3, doc 11 §3/§5/§8, doc 13 §2) + contrato do serviço que a página consome
-// (CONFIG_INVALID com `field`, settings.operational × settings.auth). Cada regra tem teste
-// negativo: uma cópia mutada do fonte deve fazer a verificação falhar.
+// (CONFIG_INVALID com `field`, settings.operational × settings.reports × settings.auth). E1C:
+// o GESTOR vê só a seção Relatórios (settings.reports); Geral/Curral/Comercial/Dados pedem
+// settings.manage. Cada regra tem teste negativo: uma cópia mutada do fonte deve fazer a
+// verificação falhar.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -11,6 +13,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deleteDbForTests, ensureStorageReady } from '../src/storage/indexedDb/db.js';
 import { APP_CONFIG_DEFAULTS, AUTH_POLICY_DEFAULTS, getAppConfig, updateAppConfig } from '../src/modules/settings/application/appConfigService.js';
+import { parseBrazilianNumber } from '../src/modules/weighing/domain/brazilianValues.js';
 
 const root = join(fileURLToPath(new URL('..', import.meta.url)));
 const read = (rel) => readFileSync(join(root, rel), 'utf8');
@@ -109,6 +112,23 @@ function checkSettings(s) {
   const page = s.settings;
   assert.match(page, /<RequirePermission permission="settings\.operational">/, 'Configurações protegida por settings.operational (ADMIN e GESTOR)');
   assert.match(page, /id: 'seguranca',\s*title: 'Segurança',\s*permission: 'settings\.auth'/, 'seção Segurança exige settings.auth (ADMIN)');
+  // E1C: GESTOR só com Relatórios; o resto da tela continua do ADMIN (settings.manage).
+  for (const [id, title] of [['geral', 'Geral'], ['curral', 'Curral'], ['comercial', 'Comercial']]) {
+    assert.match(page, new RegExp(`id: '${id}',\\s*title: '${title}',\\s*permission: 'settings\\.manage'`), `seção ${title} só com settings.manage (ADMIN)`);
+  }
+  assert.match(page, /id: 'relatorios',\s*title: 'Relatórios',\s*permission: 'settings\.reports'/, 'seção Relatórios com settings.reports (ADMIN e GESTOR)');
+  assert.match(page, /const canSeeData = Boolean\(auth\?\.can\?\.\('settings\.manage'\)\);/, 'cartão Dados decide por settings.manage');
+  assert.match(page, /\{canSeeData \? \(\s*<div className="emp-form-cards-row">\s*<FormCard title="Dados"/, 'cartão Dados só aparece com settings.manage');
+  for (const ids of ["'geral', 'curral'", "'comercial', 'seguranca'", "'relatorios'"]) {
+    assert.ok(page.includes(`{hasSection(${ids}) ? (`), `linha de cartões (${ids}) só existe com seção visível (sem linha vazia para o GESTOR)`);
+  }
+  // Revisão E1C: a busca da seção e o teste da linha passam pela lista JÁ filtrada por can();
+  // SECTIONS só aparece na declaração, em ALL_FIELDS (rótulos) e no filtro.
+  assert.ok(page.includes('const sectionById = (id) => sections.find((section) => section.id === id);'), 'sectionById busca só nas seções permitidas');
+  assert.ok(page.includes('const hasSection = (...ids) => ids.some((id) => sectionById(id));'), 'hasSection decide pela seção visível (sem linha vazia)');
+  assert.equal(page.match(/\bSECTIONS\b/g).length, 3, 'SECTIONS não é lido fora do filtro por can()');
+  assert.match(page, /const withRefs = fields\.some\(\(field\) => field\.kind === 'ref'\);/, 'cadastros de referência só carregados quando há select de cadastro visível');
+  assert.equal((page.match(/withRefs \? \w+\.list\(\{ empresaId, incluirInativos: true \}\) : \[\],|withRefs \? listApartacoes\(\{ empresaId \}\) : \[\],/g) || []).length, 4, 'as quatro leituras de cadastro condicionadas a withRefs');
   assert.match(page, /SECTIONS\.filter\(\(section\) => auth\?\.can\?\.\(section\.permission\)\)/, 'seções filtradas por can() — sem if (role === …)');
   assert.match(page, /import \{ parseBrazilianNumber \} from '@\/modules\/weighing\/domain\/brazilianValues'/, 'usa o parser pt-BR do Lançamento');
   assert.match(page, /const parseDecimal = \(text\) => parseBrazilianNumber\(text\);/, 'parseDecimal delega ao parser pt-BR');
@@ -188,15 +208,55 @@ const negatives = [
   ['Configurações sem navegar para Manutenção', mutated('settings', "createPageUrl('ManutencaoSistema')", "createPageUrl('Outra')")],
   ['Configurações sem a seção Relatórios', mutated('settings', "{renderSection('relatorios')}", '')],
   ['divisor da @ como texto livre', mutated('settings', "kind: 'choice',", "kind: 'integer',")],
+  ['Relatórios sem settings.reports (GESTOR sem a seção)', mutated('settings', "permission: 'settings.reports'", "permission: 'settings.manage'")],
+  ['Geral visível ao GESTOR', mutated('settings', "title: 'Geral',\n    permission: 'settings.manage'", "title: 'Geral',\n    permission: 'settings.operational'")],
+  ['Comercial visível ao GESTOR', mutated('settings', "title: 'Comercial',\n    permission: 'settings.manage'", "title: 'Comercial',\n    permission: 'settings.operational'")],
+  ['Dados visível a todos', mutated('settings', "const canSeeData = Boolean(auth?.can?.('settings.manage'));", 'const canSeeData = true;')],
+  ['linha vazia para o GESTOR', mutated('settings', "{hasSection('geral', 'curral') ? (", '{true ? (')],
+  // Revisão E1C: estas duas passavam no gate e mudam a tela do GESTOR (seções de ADMIN à mostra ou
+  // linhas vazias), conferido por render SSR.
+  ['sectionById sem o filtro (GESTOR vê as seções do ADMIN)', mutated('settings', 'const sectionById = (id) => sections.find(', 'const sectionById = (id) => SECTIONS.find(')],
+  ['hasSection sempre verdadeiro (linhas vazias no GESTOR)', mutated('settings', 'const hasSection = (...ids) => ids.some((id) => sectionById(id));', 'const hasSection = () => true;')],
+  ['cadastros lidos sem withRefs', mutated('settings', 'withRefs ? brandService.list({ empresaId, incluirInativos: true }) : [],', 'brandService.list({ empresaId, incluirInativos: true }),')],
 ];
 for (const [name, mutatedSources] of negatives) {
   assert.throws(() => runAll(mutatedSources), `mutação deveria falhar: ${name}`);
 }
 
 // ---------------------------------------------------------------------------
+// 5b. E1C: toPatch da página executado de verdade (trecho extraído do fonte). Campo opcional
+//     em branco (rendimento padrão) vira null e não trava o Salvar; campo obrigatório em branco
+//     e texto inválido continuam recusados apontando o campo. Negativo: sem o ramo opcional o
+//     rendimento em branco volta a travar.
+// ---------------------------------------------------------------------------
+function loadToPatch(page) {
+  const start = page.indexOf('function invalid(');
+  const end = page.indexOf('const labelOf');
+  assert.ok(start > 0 && end > start, 'trecho invalid/toPatch encontrado na página');
+  return new Function('NONE', 'parseDecimal', `${page.slice(start, end)}\nreturn toPatch;`)('__nenhuma__', parseBrazilianNumber);
+}
+const RENDIMENTO = { id: 'rendimento_padrao', label: 'Rendimento de carcaça padrão (%)', kind: 'decimal', optional: true };
+const FAIXA_MIN = { id: 'faixa_peso_min', label: 'Peso mínimo aceito (kg)', kind: 'decimal' };
+assert.match(sources.settings, /\{ id: 'rendimento_padrao', label: 'Rendimento de carcaça padrão \(%\)', kind: 'decimal', optional: true,/, 'rendimento padrão marcado como opcional na página');
+function checkToPatch(toPatch) {
+  const config = { rendimento_padrao: null, faixa_peso_min: 20 };
+  assert.deepEqual(toPatch({ rendimento_padrao: '', faixa_peso_min: '20' }, config, [RENDIMENTO, FAIXA_MIN]), {}, 'rendimento em branco sem mudança: nada a gravar (não trava o Salvar)');
+  assert.deepEqual(toPatch({ rendimento_padrao: '  ', faixa_peso_min: '25' }, config, [RENDIMENTO, FAIXA_MIN]), { faixa_peso_min: 25 }, 'outra seção salva com o rendimento em branco');
+  assert.deepEqual(toPatch({ rendimento_padrao: '' }, { rendimento_padrao: 52.5 }, [RENDIMENTO]), { rendimento_padrao: null }, 'apagar o rendimento grava null (sem padrão)');
+  assert.deepEqual(toPatch({ rendimento_padrao: '52,5' }, config, [RENDIMENTO]), { rendimento_padrao: 52.5 }, 'rendimento 52,5 em pt-BR');
+  assert.throws(() => toPatch({ faixa_peso_min: '' }, config, [FAIXA_MIN]), (err) => err.code === 'CONFIG_INVALID' && err.field === 'faixa_peso_min', 'NEGATIVO: campo obrigatório em branco recusado');
+  assert.throws(() => toPatch({ rendimento_padrao: 'abc' }, config, [RENDIMENTO]), (err) => err.code === 'CONFIG_INVALID' && err.field === 'rendimento_padrao', 'NEGATIVO: texto inválido no opcional recusado');
+}
+checkToPatch(loadToPatch(sources.settings));
+const OPTIONAL_BRANCH = "} else if (field.optional && String(raw ?? '').trim() === '') {";
+assert.ok(sources.settings.includes(OPTIONAL_BRANCH), 'ramo do campo opcional presente em toPatch');
+assert.throws(() => checkToPatch(loadToPatch(sources.settings.replace(OPTIONAL_BRANCH, '} else if (false) {'))), 'mutação deveria falhar: opcional em branco recusado de novo');
+
+// ---------------------------------------------------------------------------
 // 6. Contrato do serviço consumido pela página: erro de validação identifica o campo,
 //    ator sem settings.operational é recusado, GESTOR não grava auth-policy, e uma
-//    gravação válida persiste nas quatro chaves.
+//    gravação válida persiste nas quatro chaves. E1C: o divisor da @ (report-settings) exige
+//    settings.reports — GESTOR grava, OPERADOR/CONSULTA/sem ator não.
 // ---------------------------------------------------------------------------
 await deleteDbForTests();
 await ensureStorageReady();
@@ -208,7 +268,9 @@ const forbidden = await updateAppConfig({ id: 'op', nome: 'Op', role: 'OPERADOR'
 assert.equal(forbidden?.code, 'AUTH_FORBIDDEN', 'OPERADOR não grava configurações');
 const gestorAuth = await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { inactivity_lock_minutes: 10 }).then(() => null, (err) => err);
 assert.equal(gestorAuth?.code, 'AUTH_FORBIDDEN', 'GESTOR não grava a seção Segurança (auth-policy)');
-assert.equal((await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { faixa_peso_min: 25 })).faixa_peso_min, 25, 'GESTOR grava seções operacionais');
+// Decisão E1C: o serviço continua aceitando o GESTOR nos grupos operacionais (settings.operational);
+// só a tela deixou de mostrá-los a ele.
+assert.equal((await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { faixa_peso_min: 25 })).faixa_peso_min, 25, 'GESTOR ainda grava grupos operacionais pelo serviço');
 const saved = await updateAppConfig(admin, { intervalo_pesagem_dias: 45, exigir_documento_venda: true, inactivity_lock_minutes: 0, lock_minutes: 0.5 });
 assert.equal(saved.intervalo_pesagem_dias, 45);
 assert.equal(saved.exigir_documento_venda, true);
@@ -220,7 +282,14 @@ assert.equal((await getAppConfig()).intervalo_pesagem_dias, 45, 'gravação pers
 const divisorInvalido = await updateAppConfig(admin, { arroba_divisor: 20 }).then(() => null, (err) => err);
 assert.equal(divisorInvalido?.code, 'CONFIG_INVALID', 'divisor 20 recusado');
 assert.equal(divisorInvalido?.field, 'arroba_divisor', 'erro identifica o campo do divisor');
-assert.equal((await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { arroba_divisor: 15 })).arroba_divisor, 15, 'GESTOR grava o divisor (settings.operational)');
+for (const actor of [{ id: 'op', nome: 'Op', role: 'OPERADOR' }, { id: 'c', nome: 'Consulta', role: 'CONSULTA' }, null]) {
+  const recusa = await updateAppConfig(actor, { arroba_divisor: 15 }).then(() => null, (err) => err);
+  assert.equal(recusa?.code, 'AUTH_FORBIDDEN', `${actor?.role ?? 'sem ator'} não grava o divisor da @`);
+  assert.equal(recusa?.action, 'settings.reports', 'recusa aponta settings.reports');
+}
+assert.equal((await getAppConfig()).arroba_divisor, 30, 'recusas não gravaram o divisor');
+assert.equal((await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { arroba_divisor: 15 })).arroba_divisor, 15, 'GESTOR grava o divisor (settings.reports)');
+assert.equal((await getAppConfig()).arroba_divisor, 15, 'divisor 15 persistido');
 await deleteDbForTests();
 
 console.log('OK verify-shell-settings-ui');
@@ -230,10 +299,10 @@ console.log(JSON.stringify({
   userMenuActions: ['Bloquear', 'Trocar senha', 'Trocar usuário', 'Sair'],
   authScreensModeloBase1: true,
   authScreensNoDataBeforeLogin: true,
-  settingsPermissions: { page: 'settings.operational', securitySection: 'settings.auth' },
+  settingsPermissions: { page: 'settings.operational', reportsSection: 'settings.reports', adminSections: 'settings.manage', securitySection: 'settings.auth' },
   settingsUsesBrazilianParser: true,
   settingsFieldsCovered: Object.keys(APP_CONFIG_DEFAULTS).filter((key) => key !== 'rendimento_padrao_origem').length,
   settingsEnterSaves: true,
   negativeMutations: negatives.length,
-  serviceContract: { configInvalidHasField: true, operatorForbidden: true, gestorForbiddenAuthPolicy: true, persisted: true },
+  serviceContract: { configInvalidHasField: true, operatorForbidden: true, gestorForbiddenAuthPolicy: true, gestorWritesArrobaDivisor: true, persisted: true },
 }, null, 2));

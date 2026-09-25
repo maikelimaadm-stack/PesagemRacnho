@@ -8,8 +8,10 @@
 //                                    relatórios — não é a @ de carcaça do Comercial, que continua ÷ 15)
 // getAppConfig() devolve a visão MESCLADA (chaves planas) e updateAppConfig() distribui o
 // patch pelos grupos. A chave antiga 'config:<empresa>' (revisão 1) é migrada uma vez e removida.
-// Permissões (ADR-042): settings.auth (ADMIN) para auth-policy; settings.operational
-// (ADMIN e GESTOR) para os demais grupos.
+// Permissões (ADR-042): settings.auth (ADMIN) para auth-policy; settings.reports (ADMIN e
+// GESTOR, E1C) para report-settings; settings.operational (ADMIN e GESTOR) para os demais grupos.
+// A tela de Configurações só mostra Geral/Curral/Comercial ao ADMIN (settings.manage); o serviço
+// mantém settings.operational nesses grupos de propósito (nada além da tela grava por eles).
 import storage from '../../../storage/storageAdapter.js';
 import { ensureStorageReady } from '../../../storage/indexedDb/db.js';
 import { authorize, roleOf } from '../../auth/domain/permissionService.js';
@@ -60,7 +62,7 @@ export const CONFIG_GROUPS = Object.freeze({
   operational: Object.freeze({ prefix: 'operational-defaults', defaults: OPERATIONAL_DEFAULTS, permission: 'settings.operational' }),
   sales: Object.freeze({ prefix: 'sales-policy', defaults: SALES_POLICY_DEFAULTS, permission: 'settings.operational' }),
   weightWarning: Object.freeze({ prefix: 'weight-warning-policy', defaults: WEIGHT_WARNING_POLICY_DEFAULTS, permission: 'settings.operational' }),
-  reports: Object.freeze({ prefix: 'report-settings', defaults: REPORT_SETTINGS_DEFAULTS, permission: 'settings.operational' }),
+  reports: Object.freeze({ prefix: 'report-settings', defaults: REPORT_SETTINGS_DEFAULTS, permission: 'settings.reports' }),
 });
 const GROUP_NAMES = Object.freeze(Object.keys(CONFIG_GROUPS));
 
@@ -274,7 +276,8 @@ export async function getInactivityMinutes(empresaId = DEFAULT_EMPRESA_ID) {
 
 /**
  * Patch parcial distribuído pelos grupos. Cada grupo tocado exige a sua permissão
- * (settings.auth para auth-policy; settings.operational para os demais) — a autorização
+ * (settings.auth para auth-policy; settings.reports para report-settings; settings.operational
+ * para os demais) — a autorização
  * acontece ANTES de qualquer gravação. Chaves desconhecidas são recusadas. Devolve a
  * visão mesclada atualizada.
  */

@@ -22,12 +22,14 @@ const NONE = '__nenhuma__';
 // (operational-defaults, weight-warning-policy, sales-policy, auth-policy, report-settings — doc 11 §8,
 // ADR-025/033/045, E1B), lidas/gravadas pela visão mesclada do appConfigService. `kind`: ref (id de
 // cadastro), integer, decimal, boolean, choice (lista fixa em `options`, valores numéricos).
-// `width` segue os presets do FormCard. `permission`: quem pode ver/gravar a seção.
+// `width` segue os presets do FormCard. `permission`: quem vê (e grava pela tela) a seção.
+// E1C 1.4.0: o GESTOR vê só Relatórios (settings.reports); Geral, Curral, Comercial e Dados
+// ficam com settings.manage e Segurança com settings.auth (ADMIN).
 const SECTIONS = [
   {
     id: 'geral',
     title: 'Geral',
-    permission: 'settings.operational',
+    permission: 'settings.manage',
     description: 'Padrões pré-selecionados no Lançamento (cadastro rápido de animal). Só cadastros ativos aparecem.',
     fields: [
       { id: 'marca_padrao_id', label: 'Marca padrão', kind: 'ref', source: 'marcas', width: 'CAMPO_PRINCIPAL', help: 'Marca já selecionada ao cadastrar um animal no Lançamento.' },
@@ -38,7 +40,7 @@ const SECTIONS = [
   {
     id: 'curral',
     title: 'Curral',
-    permission: 'settings.operational',
+    permission: 'settings.manage',
     description: 'Apartação sugerida no Lançamento e limites que geram os avisos de conferência do Lançamento.',
     fields: [
       { id: 'apartacao_padrao_id', label: 'Apartação padrão', kind: 'ref', source: 'apartacoes', width: 'CAMPO_PRINCIPAL', help: 'Apartação já selecionada ao abrir o Lançamento.' },
@@ -52,11 +54,11 @@ const SECTIONS = [
   {
     id: 'comercial',
     title: 'Comercial',
-    permission: 'settings.operational',
+    permission: 'settings.manage',
     description: 'Políticas aplicadas nas saídas por venda e abate (ADR-025, ADR-033).',
     fields: [
       { id: 'exigir_documento_venda', label: 'Exigir documento na venda', kind: 'boolean', width: 'SIM_NAO', help: 'Com "Sim", o Lançamento e o Fechamento só concluem uma venda com documento vinculado.' },
-      { id: 'rendimento_padrao', label: 'Rendimento de carcaça padrão (%)', kind: 'decimal', width: 'NUMERO', help: 'Usado pelo Lançamento só quando a operação não informa o rendimento; a origem fica registrada como padrão da empresa.' },
+      { id: 'rendimento_padrao', label: 'Rendimento de carcaça padrão (%)', kind: 'decimal', optional: true, width: 'NUMERO', help: 'Usado pelo Lançamento só quando a operação não informa o rendimento; a origem fica registrada como padrão da empresa. Em branco: sem rendimento padrão.' },
     ],
   },
   {
@@ -73,7 +75,7 @@ const SECTIONS = [
   {
     id: 'relatorios',
     title: 'Relatórios',
-    permission: 'settings.operational',
+    permission: 'settings.reports',
     description: 'Arroba de peso vivo usada na folha dos relatórios (Média @, Total @, ganho em @) e mostrada no rodapé. Não muda a @ de carcaça do Comercial (carcaça ÷ 15, com rendimento).',
     fields: [
       {
@@ -124,6 +126,10 @@ function toPatch(form, config, fields) {
     else if (field.kind === 'choice') {
       if (!field.options.some((option) => option.value === raw)) throw invalid(field, `Escolha uma opção em "${field.label}".`);
       value = Number(raw);
+    } else if (field.optional && String(raw ?? '').trim() === '') {
+      // Campo opcional em branco = sem valor (o serviço aceita null; ex.: rendimento padrão não
+      // informado). Antes da E1C o branco era recusado e travava o Salvar de qualquer seção.
+      value = null;
     } else {
       value = parseDecimal(raw);
       if (value === null || !Number.isFinite(value)) throw invalid(field, `Informe um número válido em "${field.label}".`);
@@ -214,9 +220,11 @@ function ConfiguracoesContent() {
   const actor = auth?.user;
   const navigate = useNavigate();
   const empresaId = DEFAULT_EMPRESA_ID;
-  // Seções visíveis/editáveis conforme a permissão do papel (settings.operational ou settings.auth).
+  // Seções visíveis/editáveis conforme a permissão do papel (settings.manage, settings.auth ou
+  // settings.reports). O cartão Dados segue settings.manage (ADMIN).
   const sections = useMemo(() => SECTIONS.filter((section) => auth?.can?.(section.permission)), [auth]);
   const fields = useMemo(() => sections.flatMap((section) => section.fields), [sections]);
+  const canSeeData = Boolean(auth?.can?.('settings.manage'));
   const [config, setConfig] = useState(null);
   const [form, setForm] = useState({});
   const [baseline, setBaseline] = useState({});
@@ -229,12 +237,14 @@ function ConfiguracoesContent() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
+      // Cadastros de referência só quando alguma seção visível tem select de cadastro (o GESTOR não tem).
+      const withRefs = fields.some((field) => field.kind === 'ref');
       const [current, marcas, racas, propriedades, apartacoes] = await Promise.all([
         getAppConfig(empresaId),
-        brandService.list({ empresaId, incluirInativos: true }),
-        breedService.list({ empresaId, incluirInativos: true }),
-        propertyService.list({ empresaId, incluirInativos: true }),
-        listApartacoes({ empresaId }),
+        withRefs ? brandService.list({ empresaId, incluirInativos: true }) : [],
+        withRefs ? breedService.list({ empresaId, incluirInativos: true }) : [],
+        withRefs ? propertyService.list({ empresaId, incluirInativos: true }) : [],
+        withRefs ? listApartacoes({ empresaId }) : [],
       ]);
       const values = toForm(current, fields);
       setConfig(current);
@@ -334,6 +344,8 @@ function ConfiguracoesContent() {
     return <TextField key={field.id} field={field} value={form[field.id]} onChange={setField(field.id)} error={error} />;
   };
   const sectionById = (id) => sections.find((section) => section.id === id);
+  // Linha de cartões só existe se alguma das suas seções estiver visível (sem linha vazia no GESTOR).
+  const hasSection = (...ids) => ids.some((id) => sectionById(id));
   const renderSection = (id) => {
     const section = sectionById(id);
     if (!section) return null;
@@ -404,29 +416,37 @@ function ConfiguracoesContent() {
                     <fieldset className="emp-form-fieldset" disabled={loading}>
                       <div className="emp-form-fields emp-form-fields-corp cad-form-fields cad-form-fields-corp">
                         <div className="emp-form-cards-layout cad-form-cards-layout mg-prototype-cards-layout">
-                          <div className="emp-form-cards-row">
-                            {renderSection('geral')}
-                            {renderSection('curral')}
-                          </div>
-                          <div className="emp-form-cards-row">
-                            {renderSection('comercial')}
-                            {renderSection('seguranca')}
-                          </div>
-                          <div className="emp-form-cards-row">
-                            {renderSection('relatorios')}
-                          </div>
-                          <div className="emp-form-cards-row">
-                            <FormCard title="Dados" description="Backup, restauração, importação, migração e verificação de integridade ficam em Backup e Manutenção." full>
-                              <div className="app-config__actions flex flex-wrap items-center gap-2" data-width-type="CAMPO_PRINCIPAL" style={{ flex: '1 1 100%' }}>
-                                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={goToMaintenance} title="Abrir Backup e Manutenção">
-                                  <HardDriveDownload className="h-3.5 w-3.5" aria-hidden="true" />Abrir Backup e Manutenção
-                                </button>
-                                <span className="app-config__meta ml-auto text-[10px]" style={{ color: 'var(--mb1-text-3)' }}>
-                                  Aplicativo {versions.app} · Banco v{versions.dbSchema} · Backup formato {versions.backupFormat}
-                                </span>
-                              </div>
-                            </FormCard>
-                          </div>
+                          {hasSection('geral', 'curral') ? (
+                            <div className="emp-form-cards-row">
+                              {renderSection('geral')}
+                              {renderSection('curral')}
+                            </div>
+                          ) : null}
+                          {hasSection('comercial', 'seguranca') ? (
+                            <div className="emp-form-cards-row">
+                              {renderSection('comercial')}
+                              {renderSection('seguranca')}
+                            </div>
+                          ) : null}
+                          {hasSection('relatorios') ? (
+                            <div className="emp-form-cards-row">
+                              {renderSection('relatorios')}
+                            </div>
+                          ) : null}
+                          {canSeeData ? (
+                            <div className="emp-form-cards-row">
+                              <FormCard title="Dados" description="Backup, restauração, importação, migração e verificação de integridade ficam em Backup e Manutenção." full>
+                                <div className="app-config__actions flex flex-wrap items-center gap-2" data-width-type="CAMPO_PRINCIPAL" style={{ flex: '1 1 100%' }}>
+                                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={goToMaintenance} title="Abrir Backup e Manutenção">
+                                    <HardDriveDownload className="h-3.5 w-3.5" aria-hidden="true" />Abrir Backup e Manutenção
+                                  </button>
+                                  <span className="app-config__meta ml-auto text-[10px]" style={{ color: 'var(--mb1-text-3)' }}>
+                                    Aplicativo {versions.app} · Banco v{versions.dbSchema} · Backup formato {versions.backupFormat}
+                                  </span>
+                                </div>
+                              </FormCard>
+                            </div>
+                          ) : null}
                         </div>
                       </div>
                     </fieldset>
@@ -442,7 +462,8 @@ function ConfiguracoesContent() {
   );
 }
 
-// ADMIN e GESTOR (settings.operational); a seção Segurança só aparece com settings.auth (ADMIN).
+// ADMIN e GESTOR (settings.operational, a mesma do item de menu). Dentro, cada seção pede a sua
+// permissão: o GESTOR vê só Relatórios (settings.reports, E1C); Segurança só com settings.auth.
 // O serviço valida de novo, por grupo, ao gravar.
 export default function Configuracoes() {
   return (

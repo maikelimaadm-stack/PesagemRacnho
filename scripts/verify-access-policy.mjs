@@ -21,7 +21,7 @@ const read = (rel) => readFileSync(join(root, rel), 'utf8');
 assert.equal(PROFILES, ROLES, 'PROFILES é ROLES');
 assert.deepEqual([...PROFILES], ['ADMIN', 'GESTOR', 'OPERADOR', 'CONSULTA'], 'quatro papéis');
 assert.equal(ALL_PERMISSIONS, ACTIONS);
-assert.equal(ALL_PERMISSIONS.length, 28);
+assert.equal(ALL_PERMISSIONS.length, 29); // E1C: + settings.reports (Configurações › Relatórios, ADMIN e GESTOR)
 assert.deepEqual(PROFILE_LABELS, { ADMIN: 'Administrador', GESTOR: 'Gestor', OPERADOR: 'Operador', CONSULTA: 'Consulta' });
 let checks = 0;
 for (const action of ACTIONS) {
@@ -33,15 +33,15 @@ for (const action of ACTIONS) {
     checks += 1;
   }
 }
-assert.equal(checks, 112);
+assert.equal(checks, 116);
 for (const role of ROLES) {
   assert.deepEqual([...PERMISSIONS[role]], listActions(role));
   assert.equal(profileLabel(role), roleLabel(role));
   assert.equal(isProfile(role), true);
 }
 assert.ok(Object.isFrozen(PERMISSIONS) && Object.isFrozen(PERMISSIONS.ADMIN), 'mapa estático imutável');
-assert.equal(PERMISSIONS.ADMIN.length, 28);
-assert.equal(PERMISSIONS.GESTOR.length, 21);
+assert.equal(PERMISSIONS.ADMIN.length, 29);
+assert.equal(PERMISSIONS.GESTOR.length, 22);
 assert.equal(PERMISSIONS.OPERADOR.length, 9);
 assert.equal(PERMISSIONS.CONSULTA.length, 7);
 

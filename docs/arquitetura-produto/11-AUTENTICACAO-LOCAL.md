@@ -63,15 +63,27 @@ src/pages/Usuarios.jsx          ação users.manage (ADMIN)
 | `commercial.values` (ver preços) | ✔ | ✔ | ✘ | ✘ |
 | `shipment.read` / `shipment.write` | ✔ / ✔ | ✔ / ✔ | ✔ / ✘ | ✔ / ✘ |
 | `session.close` / `session.reopen` | ✔ | ✔ | ✘ | ✘ |
-| `reports.read` | ✔ | ✔ | ✘ | ✔ |
+| `reports.read` | ✔ | ✔ | ✔ | ✔ |
+| `reports.export` | ✔ | ✔ | ✘ | ✔ (só relatórios não sensíveis) |
+| `reports.templates.share` | ✔ | ✔ | ✘ | ✘ |
 | `maintenance.backup` | ✔ | ✔ | ✘ | ✘ |
 | `maintenance.restore` / `maintenance.clear` / `maintenance.reset` / `maintenance.migrate` | ✔ | ✘ | ✘ | ✘ |
 | `users.manage` | ✔ | ✘ | ✘ | ✘ |
 | `settings.operational` | ✔ | ✔ | ✘ | ✘ |
+| `settings.reports` (Configurações › Relatórios, divisor da @ — E1C 1.4.0) | ✔ | ✔ | ✘ | ✘ |
 | `settings.auth` / `settings.manage` | ✔ | ✘ | ✘ | ✘ |
-| `audit.read` | ✔ | ✔ | ✘ | ✔ |
+| `audit.read` | ✔ | ✔ | ✘ | ✘ |
 
 Regra: ações destrutivas/administrativas chamam `authorize` no serviço; `RequirePermission` na UI é conveniência.
+Relatórios (1.3.0): `reports.*` e `audit.read` seguem `docs/reporting/PERMISSIONS.md`. Esta tabela é
+conferida contra a `MATRIX` pelo gate `auth:permissions:verify` (revisão E1C).
+
+Configurações (E1C, 1.4.0): o item de menu e a página pedem `settings.operational` (ADMIN e GESTOR);
+dentro, cada seção pede a sua permissão — Relatórios (divisor da @) `settings.reports`; Geral, Curral,
+Comercial e o cartão Dados `settings.manage`; Segurança `settings.auth`. Na prática o GESTOR vê só
+Relatórios. No serviço (`appConfigService`), `report-settings` exige `settings.reports`,
+`auth-policy` exige `settings.auth` e os grupos operacionais (`operational-defaults`, `sales-policy`,
+`weight-warning-policy`) continuam em `settings.operational` — só a tela deixou de mostrá-los ao GESTOR.
 
 ## 5. Fluxo
 
