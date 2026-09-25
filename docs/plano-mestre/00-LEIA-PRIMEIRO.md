@@ -54,8 +54,9 @@ Versões são alvo: se duas etapas integrarem juntas, o orquestrador ajusta, sem
    `docs/evidence/<etapa>/REPORT.md` (formato na seção 6).
 8. Condições de parada (parar e reportar, não contornar): perda de dados, migração irreversível, backup
    inválido, integridade vermelha, duplicação de animal/identificador, restore falhando.
-9. Git: uma branch por etapa `program/e<N>-<nome>` a partir de `main` atualizada; commits pequenos;
-   sem push/merge em `main` sem autorização da responsável.
+9. Git: Cada etapa cria sua branch program/e<N>-<nome> a partir de main. Ao concluir com gates verdes,
+   main só avança (fast-forward) para a branch da etapa com autorização da responsável, dada na resposta
+   ao REPORT. Nunca push sem autorização. Commits pequenos e temáticos.
 10. Linguagem da interface: simples, de curral. Nada de "entidade", "grão", "agregação" na tela.
 
 ## 5. Canais de versão (depois da E2)

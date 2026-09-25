@@ -2,9 +2,9 @@ REGRAS COMUNS (valem para todo prompt deste pacote)
 - Leia primeiro: docs/plano-mestre/00-LEIA-PRIMEIRO.md e a especificação da etapa.
 - A especificação é o contrato. Se algo nela estiver errado frente ao código real, NÃO improvise:
   anote em "Perguntas para a responsável" no REPORT e siga com o restante.
-- Branch: crie a branch da etapa a partir do último commit verde da linha de integração
-  (hoje: program/sanity-launch-import, depois do PROMPT-00). Nunca faça merge/push em main sem
-  autorização escrita da responsável.
+- Git: Cada etapa cria sua branch program/e<N>-<nome> a partir de main. Ao concluir com gates verdes,
+  main só avança (fast-forward) para a branch da etapa com autorização da responsável, dada na resposta
+  ao REPORT. Nunca push sem autorização. Commits pequenos e temáticos.
 - Nunca apague dado do usuário. Mudança de esquema = STORES_Vn novo + backfill idempotente + backup
   pré-migração validado + gate migration:vN:verify + restore da versão anterior testado.
 - Offline sempre. ModeloBase1 como contrato visual. Formato brasileiro. Interface em linguagem de curral.
