@@ -40,7 +40,10 @@ assert.equal(stored.version, 1);
 assert.equal(stored.templates.length, 2);
 const serialized = JSON.stringify(stored);
 for (const forbidden of ['"rows"', '"data"', '"population"', '345', 'Frigo Sul']) assert.ok(!serialized.includes(forbidden), `modelo não guarda dados (${forbidden})`);
-assert.deepEqual(Object.keys(stored.templates[0]).sort(), ['aggregates', 'baseReportId', 'baseReportVersion', 'columns', 'createdAt', 'filters', 'groups', 'id', 'name', 'orientation', 'ownerName', 'ownerUserId', 'params', 'period', 'scope', 'search', 'sort', 'updatedAt', 'updatedBy', 'version', 'widths'].sort());
+// E1 (1.4.0): o modelo guarda também o modo (Resumido/Detalhado) e a ordem do Resumido.
+assert.deepEqual(Object.keys(stored.templates[0]).sort(), ['aggregates', 'baseReportId', 'baseReportVersion', 'columns', 'createdAt', 'filters', 'groups', 'id', 'mode', 'name', 'orientation', 'ownerName', 'ownerUserId', 'params', 'period', 'scope', 'search', 'sort', 'summarySort', 'updatedAt', 'updatedBy', 'version', 'widths'].sort());
+assert.equal(stored.templates[0].baseReportId, 'desempenho', 'salvar a partir do id antigo grava o id novo');
+assert.equal(stored.templates[0].mode, null, 'sem modo escolhido: abre no padrão da definição');
 
 // Visibilidade: dono vê o pessoal; todos veem o compartilhado
 assert.deepEqual((await listTemplates(OPERADOR)).map((t) => t.name).sort(), ['GMD engorda', 'GMD machos']);
@@ -107,15 +110,33 @@ assert.deepEqual(listadoConsulta.columns, ['data_pesagem', 'numero_animal'], 'li
 assert.deepEqual(listadoConsulta.filters, {}, 'filtro comercial não vaza na listagem');
 assert.deepEqual((await listTemplates(ADMIN)).find((template) => template.id === comercial.id).columns, ['data_pesagem', 'numero_animal', 'valor_venda_total']);
 
+// E1: modo e ordem do Resumido salvos e restaurados; modelo sem modo abre no padrão da definição.
+const comModo = await saveTemplate({ ...config, name: 'Resumo por lote', scope: 'PERSONAL', mode: 'RESUMIDO', summarySort: { key: 'gmd', direction: 'desc' } }, GESTOR);
+assert.equal(comModo.mode, 'RESUMIDO');
+assert.deepEqual(comModo.summarySort, { key: 'gmd', direction: 'desc' });
+const reqModo = templateToRequest(comModo, 'GESTOR');
+assert.equal(reqModo.selection.mode, 'RESUMIDO');
+const vmModo = await runReport(reqModo.reportId, { today: TODAY, params: reqModo.params, selection: reqModo.selection }, GESTOR);
+assert.equal(vmModo.mode, 'RESUMIDO');
+assert.deepEqual(vmModo.summarySort, { key: 'gmd', direction: 'desc' });
+assert.equal(templateToRequest({ ...comModo, mode: undefined }, 'GESTOR').selection.mode, 'RESUMIDO', 'sem modo → defaultMode de "desempenho" (agrupado)');
+assert.equal(templateToRequest({ ...comModo, baseReportId: 'comercial.vendas', columns: [], groups: [], aggregates: [], sort: [], filters: {}, mode: undefined }, 'GESTOR').selection.mode, 'DETALHADO', 'sem modo → defaultMode de relatório sem grupo');
+assert.equal(await code(() => saveTemplate({ ...config, name: 'Modo ruim', mode: 'COMPACTO' }, GESTOR)), 'REPORT_TEMPLATE_INVALID', 'NEGATIVO: modo inválido');
+await deleteTemplate(comModo.id, GESTOR);
+
 // Favoritos e recentes por usuário (appSettings)
-assert.deepEqual(await toggleFavorite('rebanho.inventario', GESTOR), ['rebanho.inventario']);
+assert.deepEqual(await toggleFavorite('rebanho.atual', GESTOR), ['rebanho.atual']);
 assert.deepEqual(await getFavorites(OPERADOR), [], 'favoritos são por usuário');
-assert.deepEqual(await toggleFavorite('rebanho.inventario', GESTOR), []);
+assert.deepEqual(await toggleFavorite('rebanho.atual', GESTOR), []);
+// Id antigo como favorito vira "novo#antigo" (abre o relatório novo com a visão do antigo).
+assert.deepEqual(await toggleFavorite('rebanho.dimensao.raca', GESTOR), ['rebanho.atual#rebanho.dimensao.raca']);
+assert.deepEqual(await toggleFavorite('rebanho.atual#rebanho.dimensao.raca', GESTOR), []);
 await recordRecent('pesagens.periodo', GESTOR, { now: '2026-09-15T09:00:00.000Z' });
-await recordRecent('desempenho.lote', GESTOR, { templateId: renomeado.id, now: '2026-09-15T09:05:00.000Z' });
+await recordRecent('desempenho', GESTOR, { templateId: renomeado.id, now: '2026-09-15T09:05:00.000Z' });
 await recordRecent('pesagens.periodo', GESTOR, { now: '2026-09-15T09:10:00.000Z' });
-assert.deepEqual((await getRecents(GESTOR)).map((item) => item.reportId), ['pesagens.periodo', 'desempenho.lote'], 'recente sem duplicar, mais novo primeiro');
+assert.deepEqual((await getRecents(GESTOR)).map((item) => `${item.reportId}#${item.presetId ?? ''}`), ['pesagens#pesagens.periodo', 'desempenho#'], 'recente sem duplicar, mais novo primeiro (id antigo → novo + visão)');
 assert.equal(await code(() => toggleFavorite('inexistente', GESTOR)), 'REPORT_TEMPLATE_INVALID');
+assert.equal(await code(() => toggleFavorite('pesagens#rebanho.dimensao.raca', GESTOR)), 'REPORT_TEMPLATE_INVALID', 'NEGATIVO: visão de outro relatório');
 
 // Persistência sobrevive a reabrir o banco
 storage.resetForTests?.();

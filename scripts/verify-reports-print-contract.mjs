@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import { ADMIN, CONSULTA, OPERADOR, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
 import { runReport } from '../src/modules/reporting/application/reportService.js';
 import { preparePrint } from '../src/modules/reporting/application/reportPrintService.js';
-import { PRINT_LIMITS, buildPrintDocument, decidePrintLayout, escapeHtml } from '../src/modules/reporting/infrastructure/exporters/printDocument.js';
+import { PRINT_LIMITS, buildPrintDocument, decidePrintLayout, decideSummaryPrintLayout, escapeHtml } from '../src/modules/reporting/infrastructure/exporters/printDocument.js';
+import { buildSummaryLayout } from '../src/modules/reporting/domain/summaryLayout.js';
 import { flattenTree } from '../src/modules/reporting/domain/groupEngine.js';
 import { formatCell } from '../src/modules/reporting/domain/reportFormatting.js';
 import { cellRawValue } from '../src/modules/reporting/infrastructure/exporters/reportLayout.js';
@@ -25,7 +26,7 @@ const vm = await runReport('pesagens.periodo', {
 const { html, layout, stats, manifest } = preparePrint(vm, ADMIN, { organization: 'Fazenda Modelo' });
 
 // Cabeçalho
-for (const text of ['Pesagens Individuais', 'Fazenda Modelo', escapeHtml('Pesagens por período'), 'Período', 'Filtros', 'Marca contém alfa', 'Agrupado por', 'Apartação › Lote', 'Emitido em', 'por Ana Admin (ADMIN)', `Versão ${vm.appVersion}`, 'esquema 8', `Emissão ${vm.emissionId.slice(0, 8)}`]) {
+for (const text of ['Pesagens Individuais', 'Fazenda Modelo', '<h1>Pesagens</h1>', 'Período', 'Filtros', 'Marca contém alfa', 'Agrupado por', 'Apartação › Lote', 'Emitido em', 'por Ana Admin (ADMIN)', `Versão ${vm.appVersion}`, 'esquema 8', `Emissão ${vm.emissionId.slice(0, 8)}`]) {
   assert.ok(html.includes(text), `cabeçalho contém: ${text}`);
 }
 assert.ok(html.includes('01/08/2026 a 15/09/2026'), 'período resolvido');
@@ -79,5 +80,27 @@ const vmConsulta = await runReport('pesagens.periodo', { today: TODAY, params: p
 const consultaDoc = preparePrint(vmConsulta, CONSULTA);
 assert.ok(!consultaDoc.html.includes('Valor venda') && consultaDoc.html.includes('1 coluna(s) omitida(s) pelo perfil'), 'CONSULTA imprime sem valores, com aviso de omissão');
 
+// E1 (1.4.0): Resumido cabe em A4 retrato — uma linha por grupo + Total geral, mesmas células da tela;
+// cabeçalho com fazenda, período, filtros, "Agrupado por" e o modo.
+const vmResumo = await runReport('desempenho.lote', { today: TODAY, params: period }, ADMIN);
+assert.equal(vmResumo.mode, 'RESUMIDO');
+const resumoDoc = preparePrint(vmResumo, ADMIN, { organization: 'Fazenda Modelo' });
+assert.match(resumoDoc.html, /@page \{ size: A4 portrait;/, `Resumido de Desempenho por lote (${resumoDoc.layout.columnCount} colunas) cabe em A4 retrato`);
+assert.equal(resumoDoc.layout.fits, true);
+assert.equal(resumoDoc.stats.dataRows, 0, 'Resumido sem linha de animal');
+assert.equal(resumoDoc.stats.summaryRows, vmResumo.summaryRows.length, 'uma linha por grupo');
+assert.equal(resumoDoc.stats.totalRows, 1, 'um Total geral');
+for (const text of ['Fazenda Modelo', 'Período', 'Filtros', 'Agrupado por', 'Apartação (última pesagem no período) › Lote (última pesagem no período)', 'Resumido (uma linha por grupo)', 'Total geral']) {
+  assert.ok(resumoDoc.html.includes(escapeHtml(text)), `Resumido: cabeçalho/tabela contém ${text}`);
+}
+const telaResumo = buildSummaryLayout(vmResumo, 'screen');
+for (const row of telaResumo.rows) {
+  for (const cell of row.cells) if (cell) assert.ok(resumoDoc.html.includes(escapeHtml(cell)), `célula do Resumido igual à tela: ${cell}`);
+}
+assert.equal((resumoDoc.html.match(/<tr class="sum lvl/g) || []).length, vmResumo.summaryRows.length);
+assert.equal(resumoDoc.manifest.mode, 'RESUMIDO', 'manifesto da impressão registra o modo');
+const muitasMetricas = decideSummaryPrintLayout({ groupHeaders: ['a', 'b', 'c'], metrics: Array.from({ length: 10 }, () => ({})) });
+assert.equal(muitasMetricas.orientation, 'landscape', 'Resumido largo demais vai para paisagem (nunca corta coluna)');
+
 await resetDb();
-console.log(JSON.stringify({ gate: 'reports:print-contract:verify', ok: true, stats, htmlBytes: html.length }, null, 2));
+console.log(JSON.stringify({ gate: 'reports:print-contract:verify', ok: true, stats, summaryStats: resumoDoc.stats, htmlBytes: html.length }, null, 2));

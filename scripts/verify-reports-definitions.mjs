@@ -2,7 +2,7 @@
 // disponível executa na massa de referência; defineReport recusa definições incoerentes.
 import assert from 'node:assert/strict';
 import { ADMIN, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
-import { listReportDefinitions } from '../src/modules/reporting/definitions/reportCatalog.js';
+import { listAllReportDefinitions as listReportDefinitions } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { defineReport, REPORT_FAMILIES } from '../src/modules/reporting/domain/reportDefinition.js';
 import { defineColumn } from '../src/modules/reporting/domain/columnDefinition.js';
 import { GRAINS, GRAIN_LIST } from '../src/modules/reporting/domain/reportGrain.js';

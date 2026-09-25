@@ -1,6 +1,8 @@
 // Famílias EMBARQUES (previsto × realizado), CONTROLE, CADASTROS e relatórios BLOQUEADOS
 // (classificados na auditoria como "requer nova modelagem" ou "não deve ser feito agora").
-import { defineReport } from '../domain/reportDefinition.js';
+// E1 (1.4.0): auditoria, qualidade dos dados e backups aparecem na aba Controle da Manutenção;
+// cadastros.* (as telas de cadastro já listam e exportam) e os bloqueados saem da interface (backlog).
+import { REPORT_VISIBILITY, defineReport } from '../domain/reportDefinition.js';
 import { GRAINS } from '../domain/reportGrain.js';
 import {
   AUDIT_COLUMNS, BACKUP_COLUMNS, DATA_ISSUE_COLUMNS, REGISTRY_BASE_COLUMNS, REGISTRY_EXTRA_COLUMNS, SHIPMENT_DOCUMENT_COLUMNS,
@@ -20,7 +22,7 @@ export const EMBARQUES_PREVISTO_REALIZADO = defineReport({
 });
 
 export const CONTROLE_AUDITORIA = defineReport({
-  id: 'controle.auditoria', family: 'controle', grain: GRAINS.AUDIT_ENTRY, version: 1, source: 'audit.byPeriod',
+  id: 'controle.auditoria', family: 'controle', visibility: REPORT_VISIBILITY.MAINTENANCE, grain: GRAINS.AUDIT_ENTRY, version: 1, source: 'audit.byPeriod',
   requires: ['reports.read', 'audit.read'], columns: AUDIT_COLUMNS, title: 'Trilha de auditoria',
   description: 'Quem fez o quê e quando: criação, edição, cancelamento e demais ações auditadas no período.',
   params: [{ id: 'periodo', type: 'period', label: 'Período', required: true, default: { preset: 'ultimos_7_dias' } }],
@@ -33,7 +35,7 @@ export const CONTROLE_AUDITORIA = defineReport({
 });
 
 export const CONTROLE_QUALIDADE = defineReport({
-  id: 'controle.qualidade-dados', family: 'controle', grain: GRAINS.DATA_ISSUE, version: 1, source: 'data.quality',
+  id: 'controle.qualidade-dados', family: 'controle', visibility: REPORT_VISIBILITY.MAINTENANCE, defaultMode: 'DETALHADO', grain: GRAINS.DATA_ISSUE, version: 1, source: 'data.quality',
   requires: ['reports.read', 'registry.read', 'weighing.read'], columns: DATA_ISSUE_COLUMNS, title: 'Qualidade dos dados',
   description: 'Referências quebradas, duplicidades, valores fora do padrão, registros legados e cadastros não resolvidos.',
   metrics: ['Problemas por tipo', 'Por gravidade'],
@@ -44,7 +46,7 @@ export const CONTROLE_QUALIDADE = defineReport({
 });
 
 export const CONTROLE_BACKUPS = defineReport({
-  id: 'controle.backups', family: 'controle', grain: GRAINS.BACKUP_ENTRY, version: 1, source: 'backups.history',
+  id: 'controle.backups', family: 'controle', visibility: REPORT_VISIBILITY.MAINTENANCE, grain: GRAINS.BACKUP_ENTRY, version: 1, source: 'backups.history',
   requires: ['reports.read', 'maintenance.backup'], columns: BACKUP_COLUMNS, title: 'Histórico de backups',
   description: 'Backups registrados: data, tipo, arquivo, tamanho e SHA-256 (somente metadados).',
   metrics: ['Backups', 'Último backup'],
@@ -60,7 +62,7 @@ const REGISTRIES = [
 
 export const CADASTROS_RELATORIOS = REGISTRIES.map(([store, title]) => defineReport({
   id: `cadastros.${store}`, family: 'cadastros', grain: GRAINS.REGISTRY_ITEM, version: 1, source: `registry.${store}`,
-  requires: ['reports.read', 'registry.read'], title, presetOf: 'cadastros',
+  requires: ['reports.read', 'registry.read'], title, presetOf: 'cadastros', visibility: REPORT_VISIBILITY.HIDDEN,
   description: `Lista de ${title.toLowerCase()} com situação e campos do cadastro.`,
   columns: [...REGISTRY_BASE_COLUMNS, ...(REGISTRY_EXTRA_COLUMNS[store] || [])],
   metrics: ['Itens', 'Ativos'],
@@ -70,7 +72,7 @@ export const CADASTROS_RELATORIOS = REGISTRIES.map(([store, title]) => defineRep
 
 export const CADASTROS_USUARIOS = defineReport({
   id: 'cadastros.usuarios', family: 'cadastros', grain: GRAINS.REGISTRY_ITEM, version: 1, source: 'registry.usuarios',
-  requires: ['reports.read', 'users.manage'], title: 'Usuários', presetOf: 'cadastros',
+  requires: ['reports.read', 'users.manage'], title: 'Usuários', presetOf: 'cadastros', visibility: REPORT_VISIBILITY.HIDDEN,
   description: 'Usuários locais com login, perfil, situação e último acesso. Nunca exibe credenciais.',
   columns: [REGISTRY_BASE_COLUMNS[0], REGISTRY_BASE_COLUMNS[1], REGISTRY_BASE_COLUMNS[3], ...REGISTRY_EXTRA_COLUMNS.usuarios],
   metrics: ['Usuários por perfil'],
@@ -81,7 +83,7 @@ export const CADASTROS_USUARIOS = defineReport({
 });
 
 const blocked = (id, family, grain, title, blockedReason, requires = ['reports.read']) => defineReport({
-  id, family, grain, version: 1, title, requires, status: 'blocked', blockedReason, description: title,
+  id, family, grain, version: 1, title, requires, status: 'blocked', blockedReason, description: title, visibility: REPORT_VISIBILITY.HIDDEN,
 });
 
 export const RELATORIOS_BLOQUEADOS = [

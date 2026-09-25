@@ -7,14 +7,16 @@
 // única: exportadores não voltam ao banco nem refazem conta.
 import { applyFilters, serializeFilters } from '../domain/filterEngine.js';
 import { sortRows } from '../domain/sortEngine.js';
-import { groupRows, MAX_GROUP_LEVELS } from '../domain/groupEngine.js';
+import { groupRows, MAX_GROUP_LEVELS, NONE_GROUP_KEY, NONE_GROUP_LABEL } from '../domain/groupEngine.js';
 import { aggregateSpecId, assertAggregateSpec, computeAggregates } from '../domain/reportAggregates.js';
-import { createColumnResolver } from '../domain/reportDefinition.js';
+import { REPORT_MODES, REPORT_VISIBILITY, createColumnResolver, normalizeReportMode } from '../domain/reportDefinition.js';
 import { GRAIN_LABELS, grainHasAnimal } from '../domain/reportGrain.js';
 import { describePeriod, localToday, resolvePeriod } from '../domain/reportPeriod.js';
 import { assertCanRunReport, canRunReport, canSeeColumn, forbiddenColumnIds } from '../domain/reportPermissions.js';
+import { SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC, buildSummaryRows } from '../domain/summaryLayout.js';
 import { forbiddenError } from '../../auth/domain/permissionService.js';
-import { getReportDefinition, listReportDefinitions } from '../definitions/reportCatalog.js';
+import { listReportDefinitions, resolveReportId } from '../definitions/reportCatalog.js';
+import { aliasSelection } from '../definitions/legacyAliases.js';
 import { getReportSource } from '../infrastructure/reportSources/index.js';
 import { APP_VERSION, DATA_BUILD_ID, DB_SCHEMA_VERSION } from '../../../versioning/versionInfo.js';
 
@@ -29,10 +31,13 @@ function newEmissionId() {
   return globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `em-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-/** Catálogo filtrado pelo papel (relatórios bloqueados aparecem só como indisponíveis). */
-export function listReports(actor) {
+/**
+ * Catálogo filtrado pelo papel. E1: por área da interface — `catalog` (os 12 de Relatórios, padrão)
+ * ou `maintenance` (aba Controle). Bloqueados e cadastros ficam fora (visibility hidden).
+ */
+export function listReports(actor, { visibility = REPORT_VISIBILITY.CATALOG } = {}) {
   const { role } = requireActor(actor);
-  return listReportDefinitions().map((definition) => ({
+  return listReportDefinitions({ visibility }).map((definition) => ({
     id: definition.id,
     title: definition.title,
     description: definition.description,
@@ -44,8 +49,23 @@ export function listReports(actor) {
     status: definition.status,
     blockedReason: definition.blockedReason ?? null,
     available: canRunReport(definition, role),
-    presetOf: definition.presetOf ?? null,
+    defaultMode: definition.defaultMode,
+    visibility: definition.visibility,
   })).filter((item) => item.status === 'blocked' || item.available);
+}
+
+/**
+ * Seleção efetiva quando o relatório é aberto por um id antigo (alias): a seleção equivalente do
+ * relatório antigo preenche o que a chamada não informou. `params` antigos viram filtros.
+ */
+function mergeAliasSelection(alias, selection = {}, params = {}) {
+  if (!alias) return selection;
+  const preset = aliasSelection(alias, params);
+  const merged = { ...selection };
+  for (const key of ['columns', 'groups', 'filters', 'sort', 'aggregates', 'mode']) {
+    if (merged[key] === undefined && preset[key] !== undefined) merged[key] = preset[key];
+  }
+  return merged;
 }
 
 /**
@@ -93,7 +113,41 @@ export function resolveSelection(definition, selection = {}, role) {
   });
 
   const searchColumnIds = definition.searchColumns.filter((id) => canSeeColumn(resolve(id).column, role));
-  return { resolve, columns, filters, search: String(selection.search ?? '').trim(), searchColumnIds, sort, groups, aggregates, warnings, hiddenByPermission };
+
+  // Modo: RESUMIDO | DETALHADO (padrão da definição — Resumido quando nasce agrupada).
+  const mode = normalizeReportMode(selection.mode, definition.defaultMode ?? REPORT_MODES.DETALHADO);
+
+  // Detalhe de um grupo (clique no Resumido): recorte EXATO pela mesma chave do agrupamento
+  // (groupKeyOf), inclusive "Não informado" — não é filtro de texto, então nunca mistura grupos.
+  const drill = (selection.drill ?? []).filter((part) => part?.columnId).map((part) => {
+    const accessor = resolve(part.columnId);
+    if (!accessor) throw new Error(`relatório ${definition.id}: detalhe em coluna desconhecida (${part.columnId})`);
+    if (!accessor.column.groupable) throw new Error(`relatório ${definition.id}: ${part.columnId} não é agrupável`);
+    if (!canSeeColumn(accessor.column, role)) throw forbiddenError(role, 'commercial.values');
+    return { columnId: part.columnId, key: part.key === null || part.key === undefined ? NONE_GROUP_KEY : String(part.key), label: part.label ?? null, columnLabel: accessor.column.label };
+  });
+
+  // Ordem das linhas do Resumido: por rótulo, por quantidade de linhas ou por uma métrica selecionada.
+  let summarySort = null;
+  if (selection.summarySort?.key) {
+    const key = String(selection.summarySort.key);
+    const known = key === SUMMARY_LABEL_SORT || key === SUMMARY_ROWS_METRIC || aggregates.some((spec) => aggregateSpecId(spec) === key);
+    if (known) summarySort = { key, direction: selection.summarySort.direction === 'desc' ? 'desc' : 'asc' };
+  }
+  return { resolve, columns, filters, search: String(selection.search ?? '').trim(), searchColumnIds, sort, groups, aggregates, warnings, hiddenByPermission, mode, drill, summarySort };
+}
+
+function applyDrill(rows, drill, resolve) {
+  if (!drill.length) return rows;
+  const tests = drill.map((part) => {
+    const accessor = resolve(part.columnId);
+    return (row) => {
+      const raw = accessor.groupKeyOf(row);
+      const key = raw === null || raw === undefined || (typeof raw === 'string' && raw.trim() === '') ? NONE_GROUP_KEY : String(raw);
+      return key === part.key;
+    };
+  });
+  return rows.filter((row) => tests.every((test) => test(row)));
 }
 
 function resolveParams(definition, input = {}, today) {
@@ -136,13 +190,14 @@ function publicColumn(accessor) {
  */
 export async function runReport(definitionOrId, request = {}, actor) {
   const { role } = requireActor(actor);
-  const definition = typeof definitionOrId === 'string' ? getReportDefinition(definitionOrId) : definitionOrId;
+  const resolved = typeof definitionOrId === 'string' ? resolveReportId(definitionOrId) : { definition: definitionOrId, aliasId: null, alias: null };
+  const definition = resolved?.definition ?? null;
   if (!definition) throw new Error(`relatório desconhecido (${definitionOrId})`);
   assertCanRunReport(definition, role);
   const startedAt = now();
   const today = request.today || localToday();
   const params = resolveParams(definition, request.params, today);
-  const selection = resolveSelection(definition, request.selection, role);
+  const selection = resolveSelection(definition, mergeAliasSelection(resolved.alias, request.selection, request.params), role);
   // Condição fixa do relatório (ex.: ganho < 0 em "perdendo peso"): sempre aplicada, sempre exibida.
   const lockedFilters = definition.lockedFilters ? serializeFilters(definition.lockedFilters(params)) : {};
   const source = getReportSource(definition.source);
@@ -155,7 +210,7 @@ export async function runReport(definitionOrId, request = {}, actor) {
     : await source({ definition, params, empresaId, today, deps: request.deps });
   const afterLoad = now();
   const locked = Object.keys(lockedFilters).length ? applyFilters(loaded.rows, { filters: lockedFilters }, selection.resolve) : loaded.rows;
-  const filtered = applyFilters(locked, { search: selection.search, searchColumnIds: selection.searchColumnIds, filters: selection.filters }, selection.resolve);
+  const filtered = applyDrill(applyFilters(locked, { search: selection.search, searchColumnIds: selection.searchColumnIds, filters: selection.filters }, selection.resolve), selection.drill, selection.resolve);
   const afterFilter = now();
   const sorted = sortRows(filtered, selection.sort, selection.resolve);
   const afterSort = now();
@@ -170,6 +225,14 @@ export async function runReport(definitionOrId, request = {}, actor) {
   const afterAggregate = now();
 
   const period = Object.values(params).find((value) => value && value.preset && value.from) || null;
+  // Resumido: lista em profundidade de nós (nível, caminho, rótulo, linhas, agregados) — SEM linhas de dados.
+  const summaryRows = selection.mode === REPORT_MODES.RESUMIDO ? buildSummaryRows(tree.nodes, { summarySort: selection.summarySort }) : null;
+  const drill = selection.drill.map((part) => {
+    if (part.label) return part;
+    if (part.key === NONE_GROUP_KEY) return { ...part, label: NONE_GROUP_LABEL };
+    const sample = sorted[0];
+    return { ...part, label: sample ? String(selection.resolve(part.columnId).groupLabelOf(sample) ?? part.key) : part.key };
+  });
   return {
     kind: 'pesagens.report-view-model',
     version: 1,
@@ -177,11 +240,19 @@ export async function runReport(definitionOrId, request = {}, actor) {
     reportId: definition.id,
     reportName: definition.title,
     reportDefinitionVersion: definition.version,
+    // Aberto por id antigo consolidado (favorito/modelo/link de antes da 1.4.0).
+    presetId: resolved.aliasId,
+    presetTitle: resolved.alias?.title ?? null,
     family: definition.family,
     grain: definition.grain,
     grainLabel: GRAIN_LABELS[definition.grain],
+    animalColumnId: definition.animalColumnId ?? null,
     classification: definition.classification,
     notes: definition.notes,
+    mode: selection.mode,
+    summarySort: selection.summarySort,
+    summaryRows,
+    drill,
     generatedAt: new Date().toISOString(),
     emittedBy: { id: actor.id ?? null, nome: actor.nome ?? null, role },
     appVersion: APP_VERSION,

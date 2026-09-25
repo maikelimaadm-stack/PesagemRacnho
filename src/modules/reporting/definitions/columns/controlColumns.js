@@ -33,6 +33,8 @@ export const LOT_STAY_COLUMNS = [
   defineColumn({ id: 'fim', label: 'Saída do lote', type: 'date', grains: g(GRAINS.LOT_STAY), defaultVisible: true }),
   defineColumn({ id: 'dias_no_lote', label: 'Dias no lote (no período)', type: 'integer', grains: g(GRAINS.LOT_STAY), defaultVisible: true, aggregations: ['countValid', 'avg', 'min', 'max', 'sum'] }),
   defineColumn({ id: 'mudanca', label: 'Mudança de lote', type: 'boolean', grains: g(GRAINS.LOT_STAY), groupable: true, description: 'Verdadeiro quando o animal veio de outro lote (não é a primeira permanência).' }),
+  // E1 (1.4.0): torna "mudanças de lote no período" um filtro comum (antes era condição fixa com as datas do período).
+  defineColumn({ id: 'entrada_no_periodo', label: 'Entrou no lote no período', type: 'boolean', grains: g(GRAINS.LOT_STAY), groupable: true, source: 'derivado', description: 'Verdadeiro quando a entrada no lote cai dentro do período do relatório.' }),
 ];
 
 export const SHIPMENT_DOCUMENT_COLUMNS = [

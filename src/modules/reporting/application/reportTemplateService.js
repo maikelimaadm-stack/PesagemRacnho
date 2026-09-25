@@ -1,12 +1,20 @@
 // Modelos de relatório (Modelo 2 pessoal / Modelo 3 compartilhado) em appSettings — sem store nova.
 //   report-templates:<empresa_id>                   → { version: 1, templates: [...] }
-//   report-favorites:<empresa_id>:<usuario_id>      → [reportId]
-//   report-recents:<empresa_id>:<usuario_id>        → [{ reportId, templateId, at }]
+//   report-favorites:<empresa_id>:<usuario_id>      → [chave]  (chave = reportId ou "reportId#idAntigo")
+//   report-recents:<empresa_id>:<usuario_id>        → [{ reportId, presetId, templateId, at }]
 // O modelo guarda SÓ configuração (nunca dados). Ao aplicar, tudo é revalidado contra a
 // definição e o papel de quem abre: modelo nunca amplia permissão.
+//
+// E1 (1.4.0): o modelo guarda também `mode` (RESUMIDO|DETALHADO) e `summarySort`. Relatórios
+// consolidados: favoritos, recentes e modelos com id antigo são reescritos (em tempo de execução,
+// idempotente, sem esquema) para o id novo + seleção equivalente, com auditoria "relatório consolidado".
+// Favorito de relatório antigo vira "idNovo#idAntigo": abre o relatório novo com a visão do antigo.
 import { readAppSetting, writeAppSetting } from '../../../storage/indexedDb/repositories/index.js';
+import { ensureStorageReady } from '../../../storage/indexedDb/db.js';
 import { can, forbiddenError } from '../../auth/domain/permissionService.js';
-import { getReportDefinition } from '../definitions/reportCatalog.js';
+import { getReportDefinition, resolveReportId } from '../definitions/reportCatalog.js';
+import { aliasSelection, getLegacyAlias } from '../definitions/legacyAliases.js';
+import { REPORT_MODES, normalizeReportMode } from '../domain/reportDefinition.js';
 import { canRunReport, canSeeColumn } from '../domain/reportPermissions.js';
 import { MAX_GROUP_LEVELS } from '../domain/groupEngine.js';
 import { serializeFilters } from '../domain/filterEngine.js';
@@ -14,6 +22,7 @@ import { PERIOD_PRESETS } from '../domain/reportPeriod.js';
 
 export const TEMPLATE_VERSION = 1;
 export const TEMPLATE_SCOPES = Object.freeze({ PERSONAL: 'PERSONAL', SHARED: 'SHARED' });
+export const PREFERENCES_MIGRATION_ORIGIN = 'relatorios-consolidacao-1.4.0';
 const MAX_RECENTS = 12;
 
 const templatesKey = (empresaId) => `report-templates:${empresaId}`;
@@ -32,18 +41,172 @@ function templateError(message) {
   return error;
 }
 
-async function readStore(empresaId) {
-  const value = await readAppSetting(templatesKey(empresaId));
-  if (!value || typeof value !== 'object' || !Array.isArray(value.templates)) return { version: TEMPLATE_VERSION, templates: [] };
-  return value;
+// ---------------------------------------------------------------------------
+// Chaves de favorito: "reportId" ou "reportId#idAntigo" (visão de um relatório consolidado)
+// ---------------------------------------------------------------------------
+
+/** Chave de favorito/recente para um relatório (e, opcionalmente, a visão de um relatório antigo). */
+export function favoriteKey(reportId, presetId = null) {
+  return presetId ? `${reportId}#${presetId}` : reportId;
 }
+
+/** "reportId#idAntigo" → { reportId, presetId }; id antigo solto → { reportId: novo, presetId: antigo }. */
+export function parseFavoriteKey(key) {
+  const text = String(key ?? '');
+  const [reportId, presetId = null] = text.split('#');
+  if (!presetId) {
+    const alias = getLegacyAlias(reportId);
+    if (alias) return { reportId: alias.id, presetId: reportId };
+  }
+  return { reportId, presetId };
+}
+
+function validFavoriteKey(key) {
+  const { reportId, presetId } = parseFavoriteKey(key);
+  const resolved = resolveReportId(reportId);
+  if (!resolved || resolved.aliasId) return false;
+  if (!presetId) return true;
+  return getLegacyAlias(presetId)?.id === reportId;
+}
+
+// ---------------------------------------------------------------------------
+// Migração de preferências (relatórios consolidados na 1.4.0)
+// ---------------------------------------------------------------------------
+
+/**
+ * Modelo salvo num relatório antigo → modelo do relatório novo com a seleção equivalente.
+ * O que o modelo guardava prevalece; o que ele não guardava (condições fixas do relatório antigo,
+ * colunas/ordem/totais padrão do antigo) vem do alias. Parâmetros extintos viram filtros.
+ * @returns {object|null} modelo migrado, ou null se o id não é antigo.
+ */
+export function migrateLegacyTemplate(template) {
+  const alias = getLegacyAlias(template?.baseReportId);
+  if (!alias) return null;
+  const definition = getReportDefinition(alias.id);
+  const preset = aliasSelection(alias, template.params || {});
+  const fixed = Object.fromEntries((alias.fixed || []).filter((id) => preset.filters[id]).map((id) => [id, preset.filters[id]]));
+  const params = { ...(template.params || {}) };
+  for (const param of Object.keys(alias.legacyParams || {})) delete params[param];
+  const groups = Array.isArray(template.groups) ? template.groups : preset.groups;
+  return {
+    ...template,
+    baseReportId: alias.id,
+    baseReportVersion: definition.version,
+    migratedFrom: template.baseReportId,
+    columns: template.columns?.length ? template.columns : (preset.columns ?? []),
+    filters: { ...(template.filters || {}), ...fixed },
+    groups,
+    sort: template.sort?.length ? template.sort : (preset.sort ?? []),
+    aggregates: template.aggregates?.length ? template.aggregates : (preset.aggregates ?? []),
+    params,
+    // O relatório antigo não tinha modo: agrupado abre Resumido, lista abre Detalhado.
+    mode: template.mode ?? (groups.length ? REPORT_MODES.RESUMIDO : REPORT_MODES.DETALHADO),
+  };
+}
+
+function migrateFavoriteList(list) {
+  const out = [];
+  const changes = [];
+  for (const key of Array.isArray(list) ? list : []) {
+    const text = String(key);
+    let next = text;
+    if (!text.includes('#')) {
+      const alias = getLegacyAlias(text);
+      if (alias) { next = favoriteKey(alias.id, text); changes.push({ from: text, to: alias.id }); }
+    }
+    if (!out.includes(next)) out.push(next);
+  }
+  return { list: out, changes };
+}
+
+function migrateRecentList(list) {
+  const changes = [];
+  const out = (Array.isArray(list) ? list : []).map((item) => {
+    const alias = getLegacyAlias(item?.reportId);
+    if (!alias) return item;
+    changes.push({ from: item.reportId, to: alias.id });
+    return { ...item, reportId: alias.id, presetId: item.presetId ?? item.reportId };
+  });
+  return { list: out, changes };
+}
+
+async function auditConsolidation(key, changes, actor, kind) {
+  if (!changes.length) return;
+  const db = await ensureStorageReady();
+  const ts = new Date().toISOString();
+  for (const change of changes) {
+    await db.table('auditoria').add({
+      id: globalThis.crypto.randomUUID(),
+      entidade: 'appSettings',
+      entidade_id: key,
+      acao: 'ATUALIZAR',
+      origem: PREFERENCES_MIGRATION_ORIGIN,
+      resumo: `Relatório consolidado: ${change.from} → ${change.to} (${kind}).`,
+      campos_alterados: ['reportId'],
+      usuario_id: actor?.id ?? null,
+      usuario_nome_snapshot: actor?.nome ?? null,
+      created_at: ts,
+    });
+  }
+}
+
+/**
+ * Reescreve favoritos/recentes do ator e os modelos da empresa que ainda citam relatórios antigos.
+ * Idempotente (sem id antigo → nada grava). Falha de gravação (ex.: banco em somente leitura) não
+ * impede a leitura: quem chama recebe as listas já convertidas em memória.
+ * @returns {Promise<{ favorites: string[], recents: object[], templates: object[], migrated: number }>}
+ */
+export async function migrateReportPreferences(actor, { empresaId = 'local' } = {}) {
+  requireActor(actor);
+  const [storedTemplates, favorites, recents] = await Promise.all([
+    readAppSetting(templatesKey(empresaId)),
+    readAppSetting(favoritesKey(empresaId, actor.id)),
+    readAppSetting(recentsKey(empresaId, actor.id)),
+  ]);
+  const templateStore = storedTemplates && typeof storedTemplates === 'object' && Array.isArray(storedTemplates.templates)
+    ? storedTemplates : { version: TEMPLATE_VERSION, templates: [] };
+  const templateChanges = [];
+  const templates = templateStore.templates.map((template) => {
+    const migrated = migrateLegacyTemplate(template);
+    if (!migrated) return template;
+    templateChanges.push({ from: template.baseReportId, to: migrated.baseReportId });
+    return migrated;
+  });
+  const fav = migrateFavoriteList(favorites);
+  const rec = migrateRecentList(recents);
+  const migrated = templateChanges.length + fav.changes.length + rec.changes.length;
+  if (migrated) {
+    try {
+      if (templateChanges.length) {
+        await writeAppSetting(templatesKey(empresaId), { ...templateStore, templates });
+        await auditConsolidation(templatesKey(empresaId), templateChanges, actor, 'modelo salvo');
+      }
+      if (fav.changes.length) {
+        await writeAppSetting(favoritesKey(empresaId, actor.id), fav.list);
+        await auditConsolidation(favoritesKey(empresaId, actor.id), fav.changes, actor, 'favorito');
+      }
+      if (rec.changes.length) {
+        await writeAppSetting(recentsKey(empresaId, actor.id), rec.list);
+        await auditConsolidation(recentsKey(empresaId, actor.id), rec.changes, actor, 'recente');
+      }
+    } catch {
+      /* somente leitura: segue com a conversão em memória */
+    }
+  }
+  return { favorites: fav.list, recents: rec.list, templates, migrated };
+}
+
+// ---------------------------------------------------------------------------
+// Modelos
+// ---------------------------------------------------------------------------
 
 /** Visíveis ao ator: os próprios pessoais + todos os compartilhados, de relatórios que ele pode abrir. */
 export async function listTemplates(actor, { empresaId = 'local', reportId = null } = {}) {
   requireActor(actor);
-  const store = await readStore(empresaId);
-  return store.templates.filter((template) => {
-    if (reportId && template.baseReportId !== reportId) return false;
+  const { templates } = await migrateReportPreferences(actor, { empresaId });
+  const wanted = reportId ? getReportDefinition(reportId)?.id ?? reportId : null;
+  return templates.filter((template) => {
+    if (wanted && template.baseReportId !== wanted) return false;
     const definition = getReportDefinition(template.baseReportId);
     if (!definition || !canRunReport(definition, actor.role)) return false;
     return template.scope === TEMPLATE_SCOPES.SHARED || template.ownerUserId === actor.id;
@@ -87,6 +250,9 @@ export function normalizeTemplateConfig(definition, config = {}) {
     if (spec.op === 'count' && !spec.columnId) continue;
     if (!spec.columnId || !byId.get(spec.columnId).aggregations.includes(spec.op)) throw templateError(`Total ${spec.op} inválido para ${spec.columnId}`);
   }
+  if (config.mode != null && !Object.values(REPORT_MODES).includes(config.mode)) throw templateError(`Modo inválido (${config.mode})`);
+  const mode = config.mode ? normalizeReportMode(config.mode) : null;
+  const summarySort = config.summarySort?.key ? { key: String(config.summarySort.key), direction: config.summarySort.direction === 'desc' ? 'desc' : 'asc' } : null;
   let period = null;
   if (config.period) {
     const preset = config.period.preset || 'personalizado';
@@ -102,7 +268,7 @@ export function normalizeTemplateConfig(definition, config = {}) {
   }
   const widths = {};
   for (const [id, width] of Object.entries(config.widths || {})) if (ids.has(id) && Number.isFinite(Number(width))) widths[id] = Math.max(60, Math.min(600, Number(width)));
-  return { columns, filters, groups, aggregates, sort, period, params, search: String(config.search ?? ''), widths, orientation: ['portrait', 'landscape', 'auto'].includes(config.orientation) ? config.orientation : 'auto' };
+  return { columns, filters, groups, aggregates, sort, mode, summarySort, period, params, search: String(config.search ?? ''), widths, orientation: ['portrait', 'landscape', 'auto'].includes(config.orientation) ? config.orientation : 'auto' };
 }
 
 /** Cria ou atualiza. PERSONAL: só o dono edita. SHARED: exige reports.templates.share. */
@@ -122,7 +288,8 @@ export async function saveTemplate(input, actor, { empresaId = 'local', now = ne
     .filter((id) => !canSeeColumn(definition.columns.find((column) => column.id === id), actor.role));
   if (hidden.length) throw forbiddenError(actor.role, 'commercial.values');
 
-  const store = await readStore(empresaId);
+  const { templates: current } = await migrateReportPreferences(actor, { empresaId });
+  const store = { version: TEMPLATE_VERSION, templates: current };
   const existingIndex = input.id ? store.templates.findIndex((template) => template.id === input.id) : -1;
   if (existingIndex >= 0) {
     const existing = store.templates[existingIndex];
@@ -158,21 +325,23 @@ export async function saveTemplate(input, actor, { empresaId = 'local', now = ne
 
 export async function deleteTemplate(templateId, actor, { empresaId = 'local' } = {}) {
   requireActor(actor);
-  const store = await readStore(empresaId);
-  const template = store.templates.find((item) => item.id === templateId);
+  const { templates } = await migrateReportPreferences(actor, { empresaId });
+  const template = templates.find((item) => item.id === templateId);
   if (!template) return false;
   const ownsPersonal = template.scope === TEMPLATE_SCOPES.PERSONAL && template.ownerUserId === actor.id;
   const canShared = template.scope === TEMPLATE_SCOPES.SHARED && can(actor.role, 'reports.templates.share');
   if (!ownsPersonal && !canShared) throw forbiddenError(actor.role, 'reports.templates.share');
-  await writeAppSetting(templatesKey(empresaId), { version: TEMPLATE_VERSION, templates: store.templates.filter((item) => item.id !== templateId) });
+  await writeAppSetting(templatesKey(empresaId), { version: TEMPLATE_VERSION, templates: templates.filter((item) => item.id !== templateId) });
   return true;
 }
 
 /**
  * Modelo salvo → seleção para runReport. Revalida contra a definição ATUAL e o papel de quem
  * abre: colunas/filtros removidos ou sem permissão saem com aviso (nunca amplia permissão).
+ * Modelo sem `mode` (anterior à 1.4.0) abre no modo padrão da definição.
  */
-export function templateToRequest(template, role) {
+export function templateToRequest(source, role) {
+  const template = migrateLegacyTemplate(source) ?? source;
   const definition = getReportDefinition(template.baseReportId);
   if (!definition) throw templateError('Relatório base do modelo não existe mais');
   const warnings = [];
@@ -190,38 +359,52 @@ export function templateToRequest(template, role) {
   return {
     reportId: definition.id,
     params: { ...(template.period ? { periodo: template.period } : {}), ...(template.params || {}) },
-    selection: { columns, filters, groups, sort, aggregates, search: template.search || '' },
+    selection: {
+      columns, filters, groups, sort, aggregates, search: template.search || '',
+      mode: normalizeReportMode(template.mode, definition.defaultMode),
+      summarySort: template.summarySort ?? null,
+    },
     widths: template.widths || {},
     orientation: template.orientation || 'auto',
     warnings,
   };
 }
 
+// ---------------------------------------------------------------------------
+// Favoritos e recentes
+// ---------------------------------------------------------------------------
+
 export async function getFavorites(actor, { empresaId = 'local' } = {}) {
   requireActor(actor);
-  const value = await readAppSetting(favoritesKey(empresaId, actor.id));
-  return Array.isArray(value) ? value : [];
+  const { favorites } = await migrateReportPreferences(actor, { empresaId });
+  return favorites.filter(validFavoriteKey);
 }
 
-export async function toggleFavorite(reportId, actor, { empresaId = 'local' } = {}) {
+/** Marca/desmarca. `key` = reportId, "reportId#idAntigo" ou um id antigo (vira "novo#antigo"). */
+export async function toggleFavorite(key, actor, { empresaId = 'local' } = {}) {
   requireActor(actor);
-  if (!getReportDefinition(reportId)) throw templateError('Relatório inexistente');
+  const { reportId, presetId } = parseFavoriteKey(key);
+  const normalized = favoriteKey(reportId, presetId);
+  if (!validFavoriteKey(normalized)) throw templateError('Relatório inexistente');
   const current = await getFavorites(actor, { empresaId });
-  const next = current.includes(reportId) ? current.filter((id) => id !== reportId) : [...current, reportId];
+  const next = current.includes(normalized) ? current.filter((id) => id !== normalized) : [...current, normalized];
   await writeAppSetting(favoritesKey(empresaId, actor.id), next);
   return next;
 }
 
 export async function getRecents(actor, { empresaId = 'local' } = {}) {
   requireActor(actor);
-  const value = await readAppSetting(recentsKey(empresaId, actor.id));
-  return Array.isArray(value) ? value : [];
+  const { recents } = await migrateReportPreferences(actor, { empresaId });
+  return recents;
 }
 
-export async function recordRecent(reportId, actor, { empresaId = 'local', templateId = null, now = new Date().toISOString() } = {}) {
+export async function recordRecent(reportId, actor, { empresaId = 'local', templateId = null, presetId = null, now = new Date().toISOString() } = {}) {
   requireActor(actor);
+  const parsed = parseFavoriteKey(presetId ? favoriteKey(reportId, presetId) : reportId);
   const current = await getRecents(actor, { empresaId });
-  const next = [{ reportId, templateId, at: now }, ...current.filter((item) => !(item.reportId === reportId && item.templateId === templateId))].slice(0, MAX_RECENTS);
+  const entry = { reportId: parsed.reportId, presetId: parsed.presetId ?? null, templateId, at: now };
+  const same = (item) => item.reportId === entry.reportId && (item.presetId ?? null) === entry.presetId && (item.templateId ?? null) === (templateId ?? null);
+  const next = [entry, ...current.filter((item) => !same(item))].slice(0, MAX_RECENTS);
   await writeAppSetting(recentsKey(empresaId, actor.id), next);
   return next;
 }

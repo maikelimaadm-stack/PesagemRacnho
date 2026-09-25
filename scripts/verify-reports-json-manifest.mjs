@@ -9,14 +9,18 @@ import { prepareEmission } from '../src/modules/reporting/application/reportExpo
 import { APP_VERSION, DB_SCHEMA_VERSION } from '../src/versioning/versionInfo.js';
 
 await seedReportFixture();
-const vm = await runReport('desempenho.lote', { today: TODAY, params: { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } }, selection: { filters: { sexo: { operator: 'in', values: ['M', 'F'] } } } }, ADMIN);
+// E1: `desempenho.lote` é alias de `desempenho` (Apartação › Lote); aqui o contrato do DETALHADO.
+const vm = await runReport('desempenho.lote', { today: TODAY, params: { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } }, selection: { mode: 'DETALHADO', filters: { sexo: { operator: 'in', values: ['M', 'F'] } } } }, ADMIN);
 const { content, manifest, fileName } = await prepareEmission(vm, 'json', ADMIN);
 const parsed = JSON.parse(content);
 
 for (const key of ['manifest', 'definition', 'parameters', 'filters', 'groups', 'columns', 'aggregates', 'data', 'tree', 'totals']) assert.ok(key in parsed, `JSON contém ${key}`);
 const required = ['reportId', 'reportName', 'reportDefinitionVersion', 'emissionId', 'emittedAt', 'emittedBy', 'appVersion', 'schemaVersion', 'filters', 'period', 'groups', 'columns', 'recordCount', 'uniqueAnimalCount', 'contentSha256', 'fileName'];
 for (const key of required) assert.ok(parsed.manifest[key] !== undefined, `manifesto contém ${key}`);
-assert.equal(parsed.manifest.reportId, 'desempenho.lote');
+assert.equal(parsed.manifest.reportId, 'desempenho');
+assert.equal(parsed.manifest.presetId, 'desempenho.lote', 'manifesto registra o id antigo usado para abrir');
+assert.equal(parsed.manifest.mode, 'DETALHADO');
+assert.equal(parsed.mode, 'DETALHADO');
 assert.equal(parsed.manifest.appVersion, APP_VERSION);
 assert.equal(parsed.manifest.schemaVersion, DB_SCHEMA_VERSION);
 assert.equal(parsed.manifest.schemaVersion, 8, 'esquema Dexie 8 (sanidade, ADR-049)');
@@ -43,6 +47,17 @@ assert.equal(parsed.tree[0].children.reduce((acc, child) => acc + child.rowCount
 const a1 = parsed.data.find((row) => row._id === 'A1');
 assert.equal(a1.gmd, 45 / 40, 'JSON leva o valor canônico, sem arredondar');
 assert.equal(typeof a1.peso_final, 'number');
+
+// E1: no RESUMIDO o JSON leva `summary` (uma linha por grupo + Total geral) e nenhuma linha de animal.
+const vmResumo = await runReport('desempenho.lote', { today: TODAY, params: { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } } }, ADMIN);
+assert.equal(vmResumo.mode, 'RESUMIDO', 'alias agrupado abre no Resumido');
+const resumo = JSON.parse((await prepareEmission(vmResumo, 'json', ADMIN)).content);
+assert.equal(resumo.manifest.mode, 'RESUMIDO');
+assert.deepEqual(resumo.data, [], 'Resumido não exporta linha de animal');
+assert.equal(resumo.summary.rows.length, vmResumo.summaryRows.length + 1, 'uma linha por nó + Total geral');
+assert.equal(resumo.summary.rows.at(-1).type, 'GRAND_TOTAL');
+assert.deepEqual(resumo.summary.rows.at(-1).values, Object.fromEntries(vmResumo.aggregates.map((spec) => [spec.id, vmResumo.totals[spec.id].value])), 'total geral = totais do view model');
+assert.ok(resumo.tree.every((node) => node.rowIds.length === 0), 'Resumido sem ids de linha');
 
 // Nada interno ou secreto vaza
 const text = content.toLowerCase();

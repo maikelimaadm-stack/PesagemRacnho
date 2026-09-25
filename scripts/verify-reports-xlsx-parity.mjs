@@ -45,9 +45,10 @@ for (const name of ['[Content_Types].xml', '_rels/.rels', 'xl/workbook.xml', 'xl
   assert.equal(entries, 7);
 }
 const sheet = files['xl/worksheets/sheet1.xml'];
-assert.match(files['xl/workbook.xml'], /<sheet name="Pesagens por período"/);
+// E1: pesagens.periodo é alias de "Pesagens" (o título da planilha é o do relatório consolidado).
+assert.match(files['xl/workbook.xml'], /<sheet name="Pesagens"/);
 assert.match(files['xl/workbook.xml'], /<sheet name="Manifesto"/);
-assert.ok(sheet.includes('Pesagens por período') && sheet.includes('01/08/2026 a 15/09/2026') && sheet.includes('Apartação › Lote'), 'título, período e agrupamento');
+assert.ok(sheet.includes('>Pesagens<') && sheet.includes('01/08/2026 a 15/09/2026') && sheet.includes('Apartação › Lote'), 'título, período e agrupamento');
 assert.ok(files['xl/worksheets/sheet2.xml'].includes(vm.emissionId), 'aba de manifesto com a emissão');
 assert.ok(!/s="null"/.test(sheet), 'NEGATIVO: nenhum estilo inválido');
 

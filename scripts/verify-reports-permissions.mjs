@@ -26,7 +26,8 @@ for (const [role, actions] of Object.entries(expected)) for (const [action, valu
 // Catálogo por perfil: todos veem os relatórios operacionais
 for (const actor of [ADMIN, GESTOR, OPERADOR, CONSULTA]) {
   const ids = listReports(actor).filter((item) => item.available).map((item) => item.id);
-  assert.ok(ids.includes('pesagens.periodo') && ids.includes('rebanho.inventario') && ids.includes('desempenho.individual'), `${actor.role} vê relatórios operacionais`);
+  // E1 (1.4.0): catálogo consolidado (pesagens.periodo/rebanho.inventario/desempenho.individual viraram aliases).
+  assert.ok(ids.includes('pesagens') && ids.includes('rebanho.atual') && ids.includes('desempenho'), `${actor.role} vê relatórios operacionais`);
 }
 
 // Sem sessão / papel desconhecido → recusado no serviço

@@ -3,7 +3,7 @@
 // animais únicos nunca são contagem de eventos.
 import assert from 'node:assert/strict';
 import { ADMIN, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
-import { listReportDefinitions, getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
+import { listAllReportDefinitions as listReportDefinitions, getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { columnSupportsGrain, GRAINS } from '../src/modules/reporting/domain/reportGrain.js';
 import { runReport, resolveSelection } from '../src/modules/reporting/application/reportService.js';
 

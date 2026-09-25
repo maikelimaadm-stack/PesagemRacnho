@@ -113,6 +113,8 @@ export async function loadLotStayRows({ period, today } = {}) {
       fim: stay.fim ?? null,
       dias_no_lote: clipEnd && clipEnd >= clipStart ? daysBetween(clipStart, clipEnd) : null,
       mudanca: Boolean(previous),
+      // Mesma regra da antiga condição fixa de "Mudanças de lote": entrada entre de e até (dia civil).
+      entrada_no_periodo: Boolean(stay.inicio) && String(stay.inicio).slice(0, 10) >= period.from && String(stay.inicio).slice(0, 10) <= period.to,
     };
   });
   return timed(startedAt, queriedAt, rows, 'index:animalLotes.inicio', stays.length);

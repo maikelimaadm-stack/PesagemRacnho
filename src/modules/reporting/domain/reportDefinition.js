@@ -24,6 +24,18 @@ export const DATA_CLASSIFICATION = Object.freeze({
   LEGACY_EVENT: 'COMERCIAL — DADOS LEGADOS/POR EVENTO',
 });
 
+// E1 (1.4.0): RESUMIDO = uma linha por grupo com as métricas em colunas; DETALHADO = linhas de
+// dados com grupos e subtotais (como até a 1.3.x).
+export const REPORT_MODES = Object.freeze({ RESUMIDO: 'RESUMIDO', DETALHADO: 'DETALHADO' });
+
+// Onde o relatório aparece: catálogo de Relatórios, aba Controle da Manutenção, ou em lugar nenhum
+// (backlog/bloqueados e cadastros — continuam no código, executáveis por id quando não bloqueados).
+export const REPORT_VISIBILITY = Object.freeze({ CATALOG: 'catalog', MAINTENANCE: 'maintenance', HIDDEN: 'hidden' });
+
+export function normalizeReportMode(mode, fallback = REPORT_MODES.DETALHADO) {
+  return mode === REPORT_MODES.RESUMIDO || mode === REPORT_MODES.DETALHADO ? mode : fallback;
+}
+
 const PARAM_TYPES = new Set(['period', 'integer', 'date', 'ranges']);
 
 /** Accessor único usado por filtro, ordenação, agrupamento e agregação. */
@@ -109,6 +121,17 @@ export function defineReport(spec) {
   if ([GRAINS.EVENT, GRAINS.ANIMAL_PERIOD, GRAINS.EXIT].includes(spec.grain) && spec.status !== 'blocked' && !requiresPeriod && !spec.periodExemption) {
     throw new Error(`${context}: grão ${spec.grain} exige período obrigatório (ou periodExemption justificado)`);
   }
+  if (spec.defaultMode != null && !Object.values(REPORT_MODES).includes(spec.defaultMode)) throw new Error(`${context}: defaultMode inválido (${spec.defaultMode})`);
+  if (spec.visibility != null && !Object.values(REPORT_VISIBILITY).includes(spec.visibility)) throw new Error(`${context}: visibility inválida (${spec.visibility})`);
+  // Filtros rápidos: atalhos nomeados ("Somente mortes") que só preenchem filtros de colunas do relatório.
+  for (const quick of spec.quickFilters || []) {
+    if (!quick?.id || !quick.label || !quick.filters || typeof quick.filters !== 'object') throw new Error(`${context}: filtro rápido inválido`);
+    assertIds(Object.keys(quick.filters), byId, `${context} quickFilters.${quick.id}`);
+  }
+  for (const columnId of spec.quickGroups || []) {
+    assertIds([columnId], byId, `${context} quickGroups`);
+    if (!byId.get(columnId).groupable) throw new Error(`${context}: ${columnId} não é agrupável (quickGroups)`);
+  }
   const sensitivities = [...new Set(columns.map((column) => column.sensitive).filter(Boolean))];
   return Object.freeze({
     description: '',
@@ -121,8 +144,13 @@ export function defineReport(spec) {
     defaultSort: [],
     defaultGroups: [],
     defaultAggregates: [],
+    quickFilters: [],
+    quickGroups: [],
     status: 'available',
     ...spec,
+    // Resumido por padrão quando o relatório nasce agrupado (E1 §1.1).
+    defaultMode: spec.defaultMode ?? ((spec.defaultGroups || []).length > 0 ? REPORT_MODES.RESUMIDO : REPORT_MODES.DETALHADO),
+    visibility: spec.visibility ?? (spec.status === 'blocked' ? REPORT_VISIBILITY.HIDDEN : REPORT_VISIBILITY.CATALOG),
     columns: Object.freeze([...columns]),
     sensitivities: Object.freeze(sensitivities),
   });

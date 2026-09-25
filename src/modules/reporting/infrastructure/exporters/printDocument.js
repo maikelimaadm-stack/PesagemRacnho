@@ -4,13 +4,48 @@
 // grupos, subtotais e total geral; rodapé com página X de Y, emissão e versão.
 import { describeFilter } from '../../domain/filterEngine.js';
 import { describePeriod } from '../../domain/reportPeriod.js';
-import { buildReportLines } from './reportLayout.js';
+import { buildReportLines, isSummaryMode } from './reportLayout.js';
 
 export const PRINT_LIMITS = Object.freeze({
   PORTRAIT_MAX_COLUMNS: 8,
   PORTRAIT_MAX_WIDTH: 1000, // soma das larguras (px de tela) que cabe em A4 retrato a 8,5 pt
   LANDSCAPE_MAX_WIDTH: 1520, // idem A4 paisagem
+  // Resumido (E1): colunas de métrica são números curtos — até 11 colunas cabem em retrato.
+  SUMMARY_PORTRAIT_MAX_COLUMNS: 11,
+  SUMMARY_GROUP_WIDTH: 150,
+  SUMMARY_METRIC_WIDTH: 84,
 });
+
+/** Larguras (px de tela) das colunas do Resumido: níveis de grupo + métricas. */
+export function summaryColumnWidths(summary) {
+  return [
+    ...summary.groupHeaders.map(() => PRINT_LIMITS.SUMMARY_GROUP_WIDTH),
+    ...summary.metrics.map(() => PRINT_LIMITS.SUMMARY_METRIC_WIDTH),
+  ];
+}
+
+/** Orientação do Resumido: retrato sempre que couber (E1 §1.8: "Resumido cabe em A4 retrato"). */
+export function decideSummaryPrintLayout(summary, { orientation = 'auto' } = {}) {
+  const widths = summaryColumnWidths(summary);
+  const totalWidth = widths.reduce((sum, width) => sum + width, 0);
+  const count = widths.length;
+  const fitsPortrait = count <= PRINT_LIMITS.SUMMARY_PORTRAIT_MAX_COLUMNS && totalWidth <= PRINT_LIMITS.PORTRAIT_MAX_WIDTH;
+  const fitsLandscape = totalWidth <= PRINT_LIMITS.LANDSCAPE_MAX_WIDTH;
+  const chosen = orientation === 'auto' ? (fitsPortrait ? 'portrait' : 'landscape') : orientation;
+  const fits = chosen === 'portrait' ? fitsPortrait : fitsLandscape;
+  return {
+    orientation: chosen,
+    fits,
+    totalWidth,
+    columnCount: count,
+    widths,
+    warning: fits ? null : {
+      code: 'PRINT_TOO_WIDE',
+      message: 'Este relatório possui muitas colunas para impressão.',
+      options: chosen === 'portrait' && fitsLandscape ? ['paisagem', 'reduzir totais', 'exportar XLSX/CSV'] : ['reduzir totais', 'exportar XLSX/CSV'],
+    },
+  };
+}
 
 export function escapeHtml(value) {
   return String(value ?? '')
@@ -51,6 +86,7 @@ export function describeFilters(viewModel) {
   const parts = [
     ...Object.entries(viewModel.lockedFilters || {}).map(([id, filter]) => `${label(id)} ${describeFilter(filter, columnOf(id))} (fixo)`),
     ...Object.entries(viewModel.filters || {}).map(([id, filter]) => `${label(id)} ${describeFilter(filter, columnOf(id))}`),
+    ...(viewModel.drill || []).map((part) => `${part.columnLabel ?? label(part.columnId)} = ${part.label ?? part.key} (detalhe do grupo)`),
   ];
   if (viewModel.search) parts.push(`pesquisa “${viewModel.search}”`);
   return parts.length ? parts.join(' · ') : 'Nenhum';
@@ -66,12 +102,31 @@ export function footerText(viewModel) {
   return `Pesagens Individuais ${viewModel.appVersion} · Emissão ${String(viewModel.emissionId).slice(0, 8)} · ${viewModel.reportName}`;
 }
 
-/**
- * @param viewModel resultado de runReport
- * @param {{ orientation?: 'auto'|'portrait'|'landscape', widths?: object, organization?: string, pageNumbersInCss?: boolean }} options
- * @returns {{ html: string, layout: object, stats: { dataRows: number, groupRows: number, subtotalRows: number, totalRows: number } }}
- */
-export function buildPrintDocument(viewModel, options = {}) {
+/** Resumido: uma linha por grupo (rótulo na coluna do próprio nível) + Total geral. */
+function buildSummaryTable(viewModel, options) {
+  const { headers, lines, summary } = buildReportLines(viewModel, 'print');
+  const layout = decideSummaryPrintLayout(summary, options);
+  const groupCount = summary.groupHeaders.length;
+  const widthSum = layout.widths.reduce((sum, width) => sum + width, 0) || 1;
+  const stats = { dataRows: 0, groupRows: 0, subtotalRows: 0, totalRows: 0, summaryRows: 0 };
+  const body = lines.map((line) => {
+    const grand = line.type === 'GRAND_TOTAL';
+    if (grand) stats.totalRows += 1; else { stats.summaryRows += 1; stats.groupRows += 1; }
+    const cells = line.cells.map((cell, index) => `<td class="${index >= groupCount ? 'num' : `lbl${index === line.level - 1 ? ' own' : ''}`}">${escapeHtml(cell)}</td>`).join('');
+    return `<tr class="${grand ? 'grand sumtotal' : `sum lvl${line.level}`}">${cells}</tr>`;
+  });
+  const table = `<table class="summary">
+  <colgroup>${layout.widths.map((width) => `<col style="width:${((width / widthSum) * 100).toFixed(2)}%">`).join('')}</colgroup>
+  <thead><tr>${headers.map((header, index) => `<th class="${index >= groupCount ? 'num' : ''}">${escapeHtml(header)}</th>`).join('')}</tr></thead>
+  <tbody>
+${body.join('\n')}
+  </tbody>
+</table>`;
+  return { table, layout, stats };
+}
+
+/** Detalhado: grupos, linhas de dados, subtotais e total geral (como até a 1.3.x). */
+function buildDetailedTable(viewModel, options) {
   const layout = decidePrintLayout(viewModel, options);
   const { headers, lines } = buildReportLines(viewModel, 'print');
   const columns = viewModel.columns;
@@ -110,7 +165,24 @@ export function buildPrintDocument(viewModel, options = {}) {
     body.push(`<tr class="grand"><td colspan="${columns.length}"><span class="tl">Total geral</span><span class="chip">Registros: <b>${viewModel.rowCount}</b></span></td></tr>`);
     stats.totalRows += 1;
   }
+  const table = `<table>
+  <colgroup>${colWidths.map((width) => `<col style="width:${((width / widthSum) * 100).toFixed(2)}%">`).join('')}</colgroup>
+  <thead><tr>${headers.map((header, index) => `<th class="${columns[index].align === 'right' ? 'num' : ''}">${escapeHtml(header)}</th>`).join('')}</tr></thead>
+  <tbody>
+${body.join('\n')}
+  </tbody>
+</table>`;
+  return { table, layout, stats };
+}
 
+/**
+ * @param viewModel resultado de runReport
+ * @param {{ orientation?: 'auto'|'portrait'|'landscape', widths?: object, organization?: string, pageNumbersInCss?: boolean }} options
+ * @returns {{ html: string, layout: object, stats: object }}
+ */
+export function buildPrintDocument(viewModel, options = {}) {
+  const summary = isSummaryMode(viewModel);
+  const { table, layout, stats } = summary ? buildSummaryTable(viewModel, options) : buildDetailedTable(viewModel, options);
   const size = layout.orientation === 'landscape' ? 'A4 landscape' : 'A4 portrait';
   const periodText = viewModel.period ? describePeriod(viewModel.period) : 'Sem período (estado atual)';
   const emitted = `${formatEmittedAt(viewModel.generatedAt)} por ${viewModel.emittedBy.nome ?? viewModel.emittedBy.id ?? '—'} (${viewModel.emittedBy.role})`;
@@ -155,6 +227,12 @@ tr.grand .tl { text-transform: uppercase; letter-spacing: .04em; }
 .chip i { font-style: normal; color: #555; }
 .notes { margin: 2mm 0 0; padding-left: 4mm; font-size: 7pt; color: #444; }
 .doc-end { margin-top: 3mm; font-size: 7pt; color: #555; }
+table.summary td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+tr.sum:nth-child(even) td { background: #fafbfc; }
+tr.sum.lvl1 td { font-weight: 700; border-top: .5pt solid #b7c2cc; }
+tr.sum.lvl2 td.own { padding-left: 4mm; }
+tr.sum.lvl3 td.own { padding-left: 7mm; }
+tr.sumtotal td { font-weight: 700; }
 </style>
 </head>
 <body>
@@ -167,6 +245,7 @@ tr.grand .tl { text-transform: uppercase; letter-spacing: .04em; }
       <dt>Grão</dt><dd>${escapeHtml(viewModel.grainLabel)}</dd>
       <dt>Filtros</dt><dd>${escapeHtml(describeFilters(viewModel))}</dd>
       ${viewModel.groups.length ? `<dt>Agrupado por</dt><dd>${escapeHtml(viewModel.groups.map((group) => group.label).join(' › '))}</dd>` : ''}
+      <dt>Modo</dt><dd>${summary ? 'Resumido (uma linha por grupo)' : 'Detalhado'}</dd>
     </dl>
     ${viewModel.classification && viewModel.classification !== 'CANÔNICO' ? `<span class="legacy">${escapeHtml(viewModel.classification)}</span>` : ''}
   </div>
@@ -177,13 +256,7 @@ tr.grand .tl { text-transform: uppercase; letter-spacing: .04em; }
     <div>Emissão ${escapeHtml(String(viewModel.emissionId).slice(0, 8))}</div>
   </div>
 </header>
-<table>
-  <colgroup>${colWidths.map((width) => `<col style="width:${((width / widthSum) * 100).toFixed(2)}%">`).join('')}</colgroup>
-  <thead><tr>${headers.map((header, index) => `<th class="${columns[index].align === 'right' ? 'num' : ''}">${escapeHtml(header)}</th>`).join('')}</tr></thead>
-  <tbody>
-${body.join('\n')}
-  </tbody>
-</table>
+${table}
 ${(viewModel.notes || []).length ? `<ul class="notes">${viewModel.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : ''}
 ${viewModel.hiddenByPermission?.length ? `<p class="doc-end">${viewModel.hiddenByPermission.length} coluna(s) omitida(s) pelo perfil do emissor.</p>` : ''}
 <p class="doc-end">Ausentes são exibidos como “—” e não entram em médias e somas. Total geral recalculado sobre toda a população filtrada.</p>

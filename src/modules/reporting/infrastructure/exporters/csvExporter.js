@@ -1,11 +1,14 @@
 // CSV canônico (substitui as implementações espalhadas; docs/reporting/EXPORT-CONTRACT.md §CSV).
 // UTF-8 com BOM, separador ";", CRLF, toda célula entre aspas quando necessário (aspas dobradas),
 // números pt-BR sem separador de milhar, datas dd/mm/aaaa, ausente = vazio.
-// Estrutura: tipo_linha;nivel;grupo;metrica;valor;<colunas visíveis>
+// Estrutura DETALHADO: tipo_linha;nivel;grupo;metrica;valor;<colunas visíveis>
 //   DATA        → colunas preenchidas;
 //   GROUP       → cabeçalho do grupo em "grupo";
 //   SUBTOTAL    → uma linha por total do grupo (metrica + valor);
 //   GRAND_TOTAL → uma linha por total geral.
+// Estrutura RESUMIDO (E1): tipo_linha;nivel;<um por nível de agrupamento>;<uma por métrica>
+//   SUMMARY     → uma linha por grupo (mesmas células da tela);
+//   GRAND_TOTAL → Total geral.
 import { buildReportLines } from './reportLayout.js';
 
 export const CSV_BOM = '\uFEFF';
@@ -26,7 +29,12 @@ export function csvCell(value) {
 }
 
 export function buildCsv(viewModel) {
-  const { headers, lines } = buildReportLines(viewModel, 'csv');
+  const { mode, headers, lines } = buildReportLines(viewModel, 'csv');
+  if (mode === 'RESUMIDO') {
+    const out = [['tipo_linha', 'nivel', ...headers].map(csvCell).join(CSV_SEPARATOR)];
+    for (const line of lines) out.push([line.type, line.level, ...line.cells].map(csvCell).join(CSV_SEPARATOR));
+    return CSV_BOM + out.join(CSV_NEWLINE) + CSV_NEWLINE;
+  }
   const out = [['tipo_linha', 'nivel', 'grupo', 'metrica', 'valor', ...headers].map(csvCell).join(CSV_SEPARATOR)];
   for (const line of lines) {
     const prefix = [line.type, line.level, line.type === 'GROUP' ? line.label : line.group, line.metric ?? '', line.value ?? ''];

@@ -61,18 +61,47 @@ function aggregateColumn(spec, viewModel) {
   return viewModel.availableColumns.find((column) => column.id === spec.columnId) || { type: 'number' };
 }
 
+function metaRows(viewModel) {
+  const grouping = viewModel.groups.length ? viewModel.groups.map((group) => group.label).join(' › ') : 'Sem agrupamento';
+  const mode = viewModel.mode === 'RESUMIDO' ? ' · Resumido (uma linha por grupo)' : ' · Detalhado';
+  return [
+    { kind: 'TITLE', cells: [[viewModel.reportName, STYLE.title]] },
+    { kind: 'META', cells: [['Período', STYLE.meta], [viewModel.period ? describePeriod(viewModel.period) : 'Estado atual', null]] },
+    { kind: 'META', cells: [['Filtros', STYLE.meta], [describeFilters(viewModel), null]] },
+    { kind: 'META', cells: [['Agrupado por', STYLE.meta], [`${grouping}${mode}`, null]] },
+    { kind: 'META', cells: [['Emissão', STYLE.meta], [`${viewModel.emissionId} · ${viewModel.generatedAt} · ${viewModel.emittedBy.nome ?? viewModel.emittedBy.id} (${viewModel.emittedBy.role}) · versão ${viewModel.appVersion}`, null]] },
+    { kind: 'BLANK', cells: [] },
+  ];
+}
+
+/** Resumido: mesma tabela da tela (níveis de grupo + métricas), números como números. */
+function buildSummarySheetRows(viewModel, layout) {
+  const { headers, lines, summary } = layout;
+  const width = headers.length;
+  const groupCount = summary.groupHeaders.length;
+  const rows = metaRows(viewModel);
+  rows.push({ kind: 'HEADER', cells: headers.map((header) => [header, STYLE.header]) });
+  for (const line of lines) {
+    const total = line.type === 'GRAND_TOTAL';
+    const labelStyle = total ? STYLE.total : line.level === 1 ? STYLE.group : STYLE.text;
+    const cells = line.cells.map((value, index) => {
+      if (index < groupCount) return [value, labelStyle];
+      const metric = summary.metrics[index - groupCount];
+      return [value, typeof value === 'number' ? numberStyle(metric.column) : (total ? STYLE.total : STYLE.text)];
+    });
+    rows.push({ kind: line.type, cells });
+  }
+  return { rows, width, dataHeaders: headers };
+}
+
 /** Linhas da planilha principal: [{ cells: [[valor, estilo], ...], kind }]. */
 export function buildSheetRows(viewModel) {
-  const { headers, lines } = buildReportLines(viewModel, 'xlsx');
+  const layout = buildReportLines(viewModel, 'xlsx');
+  if (layout.mode === 'RESUMIDO') return buildSummarySheetRows(viewModel, layout);
+  const { headers, lines } = layout;
   const width = 4 + viewModel.columns.length;
   const pad = (cells) => [...cells, ...Array(Math.max(0, width - cells.length)).fill([null, STYLE.text])];
-  const rows = [];
-  rows.push({ kind: 'TITLE', cells: [[viewModel.reportName, STYLE.title]] });
-  rows.push({ kind: 'META', cells: [['Período', STYLE.meta], [viewModel.period ? describePeriod(viewModel.period) : 'Estado atual', null]] });
-  rows.push({ kind: 'META', cells: [['Filtros', STYLE.meta], [describeFilters(viewModel), null]] });
-  rows.push({ kind: 'META', cells: [['Agrupado por', STYLE.meta], [viewModel.groups.length ? viewModel.groups.map((group) => group.label).join(' › ') : 'Sem agrupamento', null]] });
-  rows.push({ kind: 'META', cells: [['Emissão', STYLE.meta], [`${viewModel.emissionId} · ${viewModel.generatedAt} · ${viewModel.emittedBy.nome ?? viewModel.emittedBy.id} (${viewModel.emittedBy.role}) · versão ${viewModel.appVersion}`, null]] });
-  rows.push({ kind: 'BLANK', cells: [] });
+  const rows = metaRows(viewModel);
   rows.push({ kind: 'HEADER', cells: pad([['Tipo', STYLE.header], ['Grupo', STYLE.header], ['Métrica', STYLE.header], ['Valor', STYLE.header], ...headers.map((header) => [header, STYLE.header])]) });
   for (const line of lines) {
     if (line.type === 'GROUP') {

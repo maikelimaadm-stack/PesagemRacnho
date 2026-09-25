@@ -3,14 +3,15 @@
 // manifesto, modelos); nenhuma coluna de segredo de autenticação existe em definição alguma.
 import assert from 'node:assert/strict';
 import { ADMIN, CONSULTA, OPERADOR, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
-import { listReportDefinitions } from '../src/modules/reporting/definitions/reportCatalog.js';
+import { getReportDefinition, listAllReportDefinitions } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { runReport } from '../src/modules/reporting/application/reportService.js';
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
 import { FORBIDDEN_FIELD_PATTERN } from '../src/modules/reporting/domain/reportPermissions.js';
 
 // 1. Nenhuma definição expõe segredo; toda coluna de valor é marcada como comercial.
 const VALUE_IDS = /^(valor_|preco|quantidade_arrobas|peso_carcaca)/;
-for (const definition of listReportDefinitions()) {
+// E1: todas as definições do código (catálogo, Manutenção e ocultas).
+for (const definition of listAllReportDefinitions()) {
   for (const column of definition.columns) {
     assert.ok(!FORBIDDEN_FIELD_PATTERN.test(column.id), `${definition.id}: coluna proibida ${column.id}`);
     if (VALUE_IDS.test(column.id)) assert.equal(column.sensitive, 'commercial', `${definition.id}: ${column.id} deve ser sensível`);
@@ -19,7 +20,7 @@ for (const definition of listReportDefinitions()) {
 
 await seedReportFixture();
 const period = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
-const everything = listReportDefinitions().find((d) => d.id === 'pesagens.periodo').columns.map((column) => column.id);
+const everything = getReportDefinition('pesagens.periodo').columns.map((column) => column.id);
 // Valores exclusivos da venda da massa (o peso 300,00 kg existe e não é segredo).
 const SECRET_VALUES = ['3000', '3.000', '9,33', 'Valor venda', 'Preço/@', '@ carcaça'];
 
@@ -53,6 +54,18 @@ for (const actor of [OPERADOR, CONSULTA]) {
       for (const secret of SECRET_VALUES) assert.ok(!content.includes(secret), `${actor.role} ${format}: não contém "${secret}"`);
       assert.ok(!JSON.stringify(manifest).includes('valor_venda_total') || manifest.hiddenByPermission.includes('valor_venda_total'), 'manifesto só cita a coluna como oculta');
       assert.ok(!/"valor_venda_total":/.test(content), `${actor.role} ${format}: nenhum campo de valor`);
+    }
+    // E1: o Resumido também não vaza valor (métricas de valor nem entram na seleção de quem não vê).
+    const vmResumido = await runReport('pesagens', {
+      today: TODAY, params: period,
+      selection: { mode: 'RESUMIDO', groups: [{ columnId: 'motivo_saida' }], aggregates: [{ id: 'soma_venda', columnId: 'valor_venda_total', op: 'sum' }, { id: 'registros', op: 'count' }] },
+    }, actor);
+    assert.deepEqual(vmResumido.aggregates.map((spec) => spec.id), ['registros'], 'Resumido: métrica de valor descartada');
+    for (const format of ['csv', 'json', 'xlsx']) {
+      const { content } = await prepareEmission(vmResumido, format, actor);
+      const text = typeof content === 'string' ? content : new TextDecoder().decode(content);
+      for (const secret of SECRET_VALUES) assert.ok(!text.includes(secret), `${actor.role} Resumido ${format}: não contém "${secret}"`);
+      assert.ok(!/Valor \(R\$\)/.test(text), `${actor.role} Resumido ${format}: sem coluna de valor`);
     }
   }
 }

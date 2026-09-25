@@ -1,26 +1,15 @@
-// Layout linear do view model, comum a CSV, XLSX e impressão: GROUP / DATA / SUBTOTAL /
-// GRAND_TOTAL. Nenhuma conta nova — só percorre a árvore e os totais já calculados.
-import { AGGREGATION_LABELS } from '../../domain/columnDefinition.js';
+// Layout linear do view model, comum a CSV, XLSX e impressão. Nenhuma conta nova — só percorre a
+// árvore e os totais já calculados.
+//   DETALHADO → GROUP / DATA / SUBTOTAL / GRAND_TOTAL (como até a 1.3.x);
+//   RESUMIDO  → SUMMARY (uma por grupo, métricas em colunas) + GRAND_TOTAL (domain/summaryLayout.js).
+import { aggregateLabel, aggregateValueColumn } from '../../domain/aggregateLabels.js';
+import { REPORT_MODES } from '../../domain/reportDefinition.js';
 import { formatCell, headerLabel } from '../../domain/reportFormatting.js';
+import { buildSummaryLayout } from '../../domain/summaryLayout.js';
 
-export const LINE_TYPES = Object.freeze({ GROUP: 'GROUP', DATA: 'DATA', SUBTOTAL: 'SUBTOTAL', GRAND_TOTAL: 'GRAND_TOTAL' });
+export { aggregateLabel, aggregateValueColumn };
 
-/** Rótulo de uma agregação: "Média simples — Peso (kg)"; contagem de registros sem coluna. */
-export function aggregateLabel(spec, columns) {
-  if (spec.op === 'count' && !spec.columnId) return 'Registros';
-  const column = columns.find((item) => item.id === spec.columnId);
-  if (spec.op === 'countDistinct' && column && ['animal', 'numero_animal'].includes(column.id)) return 'Animais únicos';
-  return `${AGGREGATION_LABELS[spec.op] ?? spec.op} — ${column ? headerLabel(column) : spec.columnId}`;
-}
-
-/** Coluna "virtual" para formatar o valor de uma agregação no tipo certo. */
-export function aggregateValueColumn(spec, columns) {
-  if (['count', 'countValid', 'countDistinct'].includes(spec.op)) return { type: 'integer' };
-  const column = columns.find((item) => item.id === spec.columnId) || columns.find((item) => item.id === spec.columnId);
-  if (!column) return { type: 'number' };
-  if (spec.op === 'weightedGmd') return { type: 'gmd' };
-  return column;
-}
+export const LINE_TYPES = Object.freeze({ GROUP: 'GROUP', DATA: 'DATA', SUBTOTAL: 'SUBTOTAL', GRAND_TOTAL: 'GRAND_TOTAL', SUMMARY: 'SUMMARY' });
 
 /** Valor bruto da célula de dados (nome para entidade). */
 export function cellRawValue(viewModel, column, row) {
@@ -28,14 +17,33 @@ export function cellRawValue(viewModel, column, row) {
   return column.type === 'entity' ? accessor.displayOf(row) : accessor.valueOf(row);
 }
 
+export function isSummaryMode(viewModel) {
+  return viewModel?.mode === REPORT_MODES.RESUMIDO;
+}
+
 /**
  * @param viewModel resultado de runReport
  * @param {'csv'|'xlsx'|'print'|'screen'} target
- * @returns {{ headers: string[], lines: { type, level, group, metric?, value?, cells: any[], row? }[] }}
+ * @returns {{ mode, headers: string[], lines: { type, level, group, metric?, value?, cells: any[], row? }[], summary? }}
  */
 export function buildReportLines(viewModel, target) {
+  if (isSummaryMode(viewModel)) {
+    const summary = buildSummaryLayout(viewModel, target);
+    const lines = summary.rows.map((row) => ({
+      type: row.type,
+      level: row.level,
+      group: row.node ? row.node.path.map((part) => part.label).join(' > ') : '',
+      label: row.label,
+      rowCount: row.node ? row.node.rowCount : viewModel.rowCount,
+      cells: row.cells,
+      rawValues: row.rawValues,
+    }));
+    return { mode: REPORT_MODES.RESUMIDO, headers: summary.headers, lines, summary };
+  }
+
   const { columns, aggregates } = viewModel;
   const specs = aggregates;
+  const valueColumns = viewModel.availableColumns ?? columns;
   const lines = [];
   const dataLine = (row, level, group) => ({
     type: LINE_TYPES.DATA,
@@ -50,9 +58,9 @@ export function buildReportLines(viewModel, target) {
       type,
       level,
       group,
-      metric: aggregateLabel(spec, columns),
+      metric: aggregateLabel(spec, valueColumns),
       spec,
-      value: formatCell(aggregateValueColumn(spec, columns), result?.value ?? null, target),
+      value: formatCell(aggregateValueColumn(spec, valueColumns), result?.value ?? null, target),
       rawValue: result?.value ?? null,
       nValid: result?.n_validos ?? null,
       nMissing: result?.n_ausentes ?? null,
@@ -73,5 +81,5 @@ export function buildReportLines(viewModel, target) {
     viewModel.rows.forEach((row) => lines.push(dataLine(row, 0, '')));
   }
   lines.push(...totalLines(LINE_TYPES.GRAND_TOTAL, viewModel.totals, 0, ''));
-  return { headers: columns.map((column) => headerLabel(column)), lines };
+  return { mode: REPORT_MODES.DETALHADO, headers: columns.map((column) => headerLabel(column)), lines };
 }
