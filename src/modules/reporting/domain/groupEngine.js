@@ -15,6 +15,18 @@ function isMissing(value) {
 }
 
 /**
+ * Ordem natural entre grupos irmãos: pela chave de ordem da coluna quando os dois a têm
+ * (groupOrder — ex.: Sessão pela data), senão pelo rótulo. Também usada por "Rótulo" no Resumido.
+ */
+export function compareGroupLabels(left, right) {
+  if (left.orderKey != null && right.orderKey != null) {
+    const byOrder = collator.compare(String(left.orderKey), String(right.orderKey));
+    if (byOrder !== 0) return byOrder;
+  }
+  return collator.compare(left.label, right.label);
+}
+
+/**
  * @param rows população já filtrada (e ordenada: a ordem das linhas dentro do grupo é preservada)
  * @param levels [{ columnId, direction? }] — até 3
  * @param resolve (columnId) => { column, groupKeyOf(row), groupLabelOf(row), valueOf(row), ... }
@@ -44,14 +56,15 @@ export function groupRows(rows, levels = [], resolve, { aggregates = [] } = {}) 
       let bucket = buckets.get(key);
       if (!bucket) {
         const rawLabel = missing ? NONE_GROUP_LABEL : level.accessor.groupLabelOf(row);
-        bucket = { key, label: isMissing(rawLabel) ? String(rawKey) : String(rawLabel), missing, rows: [] };
+        const rawOrder = missing ? null : level.accessor.groupOrderOf?.(row);
+        bucket = { key, label: isMissing(rawLabel) ? String(rawKey) : String(rawLabel), orderKey: isMissing(rawOrder) ? null : rawOrder, missing, rows: [] };
         buckets.set(key, bucket);
       }
       bucket.rows.push(row);
     }
     const ordered = [...buckets.values()].sort((left, right) => {
       if (left.missing !== right.missing) return left.missing ? 1 : -1;
-      const result = collator.compare(left.label, right.label);
+      const result = compareGroupLabels(left, right);
       return level.direction === 'desc' ? -result : result;
     });
     return ordered.map((bucket) => {
@@ -64,6 +77,7 @@ export function groupRows(rows, levels = [], resolve, { aggregates = [] } = {}) 
         columnLabel: level.accessor.column.label,
         key: bucket.key,
         label: bucket.label,
+        orderKey: bucket.orderKey,
         missing: bucket.missing,
         path,
         rowCount: bucket.rows.length,

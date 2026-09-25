@@ -28,6 +28,42 @@ export const SEXO_OPTIONS = [
 
 const textKey = (id, text) => (row) => row[id] || (row[text] ? `txt:${normalizeText(row[text])}` : null);
 
+// Animal único: pelo id do animal; registro legado sem id cai em número+marca (mesma chave de
+// "Cabeças" em todas as contagens de animais — Machos, Fêmeas, com pesagem anterior).
+const animalKeyOf = (row) => row.animal_key || row.animal_id || `legado:${normalizeText(row.numero_animal)}::${normalizeText(row.marca)}`;
+
+// Sexo em código (M/F); legado gravado como "Macho"/"Fêmea" também casa.
+const sexCodeOf = (row) => {
+  const text = normalizeText(row?.sexo);
+  if (text === 'm' || text === 'macho') return 'M';
+  if (text === 'f' || text === 'femea') return 'F';
+  return null;
+};
+
+const isBlank = (value) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+
+// E1B: @ de PESO VIVO = kg ÷ divisor da linha (30 padrão ou 15, Configurações › Relatórios; gravado
+// em `arroba_divisor` pela fonte). NÃO é a @ de carcaça do Comercial (quantidade_arrobas = carcaça ÷ 15,
+// com rendimento, sensível). Sem kg (ou sem divisor) → null, nunca 0.
+const liveArrobaOf = (field) => (row) => {
+  const kg = row?.[field];
+  if (isBlank(kg)) return null;
+  const number = Number(kg);
+  const divisor = Number(row.arroba_divisor);
+  if (!Number.isFinite(number) || !Number.isFinite(divisor) || divisor <= 0) return null;
+  return number / divisor;
+};
+
+// Pesagem com anterior válida (entra no GMD ponderado): dias > 0 e ganho preenchido.
+const hasPreviousGain = (row) => Number(row?.dias) > 0 && !isBlank(row?.ganho) && Number.isFinite(Number(row.ganho));
+
+// Contagem condicional de animais sem operação nova: coluna identificador cuja chave de grupo só
+// existe quando a condição vale; countDistinct conta animais únicos (0 quando ninguém casa).
+const animalWhen = (test) => ({
+  accessor: (row) => (test(row) ? row.numero_animal ?? null : null),
+  groupKey: (row) => (test(row) ? animalKeyOf(row) : null),
+});
+
 const purchaseDocumentation = (row) => {
   const value = row?.documentacao;
   if (!value) return {};
@@ -59,7 +95,7 @@ export const EVENT_COLUMNS = [
     id: 'numero_animal', label: 'Animal', type: 'identifier', grains: EVENT_GRAINS, defaultVisible: true, defaultWidth: 116,
     aggregations: ['count', 'countDistinct'],
     // Animais únicos: pelo id do animal; registro legado sem id cai em número+marca.
-    groupKey: (row) => row.animal_key || row.animal_id || `legado:${normalizeText(row.numero_animal)}::${normalizeText(row.marca)}`,
+    groupKey: animalKeyOf,
   }),
   defineColumn({
     id: 'marca', label: 'Marca', type: 'text', grains: EVENT_GRAINS, groupable: true, defaultVisible: true,
@@ -81,6 +117,11 @@ export const EVENT_COLUMNS = [
     aggregations: ['countValid', 'sum', 'avg', 'min', 'max', 'range'],
   }),
   defineColumn({
+    id: 'peso_arroba', label: 'Peso em arrobas', unit: '@', type: 'number', decimals: 2, grains: EVENT_GRAINS, source: 'derivado',
+    accessor: liveArrobaOf('peso'), aggregations: ['countValid', 'sum', 'avg', 'min', 'max'],
+    description: '@ de peso vivo: peso ÷ divisor da arroba (30 ou 15, Configurações › Relatórios). Não é a @ de carcaça do Comercial.',
+  }),
+  defineColumn({
     id: 'nome_lote', label: 'Lote', type: 'text', grains: EVENT_GRAINS, groupable: true, defaultVisible: true,
     groupKey: textKey('lote_id', 'nome_lote'), groupLabel: (row) => row.lote_nome_atual || row.nome_lote,
   }),
@@ -88,9 +129,19 @@ export const EVENT_COLUMNS = [
     id: 'nome_apartacao', label: 'Apartação', type: 'text', grains: EVENT_GRAINS, groupable: true, defaultVisible: true,
     groupKey: textKey('apartacao_id', 'nome_apartacao'), groupLabel: (row) => row.apartacao_nome_atual || row.nome_apartacao,
   }),
+  // Faixa exigida do lote (E1B): peso_minimo/peso_maximo do cadastro ATUAL do lote, pelo lote_id.
+  defineColumn({
+    id: 'lote_peso_minimo', label: 'Faixa mínima do lote', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, source: 'atual',
+    aggregations: ['min', 'max'], description: 'Peso mínimo do cadastro ATUAL do lote (não o do dia da pesagem).',
+  }),
+  defineColumn({
+    id: 'lote_peso_maximo', label: 'Faixa máxima do lote', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, source: 'atual',
+    aggregations: ['min', 'max'], description: 'Peso máximo do cadastro ATUAL do lote (não o do dia da pesagem).',
+  }),
   defineColumn({
     id: 'sessao', label: 'Sessão', type: 'entity', grains: EVENT_GRAINS, groupable: true,
     accessor: (row) => row.sessao_id ?? null, display: (row) => row.sessao_label ?? null,
+    groupOrder: (row) => row.sessao_ordem ?? null,
   }),
   defineColumn({ id: 'valor_pago_cabeca', label: 'Valor compra', type: 'money', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'origem_animal', label: 'Origem', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'legado-texto' }),
@@ -119,10 +170,21 @@ export const EVENT_COLUMNS = [
   defineColumn({ id: 'motorista_nome', label: 'Motorista', type: 'text', grains: EVENT_GRAINS }),
   defineColumn({ id: 'placa_carreta', label: 'Placa', type: 'text', grains: EVENT_GRAINS, defaultWidth: 108 }),
   defineColumn({ id: 'doc_qtd', label: 'Qtd doc (dia)', type: 'integer', grains: EVENT_GRAINS, aggregations: ['countValid', 'max'], description: 'Pesagens ligadas ao mesmo documento de embarque.' }),
+  // "Pesagem anterior" (filtro Todos/Com/Sem da E1B): data anterior preenchida. Só Manejo grava a
+  // pesagem anterior; Cadastro e Saída ficam sempre "Não".
+  defineColumn({
+    id: 'tem_pesagem_anterior', label: 'Pesagem anterior', type: 'boolean', grains: EVENT_GRAINS, groupable: true, source: 'derivado',
+    accessor: (row) => !isBlank(row.data_anterior), defaultWidth: 100,
+  }),
   defineColumn({ id: 'data_anterior', label: 'Data anterior', type: 'date', grains: EVENT_GRAINS, defaultWidth: 108 }),
   defineColumn({ id: 'peso_anterior', label: 'Peso anterior', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, aggregations: ['countValid', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'dias', label: 'Dias', type: 'integer', grains: EVENT_GRAINS, defaultWidth: 82, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'ganho', label: 'Ganho', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, defaultWidth: 100, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
+  defineColumn({
+    id: 'ganho_arroba', label: 'Ganho em arrobas', unit: '@', type: 'number', decimals: 2, grains: EVENT_GRAINS, source: 'derivado',
+    accessor: liveArrobaOf('ganho'), aggregations: ['countValid', 'sum', 'avg', 'min', 'max'],
+    description: '@ de peso vivo do ganho: ganho ÷ divisor da arroba (só pesagens com pesagem anterior).',
+  }),
   defineColumn({
     id: 'gmd', label: 'GMD', unit: 'kg/dia', type: 'gmd', grains: EVENT_GRAINS, defaultVisible: true, defaultWidth: 92,
     weighted: { gain: 'ganho', days: 'dias' }, aggregations: ['countValid', 'avg', 'min', 'max', 'weightedGmd'],
@@ -143,6 +205,24 @@ export const EVENT_COLUMNS = [
   defineColumn({
     id: 'operador', label: 'Operador', type: 'entity', grains: EVENT_GRAINS, groupable: true,
     accessor: (row) => row.created_by_user_id ?? null, display: (row) => row.operador_nome ?? null,
+  }),
+  // Contagens de animais da folha (E1B), por countDistinct: Machos, Fêmeas e animais com pesagem
+  // anterior válida (base da nota "GMD calculado com N de M animais"). zeroAsEmpty: na folha a
+  // contagem 0 aparece "—" e a coluna só com zeros some (o valor continua 0 no motor e no JSON).
+  // Colunas SÓ de cálculo (metricOnly): servem ao countDistinct da folha (Machos, Fêmeas, nota do GMD);
+  // não são dado de linha — fora do seletor de colunas, dos filtros, da ordenação e das exportações.
+  defineColumn({
+    id: 'animais_machos', label: 'Machos', type: 'identifier', grains: EVENT_GRAINS, source: 'derivado',
+    aggregations: ['countDistinct'], zeroAsEmpty: true, metricOnly: true, filterable: false, sortable: false, exportable: false, ...animalWhen((row) => sexCodeOf(row) === 'M'),
+  }),
+  defineColumn({
+    id: 'animais_femeas', label: 'Fêmeas', type: 'identifier', grains: EVENT_GRAINS, source: 'derivado',
+    aggregations: ['countDistinct'], zeroAsEmpty: true, metricOnly: true, filterable: false, sortable: false, exportable: false, ...animalWhen((row) => sexCodeOf(row) === 'F'),
+  }),
+  defineColumn({
+    id: 'animais_com_anterior', label: 'Animais com pesagem anterior', type: 'identifier', grains: EVENT_GRAINS, source: 'derivado',
+    aggregations: ['countDistinct'], metricOnly: true, filterable: false, sortable: false, exportable: false, ...animalWhen(hasPreviousGain),
+    description: 'Animais com ao menos uma pesagem com anterior válida (dias > 0 e ganho): os que entram no GMD.',
   }),
 ];
 

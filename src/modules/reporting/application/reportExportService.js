@@ -53,6 +53,8 @@ export function buildManifest(viewModel, format) {
     period: viewModel.period,
     periodDescription: viewModel.period ? describePeriod(viewModel.period) : null,
     parameters: viewModel.params,
+    // E1B: divisor da @ de peso vivo usado na emissão (Média/Total em @); null em view model antigo.
+    arrobaDivisor: viewModel.arrobaDivisor ?? null,
     filters: viewModel.filters,
     lockedFilters: viewModel.lockedFilters,
     drill: (viewModel.drill ?? []).map(({ columnId, key, label }) => ({ columnId, key, label })),

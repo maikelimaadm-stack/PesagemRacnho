@@ -84,10 +84,11 @@ assert.equal(rebanho.mode, 'RESUMIDO', 'Rebanho atual abre no Resumido');
 assert.deepEqual(rebanho.groups.map((group) => group.columnId), ['lote_atual']);
 const rebanhoLayout = buildSummaryLayout(rebanho, 'screen');
 assert.deepEqual(rebanhoLayout.headers, ['Lote atual', 'Cabeças', 'Peso médio (kg)', 'Peso total (kg)'], 'colunas: Lote | Cabeças | Peso médio | Peso total');
+// E1B: kg agregado com 1 casa (a coluna de dados e as exportações de pesagem continuam com 2).
 assert.deepEqual(rebanhoLayout.rows.map((row) => row.cells), [
-  ['Lote 01', '1', '345,00', '345,00'],
-  ['Não informado', '1', '200,00', '200,00'],
-  ['Total geral', '2', '272,50', '545,00'],
+  ['Lote 01', '1', '345,0', '345,0'],
+  ['Não informado', '1', '200,0', '200,0'],
+  ['Total geral', '2', '272,5', '545,0'],
 ]);
 // Desempenho por lote: A1 +45 kg em 40 d (L1), A3 sem par (L1), A2 +30 kg em 31 d (L2), A4 sem lote.
 const desempenho = await run('desempenho');

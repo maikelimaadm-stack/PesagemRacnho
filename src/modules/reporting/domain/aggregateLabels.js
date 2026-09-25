@@ -13,14 +13,23 @@ export function aggregateLabel(spec, columns) {
   return `${AGGREGATION_LABELS[spec.op] ?? spec.op} — ${column ? headerLabel(column) : spec.columnId}`;
 }
 
+// E1B: casas dos valores AGREGADOS — kg com 1 casa (@ com 2 e GMD com 3 já vêm da coluna/tipo). O
+// valor de cada linha (grade, Relação, exportações de pesagem) continua com as casas da coluna.
+export const AGGREGATE_WEIGHT_DECIMALS = 1;
+
 /** Coluna "virtual" para formatar o valor de uma agregação no tipo certo. */
 export function aggregateValueColumn(spec, columns) {
-  if (['count', 'countValid', 'countDistinct'].includes(spec.op)) return { type: 'integer' };
+  if (['count', 'countValid', 'countDistinct'].includes(spec.op)) {
+    // Contagem condicional (Machos/Fêmeas): a coluna pede 0 como vazio na folha.
+    const counted = spec.op === 'countDistinct' && spec.columnId ? columns.find((item) => item.id === spec.columnId) : null;
+    return counted?.zeroAsEmpty ? { type: 'integer', zeroAsEmpty: true } : { type: 'integer' };
+  }
   const column = columns.find((item) => item.id === spec.columnId);
   if (!column) return { type: 'number' };
   if (spec.op === 'weightedGmd') return { type: 'gmd' };
   // Média de coluna inteira (dias no lote, dias sem pesagem, nº de pesagens) tem fração: 33,5 e não 34.
   if (column.type === 'integer' && ['avg', 'weightedAvg'].includes(spec.op)) return { ...column, type: 'number', decimals: 1 };
+  if (column.type === 'weight') return { ...column, decimals: AGGREGATE_WEIGHT_DECIMALS };
   return column;
 }
 
@@ -70,6 +79,12 @@ const LOT_AVERAGE_LABELS = Object.freeze({
 // Somas de dinheiro que SÃO o valor da operação ("Valor (R$)"); as demais levam o nome da coluna.
 const MAIN_VALUE_COLUMNS = new Set(['valor_venda_total', 'valor_total_abate', 'valor_pago_cabeca']);
 
+// @ de peso vivo (E1B): mesmo rótulo de curral do kg, com a unidade @ ("Peso médio (@)").
+const LIVE_ARROBA_NOUNS = Object.freeze({ peso_arroba: 'Peso', ganho_arroba: 'Ganho' });
+
+// Faixa exigida do lote (E1B): o mínimo da faixa mínima / o máximo da faixa máxima é a própria faixa.
+const LOT_RANGE_OPS = Object.freeze({ lote_peso_minimo: 'min', lote_peso_maximo: 'max' });
+
 /**
  * Rótulo simples (linguagem de curral) de uma métrica do Resumido.
  * @param spec { id?, op, columnId? }
@@ -95,6 +110,10 @@ export function summaryMetricLabel(spec, columns, { grain = null, animalColumnId
     return `GMD ${WEIGHT_OPS[spec.op] ?? spec.op} (kg/dia)`;
   }
   if (column.id === 'peso_medio_atual' && LOT_AVERAGE_LABELS[spec.op]) return LOT_AVERAGE_LABELS[spec.op];
+  if (LOT_RANGE_OPS[column.id]) {
+    const unit = column.unit || 'kg';
+    return spec.op === LOT_RANGE_OPS[column.id] ? `${column.label} (${unit})` : `${column.label} — ${GENERIC_OPS[spec.op] ?? spec.op} (${unit})`;
+  }
   if (column.type === 'weight' && (WEIGHT_OPS[spec.op] || spec.op === 'range')) {
     const { noun, feminine = false } = WEIGHT_NOUNS[column.id] ?? { noun: column.label };
     const unit = column.unit || 'kg';
@@ -108,6 +127,7 @@ export function summaryMetricLabel(spec, columns, { grain = null, animalColumnId
     return `${column.label} — ${GENERIC_OPS[spec.op] ?? spec.op} (R$)`;
   }
   if (column.id === 'quantidade_arrobas' && spec.op === 'sum') return 'Arrobas (@)';
+  if (LIVE_ARROBA_NOUNS[column.id] && WEIGHT_OPS[spec.op]) return `${LIVE_ARROBA_NOUNS[column.id]} ${WEIGHT_OPS[spec.op]} (${column.unit || '@'})`;
   if (spec.op === 'ratio') return headerLabel(column);
   // Contagens guardadas como número (pesagens, capacidade, previsto): a soma é o próprio rótulo.
   if (column.type === 'integer' && spec.op === 'sum') return headerLabel(column);
@@ -118,12 +138,20 @@ export function summaryMetricLabel(spec, columns, { grain = null, animalColumnId
   return column.label.includes('(') ? `${column.label} — ${op}${unit ? ` (${column.unit})` : ''}` : `${column.label} (${op}${unit})`;
 }
 
-/** Rótulos das métricas do Resumido, sem repetição (repetidos caem no rótulo técnico). */
+/**
+ * Rótulos das métricas do Resumido, sem repetição (repetidos caem no rótulo técnico).
+ * context.metricLabels (E1B): { [id da métrica]: 'Rótulo' } da definição — rótulo de curral da folha
+ * ("Qtd", "Menor (kg)", "Média (@)") aplicado quando a métrica com esse id está na seleção.
+ */
 export function summaryMetricLabels(specs, columns, context = {}) {
   const seen = new Set();
+  const overrides = context.metricLabels && typeof context.metricLabels === 'object' ? context.metricLabels : {};
   const isAnimalColumn = (columnId) => columnId === context.animalColumnId || ['animal', 'numero_animal'].includes(columnId);
   const distinctAnimals = specs.some((spec) => spec.op === 'countDistinct' && isAnimalColumn(spec.columnId));
+  // Rótulos da definição primeiro: um rótulo automático igual a um deles cai no técnico, não o contrário.
+  for (const spec of specs) if (spec.id && typeof overrides[spec.id] === 'string') seen.add(overrides[spec.id]);
   return specs.map((spec) => {
+    if (spec.id && typeof overrides[spec.id] === 'string') return overrides[spec.id];
     let label = summaryMetricLabel(spec, columns, { ...context, distinctAnimals });
     if (seen.has(label)) label = aggregateLabel(spec, columns);
     seen.add(label);

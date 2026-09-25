@@ -3,6 +3,7 @@
 import 'fake-indexeddb/auto';
 import { deleteDbForTests } from '../../src/storage/indexedDb/db.js';
 import storage from '../../src/storage/storageAdapter.js';
+import { setActorProvider } from '../../src/storage/indexedDb/auditActor.js';
 import * as weighingService from '../../src/modules/weighing/application/weighingService.js';
 
 export const ADMIN = Object.freeze({ id: 'u-admin', nome: 'Ana Admin', role: 'ADMIN' });
@@ -20,9 +21,14 @@ const registry = (id, nome, extra = {}) => ({ id, empresa_id: 'local', nome, nom
  *  A2 fêmea Angus  marca BETA  lote L2: 250 (08-05) → 260 (08-15, 10 d, +10) → Saída Venda 280 (09-05)
  *  A3 macho Nelore marca ALFA  lote L1: 410 (08-10) → Saída Morte sem peso (09-01)
  *  A4 fêmea sem raça   marca "Álfa" (texto com acento) sem lote: 200 (09-12)
+ *  Lotes (apartação Engorda): L1 "Lote 01" faixa 300–400 kg; L2 "Lote 02" faixa 200–300 kg
  *  Embarque E1 (05/09, Frigo Sul) com documento D1 (GTA 12345, previsto 0 M + 2 F) → e6 vinculada
  */
 export async function seedReportFixture() {
+  // E1B: o runReport lê o divisor da @ em Configurações (appConfigService), que carrega a sessão local
+  // e registra o provedor de ator — como no app, a escrita de pesagens passa a exigir papel. A massa dos
+  // gates é técnica, sem sessão (mesmo padrão dos demais gates em Node): provedor desligado.
+  setActorProvider(null);
   await deleteDbForTests();
   const db = await storage.ensureReady();
   await db.table('marcas').bulkAdd([registry('m-alfa', 'ALFA'), registry('m-beta', 'BETA')]);
@@ -30,9 +36,10 @@ export async function seedReportFixture() {
   await db.table('apartacoes').bulkAdd([
     { id: 'ap1', empresa_id: 'local', nome_apartacao: 'Engorda', ativo: true, created_at: TS, updated_at: TS, deleted_at: null },
   ]);
+  // Faixa exigida (E1B): Lote 01 300–400 kg, Lote 02 200–300 kg (cadastro atual do lote).
   await db.table('loteApartacoes').bulkAdd([
-    { id: 'L1', empresa_id: 'local', apartacao_id: 'ap1', nome_apartacao: 'Engorda', nome_lote: 'Lote 01', quantidade_maxima: 10, created_at: TS, updated_at: TS, deleted_at: null },
-    { id: 'L2', empresa_id: 'local', apartacao_id: 'ap1', nome_apartacao: 'Engorda', nome_lote: 'Lote 02', quantidade_maxima: 10, created_at: TS, updated_at: TS, deleted_at: null },
+    { id: 'L1', empresa_id: 'local', apartacao_id: 'ap1', nome_apartacao: 'Engorda', nome_lote: 'Lote 01', quantidade_maxima: 10, peso_minimo: 300, peso_maximo: 400, created_at: TS, updated_at: TS, deleted_at: null },
+    { id: 'L2', empresa_id: 'local', apartacao_id: 'ap1', nome_apartacao: 'Engorda', nome_lote: 'Lote 02', quantidade_maxima: 10, peso_minimo: 200, peso_maximo: 300, created_at: TS, updated_at: TS, deleted_at: null },
   ]);
   await db.table('embarques').bulkAdd([{ id: 'E1', empresa_id: 'local', nome: 'Embarque Sul', data: '2026-09-05', frigorifico: 'Frigo Sul', status: 'Concluído', created_at: TS, updated_at: TS, deleted_at: null }]);
   await db.table('documentosEmbarque').bulkAdd([{ id: 'D1', embarque_id: 'E1', embarque_nome: 'Embarque Sul', tipo_documento: 'GTA', numero_gta: '12345', motorista_nome: 'João', placa_carreta: 'ABC1D23', qtd_prev_machos: 0, qtd_prev_femeas: 2, created_at: TS, updated_at: TS, deleted_at: null }]);

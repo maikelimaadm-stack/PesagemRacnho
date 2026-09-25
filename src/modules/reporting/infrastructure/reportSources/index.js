@@ -1,6 +1,7 @@
 // Registro de fontes: id declarado na ReportDefinition → função de carga.
-// Cada fonte recebe { definition, params, empresaId, today } e devolve
+// Cada fonte recebe { definition, params, empresaId, today, arrobaDivisor } e devolve
 // { rows, strategy, rowsRead, timings: { query, transform }, warnings? }.
+// arrobaDivisor (E1B): divisor da @ de peso vivo resolvido pelo runReport (entra no sourceKey).
 import { loadEventRows } from './eventSource.js';
 import { loadAnimalCurrentRows, loadAnimalPeriodRows } from './animalSource.js';
 import { loadAuditRows, loadBackupRows, loadDataIssueRows, loadLotRows, loadLotStayRows, loadRegistryRows, loadShipmentDocumentRows } from './controlSources.js';
@@ -10,10 +11,10 @@ function periodOf(params) {
 }
 
 const SOURCES = {
-  'events.byPeriod': async ({ definition, params, empresaId }) => {
+  'events.byPeriod': async ({ definition, params, empresaId, arrobaDivisor }) => {
     const period = periodOf(params);
     if (!period) throw new Error(`relatório ${definition.id}: fonte events.byPeriod exige período`);
-    return loadEventRows({ from: period.from, to: period.to, empresaId, tipos: definition.sourceOptions?.tipos });
+    return loadEventRows({ from: period.from, to: period.to, empresaId, tipos: definition.sourceOptions?.tipos, arrobaDivisor });
   },
   'animals.current': async ({ params, empresaId, today }) => loadAnimalCurrentRows({ empresaId, today, params }),
   'animals.period': async ({ definition, params, empresaId }) => {

@@ -7,6 +7,7 @@ import { getReportDefinition, listAllReportDefinitions } from '../src/modules/re
 import { runReport } from '../src/modules/reporting/application/reportService.js';
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
 import { FORBIDDEN_FIELD_PATTERN } from '../src/modules/reporting/domain/reportPermissions.js';
+import { parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
 
 // 1. Nenhuma definição expõe segredo; toda coluna de valor é marcada como comercial.
 const VALUE_IDS = /^(valor_|preco|quantidade_arrobas|peso_carcaca)/;
@@ -21,13 +22,21 @@ for (const definition of listAllReportDefinitions()) {
 await seedReportFixture();
 const period = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
 const everything = getReportDefinition('pesagens.periodo').columns.map((column) => column.id);
+const SENSITIVE_IDS = getReportDefinition('pesagens.periodo').columns.filter((column) => column.sensitive).map((column) => column.id);
 // Valores exclusivos da venda da massa (o peso 300,00 kg existe e não é segredo).
-const SECRET_VALUES = ['3000', '3.000', '9,33', 'Valor venda', 'Preço/@', '@ carcaça'];
+// E1B: o segredo da @ de carcaça passou a ser conferido pelo PESO DE CARCAÇA "140,00" (280 kg × 50 % de
+// rendimento, que só existe com o rendimento escondido). O antigo "9,33" (140 ÷ 15) é NUMERICAMENTE igual
+// à @ de peso vivo da mesma venda (280 ÷ 30) — coluna não sensível "Peso em arrobas", que deriva do peso
+// visível e não é segredo. A @ de carcaça continua conferida abaixo pela coluna e pelos rótulos.
+const SECRET_VALUES = ['3000', '3.000', '140,00', 'Valor venda', 'Preço/@', '@ carcaça', 'Carcaça', 'Rendimento'];
 
 // 2. Admin vê (controle positivo), O/C não veem em nenhum canal
 const admin = await runReport('pesagens.periodo', { today: TODAY, params: period, selection: { columns: everything } }, ADMIN);
 const adminCsv = (await prepareEmission(admin, 'csv', ADMIN)).content;
 assert.ok(adminCsv.includes('3000,00'), 'controle: ADMIN exporta o valor da venda');
+assert.ok(adminCsv.includes('140,00') && adminCsv.includes('@ carcaça'), 'controle: ADMIN exporta a carcaça (140,00) e a @ de carcaça');
+// ('3.000' é o formato com milhar da tela; o CSV não tem separador de milhar.)
+for (const secret of SECRET_VALUES.filter((item) => item !== '3.000')) assert.ok(adminCsv.includes(secret), `controle: o segredo "${secret}" existe na massa (senão o teste não prova nada)`);
 
 for (const actor of [OPERADOR, CONSULTA]) {
   const vm = await runReport('pesagens.periodo', {
@@ -53,8 +62,17 @@ for (const actor of [OPERADOR, CONSULTA]) {
       const { content, manifest } = await prepareEmission(vmSemPesquisa, format, actor);
       for (const secret of SECRET_VALUES) assert.ok(!content.includes(secret), `${actor.role} ${format}: não contém "${secret}"`);
       assert.ok(!JSON.stringify(manifest).includes('valor_venda_total') || manifest.hiddenByPermission.includes('valor_venda_total'), 'manifesto só cita a coluna como oculta');
-      assert.ok(!/"valor_venda_total":/.test(content), `${actor.role} ${format}: nenhum campo de valor`);
+      // Nenhum campo comercial (valor, @ de carcaça, carcaça, rendimento) sai como chave do JSON.
+      for (const id of SENSITIVE_IDS) assert.ok(!new RegExp(`"${id}":`).test(content), `${actor.role} ${format}: nenhum campo ${id}`);
     }
+    // E1B: "9,33" no CSV de quem não vê valores só pode ser a @ de PESO VIVO (280 ÷ 30), na coluna
+    // "Peso em arrobas (@)" — nunca numa coluna comercial.
+    const csv = parseCsv((await prepareEmission(vmSemPesquisa, 'csv', actor)).content);
+    const header = csv[0];
+    for (const row of csv.slice(1)) {
+      row.forEach((cell, index) => { if (cell === '9,33') assert.equal(header[index], 'Peso em arrobas (@)', `${actor.role}: 9,33 só como @ viva (coluna ${header[index]})`); });
+    }
+    assert.ok(csv.slice(1).some((row) => row[header.indexOf('Peso em arrobas (@)')] === '9,33'), 'controle: a @ viva da venda (280 ÷ 30) é visível para quem vê o peso');
     // E1: o Resumido também não vaza valor (métricas de valor nem entram na seleção de quem não vê).
     const vmResumido = await runReport('pesagens', {
       today: TODAY, params: period,

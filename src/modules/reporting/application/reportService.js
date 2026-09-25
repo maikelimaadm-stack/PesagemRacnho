@@ -19,6 +19,7 @@ import { listReportDefinitions, resolveReportId } from '../definitions/reportCat
 import { aliasSelection, getLegacyAlias } from '../definitions/legacyAliases.js';
 import { getReportSource } from '../infrastructure/reportSources/index.js';
 import { APP_VERSION, DATA_BUILD_ID, DB_SCHEMA_VERSION } from '../../../versioning/versionInfo.js';
+import { ARROBA_DIVISORS, REPORT_SETTINGS_DEFAULTS, getReportSettings } from '../../settings/application/appConfigService.js';
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -105,12 +106,14 @@ export function resolveSelection(definition, selection = {}, role) {
   for (const id of requestedColumns) if (!resolve(id)) throw new Error(`relatório ${definition.id}: coluna desconhecida (${id})`);
   const hiddenByPermission = forbiddenColumnIds(definition, role, requestedColumns);
   if (hiddenByPermission.length) warnings.push({ code: 'COLUMNS_HIDDEN_BY_PERMISSION', message: `${hiddenByPermission.length} coluna(s) oculta(s) pelo seu perfil`, columns: hiddenByPermission });
-  const columns = requestedColumns.filter((id) => !hiddenByPermission.includes(id));
+  // Coluna só de cálculo (metricOnly: Machos, Fêmeas…) nunca vira coluna de dado nem filtro/ordenação.
+  const columns = requestedColumns.filter((id) => !hiddenByPermission.includes(id) && !resolve(id).column.metricOnly);
 
   const filters = serializeFilters(selection.filters ?? definition.defaultFilters ?? {});
   for (const id of Object.keys(filters)) {
     const accessor = resolve(id);
     if (!accessor) throw new Error(`relatório ${definition.id}: filtro em coluna desconhecida (${id})`);
+    if (accessor.column.metricOnly) { delete filters[id]; continue; }
     if (!canSeeColumn(accessor.column, role)) {
       delete filters[id];
       warnings.push({ code: 'FILTER_REMOVED_BY_PERMISSION', message: `Filtro em ${accessor.column.label} removido pelo seu perfil`, columns: [id] });
@@ -120,7 +123,7 @@ export function resolveSelection(definition, selection = {}, role) {
   const sort = (selection.sort?.length ? selection.sort : definition.defaultSort).filter((item) => {
     const accessor = resolve(item.columnId);
     if (!accessor) throw new Error(`relatório ${definition.id}: ordenação em coluna desconhecida (${item.columnId})`);
-    return canSeeColumn(accessor.column, role);
+    return canSeeColumn(accessor.column, role) && !accessor.column.metricOnly;
   });
 
   const groups = (selection.groups ?? definition.defaultGroups).filter((item) => item?.columnId);
@@ -214,16 +217,55 @@ function publicColumn(accessor) {
     description: column.description ?? null,
     // Só o id da coluna de peso da média ponderada (rótulo "Preço médio da @" no Resumido).
     weightedBy: typeof column.weightedBy === 'string' ? column.weightedBy : null,
+    // E1B: contagem 0 aparece "—" na folha e coluna só com zeros some (Machos/Fêmeas).
+    ...(column.zeroAsEmpty ? { zeroAsEmpty: true } : {}),
+    // E1B: coluna só de cálculo (base de Machos/Fêmeas/nota do GMD) — a tela não a oferece como dado.
+    ...(column.metricOnly ? { metricOnly: true } : {}),
   };
+}
+
+/**
+ * Pares "de–até" da definição cujas duas métricas estão na seleção — e, quando o par é amarrado a um
+ * nível (leafColumnId, ex.: faixa do lote), só se o último nível de agrupamento for essa coluna. As
+ * métricas de um par que não vale ali saem de todos os canais (hiddenMetrics), em vez de virar um
+ * "mínimo dos mínimos" sem sentido.
+ */
+function pairsPresent(pairs = [], aggregates = [], levels = []) {
+  const ids = new Set(aggregates.map(aggregateSpecId));
+  const leafColumnId = levels.at(-1)?.columnId ?? null;
+  const selected = pairs.filter((pair) => ids.has(pair.from) && ids.has(pair.to));
+  const active = selected.filter((pair) => !pair.leafColumnId || pair.leafColumnId === leafColumnId);
+  const hiddenMetrics = selected.filter((pair) => !active.includes(pair)).flatMap((pair) => [pair.from, pair.to]);
+  return { active, hiddenMetrics };
+}
+
+/**
+ * Divisor da @ de peso vivo (E1B): o da chamada (15 ou 30 — testes e tela) ou o de Configurações ›
+ * Relatórios; sem configuração legível, o padrão 30. Nunca a @ de carcaça (÷ 15 com rendimento).
+ */
+async function resolveArrobaDivisor(requested, empresaId) {
+  if (requested !== undefined && requested !== null && requested !== '') {
+    const number = Number(requested);
+    if (!ARROBA_DIVISORS.includes(number)) throw new Error(`relatório: divisor da arroba deve ser ${ARROBA_DIVISORS.join(' ou ')} (recebido ${requested})`);
+    return number;
+  }
+  try {
+    const settings = await getReportSettings(empresaId);
+    const number = Number(settings?.arroba_divisor);
+    return ARROBA_DIVISORS.includes(number) ? number : REPORT_SETTINGS_DEFAULTS.arroba_divisor;
+  } catch {
+    return REPORT_SETTINGS_DEFAULTS.arroba_divisor;
+  }
 }
 
 /**
  * Executa um relatório.
  * @param {string|object} definitionOrId
- * @param {{ params?: object, selection?: object, empresaId?: string, today?: string, reuse?: object }} request
- *   reuse: view model anterior da MESMA tela. Se relatório, parâmetros, empresa e dia forem iguais,
- *   as linhas canônicas já carregadas são reaproveitadas (mudou só filtro/coluna/grupo/total).
+ * @param {{ params?: object, selection?: object, empresaId?: string, today?: string, reuse?: object, arrobaDivisor?: 15|30 }} request
+ *   reuse: view model anterior da MESMA tela. Se relatório, parâmetros, empresa, dia e divisor da @
+ *   forem iguais, as linhas canônicas já carregadas são reaproveitadas (mudou só filtro/coluna/grupo/total).
  *   Não é cache persistido: vive só no objeto que a tela já segura.
+ *   arrobaDivisor (E1B): divisor da @ de peso vivo; ausente → Configurações › Relatórios (padrão 30).
  * @param {{ id: string, nome?: string, role: string }} actor
  */
 export async function runReport(definitionOrId, request = {}, actor) {
@@ -246,12 +288,15 @@ export async function runReport(definitionOrId, request = {}, actor) {
   const lockedFilters = { ...(definition.lockedFilters ? serializeFilters(definition.lockedFilters(params)) : {}), ...selection.fixedFilters };
   const source = getReportSource(definition.source);
   const empresaId = request.empresaId ?? 'local';
-  const sourceKey = JSON.stringify([definition.id, definition.version, empresaId, today, params, role]);
+  // O divisor da @ vai para as linhas (peso_arroba/ganho_arroba): entra no sourceKey para o reuse
+  // nunca servir linhas calculadas com o divisor anterior.
+  const arrobaDivisor = await resolveArrobaDivisor(request.arrobaDivisor, empresaId);
+  const sourceKey = JSON.stringify([definition.id, definition.version, empresaId, today, params, role, arrobaDivisor]);
 
   const reusable = request.reuse && request.reuse.sourceKey === sourceKey && request.reuse.sourceLoaded;
   const loaded = reusable
     ? { ...request.reuse.sourceLoaded, strategy: `${request.reuse.sourceLoaded.strategy}+reuse`, timings: { query: 0, transform: 0 } }
-    : await source({ definition, params, empresaId, today, deps: request.deps });
+    : await source({ definition, params, empresaId, today, arrobaDivisor, deps: request.deps });
   const afterLoad = now();
   const locked = Object.keys(lockedFilters).length ? applyFilters(loaded.rows, { filters: lockedFilters }, selection.resolve) : loaded.rows;
   const filtered = applyDrill(applyFilters(locked, { search: selection.search, searchColumnIds: selection.searchColumnIds, filters: selection.filters }, selection.resolve), selection.drill, selection.resolve);
@@ -315,6 +360,13 @@ export async function runReport(definitionOrId, request = {}, actor) {
     sort: selection.sort,
     groups: tree.levels,
     aggregates: selection.aggregates.map((spec) => ({ id: aggregateSpecId(spec), columnId: spec.columnId ?? null, op: spec.op })),
+    // E1B: divisor da @ de peso vivo usado nas linhas (rodapé "@ = peso vivo ÷ N" e manifesto); rótulos
+    // de curral por id de métrica e pares "de–até" da definição (só os pares com as duas métricas).
+    arrobaDivisor,
+    metricLabels: definition.metricLabels ?? {},
+    metricPairs: pairsPresent(definition.metricPairs ?? [], selection.aggregates, tree.levels).active,
+    // Métricas de um par que não vale neste agrupamento (ex.: faixa do lote agrupando por data): fora da folha e das exportações.
+    hiddenMetrics: pairsPresent(definition.metricPairs ?? [], selection.aggregates, tree.levels).hiddenMetrics,
     rows: sorted,
     rowCount: sorted.length,
     uniqueAnimalCount,

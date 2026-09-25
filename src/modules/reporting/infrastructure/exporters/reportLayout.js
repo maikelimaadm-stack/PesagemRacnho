@@ -6,7 +6,7 @@ import { aggregateLabel, aggregateValueColumn } from '../../domain/aggregateLabe
 import { REPORT_MODES } from '../../domain/reportDefinition.js';
 import { formatCell, headerLabel } from '../../domain/reportFormatting.js';
 import { NONE_GROUP_KEY } from '../../domain/groupEngine.js';
-import { buildSummaryLayout, formatGroupLabel } from '../../domain/summaryLayout.js';
+import { buildSummaryLayout, formatGroupLabel, isLeafGroupLevel, leafOnlyMetricKeys } from '../../domain/summaryLayout.js';
 
 export { aggregateLabel, aggregateValueColumn };
 
@@ -48,7 +48,12 @@ export function buildReportLines(viewModel, target) {
   }
 
   const { columns, aggregates } = viewModel;
-  const specs = aggregates;
+  // Métricas de um par que não vale neste agrupamento (hiddenMetrics) ficam fora também do Detalhado.
+  const hidden = new Set(viewModel.hiddenMetrics ?? []);
+  const specs = aggregates.filter((spec) => !hidden.has(spec.id));
+  // Faixa do lote (par leafOnly) só no subtotal do nível folha — acima dele e no Total geral não sai.
+  const leafOnly = leafOnlyMetricKeys(viewModel);
+  const specsAt = (level) => specs.filter((spec) => !leafOnly.has(spec.id) || isLeafGroupLevel(viewModel, level));
   const valueColumns = viewModel.availableColumns ?? columns;
   const lines = [];
   const dataLine = (row, level, group) => ({
@@ -58,7 +63,7 @@ export function buildReportLines(viewModel, target) {
     row,
     cells: columns.map((column) => formatCell(column, cellRawValue(viewModel, column, row), target)),
   });
-  const totalLines = (type, aggregatesMap, level, group) => specs.map((spec) => {
+  const totalLines = (type, aggregatesMap, level, group) => specsAt(level).map((spec) => {
     const result = aggregatesMap[spec.id];
     return {
       type,

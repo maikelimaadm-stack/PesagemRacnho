@@ -23,6 +23,26 @@ export function dedupeById(rows) {
 
 const nameMap = (rows, label = (row) => row.nome) => new Map((rows || []).filter((row) => !row.deleted_at).map((row) => [row.id, label(row)]));
 
+// E1B: divisor da @ de PESO VIVO (kg por arroba) levado a cada linha — 30 (padrão) ou 15, vindo de
+// Configurações › Relatórios pelo runReport. Não é a @ de carcaça do Comercial (carcaça ÷ 15).
+export const DEFAULT_LIVE_ARROBA_DIVISOR = 30;
+export const LIVE_ARROBA_DIVISORS = Object.freeze([30, 15]);
+
+export function normalizeLiveArrobaDivisor(value) {
+  const number = Number(value);
+  return LIVE_ARROBA_DIVISORS.includes(number) ? number : DEFAULT_LIVE_ARROBA_DIVISOR;
+}
+
+const finiteOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+// Faixa de peso do lote (cadastro ATUAL): só pelo id — nome de lote se repete entre apartações.
+const lotRangeMap = (rows) => new Map((rows || []).filter((row) => !row.deleted_at && row.id)
+  .map((row) => [row.id, { min: finiteOrNull(row.peso_minimo), max: finiteOrNull(row.peso_maximo) }]));
+
 function sessionLabel(session) {
   const date = String(session.data || '').split('-').reverse().join('/');
   const status = session.status ? ` · ${String(session.status).toLowerCase()}` : '';
@@ -57,9 +77,11 @@ export function buildAnimalIdentityIndex(animals = [], marcaNames = new Map()) {
   return map;
 }
 
-export function buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais, salesPolicy = {}, animalIdentity = null } = {}) {
+export function buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais, salesPolicy = {}, animalIdentity = null, arrobaDivisor = DEFAULT_LIVE_ARROBA_DIVISOR } = {}) {
   return {
     salesPolicy,
+    arrobaDivisor: normalizeLiveArrobaDivisor(arrobaDivisor),
+    loteFaixas: lotRangeMap(lotes),
     // Texto do evento → id do cadastro (grafias diferentes do mesmo cadastro no mesmo grupo).
     marcaIdByName: idByName(marcas),
     racaIdByName: idByName(racas),
@@ -71,6 +93,8 @@ export function buildEventLookups({ marcas, racas, categorias, apartacoes, lotes
     apartacoes: nameMap(apartacoes, (row) => row.nome_apartacao ?? row.nome),
     lotes: nameMap(lotes, (row) => row.nome_lote ?? row.nome),
     sessoes: nameMap(sessoes, sessionLabel),
+    // Ordem cronológica da sessão no agrupamento (o rótulo "dd/mm/aaaa · status" não ordena por data).
+    sessoesOrdem: nameMap(sessoes, (row) => (row.data ? `${row.data}|${row.created_at ?? ''}` : null)),
     // Só o nome: nenhum outro campo de usuário entra em relatório.
     usuarios: nameMap(usuarios, (row) => row.nome ?? row.login ?? null),
     situacaoAnimal: new Map((animais || []).filter((row) => !row.deleted_at).map((row) => [row.id, row.situacao ?? null])),
@@ -91,6 +115,7 @@ export function enrichEventRows(viewModels, lookups = buildEventLookups()) {
     const resolvedAnimalId = row.animal_id || lookups.animalIdentity.get(`${normalizeText(row.numero_animal)}::${normalizeText(row.marca)}`) || null;
     // Arroba canônica exige rendimento válido: valor legado gravado sem rendimento não entra em conta.
     const validYield = normalizeCarcassYield(row.rendimento_carcaca) !== null;
+    const faixa = row.lote_id ? lookups.loteFaixas?.get(row.lote_id) ?? null : null;
     return {
     ...row,
     animal_key: resolvedAnimalId || `legado:${normalizeText(row.numero_animal)}::${normalizeText(row.marca)}`,
@@ -103,8 +128,13 @@ export function enrichEventRows(viewModels, lookups = buildEventLookups()) {
     raca_nome: (row.raca_id || lookups.racaIdByName.get(normalizeText(row.raca))) ? lookups.racas.get(row.raca_id || lookups.racaIdByName.get(normalizeText(row.raca))) ?? null : null,
     categoria_nome: row.categoria_id ? lookups.categorias.get(row.categoria_id) ?? null : null,
     lote_nome_atual: row.lote_id ? lookups.lotes.get(row.lote_id) ?? null : null,
+    // E1B: faixa exigida do lote (cadastro atual) e divisor da @ viva usado nas colunas em @.
+    lote_peso_minimo: faixa?.min ?? null,
+    lote_peso_maximo: faixa?.max ?? null,
+    arroba_divisor: lookups.arrobaDivisor ?? DEFAULT_LIVE_ARROBA_DIVISOR,
     apartacao_nome_atual: row.apartacao_id ? lookups.apartacoes.get(row.apartacao_id) ?? null : null,
     sessao_label: row.sessao_id ? lookups.sessoes.get(row.sessao_id) ?? null : null,
+    sessao_ordem: row.sessao_id ? lookups.sessoesOrdem?.get(row.sessao_id) ?? null : null,
     operador_nome: row.created_by_user_id ? lookups.usuarios.get(row.created_by_user_id) ?? null : null,
     situacao_atual: resolvedAnimalId ? lookups.situacaoAnimal.get(resolvedAnimalId) ?? null : null,
     doc_qtd: row.documento_embarque_id ? documentCounts.get(row.documento_embarque_id) : null,

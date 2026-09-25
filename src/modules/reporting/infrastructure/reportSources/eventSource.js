@@ -22,7 +22,7 @@ async function readAllActive(table) {
   return (await table.toArray()).filter((row) => !row.deleted_at);
 }
 
-export async function loadEventLookups(db, viewModels) {
+export async function loadEventLookups(db, viewModels, { arrobaDivisor } = {}) {
   const [marcas, racas, categorias, apartacoes, lotes, usuarios] = await Promise.all([
     readAllActive(db.table('marcas')),
     readAllActive(db.table('racas')),
@@ -41,15 +41,17 @@ export async function loadEventLookups(db, viewModels) {
   const animalIdentity = hasLegacy ? buildAnimalIdentityIndex(allAnimals, new Map(marcas.map((row) => [row.id, row.nome]))) : null;
   // Política de vendas (documento obrigatório) para as pendências; sem configuração, sem exigência.
   const salesPolicy = (await readAppSetting('sales-policy:local').catch(() => null)) || {};
-  // Usuários: só id e nome saem daqui (buildEventLookups descarta o resto).
-  return buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais: hasLegacy ? allAnimals : animais, salesPolicy, animalIdentity });
+  // Usuários: só id e nome saem daqui (buildEventLookups descarta o resto). Lotes: nome e faixa de
+  // peso (peso_minimo/peso_maximo) da store já lida — nenhuma leitura nova.
+  return buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais: hasLegacy ? allAnimals : animais, salesPolicy, animalIdentity, arrobaDivisor });
 }
 
 /**
- * @param {{ from?: string, to?: string, empresaId?: string, tipos?: string[] }} params
+ * @param {{ from?: string, to?: string, empresaId?: string, tipos?: string[], arrobaDivisor?: number }} params
+ *   arrobaDivisor: divisor da @ de peso vivo (30 ou 15; padrão 30) gravado em cada linha (E1B).
  * @returns {Promise<{ rows: object[], timings: { query: number, transform: number }, strategy: string, rowsRead: number }>}
  */
-export async function loadEventRows({ from, to, empresaId, tipos } = {}) {
+export async function loadEventRows({ from, to, empresaId, tipos, arrobaDivisor } = {}) {
   const db = await storage.ensureReady();
   const table = db.table('pesagens');
   const startedAt = performance.now();
@@ -77,7 +79,7 @@ export async function loadEventRows({ from, to, empresaId, tipos } = {}) {
     if (tipos && !tipos.includes(viewModel.tipo_manejo)) continue;
     viewModels.push(viewModel);
   }
-  const lookups = await loadEventLookups(db, viewModels);
+  const lookups = await loadEventLookups(db, viewModels, { arrobaDivisor });
   const rows = enrichEventRows(viewModels, lookups);
   instrumentation.lastQuery = { strategy, from: from ?? null, to: to ?? null, rowsRead: raw.length, rowsOut: rows.length };
   return {

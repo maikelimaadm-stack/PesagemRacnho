@@ -38,7 +38,8 @@ assert.equal(compartilhado.scope, 'SHARED');
 const stored = (await db.table('appSettings').get('report-templates:local')).value;
 assert.equal(stored.version, 1);
 assert.equal(stored.templates.length, 2);
-const serialized = JSON.stringify(stored);
+// id (uuid aleatório) e datas (relógio real) ficam fora da busca: "345" pode aparecer neles por acaso.
+const serialized = JSON.stringify(stored, (key, value) => (['id', 'createdAt', 'updatedAt'].includes(key) ? undefined : value));
 for (const forbidden of ['"rows"', '"data"', '"population"', '345', 'Frigo Sul']) assert.ok(!serialized.includes(forbidden), `modelo não guarda dados (${forbidden})`);
 // E1 (1.4.0): o modelo guarda também o modo (Resumido/Detalhado) e a ordem do Resumido.
 assert.deepEqual(Object.keys(stored.templates[0]).sort(), ['aggregates', 'baseReportId', 'baseReportVersion', 'columns', 'createdAt', 'filters', 'groups', 'id', 'mode', 'name', 'orientation', 'ownerName', 'ownerUserId', 'params', 'period', 'scope', 'search', 'sort', 'summarySort', 'updatedAt', 'updatedBy', 'version', 'widths'].sort());

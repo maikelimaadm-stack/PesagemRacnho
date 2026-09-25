@@ -10,6 +10,7 @@
 // XLSX, impressão/PDF e JSON leem ESTE layout — paridade por construção.
 import { aggregateValueColumn, summaryMetricLabels } from './aggregateLabels.js';
 import { formatCell } from './reportFormatting.js';
+import { compareGroupLabels } from './groupEngine.js';
 
 export const SUMMARY_LINE_TYPES = Object.freeze({ SUMMARY: 'SUMMARY', GRAND_TOTAL: 'GRAND_TOTAL' });
 export const SUMMARY_LABEL_SORT = '__label__';
@@ -40,13 +41,13 @@ export function buildSummaryRows(tree, { summarySort = null } = {}) {
     if (!summarySort?.key) return nodes;
     return [...nodes].sort((left, right) => {
       if (left.missing !== right.missing) return left.missing ? 1 : -1;
-      if (summarySort.key === SUMMARY_LABEL_SORT) return direction * collator.compare(left.label, right.label);
+      if (summarySort.key === SUMMARY_LABEL_SORT) return direction * compareGroupLabels(left, right);
       const a = metricValue(left, summarySort.key);
       const b = metricValue(right, summarySort.key);
       const missingA = isMissingValue(a);
       const missingB = isMissingValue(b);
-      if (missingA || missingB) return missingA === missingB ? collator.compare(left.label, right.label) : (missingA ? 1 : -1);
-      if (typeof a === 'number' && typeof b === 'number') return a === b ? collator.compare(left.label, right.label) : direction * (a - b);
+      if (missingA || missingB) return missingA === missingB ? compareGroupLabels(left, right) : (missingA ? 1 : -1);
+      if (typeof a === 'number' && typeof b === 'number') return a === b ? compareGroupLabels(left, right) : direction * (a - b);
       return direction * collator.compare(String(a), String(b));
     });
   };
@@ -71,15 +72,37 @@ export function buildSummaryRows(tree, { summarySort = null } = {}) {
   return out;
 }
 
-/** Métricas do Resumido: as agregações do relatório; sem nenhuma, a contagem de linhas. */
+/**
+ * Métricas do Resumido: as agregações do relatório; sem nenhuma, a contagem de linhas.
+ * E1B: viewModel.metricLabels (da definição) troca o rótulo automático pelo rótulo de curral da folha.
+ */
 export function summaryMetrics(viewModel) {
   const columns = viewModel.availableColumns ?? viewModel.columns ?? [];
-  const context = { grain: viewModel.grain, animalColumnId: viewModel.animalColumnId ?? null };
+  const context = { grain: viewModel.grain, animalColumnId: viewModel.animalColumnId ?? null, metricLabels: viewModel.metricLabels ?? null };
   if (!viewModel.aggregates?.length) {
     return [{ key: SUMMARY_ROWS_METRIC, spec: { id: SUMMARY_ROWS_METRIC, op: 'count' }, label: summaryMetricLabels([{ op: 'count' }], columns, context)[0], column: { type: 'integer' } }];
   }
   const labels = summaryMetricLabels(viewModel.aggregates, columns, context);
-  return viewModel.aggregates.map((spec, index) => ({ key: spec.id, spec, label: labels[index], column: aggregateValueColumn(spec, columns) }));
+  // hiddenMetrics: métricas de um par "de–até" que não vale neste agrupamento (faixa do lote agrupando por data).
+  const hidden = new Set(viewModel.hiddenMetrics ?? []);
+  return viewModel.aggregates
+    .map((spec, index) => ({ key: spec.id, spec, label: labels[index], column: aggregateValueColumn(spec, columns) }))
+    .filter((metric) => !hidden.has(metric.key));
+}
+
+/**
+ * Métricas de um par "de–até" que só valem no nível folha (leafOnly — a faixa exigida é do LOTE): acima
+ * dele e no Total geral a célula fica vazia em todos os canais (folha, CSV, XLSX, grade), porque a menor
+ * mínima e a maior máxima de lotes diferentes não são a faixa de ninguém. O JSON mantém os agregados brutos.
+ */
+export function leafOnlyMetricKeys(viewModel) {
+  return new Set((viewModel.metricPairs ?? []).filter((pair) => pair.leafOnly).flatMap((pair) => [pair.from, pair.to]));
+}
+
+/** O nível (1..n; 0 = Total geral) é o nível folha do agrupamento? */
+export function isLeafGroupLevel(viewModel, level) {
+  const depth = (viewModel.groups ?? []).length;
+  return depth > 0 && level === depth;
 }
 
 const FORMATTED_LABEL_TYPES = new Set(['date', 'datetime', 'boolean']);
@@ -109,6 +132,8 @@ export function buildSummaryLayout(viewModel, target = 'screen') {
   const format = (metric, value) => formatCell(metric.column, value ?? null, target);
   const columns = viewModel.availableColumns ?? viewModel.columns ?? [];
   const levelColumns = levels.map((level) => columns.find((column) => column.id === level.columnId) ?? null);
+  const leafOnly = leafOnlyMetricKeys(viewModel);
+  const shown = (metric, level) => !leafOnly.has(metric.key) || isLeafGroupLevel(viewModel, level);
   const rows = nodes.map((node) => {
     const label = formatGroupLabel(levelColumns[node.level - 1], node.label, target, node.missing);
     return {
@@ -118,9 +143,9 @@ export function buildSummaryLayout(viewModel, target = 'screen') {
       label,
       cells: [
         ...groupHeaders.map((_, index) => (index === node.level - 1 ? label : blank)),
-        ...metrics.map((metric) => format(metric, metricValue(node, metric.key))),
+        ...metrics.map((metric) => (shown(metric, node.level) ? format(metric, metricValue(node, metric.key)) : blank)),
       ],
-      rawValues: metrics.map((metric) => metricValue(node, metric.key)),
+      rawValues: metrics.map((metric) => (shown(metric, node.level) ? metricValue(node, metric.key) : null)),
     };
   });
   const totalsNode = { rowCount: viewModel.rowCount, aggregates: viewModel.totals };
@@ -131,9 +156,9 @@ export function buildSummaryLayout(viewModel, target = 'screen') {
     label: 'Total geral',
     cells: [
       ...groupHeaders.map((_, index) => (index === 0 ? 'Total geral' : blank)),
-      ...metrics.map((metric) => format(metric, metricValue(totalsNode, metric.key))),
+      ...metrics.map((metric) => (shown(metric, 0) ? format(metric, metricValue(totalsNode, metric.key)) : blank)),
     ],
-    rawValues: metrics.map((metric) => metricValue(totalsNode, metric.key)),
+    rawValues: metrics.map((metric) => (shown(metric, 0) ? metricValue(totalsNode, metric.key) : null)),
   });
   return { headers: [...groupHeaders, ...metrics.map((metric) => metric.label)], groupHeaders, metrics, rows };
 }

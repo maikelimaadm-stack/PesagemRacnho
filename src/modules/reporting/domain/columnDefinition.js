@@ -99,6 +99,7 @@ export function defineColumn(spec) {
   if (spec.accessor != null && typeof spec.accessor !== 'function') throw new Error(`coluna ${id}: accessor deve ser função`);
   if (spec.display != null && typeof spec.display !== 'function') throw new Error(`coluna ${id}: display deve ser função`);
   if (type === 'entity' && typeof spec.display !== 'function') throw new Error(`coluna ${id}: entidade exige display (nome) além do accessor (id)`);
+  if (spec.groupOrder != null && typeof spec.groupOrder !== 'function') throw new Error(`coluna ${id}: groupOrder deve ser função`);
   if (type === 'enum' && !Array.isArray(spec.options)) throw new Error(`coluna ${id}: enum exige options`);
   if (spec.sensitive != null && !Object.values(SENSITIVITY).includes(spec.sensitive)) throw new Error(`coluna ${id}: sensibilidade inválida (${spec.sensitive})`);
   if (spec.weighted && (!spec.weighted.gain || !spec.weighted.days)) throw new Error(`coluna ${id}: weighted exige gain e days`);
@@ -158,6 +159,11 @@ export function groupKeyOf(column, row) {
 export function groupLabelOf(column, row) {
   if (column.groupLabel) return column.groupLabel(row);
   return displayOf(column, row);
+}
+
+/** Chave de ORDEM do grupo quando o rótulo não ordena (ex.: Sessão "dd/mm/aaaa · status" → data ISO). */
+export function groupOrderOf(column, row) {
+  return column.groupOrder ? column.groupOrder(row) ?? null : null;
 }
 
 export function indexColumns(columns) {

@@ -4,7 +4,8 @@
 // (Tipo | Grupo | Métrica | Valor | colunas) e uma segunda aba com o manifesto.
 import { describeFilters } from './printDocument.js';
 import { describePeriod } from '../../domain/reportPeriod.js';
-import { buildReportLines } from './reportLayout.js';
+import { DEFAULT_DECIMALS } from '../../domain/reportFormatting.js';
+import { aggregateValueColumn, buildReportLines } from './reportLayout.js';
 
 const encoder = new TextEncoder();
 
@@ -35,13 +36,17 @@ export function columnLetter(index) {
 }
 
 // Estilos (cellXfs): 0 padrão · 1 texto com borda · 2 cabeçalho · 3 título · 4 total · 5 grupo ·
-// 6 número 2 casas · 7 número 3 casas · 8 inteiro · 9 subtotal · 10 rótulo de metadados
-const STYLE = { text: 1, header: 2, title: 3, total: 4, group: 5, num2: 6, num3: 7, int: 8, subtotal: 9, meta: 10 };
+// 6 número 2 casas · 7 número 3 casas · 8 inteiro · 9 subtotal · 10 rótulo de metadados ·
+// 11 número 1 casa (E1B: kg agregado)
+const STYLE = { text: 1, header: 2, title: 3, total: 4, group: 5, num2: 6, num3: 7, int: 8, subtotal: 9, meta: 10, num1: 11 };
 
+// Formato do Excel = casas da coluna (as mesmas de formatCell): 0 inteiro, 1, 2 (padrão) ou 3.
 function numberStyle(column) {
   if (!column) return STYLE.num2;
-  if (column.type === 'integer') return STYLE.int;
-  if (column.type === 'gmd') return STYLE.num3;
+  const decimals = Number.isInteger(column.decimals) ? column.decimals : DEFAULT_DECIMALS[column.type];
+  if (column.type === 'integer' || decimals === 0) return STYLE.int;
+  if (decimals === 1) return STYLE.num1;
+  if (decimals === 3) return STYLE.num3;
   return STYLE.num2;
 }
 
@@ -55,10 +60,9 @@ function rowXml(rowNumber, cells) {
   return `<row r="${rowNumber}">${cells.map(([value, style], index) => cellXml(`${columnLetter(index)}${rowNumber}`, value, style ?? 0)).join('')}</row>`;
 }
 
+// Mesma coluna "virtual" do layout (kg agregado com 1 casa, média de inteiro com 1, GMD com 3).
 function aggregateColumn(spec, viewModel) {
-  if (['count', 'countValid', 'countDistinct'].includes(spec.op)) return { type: 'integer' };
-  if (spec.op === 'weightedGmd') return { type: 'gmd' };
-  return viewModel.availableColumns.find((column) => column.id === spec.columnId) || { type: 'number' };
+  return aggregateValueColumn(spec, viewModel.availableColumns ?? viewModel.columns ?? []);
 }
 
 function metaRows(viewModel) {
@@ -129,12 +133,12 @@ function worksheetXml(rows, width, widths) {
 
 const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="3"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="#,##0.000"/><numFmt numFmtId="166" formatCode="#,##0"/></numFmts>
+<numFmts count="4"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="#,##0.000"/><numFmt numFmtId="166" formatCode="#,##0"/><numFmt numFmtId="167" formatCode="#,##0.0"/></numFmts>
 <fonts count="3"><font><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>
 <fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE5E7EB"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDFF0E5"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEEF7F1"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="2"><border/><border><left style="thin"><color rgb="FFD1D5DB"/></left><right style="thin"><color rgb="FFD1D5DB"/></right><top style="thin"><color rgb="FFD1D5DB"/></top><bottom style="thin"><color rgb="FFD1D5DB"/></bottom></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="11">
+<cellXfs count="12">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
@@ -146,6 +150,7 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
 <xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+<xf numFmtId="167" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;

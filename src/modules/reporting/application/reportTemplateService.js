@@ -9,6 +9,12 @@
 // consolidados: favoritos, recentes e modelos com id antigo são reescritos (em tempo de execução,
 // idempotente, sem esquema) para o id novo + seleção equivalente, com auditoria "relatório consolidado".
 // Favorito de relatório antigo vira "idNovo#idAntigo": abre o relatório novo com a visão do antigo.
+//
+// E1B (1.4.0): último estado do relatório por usuário (a tela volta como a pessoa deixou):
+//   report-view-state:<empresa_id>:<usuario_id>     → { version: 1, reports: { [reportId]: config } }
+// config tem o MESMO formato validado de um modelo (período, filtros, agrupamento, modo, ordem,
+// orientação…) + showEmptyColumns; nunca dados. Ao ler, passa pela mesma revalidação do modelo
+// (templateToRequest): estado antigo com coluna que sumiu ou que o papel não vê é filtrado, sem erro.
 import { readAppSetting, writeAppSetting } from '../../../storage/indexedDb/repositories/index.js';
 import { ensureStorageReady } from '../../../storage/indexedDb/db.js';
 import { can, forbiddenError } from '../../auth/domain/permissionService.js';
@@ -28,6 +34,8 @@ const MAX_RECENTS = 12;
 const templatesKey = (empresaId) => `report-templates:${empresaId}`;
 const favoritesKey = (empresaId, userId) => `report-favorites:${empresaId}:${userId}`;
 const recentsKey = (empresaId, userId) => `report-recents:${empresaId}:${userId}`;
+const viewStateKey = (empresaId, userId) => `report-view-state:${empresaId}:${userId}`;
+export const VIEW_STATE_VERSION = 1;
 
 function requireActor(actor) {
   if (!actor?.id || !actor?.role) throw forbiddenError(actor?.role ?? null, 'reports.read');
@@ -475,4 +483,54 @@ export async function recordRecent(reportId, actor, { empresaId = 'local', templ
   const next = [entry, ...current.filter((item) => !same(item))].slice(0, MAX_RECENTS);
   await writeAppSetting(recentsKey(empresaId, actor.id), next);
   return next;
+}
+
+// ---------------------------------------------------------------------------
+// Último estado do relatório por usuário (E1B)
+// ---------------------------------------------------------------------------
+
+/**
+ * Grava como a pessoa deixou o relatório (período, tipo/agrupamento, filtros, modo, ordem, orientação,
+ * colunas vazias). Validado como um modelo (ids desconhecidos são erro); sem auditoria, como favoritos.
+ */
+export async function saveReportViewState(reportId, config, actor, { empresaId = 'local', now = new Date().toISOString() } = {}) {
+  requireActor(actor);
+  const definition = getReportDefinition(reportId);
+  if (!definition || resolveReportId(reportId)?.aliasId) throw templateError('Relatório inexistente');
+  if (!canRunReport(definition, actor.role)) throw forbiddenError(actor.role, definition.requires.find((action) => !can(actor.role, action)) || 'reports.read');
+  const normalized = normalizeTemplateConfig(definition, config);
+  const hidden = [...normalized.columns, ...Object.keys(normalized.filters), ...normalized.groups.map((group) => group.columnId)]
+    .filter((id) => !canSeeColumn(definition.columns.find((column) => column.id === id), actor.role));
+  if (hidden.length) throw forbiddenError(actor.role, 'commercial.values');
+  const stored = await readAppSetting(viewStateKey(empresaId, actor.id));
+  const reports = stored && typeof stored === 'object' && stored.reports && typeof stored.reports === 'object' ? { ...stored.reports } : {};
+  reports[definition.id] = {
+    ...normalized,
+    baseReportId: definition.id,
+    baseReportVersion: definition.version,
+    showEmptyColumns: config?.showEmptyColumns === true,
+    updatedAt: now,
+  };
+  await writeAppSetting(viewStateKey(empresaId, actor.id), { version: VIEW_STATE_VERSION, reports });
+  return reports[definition.id];
+}
+
+/**
+ * Último estado → pedido pronto para a tela ({ params, selection, orientation, showEmptyColumns,
+ * warnings }), revalidado contra a definição atual e o papel (nunca amplia permissão). Sem estado, ou
+ * estado ilegível, devolve null (a tela abre no padrão do relatório).
+ */
+export async function getReportViewState(reportId, actor, { empresaId = 'local' } = {}) {
+  requireActor(actor);
+  const definition = getReportDefinition(reportId);
+  if (!definition || !canRunReport(definition, actor.role)) return null;
+  const stored = await readAppSetting(viewStateKey(empresaId, actor.id));
+  const state = stored?.reports?.[definition.id];
+  if (!state || typeof state !== 'object') return null;
+  try {
+    const request = templateToRequest({ ...state, baseReportId: definition.id }, actor.role);
+    return { ...request, showEmptyColumns: state.showEmptyColumns === true, updatedAt: state.updatedAt ?? null };
+  } catch {
+    return null;
+  }
 }
