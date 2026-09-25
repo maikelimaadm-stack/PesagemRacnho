@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Columns3, Download, FileJson, FileSpreadsheet, FileText, Layers, Lock, Printer, RefreshCw, Save, SearchCheck, Sigma, Star, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Columns3, Eye, EyeOff, FileJson, FileSpreadsheet, FileText, Layers, Lock, MoreHorizontal, Printer, RefreshCw, Save, ScrollText, SearchCheck, Sigma, Star, Table2, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import MakColumnConfigDialog from "@/components/mak/MakColumnConfigDialog";
 import MakFilterPill from "@/components/mak/MakFilterPill";
@@ -12,44 +11,74 @@ import MakFilterRail from "@/components/mak/MakFilterRail";
 import MgTablePanelStrip from "@/components/mak/MgTablePanelStrip";
 import { ModeloBase1PageContainer, ModeloBase1PageHeader } from "@/components/modelobase1";
 import { describeFilter, isFilterActive, normalizeFilter } from "@/modules/reporting/domain/filterEngine";
-import { PERIOD_PRESETS, describePeriod } from "@/modules/reporting/domain/reportPeriod";
+import { describePeriod } from "@/modules/reporting/domain/reportPeriod";
 import { REPORT_FAMILIES, REPORT_MODES } from "@/modules/reporting/domain/reportDefinition";
-import { formatGroupLabel } from "@/modules/reporting/domain/summaryLayout";
+import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
+import { listReportViews, matchView, viewSelection } from "@/modules/reporting/domain/reportViews";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { aliasSelection, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
 import { runReport } from "@/modules/reporting/application/reportService";
 import { emitReport } from "@/modules/reporting/application/reportExportService";
 import { exportPdf, printReport } from "@/modules/reporting/application/reportPrintService";
+import { loadReportHeader } from "@/modules/catalog/application/propertyHeaderService";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { favoriteKey, getFavorites, recordRecent, saveTemplate, templateToRequest, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
+import { favoriteKey, getFavorites, recordRecent, saveReportViewState, saveTemplate, templateToRequest, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
-import ReportSummaryTable from "./ReportSummaryTable";
+import ReportFilterBar from "./ReportFilterBar";
+import ReportSheetView from "./ReportSheetView";
 import ReportTable from "./ReportTable";
 import { pillFilterType, pillOptions, toServiceFilters, useCan } from "./reportUi";
 
 const NO_GROUP = "__nenhum__";
 const CUSTOM_GROUP = "__personalizado__";
+const PREVIOUS_COLUMN = "tem_pesagem_anterior";
 
-function initialState(definition, template, preset, role) {
+// Botões de filtro padrão (E1B §3, linha 2): o primeiro id que o relatório tiver. Proprietário só aparece
+// quando existir a coluna (hoje não existe nas pesagens: fica para a E3).
+const FILTER_BUTTONS = Object.freeze([
+  { label: "Lotes", ids: ["nome_lote", "lote", "lote_atual"] },
+  { label: "Apartações", ids: ["nome_apartacao", "apartacao", "apartacao_atual"] },
+  { label: "Sexo", ids: ["sexo"] },
+  { label: "Raças", ids: ["raca"] },
+  { label: "Era", ids: ["era"] },
+  { label: "Marcas", ids: ["marca"] },
+  { label: "Proprietário", ids: ["proprietario"] },
+  { label: "Categoria", ids: ["categoria"] },
+  { label: "Status", ids: ["situacao_atual", "situacao"] },
+]);
+
+function stateFromRequest(definition, request, extra = {}) {
+  return {
+    params: request.params,
+    uiFilters: request.selection.filters,
+    fixedFilters: request.selection.fixedFilters ?? {},
+    columns: request.selection.columns.length ? request.selection.columns : definition.defaultColumns,
+    groups: request.selection.groups,
+    aggregates: request.selection.aggregates,
+    sort: request.selection.sort,
+    search: request.selection.search,
+    widths: request.widths,
+    mode: request.selection.mode,
+    summarySort: request.selection.summarySort,
+    drill: [],
+    orientation: request.orientation ?? "auto",
+    showEmptyColumns: false,
+    detailSheet: false,
+    ...extra,
+  };
+}
+
+function initialState(definition, template, preset, role, savedState) {
   if (template) {
     const request = templateToRequest(template, role);
     request.warnings.forEach((warning) => toast.warning(warning.message));
-    return {
-      params: request.params,
-      uiFilters: request.selection.filters,
-      fixedFilters: request.selection.fixedFilters,
-      columns: request.selection.columns.length ? request.selection.columns : definition.defaultColumns,
-      groups: request.selection.groups,
-      aggregates: request.selection.aggregates,
-      sort: request.selection.sort,
-      search: request.selection.search,
-      widths: request.widths,
-      mode: request.selection.mode,
-      summarySort: request.selection.summarySort,
-      drill: [],
-    };
+    return stateFromRequest(definition, request);
+  }
+  if (!preset && savedState) {
+    // Último estado do usuário (já revalidado pelo serviço contra a definição e o papel).
+    return stateFromRequest(definition, savedState, { showEmptyColumns: savedState.showEmptyColumns === true });
   }
   const params = {};
   for (const param of definition.params) if (param.default != null) params[param.id] = param.default;
@@ -73,6 +102,9 @@ function initialState(definition, template, preset, role) {
     mode: legacy?.mode ?? definition.defaultMode,
     summarySort: null,
     drill: [],
+    orientation: "auto",
+    showEmptyColumns: false,
+    detailSheet: false,
   };
 }
 
@@ -86,16 +118,51 @@ const sameFilter = (left, right) => {
   return plain(left) === plain(right);
 };
 
+const lowerFirst = (text) => (text ? text.charAt(0).toLocaleLowerCase("pt-BR") + text.slice(1) : text);
+
+/** "Ordenar por": nível de data (mais recente/antiga), nome do grupo e métricas no Resumido; colunas no Detalhado. */
+function buildSortOptions({ summaryMode, groups, columnOf, metrics, visibleColumns }) {
+  const options = [{ value: "padrao", label: "Padrão do relatório" }];
+  if (summaryMode) {
+    groups.forEach((group, index) => {
+      const column = columnOf(group.columnId);
+      if (column && (column.type === "date" || column.type === "datetime")) {
+        options.push({ value: `nivel:${index}:desc`, label: `${column.label} (mais recente)` }, { value: `nivel:${index}:asc`, label: `${column.label} (mais antiga)` });
+      }
+    });
+    if (groups.length) options.push({ value: "rotulo:asc", label: "Nome do grupo (A–Z)" }, { value: "rotulo:desc", label: "Nome do grupo (Z–A)" });
+    for (const metric of metrics) options.push({ value: `metrica:${metric.key}:desc`, label: `Maior ${lowerFirst(metric.label)}` }, { value: `metrica:${metric.key}:asc`, label: `Menor ${lowerFirst(metric.label)}` });
+  } else {
+    for (const column of visibleColumns) options.push({ value: `coluna:${column.id}:asc`, label: `${column.label} (crescente)` }, { value: `coluna:${column.id}:desc`, label: `${column.label} (decrescente)` });
+  }
+  return options;
+}
+
+function currentSortValue({ summaryMode, state, definition, options }) {
+  const has = (value) => options.some((option) => option.value === value);
+  if (summaryMode) {
+    if (state.summarySort?.key === SUMMARY_LABEL_SORT) return has(`rotulo:${state.summarySort.direction}`) ? `rotulo:${state.summarySort.direction}` : "custom";
+    if (state.summarySort?.key) return has(`metrica:${state.summarySort.key}:${state.summarySort.direction}`) ? `metrica:${state.summarySort.key}:${state.summarySort.direction}` : "custom";
+    const desc = state.groups.findIndex((group) => group.direction === "desc");
+    if (desc >= 0) return has(`nivel:${desc}:desc`) ? `nivel:${desc}:desc` : "custom";
+    return "padrao";
+  }
+  const first = state.sort?.[0];
+  if (!first || JSON.stringify(state.sort) === JSON.stringify(definition.defaultSort)) return "padrao";
+  return has(`coluna:${first.columnId}:${first.direction}`) ? `coluna:${first.columnId}:${first.direction}` : "custom";
+}
+
 /**
  * @param allowPreferences false quando aberto fora de Relatórios (aba Controle da Manutenção): sem
- *   estrela, sem "Salvar modelo" e sem recente — só Relatórios lista favoritos, modelos e recentes.
+ *   estrela, sem "Salvar modelo", sem recente e sem último estado — só Relatórios guarda preferências.
+ * @param savedState último estado do usuário (Relatorios.jsx lê antes de montar) ou null.
  */
-export default function ReportView({ reportId, presetId = null, template, actor, onBack, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true }) {
+export default function ReportView({ reportId, presetId = null, template, savedState = null, actor, onBack, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true }) {
   const can = useCan();
   const definition = getReportDefinition(reportId);
   const preset = presetId ? getLegacyAlias(presetId) : null;
   const [state, setState] = useState(() => {
-    const initial = initialState(definition, template, preset, actor.role);
+    const initial = initialState(definition, template, preset, actor.role, allowPreferences ? savedState : null);
     const periodParam = definition.params.find((param) => param.type === "period");
     return initialPeriod && periodParam ? { ...initial, params: { ...initial.params, [periodParam.id]: initialPeriod } } : initial;
   });
@@ -107,10 +174,11 @@ export default function ReportView({ reportId, presetId = null, template, actor,
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [currentTemplate, setCurrentTemplate] = useState(template ?? null);
   const [printPrompt, setPrintPrompt] = useState(null);
-  const [orientation, setOrientation] = useState(template?.orientation ?? "auto");
+  const [header, setHeader] = useState(null);
   const lastViewModel = useRef(null);
   const runSeq = useRef(0);
   const favKey = favoriteKey(definition.id, preset ? presetId : null);
+  const views = useMemo(() => listReportViews(definition), [definition]);
 
   useEffect(() => {
     if (!allowPreferences) return;
@@ -146,37 +214,104 @@ export default function ReportView({ reportId, presetId = null, template, actor,
     } finally {
       if (seq === runSeq.current) setLoading(false);
     }
-  }, [definition.id, state, serviceFilters, actor, preset, presetId, template]);
+  }, [definition.id, state.params, state.columns, serviceFilters, state.fixedFilters, state.groups, state.aggregates, state.sort, state.search, state.mode, state.summarySort, state.drill, actor, preset, presetId, template]);
 
   useEffect(() => {
     const timer = setTimeout(() => execute(), 200);
     return () => clearTimeout(timer);
   }, [execute]);
 
+  // Cabeçalho da folha: propriedade do filtro (quando houver uma só) ou a Padrão; sem nenhuma, o nome do sistema.
+  const headerKey = JSON.stringify([viewModel?.filters ?? {}, viewModel?.lockedFilters ?? {}, viewModel?.drill ?? []]);
+  useEffect(() => {
+    let alive = true;
+    const context = JSON.parse(headerKey);
+    loadReportHeader({ filters: context[0], lockedFilters: context[1], drill: context[2] })
+      .then((loaded) => { if (alive) setHeader(loaded); })
+      .catch(() => { if (alive) setHeader(null); });
+    return () => { alive = false; };
+  }, [headerKey]);
+
   const update = (patch) => setState((current) => ({ ...current, ...patch }));
   const periodParam = definition.params.find((param) => param.type === "period");
   const period = periodParam ? state.params[periodParam.id] ?? {} : null;
   const setPeriod = (next) => update({ params: { ...state.params, [periodParam.id]: next } });
   const visibleColumns = viewModel?.columns ?? [];
-  const available = viewModel?.availableColumns ?? [];
+  const available = useMemo(
+    () => (viewModel?.availableColumns?.length ? viewModel.availableColumns : definition.columns.filter((column) => canSeeColumn(column, actor.role))),
+    [viewModel, definition, actor.role],
+  );
+  const columnOf = useCallback((columnId) => available.find((column) => column.id === columnId) ?? null, [available]);
   const summaryMode = (viewModel?.mode ?? state.mode) === REPORT_MODES.RESUMIDO;
+
+  // Último estado do usuário: grava (com espera curta) como a pessoa deixou. Falha de gravação
+  // (banco em somente leitura) não atrapalha a tela.
+  useEffect(() => {
+    if (!allowPreferences) return undefined;
+    const timer = setTimeout(() => {
+      saveReportViewState(definition.id, {
+        columns: state.columns, filters: state.uiFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: state.aggregates,
+        sort: state.sort, search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)),
+        widths: state.widths, orientation: state.orientation, mode: state.drill.length ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
+        showEmptyColumns: state.showEmptyColumns,
+      }, actor).catch(() => {});
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [allowPreferences, definition.id, state, period, periodParam, actor]);
 
   // Agrupar por (rápido): colunas mais usadas do relatório; mais níveis pelo diálogo.
   const quickGroupOptions = useMemo(() => {
-    // Antes do primeiro cálculo as colunas vêm da definição (filtradas pelo perfil): o seletor nunca
-    // mostra o id técnico enquanto carrega.
-    const source = available.length ? available : definition.columns.filter((column) => canSeeColumn(column, actor.role));
-    const groupable = source.filter((column) => column.groupable);
+    const groupable = available.filter((column) => column.groupable);
     // O agrupamento padrão do relatório está sempre entre as opções (ex.: Sessão no Fechamento do dia).
     const quick = definition.quickGroups?.length ? definition.quickGroups : groupable.slice(0, 8).map((column) => column.id);
     const ids = [...new Set([...(definition.defaultGroups ?? []).map((group) => group.columnId), ...quick])];
     return ids.map((id) => groupable.find((column) => column.id === id)).filter(Boolean);
-  }, [available, definition, actor.role]);
-  const columnLabel = (columnId) => (available.find((column) => column.id === columnId) ?? definition.columns.find((column) => column.id === columnId))?.label ?? columnId;
+  }, [available, definition]);
+  const columnLabel = (columnId) => (columnOf(columnId) ?? definition.columns.find((column) => column.id === columnId))?.label ?? columnId;
   const quickGroupValue = state.groups.length === 0 ? NO_GROUP
     : state.groups.length === 1 && quickGroupOptions.some((column) => column.id === state.groups[0].columnId) ? state.groups[0].columnId : CUSTOM_GROUP;
+  const groupOptions = [
+    { value: NO_GROUP, label: "Sem agrupamento" },
+    ...quickGroupOptions.map((column) => ({ value: column.id, label: column.label })),
+    { value: CUSTOM_GROUP, label: quickGroupValue === CUSTOM_GROUP ? state.groups.map((group) => columnLabel(group.columnId)).join(" › ") : "Mais níveis…" },
+  ];
   const setGroups = (groups) => update({ groups, drill: [] });
   const setMode = (mode) => update({ mode, drill: mode === REPORT_MODES.RESUMIDO ? [] : state.drill });
+
+  // Tipo de relatório: atalho para agrupamento + modo (+ totais/colunas/ordem da visão) — nada de conta nova.
+  const viewId = matchView(definition, { groups: state.groups, mode: state.mode }) ?? "custom";
+  const applyView = (id) => {
+    const view = views.find((item) => item.id === id);
+    if (!view) return;
+    const selection = viewSelection(view, definition);
+    update({
+      groups: selection.groups,
+      mode: selection.mode,
+      aggregates: selection.aggregates ?? state.aggregates,
+      columns: selection.columns?.length ? selection.columns : state.columns,
+      sort: selection.sort ?? state.sort,
+      summarySort: selection.summarySort ?? null,
+      // Só a visão que declara filtros mexe nos filtros; os da pessoa ficam.
+      ...(view.filters ? { uiFilters: { ...state.uiFilters, ...JSON.parse(JSON.stringify(view.filters)) } } : {}),
+      drill: [],
+    });
+  };
+
+  const metricsForSort = useMemo(() => (viewModel && summaryMode ? summaryMetrics(viewModel) : []), [viewModel, summaryMode]);
+  const sortOptions = useMemo(() => buildSortOptions({ summaryMode, groups: state.groups, columnOf, metrics: metricsForSort, visibleColumns }), [summaryMode, state.groups, columnOf, metricsForSort, visibleColumns]);
+  const sortValue = currentSortValue({ summaryMode, state, definition, options: sortOptions });
+  const applySort = (value) => {
+    if (value === "padrao") {
+      if (summaryMode) update({ summarySort: null, groups: state.groups.map((group) => ({ columnId: group.columnId })) });
+      else update({ sort: definition.defaultSort });
+      return;
+    }
+    const [kind, key, direction] = value.split(":");
+    if (kind === "rotulo") update({ summarySort: { key: SUMMARY_LABEL_SORT, direction: key } });
+    else if (kind === "nivel") update({ summarySort: null, groups: state.groups.map((group, index) => (index === Number(key) ? { ...group, direction } : group)) });
+    else if (kind === "metrica") update({ summarySort: { key, direction } });
+    else if (kind === "coluna") update({ sort: [{ columnId: key, direction }] });
+  };
 
   // Filtros rápidos: ligados quando todos os filtros do atalho estão aplicados como definidos.
   const quickActive = (quick) => Object.entries(quick.filters).every(([columnId, filter]) => state.uiFilters[columnId] && sameFilter(state.uiFilters[columnId], filter));
@@ -192,17 +327,28 @@ export default function ReportView({ reportId, presetId = null, template, actor,
     const direction = currentSort?.direction === "asc" ? "desc" : "asc";
     update({ sort: [{ columnId, direction }] });
   };
+  // Clique no cabeçalho de uma métrica da folha: maior primeiro; de novo inverte.
+  const onSheetSort = (key) => {
+    const direction = state.summarySort?.key === key && state.summarySort.direction === "desc" ? "asc" : "desc";
+    update({ summarySort: { key, direction } });
+  };
   const onFilter = (columnId, value) => {
     const next = { ...state.uiFilters };
     if (value && isFilterActive(value)) next[columnId] = value;
     else delete next[columnId];
     update({ uiFilters: next });
   };
-  // Clique num grupo do Resumido: Detalhado só daquele grupo (recorte exato pela chave do grupo).
-  const onDrill = (node) => update({
+  // Clique num grupo da folha (ou num título de seção): Detalhado só daquele grupo (recorte exato pela chave).
+  const onDrill = (path) => update({
     mode: REPORT_MODES.DETALHADO,
-    drill: node.path.map((part) => ({ columnId: part.columnId, key: part.key, label: formatGroupLabel(definition.columns.find((column) => column.id === part.columnId), part.label, "screen", part.key === NONE_GROUP_KEY) })),
+    drill: path.map((part) => ({ columnId: part.columnId, key: part.key, label: formatGroupLabel(definition.columns.find((column) => column.id === part.columnId), part.label, "screen", part.key === NONE_GROUP_KEY) })),
   });
+
+  // Pesagem anterior (Todos/Com/Sem): filtro comum na coluna "tem pesagem anterior", pelo mesmo motor.
+  const previousColumn = columnOf(PREVIOUS_COLUMN);
+  const previousFilter = state.uiFilters[PREVIOUS_COLUMN];
+  const previousValue = previousFilter && isFilterActive(previousFilter) ? (previousFilter.value === true || previousFilter.value === "true" ? "com" : "sem") : "todos";
+  const setPrevious = (value) => onFilter(PREVIOUS_COLUMN, value === "todos" ? null : { operator: "equals", value: value === "com" });
 
   const exportAs = async (format) => {
     if (!viewModel) return;
@@ -215,10 +361,11 @@ export default function ReportView({ reportId, presetId = null, template, actor,
     }
   };
 
-  // Impressão/PDF: se as colunas não couberem, pergunta (paisagem, reduzir colunas/totais ou exportar) — nunca corta em silêncio.
+  // Impressão/PDF = a folha: se as colunas não couberem nem com a fonte menor, pergunta (paisagem,
+  // reduzir totais/colunas ou exportar) — nunca corta em silêncio.
   const emitDocument = async (kind, overrides = {}) => {
     if (!viewModel) return;
-    const options = { orientation: overrides.orientation ?? orientation, widths: state.widths, acceptTooWide: overrides.acceptTooWide ?? false };
+    const options = { orientation: overrides.orientation ?? state.orientation, widths: state.widths, header, showEmptyColumns: state.showEmptyColumns, acceptTooWide: overrides.acceptTooWide ?? false };
     try {
       const result = kind === "pdf" ? await exportPdf(viewModel, actor, options) : await printReport(viewModel, actor, options);
       if (result.blocked) { setPrintPrompt({ kind, layout: result.layout }); return; }
@@ -238,7 +385,7 @@ export default function ReportView({ reportId, presetId = null, template, actor,
         id, name, scope, baseReportId: definition.id,
         columns: state.columns, filters: state.uiFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort,
         search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)), widths: state.widths,
-        orientation, mode: drilling ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
+        orientation: state.orientation, mode: drilling ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
       }, actor);
       setCurrentTemplate(saved);
       setDialog(null);
@@ -251,24 +398,32 @@ export default function ReportView({ reportId, presetId = null, template, actor,
     }
   };
 
-  // Pílulas: colunas visíveis + colunas ocultas que ainda filtram (um filtro nunca fica invisível).
-  const pillColumns = [
-    ...visibleColumns,
-    ...available.filter((column) => !visibleColumns.some((item) => item.id === column.id) && isFilterActive(state.uiFilters[column.id])),
-  ];
-  const filterPills = pillColumns.map((column) => (
+  // Linha 2: botões padrão (com contador), depois os demais filtros ativos e, no Detalhado, as colunas
+  // visíveis — um filtro nunca fica invisível e o caminho é um só (uiFilters → motor de filtros).
+  const buttonColumns = FILTER_BUTTONS.map((button) => {
+    const column = button.ids.map((id) => columnOf(id)).find(Boolean);
+    return column ? { button, column } : null;
+  }).filter(Boolean);
+  const coveredIds = new Set([...buttonColumns.map((item) => item.column.id), PREVIOUS_COLUMN]);
+  const pill = (column, label, showCount = false) => (
     <MakFilterPill
       key={column.id}
-      label={visibleColumns.some((item) => item.id === column.id) ? column.label : `${column.label} (coluna oculta)`}
+      label={label}
       value={state.uiFilters[column.id] || null}
       filterType={pillFilterType(column)}
       listOptions={() => pillOptions(viewModel, column)}
       onChange={(value) => onFilter(column.id, value)}
+      showCount={showCount}
     />
-  ));
+  );
+  const extraColumns = [
+    ...(summaryMode ? [] : visibleColumns.filter((column) => !coveredIds.has(column.id))),
+    ...available.filter((column) => !coveredIds.has(column.id) && isFilterActive(state.uiFilters[column.id]) && (summaryMode || !visibleColumns.some((item) => item.id === column.id))),
+  ];
   const hasActiveFilters = Object.values(state.uiFilters).some(isFilterActive) || Boolean(state.search);
   const lockedEntries = Object.entries(viewModel?.lockedFilters ?? {});
   const drillParts = viewModel?.drill ?? [];
+  const showSheet = summaryMode || state.detailSheet;
 
   return (
     <ModeloBase1PageContainer variant="table" className="d17b-page d17b-list-page d17b-list-page--mother cadastro-emp-scope mg-empresas-scope rpt-page">
@@ -291,20 +446,6 @@ export default function ReportView({ reportId, presetId = null, template, actor,
             ) : null}
           </div>
           <div className="mg-action-bar__end rpt-toolbar__right">
-            {periodParam ? (
-              <div className="rpt-period" role="group" aria-label="Período">
-                <Select value={period?.preset ?? "ultimos_30_dias"} onValueChange={(presetValue) => setPeriod(presetValue === "personalizado" ? { preset: presetValue, from: viewModel?.period?.from, to: viewModel?.period?.to } : { preset: presetValue })}>
-                  <SelectTrigger aria-label="Período"><SelectValue /></SelectTrigger>
-                  <SelectContent>{Object.entries(PERIOD_PRESETS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent>
-                </Select>
-                {period?.preset === "personalizado" ? (
-                  <>
-                    <Input type="date" aria-label="Data inicial" value={period.from ?? ""} onChange={(event) => setPeriod({ ...period, from: event.target.value })} />
-                    <Input type="date" aria-label="Data final" value={period.to ?? ""} onChange={(event) => setPeriod({ ...period, to: event.target.value })} />
-                  </>
-                ) : null}
-              </div>
-            ) : null}
             {definition.params.filter((param) => param.type === "integer").map((param) => (
               <label key={param.id} className="rpt-param">
                 <span>{param.label}</span>
@@ -312,48 +453,62 @@ export default function ReportView({ reportId, presetId = null, template, actor,
               </label>
             ))}
             <div className="rpt-tabs rpt-mode" role="group" aria-label="Modo do relatório">
-              {[[REPORT_MODES.RESUMIDO, "Resumido", "Uma linha por grupo, com os totais em colunas"], [REPORT_MODES.DETALHADO, "Detalhado", "Todas as linhas, com subtotais por grupo"]].map(([mode, label, title]) => (
+              {[[REPORT_MODES.RESUMIDO, "Resumido", "Uma linha por grupo, com os totais em colunas (a folha)"], [REPORT_MODES.DETALHADO, "Detalhado", "Todas as linhas, com subtotais por grupo"]].map(([mode, label, title]) => (
                 <button key={mode} type="button" className={`rpt-tab${state.mode === mode ? " is-active" : ""}`} aria-pressed={state.mode === mode} title={title} onClick={() => setMode(mode)}>{label}</button>
               ))}
             </div>
-            <div className="rpt-group-quick" role="group" aria-label="Agrupar por">
-              <span>Agrupar por</span>
-              <Select value={quickGroupValue} onValueChange={(value) => (value === CUSTOM_GROUP ? setDialog("groups") : setGroups(value === NO_GROUP ? [] : [{ columnId: value }]))}>
-                <SelectTrigger aria-label="Agrupar por"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_GROUP}>Sem agrupamento</SelectItem>
-                  {quickGroupOptions.map((column) => <SelectItem key={column.id} value={column.id}>{column.label}</SelectItem>)}
-                  <SelectItem value={CUSTOM_GROUP}>{quickGroupValue === CUSTOM_GROUP ? state.groups.map((group) => columnLabel(group.columnId)).join(" › ") : "Mais níveis…"}</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {!summaryMode ? (
+              <button type="button" className={`ios-btn tb-btn tb-btn-ghost tb-btn-icon${state.detailSheet ? " is-active" : ""}`} aria-pressed={state.detailSheet} onClick={() => update({ detailSheet: !state.detailSheet })} title={state.detailSheet ? "Ver como grade" : "Ver como folha (o que sai na impressão)"} aria-label={state.detailSheet ? "Ver como grade" : "Ver como folha"}>
+                {state.detailSheet ? <Table2 className="h-3.5 w-3.5" aria-hidden="true" /> : <ScrollText className="h-3.5 w-3.5" aria-hidden="true" />}
+              </button>
+            ) : null}
             <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("groups")} title="Níveis de agrupamento (até 3)" aria-label="Níveis de agrupamento"><Layers className="h-3.5 w-3.5" aria-hidden="true" /></button>
-            <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("totals")} title="Totais (métricas do Resumido e dos subtotais)" aria-label="Totais"><Sigma className="h-3.5 w-3.5" aria-hidden="true" /></button>
+            <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("totals")} title="Totais (colunas da folha e dos subtotais)" aria-label="Totais"><Sigma className="h-3.5 w-3.5" aria-hidden="true" /></button>
             {!summaryMode ? <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("columns")} title="Colunas" aria-label="Colunas"><Columns3 className="h-3.5 w-3.5" aria-hidden="true" /></button> : null}
+            <button type="button" className={`ios-btn tb-btn tb-btn-ghost tb-btn-icon${state.showEmptyColumns ? " is-active" : ""}`} aria-pressed={state.showEmptyColumns} onClick={() => update({ showEmptyColumns: !state.showEmptyColumns })} title={state.showEmptyColumns ? "Esconder colunas sem nenhum valor" : "Mostrar colunas vazias (sem nenhum valor no relatório)"} aria-label="Mostrar colunas vazias">
+              {state.showEmptyColumns ? <Eye className="h-3.5 w-3.5" aria-hidden="true" /> : <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />}
+            </button>
             <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => execute({ reload: true })} title="Atualizar (reler os dados do banco)" aria-label="Atualizar"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /></button>
             {allowPreferences ? <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("save")} title="Salvar modelo" aria-label="Salvar modelo"><Save className="h-3.5 w-3.5" aria-hidden="true" /></button> : null}
-            {can("reports.export") ? <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" disabled={!viewModel || loading} onClick={() => emitDocument("print")} title="Imprimir (A4)" aria-label="Imprimir"><Printer className="h-3.5 w-3.5" aria-hidden="true" /></button> : null}
             {can("reports.export") ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green" disabled={!viewModel || loading}><Download className="h-3.5 w-3.5" aria-hidden="true" />Exportar</button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuLabel className="text-xs">{summaryMode ? "Mesma tabela resumida da tela" : "Mesma população e totais da tela"}</DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-xs" onClick={() => exportAs("csv")}><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />CSV (Excel pt-BR)</DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs" onClick={() => exportAs("xlsx")}><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />XLSX (Excel)</DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs" onClick={() => exportAs("json")}><FileJson className="h-3.5 w-3.5" aria-hidden="true" />JSON com manifesto</DropdownMenuItem>
-                  <DropdownMenuItem className="text-xs" onClick={() => emitDocument("pdf")}><FileText className="h-3.5 w-3.5" aria-hidden="true" />PDF (A4)</DropdownMenuItem>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuLabel className="text-xs">Orientação: {orientation === "auto" ? "automática" : orientation === "landscape" ? "paisagem" : "retrato"}</DropdownMenuLabel>
-                  {["auto", "portrait", "landscape"].map((value) => <DropdownMenuItem key={value} className="text-xs" onClick={() => setOrientation(value)}>{value === "auto" ? "Automática" : value === "landscape" ? "Paisagem" : "Retrato"}{orientation === value ? " ✓" : ""}</DropdownMenuItem>)}
-                </DropdownMenuContent>
-              </DropdownMenu>
+              <div className="rpt-emit" role="group" aria-label="Imprimir e exportar">
+                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green" disabled={!viewModel || loading} onClick={() => emitDocument("print")} title="Imprimir a folha (A4)"><Printer className="h-3.5 w-3.5" aria-hidden="true" />Imprimir</button>
+                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" disabled={!viewModel || loading} onClick={() => exportAs("xlsx")} title="Planilha Excel (XLSX) com a mesma tabela da tela"><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />Excel</button>
+                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" disabled={!viewModel || loading} onClick={() => emitDocument("pdf")} title="PDF A4 da folha"><FileText className="h-3.5 w-3.5" aria-hidden="true" />PDF</button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" disabled={!viewModel || loading} aria-label="Outros formatos" title="Outros formatos (CSV, JSON)"><MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" /></button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel className="text-xs">{summaryMode ? "Mesma tabela resumida da tela" : "Mesma população e totais da tela"}</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem className="text-xs" onClick={() => exportAs("csv")}><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />CSV (Excel pt-BR)</DropdownMenuItem>
+                    <DropdownMenuItem className="text-xs" onClick={() => exportAs("json")}><FileJson className="h-3.5 w-3.5" aria-hidden="true" />JSON com manifesto</DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             ) : null}
           </div>
         </div>
       </div>
+
+      <ReportFilterBar
+        period={period}
+        resolvedPeriod={viewModel?.period ?? null}
+        onPeriod={periodParam ? setPeriod : null}
+        orientation={state.orientation}
+        onOrientation={(orientation) => update({ orientation })}
+        views={views}
+        viewId={viewId}
+        onView={applyView}
+        groupOptions={groupOptions}
+        groupValue={quickGroupValue}
+        onGroup={(value) => (value === CUSTOM_GROUP ? setDialog("groups") : setGroups(value === NO_GROUP ? [] : [{ columnId: value }]))}
+        sortOptions={sortOptions}
+        sortValue={sortValue}
+        onSort={applySort}
+        previous={previousColumn ? { value: previousValue, onChange: setPrevious } : null}
+      />
 
       <div className="mak-mother-page__panel-strip" data-mak-region="panel-strip">
         <MgTablePanelStrip onConfigColumns={() => setDialog(summaryMode ? "totals" : "columns")}>
@@ -366,6 +521,7 @@ export default function ReportView({ reportId, presetId = null, template, actor,
                 <button type="button" aria-label="Voltar ao Resumido" title="Voltar ao Resumido" onClick={() => update({ drill: [], mode: REPORT_MODES.RESUMIDO })}><X className="h-3 w-3" aria-hidden="true" /></button>
               </span>
             ) : null}
+            {buttonColumns.map(({ button, column }) => pill(column, button.label, true))}
             {(definition.quickFilters ?? []).map((quick) => (
               <button key={quick.id} type="button" className={`rpt-quick-filter${quickActive(quick) ? " is-on" : ""}`} aria-pressed={quickActive(quick)} onClick={() => toggleQuick(quick)}>
                 {quick.label}
@@ -373,10 +529,10 @@ export default function ReportView({ reportId, presetId = null, template, actor,
             ))}
             {lockedEntries.map(([columnId, filter]) => (
               <span key={`locked-${columnId}`} className="rpt-locked-pill" title="Condição fixa do relatório">
-                <Lock className="h-3 w-3" aria-hidden="true" />{available.find((column) => column.id === columnId)?.label ?? columnId} {describeFilter(filter, available.find((column) => column.id === columnId))}
+                <Lock className="h-3 w-3" aria-hidden="true" />{columnOf(columnId)?.label ?? columnId} {describeFilter(filter, columnOf(columnId))}
               </span>
             ))}
-            {filterPills}
+            {extraColumns.map((column) => pill(column, !summaryMode && visibleColumns.some((item) => item.id === column.id) ? column.label : `${column.label} (coluna oculta)`))}
           </MakFilterRail>
         </MgTablePanelStrip>
       </div>
@@ -384,27 +540,32 @@ export default function ReportView({ reportId, presetId = null, template, actor,
       <div className="d17b-list-body">
         <Card className="d17b-table-card">
           <CardContent className="p-0 rpt-card-content">
-          <div className="rpt-card-head">
-        <div className="rpt-context" aria-live="polite">
-          <span><strong>Período:</strong> {viewModel?.period ? describePeriod(viewModel.period) : periodParam ? "—" : "estado atual (hoje)"}</span>
-          <span>{summaryMode ? "Resumido: uma linha por grupo" : viewModel?.grainLabel ? viewModel.grainLabel.charAt(0).toUpperCase() + viewModel.grainLabel.slice(1) : "—"}</span>
-          {viewModel?.classification && viewModel.classification !== "CANÔNICO" ? <span className="rpt-legacy">{viewModel.classification}</span> : null}
-          {viewModel?.groups?.length ? <span><strong>Agrupado por:</strong> {viewModel.groups.map((group) => group.label).join(" › ")}</span> : null}
-          {loading ? <span className="rpt-loading">Calculando…</span> : viewModel ? <span className="rpt-timing" title={`Leitura: ${viewModel.stats.strategy}`}>{viewModel.rowCount.toLocaleString("pt-BR")} registro(s) · {Math.round(viewModel.stats.timings.total)} ms</span> : null}
-        </div>
-        {(viewModel?.warnings ?? []).map((warning) => (
-          <div key={warning.code} className="rpt-warning" role="status"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />{warning.message}</div>
-        ))}
-        {(definition.notes ?? []).length ? <ul className="rpt-notes">{definition.notes.map((note) => <li key={note}>{note}</li>)}</ul> : null}
-        {error ? <div className="rpt-error" role="alert">{error.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode abrir este relatório." : error.message}</div> : null}
-          </div>
-            {viewModel ? (summaryMode && viewModel.mode === REPORT_MODES.RESUMIDO ? (
-              <ReportSummaryTable
+            <div className="rpt-card-head">
+              <div className="rpt-context" aria-live="polite">
+                <span><strong>Período:</strong> {viewModel?.period ? describePeriod(viewModel.period) : periodParam ? "—" : "estado atual (hoje)"}</span>
+                <span>{showSheet ? (summaryMode ? "Folha resumida (o que sai na impressão)" : "Folha com as linhas (o que sai na impressão)") : viewModel?.grainLabel ? viewModel.grainLabel.charAt(0).toUpperCase() + viewModel.grainLabel.slice(1) : "—"}</span>
+                {viewModel?.classification && viewModel.classification !== "CANÔNICO" ? <span className="rpt-legacy">{viewModel.classification}</span> : null}
+                {loading ? <span className="rpt-loading">Calculando…</span> : viewModel ? <span className="rpt-timing" title={`Leitura: ${viewModel.stats.strategy}`}>{viewModel.rowCount.toLocaleString("pt-BR")} registro(s) · {Math.round(viewModel.stats.timings.total)} ms</span> : null}
+              </div>
+              {(viewModel?.warnings ?? []).map((warning) => (
+                <div key={warning.code} className="rpt-warning" role="status"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />{warning.message}</div>
+              ))}
+              {summaryMode && viewModel && !(viewModel.groups ?? []).length ? (
+                <div className="rpt-sheet-hint" role="note">Sem agrupamento a folha mostra só o Total geral. Escolha <strong>Agrupar por</strong> (ou um <strong>Tipo de relatório</strong>) para ver os grupos.</div>
+              ) : null}
+              {/* Na folha as notas vão no próprio documento; na grade, aqui. */}
+              {!showSheet && (definition.notes ?? []).length ? <ul className="rpt-notes">{definition.notes.map((note) => <li key={note}>{note}</li>)}</ul> : null}
+              {error ?<div className="rpt-error" role="alert">{error.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode abrir este relatório." : error.message}</div> : null}
+            </div>
+            {viewModel ? (showSheet && (viewModel.mode === REPORT_MODES.RESUMIDO || state.detailSheet) ? (
+              <ReportSheetView
                 viewModel={viewModel}
-                summarySort={state.summarySort}
-                onSummarySort={(summarySort) => update({ summarySort })}
+                header={header}
+                orientation={state.orientation}
+                showEmptyColumns={state.showEmptyColumns}
+                sort={viewModel.mode === REPORT_MODES.RESUMIDO ? state.summarySort : null}
                 onDrill={onDrill}
-                onChooseGrouping={() => setDialog("groups")}
+                onSort={viewModel.mode === REPORT_MODES.RESUMIDO ? onSheetSort : null}
               />
             ) : (
               <ReportTable
@@ -427,8 +588,8 @@ export default function ReportView({ reportId, presetId = null, template, actor,
         <MakColumnConfigDialog
           open
           onOpenChange={(open) => !open && setDialog(null)}
-          columns={available.map((column) => ({ id: column.id, label: column.label, default: definition.defaultColumns.includes(column.id) }))}
-          order={[...state.columns, ...available.map((column) => column.id).filter((id) => !state.columns.includes(id))]}
+          columns={available.filter((column) => !column.metricOnly).map((column) => ({ id: column.id, label: column.label, default: definition.defaultColumns.includes(column.id) }))}
+          order={[...state.columns, ...available.filter((column) => !column.metricOnly).map((column) => column.id).filter((id) => !state.columns.includes(id))]}
           visible={state.columns}
           onApply={({ order, visible }) => { update({ columns: order.filter((id) => visible.includes(id)) }); setDialog(null); }}
         />
@@ -440,10 +601,10 @@ export default function ReportView({ reportId, presetId = null, template, actor,
         <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact rpt-dialog">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />Este relatório possui muitas colunas para impressão.</DialogTitle>
-            <DialogDescription>{printPrompt ? `${printPrompt.layout.columnCount} colunas não cabem em A4 ${printPrompt.layout.orientation === "landscape" ? "paisagem" : "retrato"}. Nenhuma coluna é escondida automaticamente.` : ""}</DialogDescription>
+            <DialogDescription>{printPrompt ? `${printPrompt.layout.columnCount} colunas não cabem em A4 ${printPrompt.layout.orientation === "landscape" ? "paisagem" : "retrato"}, nem com a letra menor. Nenhuma coluna é escondida automaticamente.` : ""}</DialogDescription>
           </DialogHeader>
           <DialogFooter className="rpt-print-options">
-            {printPrompt?.layout.warning?.options?.includes("paisagem") ? <Button type="button" variant="outline" onClick={() => { setOrientation("landscape"); emitDocument(printPrompt.kind, { orientation: "landscape" }); }}>Usar paisagem</Button> : null}
+            {printPrompt?.layout.warning?.options?.includes("paisagem") ? <Button type="button" variant="outline" onClick={() => { update({ orientation: "landscape" }); emitDocument(printPrompt.kind, { orientation: "landscape" }); }}>Usar paisagem</Button> : null}
             <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); setDialog(summaryMode ? "totals" : "columns"); }}>{summaryMode ? "Reduzir totais" : "Reduzir colunas"}</Button>
             {can("reports.export") ? <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); exportAs("csv"); }}>Exportar CSV</Button> : null}
             <Button type="button" className="emp-toolbar-btn-save" onClick={() => emitDocument(printPrompt.kind, { acceptTooWide: true })}>Continuar mesmo assim</Button>

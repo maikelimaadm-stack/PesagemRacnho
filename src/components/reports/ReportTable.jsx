@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import MakTh, { makRowClass } from "@/components/mak/MakTh";
 import { fmtInt } from "@/components/common/formatNumber";
 import { flattenTree } from "@/modules/reporting/domain/groupEngine";
+import { formatGroupLabel } from "@/modules/reporting/domain/summaryLayout";
 import { aggregateChips, headerLabel, screenCell } from "./reportUi";
 
 // Tabela do relatório (ModeloBase1 `.emp-table-pro`): linhas de grupo, dados e subtotal vindas da
@@ -26,6 +27,9 @@ export default function ReportTable({ viewModel, sort, onSort, widths = {}, filt
   const minWidth = columns.reduce((total, column) => total + (widths[column.id] || column.defaultWidth || 120), 0);
   const sortOf = (columnId) => sort.find((item) => item.columnId === columnId)?.direction ?? null;
   const totals = aggregateChips(viewModel, viewModel.totals);
+  // Rótulo do grupo no formato brasileiro (data dd/mm/aaaa, Sim/Não), como na folha e nas exportações.
+  const groupColumns = viewModel.availableColumns ?? viewModel.columns;
+  const groupLabel = (node) => formatGroupLabel(groupColumns.find((column) => column.id === node.columnId) ?? null, node.label, "screen", node.missing);
 
   let dataIndex = 0;
   return (
@@ -67,7 +71,7 @@ export default function ReportTable({ viewModel, sort, onSort, widths = {}, filt
                   <TableRow key={`g-${line.node.id}-${index}`} className={`rpt-group-row rpt-level-${line.node.level}`}>
                     <TableCell colSpan={columns.length}>
                       <span className="rpt-group-label" style={{ paddingLeft: `${(line.node.level - 1) * 16}px` }}>
-                        {line.node.columnLabel}: <strong>{line.node.label}</strong>
+                        {line.node.columnLabel}: <strong>{groupLabel(line.node)}</strong>
                       </span>
                       <span className="rpt-group-count">{fmtInt(line.node.rowCount)} {line.node.rowCount === 1 ? "registro" : "registros"}</span>
                     </TableCell>
@@ -75,11 +79,11 @@ export default function ReportTable({ viewModel, sort, onSort, widths = {}, filt
                 );
               }
               if (line.kind === "SUBTOTAL") {
-                const chips = aggregateChips(viewModel, line.node.aggregates);
+                const chips = aggregateChips(viewModel, line.node.aggregates, line.node.level);
                 return (
                   <TableRow key={`s-${line.node.id}-${index}`} className={`rpt-subtotal-row rpt-level-${line.node.level}`}>
                     <TableCell colSpan={columns.length}>
-                      <span className="rpt-subtotal-label" style={{ paddingLeft: `${(line.node.level - 1) * 16}px` }}>Subtotal · {line.node.label}</span>
+                      <span className="rpt-subtotal-label" style={{ paddingLeft: `${(line.node.level - 1) * 16}px` }}>Subtotal · {groupLabel(line.node)}</span>
                       {chips.map((chip) => (
                         <span key={chip.id} className="rpt-chip" title={chip.partial ? `Calculado com ${chip.partial} valores (ausentes não contam como zero)` : undefined}>
                           {chip.label}: <strong>{chip.value}</strong>{chip.partial ? <em> ({chip.partial})</em> : null}

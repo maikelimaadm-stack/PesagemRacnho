@@ -130,19 +130,8 @@ html.dark .rpt-dialog__row--wrap { border-bottom-color: #2d333b; }
 .rpt-drill-pill { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 4px 0 8px; margin-right: 6px; border-radius: 999px; background: #e0efff; color: #0b4a8b; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .rpt-drill-pill button { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 0; border-radius: 999px; background: transparent; color: inherit; cursor: pointer; }
 .rpt-drill-pill button:hover { background: rgba(11, 74, 139, 0.12); }
-.rpt-summary-hint { display: flex; align-items: center; gap: 8px; margin: 6px 10px; padding: 8px 10px; border: 1px dashed #b9c6d4; border-radius: 8px; color: #475569; font-size: 12px; }
-.d17b-page .rpt-summary-table tr.rpt-sum-level-1 td { font-weight: 700; color: #1f2937; }
-.d17b-page .rpt-summary-table tr.rpt-sum-level-2 td.rpt-sum-label { padding-left: 14px; }
-.d17b-page .rpt-summary-table tr.rpt-sum-level-3 td.rpt-sum-label { padding-left: 26px; }
-.d17b-page .rpt-summary-table tr.rpt-sum-level-2 td, .d17b-page .rpt-summary-table tr.rpt-sum-level-3 td { font-weight: 400; }
-.rpt-sum-drill { display: inline-flex; align-items: center; gap: 5px; max-width: 100%; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
-.rpt-sum-drill span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rpt-sum-drill svg { flex: 0 0 auto; opacity: 0; color: #0f7a3f; transition: opacity .12s ease; }
-.rpt-sum-drill:hover, .rpt-sum-drill:focus-visible { color: #0f7a3f; text-decoration: underline; }
-.rpt-sum-drill:hover svg, .rpt-sum-drill:focus-visible svg { opacity: 1; }
-.rpt-sum-partial { text-decoration: underline dotted #94a3b8; text-underline-offset: 3px; }
-.d17b-page .rpt-summary-table tfoot tr.rpt-sum-total td { position: sticky; bottom: 0; z-index: 1; background: #dff0e5; color: #0b3b1f; font-weight: 800; border-top: 2px solid #0f7a3f; }
-.rpt-sum-tip { color: #94a3b8; }
+.rpt-sheet-hint { display: block; margin: 6px 0 0; padding: 8px 10px; border: 1px dashed #b9c6d4; border-radius: 8px; color: #475569; font-size: 12px; }
+html.dark .rpt-sheet-hint { border-color: #444c56; color: #adbac7; }
 .rpt-badge--summary { background: #e8f5ee; color: #0f5132; }
 .rpt-family--favorites h2 { display: inline-flex; align-items: center; gap: 4px; color: #b07d05; }
 .rpt-maintenance { padding: 8px 2px 16px; }
@@ -154,9 +143,6 @@ html.dark .rpt-maintenance__title { color: #c9d1d9; }
 html.dark .rpt-quick-filter { border-color: #444c56; color: #adbac7; }
 html.dark .rpt-quick-filter.is-on { background: #13261b; border-color: #2ea043; color: #a7f3c4; }
 html.dark .rpt-drill-pill { background: #102a44; color: #9ecbff; }
-html.dark .rpt-summary-hint { border-color: #444c56; color: #adbac7; }
-html.dark .d17b-page .rpt-summary-table tr.rpt-sum-level-1 td { color: #e6edf3; }
-html.dark .d17b-page .rpt-summary-table tfoot tr.rpt-sum-total td { background: #102017; color: #a7f3c4; border-top-color: #2ea043; }
 html.dark .rpt-badge--summary { background: #13261b; color: #a7f3c4; }
 
 /* Manutenção (E1): abas e aba Controle ocupam a linha inteira da grade de cartões. */
@@ -164,15 +150,8 @@ html.dark .rpt-badge--summary { background: #13261b; color: #a7f3c4; }
 .rpt-maintenance { padding: 8px 10px 16px; border: 1px solid #e3e8ee; border-radius: 12px; background: #fff; }
 html.dark .rpt-maintenance { background: #0d1117; border-color: #30363d; }
 
-/* E1: vencer as regras genéricas do escopo de cadastros (botão com texto escuro fixo; .emp-td
-   com fundo branco !important) só dentro dos relatórios — mesma técnica :not(#…-none) do projeto. */
-.cadastro-emp-scope .rpt-summary-table button.rpt-sum-drill:not(#rpt-none) { color: inherit !important; font-weight: inherit !important; }
-.cadastro-emp-scope .rpt-summary-table button.rpt-sum-drill:not(#rpt-none):hover,
-.cadastro-emp-scope .rpt-summary-table button.rpt-sum-drill:not(#rpt-none):focus-visible { color: #0f7a3f !important; }
-html body #root .cadastro-emp-scope .rpt-summary-table tfoot tr.rpt-sum-total td.emp-td:not(#rpt-none),
-html body #root .cadastro-emp-scope .rpt-summary-table tfoot tr.rpt-sum-total td:not(#rpt-none) { background: #dff0e5 !important; color: #0b3b1f !important; font-weight: 800 !important; }
-html:is(.dark, .tema-escuro, .escuro) body #root .cadastro-emp-scope .rpt-summary-table tfoot tr.rpt-sum-total td:not(#rpt-none) { background: #102017 !important; color: #a7f3c4 !important; }
-html:is(.dark, .tema-escuro, .escuro) body #root .cadastro-emp-scope .rpt-summary-table button.rpt-sum-drill:not(#rpt-none):hover { color: #7ee2a8 !important; }
+/* E1: vencer as regras genéricas do escopo de cadastros (botão com texto escuro fixo) só dentro dos
+   relatórios — mesma técnica :not(#…-none) do projeto. */
 html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-tabs { background: #1c2128; }
 html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-tabs .rpt-tab:not(#rpt-none) { color: #adbac7 !important; }
 html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-tabs .rpt-tab.is-active:not(#rpt-none) { background: #2d333b; color: #e6edf3 !important; }
@@ -182,12 +161,6 @@ html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-drill-pill b
 .cadastro-emp-scope .rpt-quick-filter.is-on:not(#rpt-none) { color: #0f5132 !important; }
 .cadastro-emp-scope .rpt-drill-pill button:not(#rpt-none) { color: #0b4a8b !important; }
 .cadastro-emp-scope .rpt-tabs .rpt-tab.is-active:not(#rpt-none) { color: #0f172a !important; }
-.cadastro-emp-scope .rpt-summary-table button.rpt-sum-drill:not(#rpt-none) span { color: inherit !important; }
-/* Resumido: nível 1 em negrito escuro; níveis 2–3 normais (cor explícita — a célula herda cinza do tema). */
-html body #root .cadastro-emp-scope .rpt-summary-table tr.rpt-sum-level-1 td:not(#rpt-none) { color: #1f2937 !important; font-weight: 700 !important; }
-html body #root .cadastro-emp-scope .rpt-summary-table :is(tr.rpt-sum-level-2, tr.rpt-sum-level-3) td:not(#rpt-none) { color: #374151 !important; font-weight: 400 !important; }
-html:is(.dark, .tema-escuro, .escuro) body #root .cadastro-emp-scope .rpt-summary-table tr.rpt-sum-level-1 td:not(#rpt-none) { color: #e6edf3 !important; }
-html:is(.dark, .tema-escuro, .escuro) body #root .cadastro-emp-scope .rpt-summary-table :is(tr.rpt-sum-level-2, tr.rpt-sum-level-3) td:not(#rpt-none) { color: #c3cbd4 !important; }
 
 /* E1: a barra do relatório nunca sobrepõe a faixa de filtros — se não couber, cresce (a altura
    fixa vem de .mg-empresas-scope :is(.mg-action-bar …)); rótulos longos viram reticências. */
@@ -196,3 +169,31 @@ html:is(.dark, .tema-escuro, .escuro) body #root .cadastro-emp-scope .rpt-summar
 .rpt-page .rpt-breadcrumb { min-width: 0; }
 .rpt-group-quick button[role="combobox"] { max-width: 240px; }
 .rpt-group-quick button[role="combobox"] > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== E1B (1.4.0): barra de filtros padrão + folha do relatório na tela ===== */
+/* A barra de ações cresce de verdade (a Tela Mãe fixa max-height e ela transbordava sobre a faixa de filtros). */
+.mg-empresas-scope.rpt-page .mg-action-bar.rpt-toolbar:not(#rpt-none) { max-height: none; }
+.rpt-page .rpt-emit { display: inline-flex; align-items: center; gap: 4px; margin-left: 4px; }
+.rpt-page .tb-btn.is-active { background: rgba(15, 138, 95, .12); }
+
+/* Linha 1: campos com o rótulo em cima (modelo da responsável). */
+.rpt-page .rpt-filterbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px 12px; padding: 8px 12px 10px; background: var(--bg-card, #fff); border-top: 1px solid var(--mb1-border, #e5e7eb); }
+.rpt-page .rpt-bar-field { display: flex; flex-direction: column; gap: 3px; min-width: 150px; flex: 0 1 190px; }
+.rpt-page .rpt-bar-field[data-field="tipo"] { flex-basis: 250px; }
+.rpt-page .rpt-bar-field[data-field="ordenar"] { flex-basis: 220px; }
+.rpt-page .rpt-bar-field--date { min-width: 128px; flex: 0 1 140px; }
+.rpt-page .rpt-bar-field__label { font-size: 11px; font-weight: 600; color: var(--mb1-text-2, #4b5563); white-space: nowrap; }
+.rpt-page .rpt-bar-field__control { height: 30px; width: 100%; font-size: 12px; }
+.rpt-page .rpt-bar-field__control > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rpt-page .rpt-bar-field__static { height: 30px; display: flex; align-items: center; font-size: 12px; color: var(--mb1-text-2, #4b5563); }
+.rpt-page .rpt-bar-field__date { width: 100%; }
+
+/* Folha na tela: papel branco sobre fundo cinza, com rolagem própria (a folha é a pré-visualização da impressão). */
+.rpt-page .rpt-sheet-host { background: #eef1f4; padding: 16px; overflow: auto; max-height: calc(100vh - 318px); min-height: 240px; }
+html:is(.dark, .tema-escuro, .escuro) body .rpt-page .rpt-sheet-host { background: #0d1117; }
+/* Botões da folha (nome do grupo, título da seção, cabeçalho de métrica): a regra genérica dos botões do
+   app força cor de texto do tema (clara no escuro) — na folha, que é sempre papel branco, herdam a cor. */
+html body #root .cadastro-emp-scope .rpt-sheet :is(button.sheet-drill, button.sheet-sort):not(#rpt-none),
+html body #root .cadastro-emp-scope .rpt-sheet :is(button.sheet-drill, button.sheet-sort):not(#rpt-none) span { color: inherit !important; background: none !important; font-weight: inherit !important; }
+html body #root .cadastro-emp-scope .rpt-sheet button.sheet-drill:not(#rpt-none):hover,
+html body #root .cadastro-emp-scope .rpt-sheet button.sheet-drill:not(#rpt-none):focus-visible { color: #0f5132 !important; }

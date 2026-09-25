@@ -4,6 +4,8 @@ import { useAuth } from "@/components/auth/useAuth";
 import { formatCell, headerLabel } from "@/modules/reporting/domain/reportFormatting";
 import { aggregateLabel, aggregateValueColumn, cellRawValue } from "@/modules/reporting/infrastructure/exporters/reportLayout";
 import { isFilterActive } from "@/modules/reporting/domain/filterEngine";
+import { isLeafGroupLevel, leafOnlyMetricKeys } from "@/modules/reporting/domain/summaryLayout";
+import { rangeText } from "@/modules/reporting/domain/reportDocument";
 
 /** Ator da sessão para os serviços ({ id, nome, role }); null fora do AuthGate. */
 export function useReportActor() {
@@ -69,12 +71,24 @@ export function screenCell(viewModel, column, row) {
   return formatCell(column, cellRawValue(viewModel, column, row), "screen");
 }
 
-export function aggregateChips(viewModel, aggregatesMap) {
-  return viewModel.aggregates.map((spec) => {
+/** Totais em chips; `level` do nó (0 = Total geral): a faixa do lote (par leafOnly) só no nível folha. */
+export function aggregateChips(viewModel, aggregatesMap, level = 0) {
+  const hidden = new Set(viewModel.hiddenMetrics ?? []);
+  const leafOnly = leafOnlyMetricKeys(viewModel);
+  const shown = (spec) => !hidden.has(spec.id) && (!leafOnly.has(spec.id) || isLeafGroupLevel(viewModel, level));
+  const specs = viewModel.aggregates.filter(shown);
+  const ids = new Set(specs.map((spec) => spec.id));
+  // Par "de–até" (faixa exigida do lote) num chip só, como na folha.
+  const pairs = (viewModel.metricPairs ?? []).filter((pair) => ids.has(pair.from) && ids.has(pair.to));
+  const paired = new Set(pairs.map((pair) => pair.to));
+  return specs.filter((spec) => !paired.has(spec.id)).map((spec) => {
     const result = aggregatesMap?.[spec.id];
+    const pair = pairs.find((item) => item.from === spec.id);
+    if (pair) return { id: `pair:${pair.id}`, label: pair.label, value: rangeText(result?.value ?? null, aggregatesMap?.[pair.to]?.value ?? null), partial: null };
     return {
       id: spec.id,
-      label: aggregateLabel(spec, viewModel.columns.length ? viewModel.availableColumns : viewModel.columns),
+      // Rótulo de curral da definição (metricLabels, o mesmo da folha) quando houver.
+      label: viewModel.metricLabels?.[spec.id] || aggregateLabel(spec, viewModel.columns.length ? viewModel.availableColumns : viewModel.columns),
       value: formatCell(aggregateValueColumn(spec, viewModel.availableColumns), result?.value ?? null, "screen"),
       partial: result && result.n_ausentes > 0 && !["count", "countDistinct"].includes(spec.op) ? `${result.n_validos} de ${result.n_total}` : null,
     };

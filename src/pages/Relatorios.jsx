@@ -5,13 +5,16 @@ import ReportView from "@/components/reports/ReportView";
 import { useReportActor } from "@/components/reports/reportUi";
 import { resolveReportId } from "@/modules/reporting/definitions/reportCatalog";
 import { getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
-import { listTemplates } from "@/modules/reporting/application/reportTemplateService";
+import { getReportViewState, listTemplates } from "@/modules/reporting/application/reportTemplateService";
 import "@/styles/reports.css";
 
 // Relatórios: uma entrada no menu. Sem `?r=` mostra o catálogo; com `?r=<id>` (e `&m=<modelo>`)
 // abre o relatório. A URL leva só identificadores — nunca filtros ou dados.
 // E1 (1.4.0): `?r=<id antigo>` (links e favoritos de antes da 1.4.0) abre o relatório novo com a
 // seleção do antigo; `&v=<id antigo>` faz o mesmo a partir do id novo (favorito "novo#antigo").
+// E1B: sem modelo e sem visão antiga, o relatório volta como a pessoa deixou (último estado por usuário),
+// lido ANTES de montar a tela (sem piscar nem calcular duas vezes). Precedência: modelo > visão antiga >
+// último estado > padrão do relatório; `&d=` (atalho do Fechamento) só troca o período.
 export default function Relatorios() {
   const actor = useReportActor();
   const location = useLocation();
@@ -24,8 +27,11 @@ export default function Relatorios() {
   const resolved = requestedId ? resolveReportId(requestedId) : null;
   const viewParam = params.get("v");
   const presetId = resolved?.aliasId ?? (viewParam && getLegacyAlias(viewParam)?.id === resolved?.definition?.id ? viewParam : null);
+  const reportId = resolved?.definition?.id ?? null;
   const [template, setTemplate] = useState(null);
   const [templateReady, setTemplateReady] = useState(!templateId);
+  const [savedState, setSavedState] = useState(null);
+  const [savedReady, setSavedReady] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -40,17 +46,29 @@ export default function Relatorios() {
     return () => { alive = false; };
   }, [templateId, actor]);
 
+  useEffect(() => {
+    let alive = true;
+    setSavedReady(false);
+    if (!reportId || !actor || templateId || presetId) { setSavedState(null); setSavedReady(true); return undefined; }
+    getReportViewState(reportId, actor)
+      .then((state) => { if (alive) setSavedState(state); })
+      .catch(() => { if (alive) setSavedState(null); })
+      .finally(() => { if (alive) setSavedReady(true); });
+    return () => { alive = false; };
+  }, [reportId, actor, templateId, presetId]);
+
   if (!actor) return null;
   const open = ({ reportId: id, template: chosen, presetId: view }) => navigate(`/Relatorios?r=${encodeURIComponent(id)}${chosen ? `&m=${encodeURIComponent(chosen.id)}` : ""}${!chosen && view ? `&v=${encodeURIComponent(view)}` : ""}`);
 
   if (resolved?.definition) {
-    if (!templateReady) return null;
+    if (!templateReady || !savedReady) return null;
     return (
       <ReportView
         key={`${resolved.definition.id}:${presetId ?? ""}:${templateId ?? ""}:${day ?? ""}`}
         reportId={resolved.definition.id}
         presetId={template ? null : presetId}
         template={template}
+        savedState={template || presetId ? null : savedState}
         initialPeriod={day ? { preset: "personalizado", from: day, to: day } : null}
         actor={actor}
         onBack={() => navigate("/Relatorios")}

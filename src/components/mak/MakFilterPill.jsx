@@ -12,6 +12,8 @@ function describeFilter(label, filter) {
 
 const NO_OPTIONS = [];
 
+// showCount (opcional, E1B): com lista marcada, o botão mostra "Lotes (2)"; o rótulo acessível e o do
+// menu continuam sem o número. Relação, Cadastros e Sanidade não passam a prop e não mudam.
 export default function MakFilterPill({
   label,
   value,
@@ -20,10 +22,12 @@ export default function MakFilterPill({
   onChange,
   disabled = false,
   openRequest = 0,
+  showCount = false,
 }) {
   const anchorRef = useRef(null);
   const [open, setOpen] = useState(false);
   const active = isMakColumnFilterActive(value);
+  const count = showCount && active && Array.isArray(value?.values) ? value.values.length : 0;
   // listOptions pode ser função: os valores únicos só são calculados quando a pílula abre.
   const resolvedOptions = useMemo(
     () => (open ? (typeof listOptions === "function" ? listOptions() : listOptions) : NO_OPTIONS),
@@ -56,7 +60,7 @@ export default function MakFilterPill({
         aria-expanded={open}
         aria-haspopup="dialog"
       >
-        <span>{label}</span>
+        <span>{count ? `${label} (${count})` : label}</span>
       </button>
       {active ? (
         <button
