@@ -1,0 +1,144 @@
+// Renderizador ÚNICO da folha do relatório (E1B 1.4.0): transforma o documento puro (domain/reportDocument)
+// em marcação HTML — a mesma na tela (fragmento dentro do app), na impressão e no PDF (documento completo).
+// Todo texto passa por escapeHtml; o logo só entra se for data URL PNG/JPEG válido. Cada célula leva
+// data-col=<índice> igual ao do cabeçalho da sua coluna (base do gate de alinhamento).
+import { isAcceptedLogo } from '../../../catalog/domain/propertyHeader.js';
+
+export function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
+ * Cabeçalho da propriedade na folha (e na pré-visualização da ficha da Propriedade).
+ * @param header modelo de buildPropertyHeader (catalog/domain/propertyHeader.js)
+ * @param {{ periodText?: string|null, emittedText?: string|null }} meta textos pequenos à direita
+ */
+export function renderSheetHeaderHtml(header, { periodText = null, emittedText = null } = {}) {
+  const model = header ?? { empty: true, titular: 'Pesagens Individuais' };
+  const logo = model.logo && isAcceptedLogo(model.logo) ? `<img class="sheet-logo" src="${escapeHtml(model.logo)}" alt="Logo">` : '';
+  const lines = [
+    `<div class="sheet-titular">${escapeHtml(model.titular)}</div>`,
+    model.fazenda ? `<div class="sheet-fazenda">${escapeHtml(model.fazenda)}</div>` : '',
+    model.endereco ? `<div class="sheet-endereco">${escapeHtml(model.endereco)}</div>` : '',
+    model.documentos ? `<div class="sheet-docs">${escapeHtml(model.documentos)}</div>` : '',
+    model.telefone ? `<div class="sheet-docs">${escapeHtml(model.telefone)}</div>` : '',
+  ].join('');
+  const meta = [
+    periodText ? `<div>${escapeHtml(periodText)}</div>` : '',
+    emittedText ? `<div>${escapeHtml(emittedText)}</div>` : '',
+  ].join('');
+  return `<div class="sheet-header${model.empty ? ' sheet-header--system' : ''}"><div class="sheet-header__logo">${logo}</div><div class="sheet-header__id">${lines}</div><div class="sheet-header__meta">${meta}</div></div>`;
+}
+
+const ROW_CLASS = Object.freeze({
+  GROUP: 'sheet-row',
+  DATA: 'sheet-row sheet-data',
+  SUBTOTAL: 'sheet-subtotal',
+  LEAF_TOTAL: 'sheet-row sheet-leaf-total',
+  TOTAL: 'sheet-total',
+  GRAND_TOTAL: 'sheet-grand',
+});
+
+function cellClass(cell) {
+  if (cell.kind === 'label') return 'lbl';
+  return cell.kind === 'num' ? 'num' : 'txt';
+}
+
+function renderHeadRow(doc, { interactive, sort }) {
+  const cells = doc.columns.map((column, index) => {
+    const cls = column.align === 'left' ? ' class="lbl"' : '';
+    let content = escapeHtml(column.label);
+    if (interactive && column.kind === 'metric' && doc.layout === 'summary') {
+      const state = sort?.key === column.key ? (sort.direction === 'desc' ? 'descending' : 'ascending') : 'none';
+      content = `<button type="button" class="sheet-sort" data-sort="${escapeHtml(column.key)}" aria-sort="${state}" title="Ordenar os grupos por ${escapeHtml(column.label)}">${escapeHtml(column.label)}</button>`;
+    }
+    return `<th data-col="${index}" data-key="${escapeHtml(column.key)}"${cls} scope="col">${content}</th>`;
+  });
+  return `<tr>${cells.join('')}</tr>`;
+}
+
+function renderRow(doc, row, { interactive }) {
+  const cls = ROW_CLASS[row.type] ?? 'sheet-row';
+  const attrs = `class="${cls}" data-row-type="${row.type}" data-row-id="${escapeHtml(row.id)}"`;
+  if (row.chips) {
+    const items = row.chips.items.map((item) => `<span class="sheet-chip">${escapeHtml(item.label)}: <b>${escapeHtml(item.text)}</b></span>`).join('');
+    return `<tr ${attrs}><td class="sheet-chips" data-col="0" colspan="${doc.columns.length}"><strong>${escapeHtml(row.chips.title)}</strong> · ${items}</td></tr>`;
+  }
+  const cells = row.cells.map((cell) => {
+    let text = escapeHtml(cell.text);
+    if (interactive && cell.kind === 'label' && row.drill) {
+      text = `<button type="button" class="sheet-drill" data-drill="${escapeHtml(row.drill)}" title="Abrir o detalhado de ${escapeHtml(cell.text)}">${text}</button>`;
+    }
+    const cls = cell.partial ? `${cellClass(cell)} sheet-partial` : cellClass(cell);
+    const title = cell.partial ? ` title="Calculado com ${cell.partial.nValid} de ${cell.partial.nTotal} valores"` : '';
+    return `<td data-col="${cell.col}" data-key="${escapeHtml(cell.key)}" class="${cls}"${title}>${text}</td>`;
+  });
+  return `<tr ${attrs}>${cells.join('')}</tr>`;
+}
+
+function renderTable(doc, table, options) {
+  if (!table) return '';
+  const colgroup = `<colgroup>${doc.print.widthPercents.map((percent) => `<col style="width:${percent}%">`).join('')}</colgroup>`;
+  const rows = table.rows.map((row) => renderRow(doc, row, options)).join('\n');
+  const title = table.title ? `<h3 class="sheet-sec-title sheet-sec-title--total">${escapeHtml(table.title)}</h3>` : '';
+  // Tabela só com linha de totais (subtotal/total geral do Detalhado): sem cabeçalho de colunas.
+  const head = table.rows.every((row) => row.chips) ? '' : `<thead>${renderHeadRow(doc, options)}</thead>`;
+  return `${title}<table class="sheet-table sheet-table--${table.kind.toLowerCase()}" data-table-id="${escapeHtml(table.id)}" data-kind="${table.kind}">${colgroup}${head}<tbody>\n${rows}\n</tbody></table>`;
+}
+
+function renderSection(doc, section, options) {
+  const tag = section.level === 1 ? 'h2' : 'h3';
+  let title = escapeHtml(section.title);
+  if (options.interactive && section.drill) {
+    title = `<button type="button" class="sheet-drill" data-drill="${escapeHtml(section.drill)}" title="Abrir o detalhado deste grupo">${title}</button>`;
+  }
+  const inner = [
+    `<${tag} class="sheet-sec-title sheet-sec-title--${section.level}">${title}</${tag}>`,
+    ...section.sections.map((child) => renderSection(doc, child, options)),
+    renderTable(doc, section.table, options),
+    renderTable(doc, section.leafTotal, options),
+  ].join('\n');
+  const keep = section.level === 1 ? ' sheet-keep' : '';
+  return `<section class="sheet-sec sheet-sec--${section.level}${keep}" data-node-id="${escapeHtml(section.id)}">\n${inner}\n</section>`;
+}
+
+function renderFooter(doc) {
+  const parts = [doc.footer.filtros, doc.footer.arroba, doc.footer.emitidoPor, doc.footer.versao].filter(Boolean);
+  return `<div class="sheet-footer">${parts.map((part) => `<span>${escapeHtml(part)}</span>`).join('')}<span class="sheet-footer__pages">Página X de Y na impressão</span></div>`;
+}
+
+/**
+ * Marcação da folha inteira (cabeçalho que se repete, título, seções, total geral, notas e rodapé).
+ * @param doc documento de buildReportDocument
+ * @param {{ mode?: 'fragment'|'print', interactive?: boolean, sort?: {key, direction}|null }} options
+ *   fragment = dentro do app (tela); print = corpo do documento impresso/PDF.
+ */
+export function renderSheetBody(doc, { mode = 'fragment', interactive = false, sort = null } = {}) {
+  const options = { interactive, sort };
+  const header = renderSheetHeaderHtml(doc.header, { periodText: doc.periodText, emittedText: doc.emittedText });
+  const titleRow = `<div class="sheet-title-row"><h1 class="sheet-title">${escapeHtml(doc.title)}</h1><span class="sheet-title-side">${escapeHtml(doc.subtitle)}</span></div>`;
+  const content = doc.empty
+    ? '<p class="sheet-empty">Nenhum registro para os filtros informados.</p>'
+    : [
+      ...doc.sections.map((section) => renderSection(doc, section, options)),
+      renderTable(doc, doc.flat, options),
+      doc.grandTotal ? `<div class="sheet-grand-block">${renderTable(doc, doc.grandTotal, options)}</div>` : '',
+    ].join('\n');
+  const notes = doc.notes.length ? `<ul class="sheet-notes">${doc.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : '';
+  const rootClass = `rpt-sheet rpt-sheet--${mode === 'print' ? 'print' : 'screen'} sheet--${doc.print.orientation} sheet-size-${doc.print.sizeClass}`;
+  return `<div class="${rootClass}" data-orientation="${doc.print.orientation}" data-layout="${doc.layout}">
+<table class="sheet-page">
+<thead><tr><td>${header}${titleRow}</td></tr></thead>
+<tfoot><tr><td>${renderFooter(doc)}</td></tr></tfoot>
+<tbody><tr><td class="sheet-body">
+${content}
+${notes}
+</td></tr></tbody>
+</table>
+</div>`;
+}

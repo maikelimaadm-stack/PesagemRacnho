@@ -1,8 +1,11 @@
 // IPC mínimo de emissão de relatórios (programa reporting R4/R6).
 //
 // - reports:print-to-pdf  → renderiza o HTML do relatório numa janela oculta SEM JavaScript,
-//                           gera o PDF (A4, rodapé com página X de Y) e grava onde o usuário escolher.
+//                           gera o PDF (A4) e grava onde o usuário escolher.
 // - reports:print         → mesma janela oculta, diálogo de impressão do sistema.
+// E1B (1.4.0): página, margens de 10 mm, cabeçalho/rodapé que se repetem e "Página X de Y" vêm do
+// PRÓPRIO documento (@page com margem e contadores, thead/tfoot da folha) — o mesmo mecanismo na
+// impressão e no PDF. O PDF não usa mais o rodapé nativo (sairia duplicado com o do documento).
 // - reports:save-file     → grava CSV/JSON/XLSX (texto ou base64) no caminho escolhido no diálogo.
 //
 // Segurança: o renderer NUNCA envia caminho — só um nome sugerido (basename saneado) e a extensão
@@ -41,14 +44,6 @@ function safeFileName(suggested, extension) {
 function assertHtml(html) {
   if (typeof html !== 'string' || !html.startsWith('<!doctype html>')) throw new AppError('REPORT_IPC_002', 'Documento de impressão inválido');
   if (Buffer.byteLength(html, 'utf8') > MAX_HTML_BYTES) throw new AppError('REPORT_IPC_003', 'Documento de impressão grande demais');
-}
-
-// O template de rodapé do printToPDF não respeita UTF-8: todo caractere fora do ASCII vira
-// entidade numérica (senão "Emissão" sai como "EmissÃ£o").
-function escapeTemplate(text) {
-  return String(text ?? '')
-    .replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]))
-    .replace(/[^\x20-\x7E]/gu, (char) => `&#${char.codePointAt(0)};`);
 }
 
 function writeAtomic(target, buffer) {
@@ -93,16 +88,16 @@ async function withRenderWindow(html, fn) {
   }
 }
 
-function pdfOptions({ landscape, footerText }) {
+// Margens em polegadas (10 mm ≈ 0,3937 in) só como reserva: o @page do documento manda (tamanho,
+// orientação, margens e o "Página X de Y" nas margens da página).
+function pdfOptions({ landscape }) {
   return {
     pageSize: 'A4',
     landscape: landscape === true,
     printBackground: true,
-    displayHeaderFooter: true,
-    headerTemplate: '<span></span>',
-    footerTemplate: `<div style="font-family:Arial,sans-serif;font-size:7px;color:#555;width:100%;padding:0 10mm;display:flex;justify-content:space-between;"><span>${escapeTemplate(footerText)}</span><span>P&#225;gina <span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`,
-    margins: { marginType: 'custom', top: 0.45, bottom: 0.55, left: 0.4, right: 0.4 },
-    preferCSSPageSize: false,
+    displayHeaderFooter: false,
+    margins: { marginType: 'custom', top: 0.3937, bottom: 0.4724, left: 0.3937, right: 0.3937 },
+    preferCSSPageSize: true,
   };
 }
 

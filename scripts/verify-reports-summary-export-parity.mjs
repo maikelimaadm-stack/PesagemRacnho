@@ -50,8 +50,19 @@ function xlsxRows(bytes) {
   return rows;
 }
 
-function printRows(html) {
-  return [...html.matchAll(/<tr class="(sum lvl\d|grand sumtotal)">([\s\S]*?)<\/tr>/g)].map(([, , body]) => [...body.matchAll(/<td class="[^"]*">([\s\S]*?)<\/td>/g)].map(([, cell]) => decode(cell)));
+// E1B: a impressão é a FOLHA (seções por nível). Cada nó da árvore aparece uma vez como linha de grupo
+// (nível folha), Subtotal (nível acima) ou Total da seção de nível 1 — lidas pelo data-row-id (= id do nó)
+// e comparadas métrica a métrica (data-key) com a mesma linha do layout da tela/CSV/XLSX/JSON.
+function printRowsByNode(html) {
+  const out = new Map();
+  for (const [, type, id, body] of html.matchAll(/<tr class="[^"]*" data-row-type="(GROUP|SUBTOTAL|TOTAL|GRAND_TOTAL|LEAF_TOTAL)" data-row-id="([^"]*)">([\s\S]*?)<\/tr>/g)) {
+    if (type === 'LEAF_TOTAL') continue;
+    const nodeId = type === 'GRAND_TOTAL' ? '#grand' : decode(id).replace(/#(subtotal|total)$/, '');
+    const cells = Object.fromEntries([...body.matchAll(/<td data-col="\d+" data-key="([^"]*)" class="[^"]*"(?: title="[^"]*")?>([\s\S]*?)<\/td>/g)].map(([, key, text]) => [decode(key), decode(text.replace(/<[^>]+>/g, ''))]));
+    assert.ok(!out.has(nodeId), `nó ${nodeId} aparece uma vez só na folha`);
+    out.set(nodeId, cells);
+  }
+  return out;
 }
 
 const cases = [
@@ -93,9 +104,26 @@ for (const testCase of cases) {
   assert.deepEqual(normalizeRows(xlsxBody, groupCount, metrics, (cell) => (cell === null ? null : Number(cell))), expected, `${testCase.name}: XLSX = tela`);
   assert.ok(String(xlsx[3].cells[1]).includes('Resumido'), `${testCase.name}: XLSX informa o modo`);
 
-  // Impressão/PDF (mesmo documento)
+  // Impressão/PDF (a folha): todo nó da árvore, com os MESMOS valores da tela, métrica a métrica
   const printed = preparePrint(vm, ADMIN, {});
-  assert.deepEqual(normalizeRows(printRows(printed.html), groupCount, metrics, (cell) => readNumber(cell)), expected, `${testCase.name}: impressão = tela`);
+  const sheetRows = printRowsByNode(printed.html);
+  const nodeIds = ['#grand', ...vm.summaryRows.map((row) => row.id)];
+  assert.deepEqual([...sheetRows.keys()].sort(), [...nodeIds].sort(), `${testCase.name}: folha cobre todos os nós (e só eles)`);
+  const zeroAsEmpty = new Set(printed.document.columns.filter((column) => column.zeroAsEmpty).map((column) => column.key));
+  screen.rows.forEach((row, index) => {
+    const nodeId = row.node ? row.node.id : '#grand';
+    const cells = sheetRows.get(nodeId);
+    metrics.forEach((metric, metricIndex) => {
+      if (!(metric.key in cells)) {
+        assert.ok(printed.document.hiddenColumns.some((column) => column.key === metric.key) || printed.document.columns.some((column) => column.kind === 'pair' && [column.from.key, column.to.key].includes(metric.key)), `${testCase.name}: métrica ${metric.key} só falta na folha se for coluna vazia (oculta) ou par "de–até"`);
+        return;
+      }
+      const value = readNumber(cells[metric.key]);
+      const wanted = expected[index][groupCount + metricIndex];
+      if (value === null && wanted === 0 && zeroAsEmpty.has(metric.key)) return; // contagem zero aparece "—" na folha
+      assert.equal(value === null ? null : roundTo(value, decimalsOf(metric)), wanted, `${testCase.name}: impressão = tela (${nodeId} · ${metric.key})`);
+    });
+  });
   assert.equal(printed.manifest.mode, 'RESUMIDO');
 
   // JSON (valor canônico, arredondado aqui na casa da coluna)
@@ -140,12 +168,15 @@ assert.deepEqual(reimported.rows[0].values, { marca: '-1+1', peso: '-12', obs: '
 const perf = await runReport('desempenho', { today: TODAY, params: P, selection: { mode: 'RESUMIDO', groups: [{ columnId: 'apartacao' }, { columnId: 'lote' }] } }, ADMIN);
 const perfPrint = preparePrint(perf, ADMIN, {});
 assert.ok(!/text-overflow:\s*ellipsis/.test(perfPrint.html), 'impressão do Resumido sem reticências');
-assert.ok(/table\.summary th \{ white-space: normal/.test(perfPrint.html), 'cabeçalho das métricas quebra entre palavras');
-const { summaryColumnWidths } = await import('../src/modules/reporting/infrastructure/exporters/printDocument.js');
-const longLayout = buildSummaryLayout(perf, 'print');
-const longWidths = summaryColumnWidths({ ...longLayout, rows: [...longLayout.rows, { cells: ['Pasto Norte Grande - Piquete A', ...longLayout.rows[0].cells.slice(1)] }] });
+assert.ok(/\.sheet-table th \{[^}]*white-space: normal; overflow-wrap: normal/.test(perfPrint.html), 'cabeçalho das métricas quebra entre palavras (nunca no meio)');
+assert.ok(/\.sheet-table \.num \{[^}]*white-space: nowrap/.test(perfPrint.html), 'número nunca quebra nem é cortado');
+// Larguras pelo conteúdo: rótulo longo alarga a coluna do rótulo (até o máximo; acima disso quebra linha).
+const { decideSheetLayout } = await import('../src/modules/reporting/domain/reportDocument.js');
+const perfDoc = perfPrint.document;
+const longRows = [...perfDoc.sections.flatMap((section) => section.table?.rows ?? []), { type: 'GROUP', cells: [{ text: 'Pasto Norte Grande - Piquete A' }, ...perfDoc.columns.slice(1).map(() => ({ text: '12.345,6' }))] }];
+const longWidths = decideSheetLayout({ layout: 'summary', columns: perfDoc.columns, rows: longRows }).widths;
 assert.ok(longWidths[0] >= 150, 'rótulo longo alarga a coluna (até o máximo; acima disso quebra linha)');
-assert.ok(longWidths.slice(longLayout.groupHeaders.length).every((width) => width >= 44), 'métricas com largura mínima');
+assert.ok(longWidths.slice(1).every((width) => width >= 34), 'métricas com largura mínima');
 
 // Negativo: um layout adulterado é detectado pela comparação.
 const vm = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: { mode: 'RESUMIDO' } }, ADMIN);

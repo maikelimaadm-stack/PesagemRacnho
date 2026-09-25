@@ -95,12 +95,16 @@ assert.equal(win.destroyed, true, 'janela destruída');
 assert.ok(!existsSync(win.loadedFile), 'HTML temporário removido');
 assert.equal(win.pdfOptions.pageSize, 'A4');
 assert.equal(win.pdfOptions.printBackground, true);
-assert.equal(win.pdfOptions.displayHeaderFooter, true);
-assert.match(win.pdfOptions.footerTemplate, /class="pageNumber"/);
-assert.match(win.pdfOptions.footerTemplate, /class="totalPages"/);
-assert.ok(win.pdfOptions.footerTemplate.includes(vm.emissionId.slice(0, 8)), 'rodapé com emissão');
-assert.ok(win.htmlAtPrint.includes(`Registros: ${vm.rowCount}`), 'PDF renderiza o documento do mesmo view model');
-assert.ok(!win.htmlAtPrint.includes('counter(pages)'), 'no PDF a paginação vem do rodapé nativo');
+// E1B: página, margens de 10 mm e "Página X de Y" vêm do PRÓPRIO documento (@page), o mesmo mecanismo da
+// impressão — o rodapé nativo do printToPDF sairia duplicado (conferido no Electron 35/Chromium 134).
+assert.equal(win.pdfOptions.displayHeaderFooter, false, 'sem rodapé nativo (o documento já pagina)');
+assert.equal(win.pdfOptions.preferCSSPageSize, true, 'tamanho e orientação do @page do documento');
+assert.equal(win.pdfOptions.footerTemplate, undefined);
+assert.ok(win.htmlAtPrint.includes('content: "Página " counter(page) " de " counter(pages)'), 'PDF com Página X de Y do documento');
+assert.ok(win.htmlAtPrint.includes(vm.emissionId.slice(0, 8)), 'rodapé da página com a emissão');
+assert.ok(/@page \{ size: A4 (portrait|landscape); margin: 10mm/.test(win.htmlAtPrint), 'A4 com margens de 10 mm');
+assert.ok(win.htmlAtPrint.includes('<table class="sheet-page">') && win.htmlAtPrint.includes('Total geral'), 'PDF renderiza a folha do mesmo view model');
+assert.ok(win.htmlAtPrint.includes("img-src data:"), 'CSP permite só o logo embutido');
 assert.equal(saveDialogResult.filters[0].extensions[0], 'pdf');
 
 // Negativos do IPC

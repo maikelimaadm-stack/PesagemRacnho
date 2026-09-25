@@ -1,9 +1,11 @@
-// Impressão e PDF (R4). Mesmo view model da tela → documento HTML (printDocument) → Electron.
-// Imprimir/gerar PDF é uma forma de exportar: exige reports.export e recusa coluna sensível sem
-// permissão (assertCanExport), exatamente como CSV/JSON.
+// Impressão e PDF (R4). Mesmo view model da tela → documento HTML (printDocument = a folha da E1B) →
+// Electron. Imprimir/gerar PDF é uma forma de exportar: exige reports.export e recusa coluna sensível
+// sem permissão (assertCanExport), exatamente como CSV/JSON. O cabeçalho da propriedade (options.header)
+// é resolvido pela tela (propertyHeaderService) e entra no documento; "Página X de Y" vem do próprio
+// documento (margem do @page) nos três canais — impressão, PDF e iframe de desenvolvimento.
 import { assertCanExport } from '../domain/reportPermissions.js';
 import { getReportDefinition } from '../definitions/reportCatalog.js';
-import { buildPrintDocument, footerText } from '../infrastructure/exporters/printDocument.js';
+import { buildPrintDocument } from '../infrastructure/exporters/printDocument.js';
 import { buildManifest, exportFileName } from './reportExportService.js';
 
 function authorize(viewModel, actor) {
@@ -75,18 +77,17 @@ export async function printReport(viewModel, actor, options = {}) {
 }
 
 export async function exportPdf(viewModel, actor, options = {}) {
-  const prepared = preparePrint(viewModel, actor, { ...options, format: 'pdf', pageNumbersInCss: false });
+  const prepared = preparePrint(viewModel, actor, { ...options, format: 'pdf' });
   if (!prepared.layout.fits && !options.acceptTooWide) return { blocked: true, layout: prepared.layout };
   const api = bridge();
   if (!api?.printToPdf) {
     // Navegador de desenvolvimento: sem Electron não há printToPDF; abre a impressão (Salvar como PDF).
-    return { ...(await printInIframe(buildPrintDocument(viewModel, { ...options, pageNumbersInCss: true }).html)), fallback: 'iframe', layout: prepared.layout };
+    return { ...(await printInIframe(prepared.html)), fallback: 'iframe', layout: prepared.layout };
   }
   const result = unwrap(await api.printToPdf({
     html: prepared.html,
     landscape: prepared.layout.orientation === 'landscape',
     suggestedName: prepared.manifest.fileName,
-    footerText: footerText(viewModel),
   }));
   if (result.canceled) return { canceled: true, layout: prepared.layout };
   const manifest = { ...prepared.manifest, fileName: result.path.split(/[\\/]/).pop(), sha256: result.sha256, size: result.size };
