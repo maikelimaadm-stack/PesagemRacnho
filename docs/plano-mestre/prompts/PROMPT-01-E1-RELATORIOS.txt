@@ -1,0 +1,23 @@
+PROMPT-01 — E1: Relatórios resumidos + catálogo enxuto (versão 1.4.0, sem mudança de esquema)
+
+Pré-requisito: docs/evidence/e0/REPORT.md com STATUS CONCLUÍDA e test:quick verde. Se não, PARE.
+
+Leia: docs/plano-mestre/prompts/_REGRAS-COMUNS.txt, docs/plano-mestre/00-LEIA-PRIMEIRO.md,
+docs/plano-mestre/E1-RELATORIOS.md, docs/reporting/*.md, src/modules/reporting/**, src/components/reports/**.
+
+Branch: program/e1-relatorios.
+
+Execute a especificação E1-RELATORIOS.md inteira, nesta ordem:
+1. Modo Resumido no domínio (reportService, summaryLayout, reportLayout) + gates reports:summary-mode e
+   reports:summary-export-parity. Comece pelos testes: totais do Resumido = totais do Detalhado.
+2. ReportSummaryTable + toolbar (Resumido|Detalhado, Agrupar por rápido, drill-down) + modelos salvos com mode.
+3. Consolidação do catálogo para 12 relatórios com LEGACY_REPORT_ALIASES, migração de favoritos/recentes/
+   modelos, mover os 4 de controle para Manutenção, esconder cadastros.* e blocked. Gate
+   reports:catalog-consolidation.
+4. docs/user/RELATORIOS.md reescrito em linguagem simples; CHANGELOG [1.4.0]; docs/release/1.4.0/.
+5. Versão 1.4.0 em package.json + contrato de versão; test:quick verde; build.
+
+Não faça: mudar esquema Dexie, criar relatórios novos de outras etapas (evolução, acerto, sanidade, estoque).
+
+Entrega: docs/evidence/e1/REPORT.md + capturas de tela do Resumido (Rebanho atual por lote, Desempenho
+por lote) em docs/evidence/e1/ + resumo no chat.

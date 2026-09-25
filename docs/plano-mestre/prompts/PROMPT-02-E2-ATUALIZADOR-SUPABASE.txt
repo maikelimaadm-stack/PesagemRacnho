@@ -1,0 +1,29 @@
+PROMPT-02 — E2: Versionamento e atualização automática via Supabase (versão 1.5.0, bootstrap)
+
+Pré-requisito: docs/evidence/e1/REPORT.md CONCLUÍDA (ou e0 CONCLUÍDA, se a responsável mandar a E2 antes).
+
+Leia: _REGRAS-COMUNS.txt, 00-LEIA-PRIMEIRO.md, docs/plano-mestre/E2-ATUALIZADOR-SUPABASE.md,
+docs/arquitetura-produto/13-VERSIONAMENTO-RELEASE.md e 15-ATUALIZACAO-AUTOMATICA-SUPABASE.md,
+electron/main.cjs, electron/preload.cjs, scripts/generate-release-*.mjs.
+
+Branch: program/e2-atualizador.
+
+Execute E2-ATUALIZADOR-SUPABASE.md:
+1. supabase/migrations/<timestamp>_app_releases.sql com app_releases, app_installs e report_install
+   exatamente como na especificação (RLS ligada). NÃO aplique em nenhum projeto remoto; só o arquivo.
+2. config/update.json com projectRef "__PREENCHER__" (a responsável/Cowork preenche após criar o projeto).
+   O app com projectRef não preenchido fica em estado `disabled`, sem erro.
+3. electron/update/updateService.cjs, IPC/preload, criticalOperationGuard, UI (selo, diálogo, Sobre,
+   Configurações › Atualizações com canal e heartbeat opcional).
+4. Rollout por percentual, withdrawn, min_supported_version, assinatura Ed25519 do manifesto
+   (gerar par de chaves de TESTE para os gates; a chave real de produção é gerada pela responsável e
+   fica fora do repo — documente o comando em docs/engineering/).
+5. Scripts release:publish, release:promote, release:withdraw com modo --dry-run e Storage simulado.
+6. Gates update:*:verify (14 do doc 15 §11) + release:publish:dry-run:verify.
+7. Versão 1.5.0, CHANGELOG, docs/release/1.5.0/ (explicar que é a versão bootstrap, instalação manual).
+8. docs/user/ATUALIZACAO.md: como trocar de canal, o que acontece offline, como ver a versão.
+
+Não faça: criar projeto Supabase, usar service_role real, publicar nada, mexer em dados do rebanho.
+
+Entrega: docs/evidence/e2/REPORT.md + lista exata do que a responsável precisa fazer no Supabase e na
+máquina de release (passo a passo numerado) + resumo no chat.

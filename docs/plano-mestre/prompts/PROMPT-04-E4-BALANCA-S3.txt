@@ -1,0 +1,24 @@
+PROMPT-04 — E4 — Balança Tru-Test S3, fase A: contrato, simulador, importação e captura (sem mudança de esquema)
+
+Pré-requisito: docs/evidence/e0/REPORT.md CONCLUÍDA. (Pode rodar em paralelo com E1–E3 em branch própria.) Se não, PARE e reporte.
+
+Leia: docs/plano-mestre/prompts/_REGRAS-COMUNS.txt, docs/plano-mestre/00-LEIA-PRIMEIRO.md,
+docs/plano-mestre/E4-BALANCA-S3.md, docs/arquitetura-produto/05-INTEGRACOES-E-EQUIPAMENTOS.md, electron/main.cjs, electron/preload.cjs, src/modules/import/**, src/pages/LancamentoPesagensIndividuais.jsx.
+
+Branch: program/e4-balanca.
+
+Execute E4-BALANCA-S3.md:
+1. src/modules/equipment/ com o contrato ScaleReading/ScaleAdapter, scaleService com detecção de estabilidade.
+2. SimulatorAdapter + integração no Lançamento (peso aparece sozinho; Enter grava; queda não trava).
+3. Campos peso_origem/balanca_id na pesagem (não indexados) + coluna 'Origem do peso' no reporting.
+4. Importação de sessão Tru-Test Data Link com mapeamento configurável. Se não houver amostra em
+   docs/evidence/e4/amostras/, marque o layout como NÃO VALIDADO.
+5. Manutenção › Equipamentos: diagnóstico Web Serial/Web Bluetooth (handlers no main, permissões
+   restritas), HEX+ASCII, salvar captura, roteiro na tela para a responsável.
+6. Configurações › Equipamentos.
+7. Gates equipment:contract, equipment:simulator, import:scale-session; preload:contract atualizado.
+8. docs/user/BALANCA.md (como ligar o S3, como fazer a captura e mandar o arquivo).
+
+Não faça: parser do protocolo S3 ao vivo (é E9, depende da captura real).
+
+Entrega: docs/evidence/e4/REPORT.md + resumo no chat. A versão sai na próxima MINOR integrada.

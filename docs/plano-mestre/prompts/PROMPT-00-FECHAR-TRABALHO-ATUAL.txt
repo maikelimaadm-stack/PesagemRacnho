@@ -1,0 +1,21 @@
+PROMPT-00 — Fechar o trabalho em andamento antes do Plano Mestre 2
+
+Contexto: repositório MAKGESTAO-main (Pesagens Individuais 1.3.2, Dexie v8), branch atual
+program/sanity-launch-import, com alterações NÃO commitadas em: CHANGELOG.md, docs/arquitetura-produto
+(08, README, 15 novo), electron/main.cjs, package.json/lock, scripts de verificação, AppShell,
+appVersion.js, eventColumns.js, weighingService.js, weighingDataAdapter.js, PesagensIndividuais.jsx,
+d17b-modelobase1.css, docs/release/1.3.1 e 1.3.2. Foi adicionada a pasta docs/plano-mestre/ (novo plano).
+
+Leia docs/plano-mestre/prompts/_REGRAS-COMUNS.txt e docs/plano-mestre/00-LEIA-PRIMEIRO.md.
+
+Tarefas:
+1. NÃO descarte nada. Rode `git status` e `git diff --stat`; explique em 1 linha por arquivo o que mudou.
+2. Rode `npm run test:quick`. Se vermelho, corrija só o necessário para ficar verde (sem funcionalidade nova).
+3. Faça commits pequenos e temáticos (versão 1.3.2, docs de atualização Supabase, plano mestre 2, etc.).
+4. Confirme que package.json, CHANGELOG e docs/release/1.3.2 estão coerentes (release:version-contract:verify).
+5. Liste todas as branches locais com o último commit e se estão contidas na linha atual; diga quais
+   podem ser arquivadas e qual deve ser a linha de integração do Plano Mestre 2.
+6. Verifique .gitignore: instaladores (*.exe), release*/, .audit-tmp/, .tmp/ não podem ir para o git.
+7. Informe se a pasta irmã ../MAKGESTAO-1.1.18 tem algo que NÃO está no histórico git atual (não apague).
+
+Entrega: docs/evidence/e0/REPORT.md (formato §6) e resumo no chat. Não comece a E1.

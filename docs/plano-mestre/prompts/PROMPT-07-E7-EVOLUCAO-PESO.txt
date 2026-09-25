@@ -1,0 +1,18 @@
+PROMPT-07 — E7 — Evolução de peso e farol de metas (1.8.x, sem mudança de esquema)
+
+Pré-requisito: docs/evidence/e1/REPORT.md e docs/evidence/e3/REPORT.md CONCLUÍDAS. Se não, PARE e reporte.
+
+Leia: docs/plano-mestre/prompts/_REGRAS-COMUNS.txt, docs/plano-mestre/00-LEIA-PRIMEIRO.md,
+docs/plano-mestre/E7-EVOLUCAO-PESO.md, src/modules/reporting/**, src/modules/weighing/domain/**, scripts/verify-weighing-calculations.mjs.
+
+Branch: program/e7-evolucao.
+
+Execute E7-EVOLUCAO-PESO.md:
+1. Cálculo da matriz (categoria no INÍCIO do período, GMD entre pesagens e acumulado, ponderado,
+   @ produzidas) no domínio + gate reports:evolution primeiro, com casos conferíveis à mão.
+2. Definição desempenho.evolucao (Resumido por padrão), gráfico de linhas, exportações com paridade.
+3. Farol de meta (limites da especificação) no Desempenho, ficha, Lançamento; gate reports:goal-light.
+4. Alertas de curral e lista 'Animais para olhar' no Fechamento do dia.
+5. docs/user/RELATORIOS.md (seção Evolução); CHANGELOG; versão PATCH/MINOR conforme o orquestrador.
+
+Entrega: docs/evidence/e7/REPORT.md + captura da matriz e do gráfico + resumo no chat.

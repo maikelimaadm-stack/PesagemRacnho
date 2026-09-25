@@ -1,0 +1,17 @@
+REGRAS COMUNS (valem para todo prompt deste pacote)
+- Leia primeiro: docs/plano-mestre/00-LEIA-PRIMEIRO.md e a especificação da etapa.
+- A especificação é o contrato. Se algo nela estiver errado frente ao código real, NÃO improvise:
+  anote em "Perguntas para a responsável" no REPORT e siga com o restante.
+- Branch: crie a branch da etapa a partir do último commit verde da linha de integração
+  (hoje: program/sanity-launch-import, depois do PROMPT-00). Nunca faça merge/push em main sem
+  autorização escrita da responsável.
+- Nunca apague dado do usuário. Mudança de esquema = STORES_Vn novo + backfill idempotente + backup
+  pré-migração validado + gate migration:vN:verify + restore da versão anterior testado.
+- Offline sempre. ModeloBase1 como contrato visual. Formato brasileiro. Interface em linguagem de curral.
+- Registre todo gate novo em test:quick. Rode test:quick completo antes de declarar concluído.
+- Atualize docs/user, CHANGELOG (bloco da versão com data real) e docs/release/<versão>/.
+- Condições de parada: perda de dados, migração irreversível, backup inválido, integridade vermelha,
+  duplicação de animal/identificador, restore falhando → pare e reporte.
+- Teste físico (balança, impressora, curral) só é declarado EXECUTADO com evidência humana.
+- Ao final, escreva docs/evidence/<etapa>/REPORT.md no formato do 00-LEIA-PRIMEIRO §6 e responda
+  no chat com o conteúdo do REPORT (resumido) + o resultado do test:quick.

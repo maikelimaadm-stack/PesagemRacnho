@@ -1,0 +1,20 @@
+PROMPT-06 — E6 — Estoque de brincos e medicamentos (versão 1.8.0, Dexie v11)
+
+Pré-requisito: docs/evidence/e3/REPORT.md CONCLUÍDA. Se E5 estiver em andamento, integre depois dela (v10 antes de v11). Se não, PARE e reporte.
+
+Leia: docs/plano-mestre/prompts/_REGRAS-COMUNS.txt, docs/plano-mestre/00-LEIA-PRIMEIRO.md,
+docs/plano-mestre/E6-ESTOQUE.md, src/modules/sanity/**, src/components/pesagens/SequenciaBrincos.jsx, stores faixasIdentificadores/excecoesIdentificadores/animalIdentificadores no schema.
+
+Branch: program/e6-estoque.
+
+Execute E6-ESTOQUE.md:
+1. Motor de estoque (domínio puro: saldo por soma, FEFO, custo médio, cancelamento) + gate stock:ledger primeiro.
+2. STORES_V11 + backfill v11 (itens a partir de medicamentos e faixas, sem movimentos inventados) + migration:v11.
+3. Brincos: entrada por faixa/lista, consumo automático ao gravar identificador, perda/rebrinco,
+   próximo livre, números pulados, lista 'Animais para rebrincar'. Gate stock:ear-tag-flow.
+4. Medicamentos: entrada com lote/validade, consumo automático por aplicação (FEFO), cancelamento,
+   vencido bloqueia com liberação justificada. Gate stock:medicine-flow.
+5. Tela REBANHO › Estoque (Saldo, Movimentos, Entrada rápida, Alertas) + relatórios estoque.*.
+6. docs/user/ESTOQUE.md; CHANGELOG [1.8.0]; docs/release/1.8.0/ com MIGRATION-v11.md; versão 1.8.0.
+
+Entrega: docs/evidence/e6/REPORT.md + resumo no chat.
