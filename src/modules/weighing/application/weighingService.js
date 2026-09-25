@@ -33,6 +33,19 @@ function withoutCommercialInput(actor, payload) {
   if (!actor || !payload || can(actor.role, 'commercial.write')) return payload;
   const copy = { ...payload };
   for (const field of COMMERCIAL_INPUT_FIELDS) delete copy[field];
+  if (copy.documentacao) {
+    try {
+      const documentation = typeof copy.documentacao === 'string'
+        ? JSON.parse(copy.documentacao)
+        : { ...copy.documentacao };
+      if (documentation && typeof documentation === 'object') {
+        delete documentation.frete;
+        copy.documentacao = JSON.stringify(documentation);
+      }
+    } catch {
+      delete copy.documentacao;
+    }
+  }
   return copy;
 }
 
@@ -142,6 +155,21 @@ export async function bulkUpdateEntries(rawItems, { recalculate = true, systemDe
   });
   if (recalculate) await recalculateAllWeightSeries();
   return payloads.length;
+}
+
+/**
+ * Altera dados mestres dos animais selecionados. Diferentemente de
+ * `bulkUpdateEntries`, esta operação não modifica apenas um fato de pesagem:
+ * marca, raça, sexo, era e categoria formam o cadastro atual do animal e,
+ * portanto, precisam permanecer coerentes em todo o histórico apresentado.
+ */
+export async function bulkUpdateAnimalProfiles(rawItems) {
+  requireWeighingPermission('weighing.edit');
+  if (!Array.isArray(rawItems) || rawItems.length === 0) return 0;
+  return weighingDataAdapter.bulkUpdateAnimalProfiles(rawItems, {
+    audit: true,
+    origin: 'edicao-coletiva',
+  });
 }
 
 export async function bulkDeleteEntries(ids, { recalculate = true } = {}) {

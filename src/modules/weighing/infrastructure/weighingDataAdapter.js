@@ -803,6 +803,130 @@ export async function bulkUpdateEntries(items, { audit = true, origin = 'edicao-
   return updatedCount;
 }
 
+const ANIMAL_PROFILE_FIELDS = Object.freeze(['sexo', 'era']);
+const ANIMAL_PROFILE_REFERENCES = Object.freeze({
+  marca_id: { store: 'marcas', textField: 'marca' },
+  raca_id: { store: 'racas', textField: 'raca' },
+  categoria_id: { store: 'categoriasAnimal', textField: null },
+});
+
+/**
+ * Atualização coletiva do cadastro atual do animal.
+ *
+ * O animal é a fonte canônica, mas os lançamentos anteriores ainda carregam um
+ * snapshot compatível em `legacy_payload`. Mantê-los sincronizados garante que
+ * a Relação, exportações e instalações antigas mostrem a mesma identificação.
+ * Uma troca de marca também atualiza o identificador VISUAL e recusa colisões
+ * número + marca com outro animal.
+ */
+export async function bulkUpdateAnimalProfiles(items, { audit = true, origin = 'edicao-coletiva' } = {}) {
+  if (!Array.isArray(items) || items.length === 0) return 0;
+  storage.assertWritable('Atualização coletiva de animais');
+  const db = await storage.ensureReady();
+  const ts = new Date().toISOString();
+  const byAnimal = new Map();
+  for (const item of items) {
+    const animalId = String(item?.animalId || item?.animal_id || '').trim();
+    if (!animalId) continue;
+    byAnimal.set(animalId, { animalId, patch: { ...(item.patch || {}) } });
+  }
+  if (!byAnimal.size) return 0;
+
+  const tables = ['animais', 'animalIdentificadores', 'pesagens', 'auditoria', 'marcas', 'racas', 'categoriasAnimal'].map((name) => db.table(name));
+  let updatedCount = 0;
+  await db.transaction('rw', tables, async () => {
+    for (const { animalId, patch } of byAnimal.values()) {
+      const animal = (await db.table('animais').where('id').equals(animalId).toArray())
+        .find((row) => !row.deleted_at);
+      if (!animal) throw new Error(`Animal não encontrado (${animalId}).`);
+
+      const changes = {};
+      const eventPatch = {};
+      for (const field of ANIMAL_PROFILE_FIELDS) {
+        if (patch[field] === undefined || patch[field] === null || patch[field] === '') continue;
+        changes[field] = patch[field];
+        eventPatch[field] = patch[field];
+      }
+
+      for (const [idField, config] of Object.entries(ANIMAL_PROFILE_REFERENCES)) {
+        if (!patch[idField]) continue;
+        const reference = (await db.table(config.store).where('id').equals(patch[idField]).toArray())
+          .find((row) => !row.deleted_at && row.ativo !== false);
+        if (!reference) throw new Error(`${config.store === 'categoriasAnimal' ? 'Categoria' : config.store === 'marcas' ? 'Marca' : 'Raça'} não encontrada ou inativa.`);
+        changes[idField] = reference.id;
+        eventPatch[idField] = reference.id;
+        if (config.textField) {
+          changes[config.textField] = reference.nome;
+          eventPatch[config.textField] = reference.nome;
+        }
+        if (idField === 'categoria_id') {
+          changes.categoria_automatica = false;
+          eventPatch.categoria_automatica = false;
+        }
+      }
+
+      if (!Object.keys(changes).length) continue;
+
+      if (changes.marca_id) {
+        const visualValue = normalized(animal.numero_animal || animal.identificacao_normalizada);
+        const collisions = (await db.table('animalIdentificadores')
+          .where('[marca_id+valor_normalizado]')
+          .equals([changes.marca_id, visualValue])
+          .toArray())
+          .filter((row) => !row.deleted_at && row.ativo !== false && String(row.animal_id) !== animalId);
+        if (collisions.length) {
+          throw new Error(`A identificação ${animal.numero_animal || animal.identificacao_normalizada} já existe na marca ${changes.marca}.`);
+        }
+      }
+
+      await db.table('animais').update(animal.localId, { ...changes, updated_at: ts });
+
+      if (changes.marca_id) {
+        const identifiers = (await db.table('animalIdentificadores').where('animal_id').equals(animalId).toArray())
+          .filter((row) => !row.deleted_at && row.tipo === 'VISUAL' && row.ativo !== false);
+        for (const identifier of identifiers) {
+          await db.table('animalIdentificadores').update(identifier.localId, {
+            marca_id: changes.marca_id,
+            marca: changes.marca,
+            updated_at: ts,
+          });
+        }
+      }
+
+      const events = (await db.table('pesagens').where('animal_id').equals(animalId).toArray())
+        .filter((row) => !row.deleted_at);
+      for (const event of events) {
+        const legacy = filterLegacyPayload({ ...weighingUi(event), ...eventPatch });
+        const promoted = {};
+        if (eventPatch.marca_id) promoted.marca_id = eventPatch.marca_id;
+        if (eventPatch.raca_id) promoted.raca_id = eventPatch.raca_id;
+        if (eventPatch.categoria_id) promoted.categoria_id = eventPatch.categoria_id;
+        await db.table('pesagens').update(event.localId, {
+          ...promoted,
+          legacy_payload: legacy,
+          updated_at: ts,
+          updated_by_user_id: actorUserId(),
+        });
+      }
+
+      if (audit) {
+        const campos = Object.keys(changes).sort();
+        await db.table('auditoria').add(auditRow({
+          entidade: 'animais',
+          entidade_id: animalId,
+          acao: 'ATUALIZAR',
+          origem: origin,
+          resumo: `Edição coletiva do animal: ${campos.length} campo(s) alterado(s)`,
+          campos_alterados: campos,
+          created_at: ts,
+        }));
+      }
+      updatedCount += 1;
+    }
+  });
+  return updatedCount;
+}
+
 // Cancelar a pesagem cancela, na mesma transação, as aplicações de sanidade
 // vinculadas por pesagem_id (cancelled_at + motivo "pesagem cancelada"; ADR-049).
 export async function bulkDeleteEntries(ids) {

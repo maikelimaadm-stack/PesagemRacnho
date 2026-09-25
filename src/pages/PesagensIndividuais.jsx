@@ -17,6 +17,8 @@ import {
 import { ensureEmpresaId } from "@/api/db";
 import * as weighingService from "@/modules/weighing/application/weighingService";
 import * as apartacaoService from "@/modules/auxiliary/application/apartacaoService";
+import * as shipmentService from "@/modules/shipments/application/shipmentService";
+import { loadAuxiliaryCatalogs } from "@/modules/auxiliary/application/legacyCatalogBridge";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,7 +31,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Upload, Search, Trash2, FileSpreadsheet, Download, FileDown,
   ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X, Scale,
-  Settings, MoreVertical, Layers, ListFilter, ChevronLeft, ChevronRight
+  Settings, MoreVertical, ListFilter, ChevronLeft, ChevronRight,
+  Tags, MapPinned, ShoppingCart, Store, Factory, BadgeDollarSign
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -57,6 +60,7 @@ import { loadEventRows } from "@/modules/reporting/infrastructure/reportSources/
 import { EXPORT_PROFILES } from "@/modules/weighing/export/weighingExportContract";
 import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
 import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
+import { parseBrazilianNumber } from "@/modules/weighing/domain/brazilianValues";
 
 // Importação (17/09/2026): a Relação não lê mais arquivo nenhum. "Importar CSV" leva ao
 // assistente de Importação (src/pages/Importacao.jsx), onde a leitura, o mapeamento de
@@ -118,6 +122,36 @@ const CAMPOS_RESULTADO_PESQUISA = [
 ];
 const textoContem = (value, term) => normalizeText(value).includes(normalizeText(term));
 
+const EMPTY_PROFILE_BATCH = Object.freeze({ marca_id: "", raca_id: "", sexo: "", era: "", categoria_id: "" });
+const EMPTY_COMMERCIAL_BATCH = Object.freeze({
+  origem_animal: "",
+  comprador: "",
+  destino_venda: "",
+  frigorifico: "",
+  valor_pago_cabeca: "",
+  valor_venda_total: "",
+  valor_arroba: "",
+  valor_arroba_abate: "",
+  valor_total_abate: "",
+  compra_gta: "",
+  compra_nfe: "",
+  compra_frete: "",
+  compra_observacao: "",
+  embarque_id: "",
+  documento_embarque_id: "",
+});
+
+function parsePurchaseDocumentation(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
 export default function PesagensIndividuais() {
   const empresaSelecionadaId = ensureEmpresaId();
   const queryClient = useQueryClient();
@@ -144,6 +178,7 @@ export default function PesagensIndividuais() {
   const podeImportar = pode('weighing.write');
   const podeExportar = pode('reports.export');
   const podeVerValores = pode('commercial.values');
+  const podeEditarComercial = pode('commercial.write');
   const colunasPermitidas = useMemo(
     () => COLUNAS_DISPONIVEIS.filter((coluna) => podeVerValores || !COMMERCIAL_VALUE_COLUMN_IDS.has(coluna.id)),
     [podeVerValores],
@@ -152,6 +187,9 @@ export default function PesagensIndividuais() {
   // Estado para edição em lote
   const [showEditarLote, setShowEditarLote] = useState(false);
   const [edicaoLote, setEdicaoLote] = useState({ data_pesagem: "", sexo: "", raca: "", era: "", marca: "", apartacao: "", lote: "" });
+  const [showEditarPerfil, setShowEditarPerfil] = useState(false);
+  const [edicaoPerfil, setEdicaoPerfil] = useState({ ...EMPTY_PROFILE_BATCH });
+  const [edicaoComercial, setEdicaoComercial] = useState({ open: false, mode: null, values: { ...EMPTY_COMMERCIAL_BATCH } });
   
   // Fetch apartações e lotes
   const { data: apartacoesData = [] } = useQuery({
@@ -169,6 +207,33 @@ export default function PesagensIndividuais() {
     },
     enabled: !!empresaSelecionadaId,
   });
+
+  const { data: catalogosAuxiliares = { compradores: [], vendedores: [], frigorificos: [], marcas: [], racas: [], categorias: [] } } = useQuery({
+    queryKey: ['catalogos-auxiliares-lote', empresaSelecionadaId],
+    queryFn: () => loadAuxiliaryCatalogs(empresaSelecionadaId),
+    enabled: !!empresaSelecionadaId,
+  });
+
+  const { data: dadosEmbarque = { embarques: [], documentos: [] } } = useQuery({
+    queryKey: ['embarques-documentos-lote', empresaSelecionadaId],
+    queryFn: async () => {
+      const [embarques, documentos] = await Promise.all([
+        shipmentService.listShipments({ empresaId: empresaSelecionadaId }),
+        shipmentService.listDocuments({ empresaId: empresaSelecionadaId }),
+      ]);
+      return {
+        embarques: embarques.filter((item) => !item.deleted_at),
+        documentos: documentos.filter((item) => !item.deleted_at),
+      };
+    },
+    enabled: !!empresaSelecionadaId && podeEditarComercial,
+  });
+
+  const documentosComerciais = useMemo(() => {
+    const shipmentId = edicaoComercial.values.embarque_id;
+    if (!shipmentId || shipmentId === '__remove__') return [];
+    return dadosEmbarque.documentos.filter((item) => item.embarque_id === shipmentId);
+  }, [dadosEmbarque.documentos, edicaoComercial.values.embarque_id]);
 
   // Lotes filtrados pela apartação selecionada na edição
   const lotesEdicaoFiltrados = useMemo(() => {
@@ -260,6 +325,19 @@ export default function PesagensIndividuais() {
   const racasExistentes = [...new Set(pesagens.map(p => p.raca).filter(Boolean))].sort();
   const erasExistentes = [...new Set(pesagens.map(p => p.era).filter(Boolean))].sort();
 
+  const selectedRows = useMemo(() => {
+    const ids = new Set(selectedItems);
+    return pesagens.filter((row) => ids.has(row.id));
+  }, [pesagens, selectedItems]);
+
+  const selectionSummary = useMemo(() => {
+    const animalIds = [...new Set(selectedRows.map((row) => row.animal_id || row.animal_id_resolvido).filter(Boolean))];
+    const cadastros = selectedRows.filter((row) => row.tipo_manejo === 'Cadastro');
+    const vendas = selectedRows.filter((row) => row.tipo_manejo === 'Saída' && row.motivo_saida === 'Venda');
+    const abates = selectedRows.filter((row) => row.tipo_manejo === 'Saída' && row.motivo_saida === 'Abate');
+    return { animalIds, cadastros, vendas, abates };
+  }, [selectedRows]);
+
   // Filtrar e ordenar
   const pesagensFiltradas = useMemo(() => {
     // Motor compartilhado: pesquisa + filtros de coluna (AND) e ordenação com ausentes por último.
@@ -333,6 +411,7 @@ export default function PesagensIndividuais() {
   };
 
   const [progressoEdicao, setProgressoEdicao] = useState({ show: false, current: 0, total: 0, texto: "" });
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const confirmarEdicaoLote = async () => {
     const dadosParaAtualizar = {};
@@ -371,10 +450,165 @@ export default function PesagensIndividuais() {
       setShowEditarLote(false);
       setEdicaoLote({ data_pesagem: "", sexo: "", raca: "", era: "", marca: "", apartacao: "", lote: "" });
       setSelectedItems([]);
+      await queryClient.invalidateQueries({ queryKey: ['pesagens-individuais'] });
     } catch (error) {
       toast.error('Erro na atualização: ' + error.message);
     } finally {
       setProgressoEdicao({ show: false, current: 0, total: 0, texto: "" });
+    }
+  };
+
+  const confirmarEdicaoPerfil = async () => {
+    const patch = Object.fromEntries(Object.entries(edicaoPerfil).filter(([, value]) => value !== ""));
+    if (!Object.keys(patch).length) {
+      toast.error('Escolha ao menos uma informação para alterar.');
+      return;
+    }
+    if (!selectionSummary.animalIds.length) {
+      toast.error('A seleção não possui animais vinculados.');
+      return;
+    }
+    setBulkSaving(true);
+    try {
+      const total = await weighingService.bulkUpdateAnimalProfiles(
+        selectionSummary.animalIds.map((animalId) => ({ animalId, patch })),
+      );
+      toast.success(`${fmtInt(total)} animal(is) atualizado(s) em todo o histórico.`);
+      setShowEditarPerfil(false);
+      setEdicaoPerfil({ ...EMPTY_PROFILE_BATCH });
+      setSelectedItems([]);
+      await queryClient.invalidateQueries({ queryKey: ['pesagens-individuais'] });
+    } catch (error) {
+      toast.error(error.message || 'Não foi possível atualizar os animais.');
+    } finally {
+      setBulkSaving(false);
+    }
+  };
+
+  const openCommercialBatch = (mode) => {
+    setEdicaoComercial({ open: true, mode, values: { ...EMPTY_COMMERCIAL_BATCH } });
+  };
+
+  const updateCommercialBatchValue = (field, value) => {
+    setEdicaoComercial((current) => ({
+      ...current,
+      values: { ...current.values, [field]: value },
+    }));
+  };
+
+  const commercialRows = edicaoComercial.mode === 'cadastro'
+    ? selectionSummary.cadastros
+    : edicaoComercial.mode === 'venda'
+      ? selectionSummary.vendas
+      : edicaoComercial.mode === 'abate'
+        ? selectionSummary.abates
+        : [];
+
+  const confirmarEdicaoComercial = async () => {
+    const fieldsByMode = {
+      cadastro: ['origem_animal', 'valor_pago_cabeca'],
+      venda: ['comprador', 'destino_venda', 'valor_venda_total', 'valor_arroba'],
+      abate: ['frigorifico', 'valor_total_abate', 'valor_arroba_abate'],
+    };
+    const numericFields = new Set(['valor_pago_cabeca', 'valor_venda_total', 'valor_arroba', 'valor_total_abate', 'valor_arroba_abate']);
+    const commonPatch = {};
+    for (const field of fieldsByMode[edicaoComercial.mode] || []) {
+      const raw = edicaoComercial.values[field];
+      if (raw === "" || raw === null || raw === undefined) continue;
+      if (numericFields.has(field)) {
+        const parsed = parseBrazilianNumber(raw);
+        if (parsed === null || parsed < 0) {
+          toast.error('Informe valores numéricos válidos.');
+          return;
+        }
+        commonPatch[field] = parsed;
+      } else {
+        commonPatch[field] = raw;
+      }
+    }
+
+    const purchaseDocumentationChanged = edicaoComercial.mode === 'cadastro'
+      && ['compra_gta', 'compra_nfe', 'compra_frete', 'compra_observacao']
+        .some((field) => edicaoComercial.values[field] !== '');
+
+    let shipmentPatch = {};
+    if (edicaoComercial.mode === 'venda' || edicaoComercial.mode === 'abate') {
+      const shipmentId = edicaoComercial.values.embarque_id;
+      const documentId = edicaoComercial.values.documento_embarque_id;
+      if (shipmentId === '__remove__') {
+        shipmentPatch = {
+          embarque_id: null,
+          embarque_nome: null,
+          documento_embarque_id: null,
+          documento_tipo: null,
+          documento_numero: null,
+          motorista_nome: null,
+          placa_carreta: null,
+        };
+      } else if (shipmentId) {
+        const shipment = dadosEmbarque.embarques.find((item) => item.id === shipmentId);
+        const document = dadosEmbarque.documentos.find((item) => item.id === documentId && item.embarque_id === shipmentId);
+        if (!shipment) {
+          toast.error('O embarque selecionado não está mais disponível.');
+          return;
+        }
+        if (!document) {
+          toast.error('Selecione também o documento do embarque.');
+          return;
+        }
+        shipmentPatch = {
+          embarque_id: shipment.id,
+          embarque_nome: shipment.nome || shipment.destino || null,
+          documento_embarque_id: document.id,
+          documento_tipo: document.tipo_documento || null,
+          documento_numero: document.tipo_documento === 'GTA+NF-e'
+            ? `GTA: ${document.numero_gta || '-'} | NF-e: ${document.numero_nfe || '-'}`
+            : (document.numero_gta || document.numero_nfe || null),
+          motorista_nome: document.motorista_nome || null,
+          placa_carreta: document.placa_carreta || null,
+        };
+      }
+    }
+
+    if (!Object.keys(commonPatch).length && !purchaseDocumentationChanged && !Object.keys(shipmentPatch).length) {
+      toast.error('Preencha ao menos uma informação comercial.');
+      return;
+    }
+    if (!commercialRows.length) {
+      toast.error('Nenhum registro compatível foi selecionado.');
+      return;
+    }
+    setBulkSaving(true);
+    try {
+      const updates = commercialRows.map((row) => {
+        const patch = { ...commonPatch, ...shipmentPatch };
+        if (purchaseDocumentationChanged) {
+          const current = parsePurchaseDocumentation(row.documentacao);
+          const next = { ...current };
+          if (edicaoComercial.values.compra_gta !== '') next.gta = edicaoComercial.values.compra_gta.trim();
+          if (edicaoComercial.values.compra_nfe !== '') next.nfe = edicaoComercial.values.compra_nfe.trim();
+          if (edicaoComercial.values.compra_observacao !== '') next.obs = edicaoComercial.values.compra_observacao.trim();
+          if (edicaoComercial.values.compra_frete !== '') {
+            const freight = parseBrazilianNumber(edicaoComercial.values.compra_frete);
+            if (freight === null || freight < 0) throw new Error('Informe um valor de frete válido.');
+            next.frete = freight;
+          }
+          patch.documentacao = JSON.stringify(next);
+        }
+        return { id: row.id, patch };
+      });
+      await weighingService.bulkUpdateEntries(
+        updates,
+        { recalculate: false },
+      );
+      toast.success(`${fmtInt(commercialRows.length)} registro(s) comercial(is) atualizado(s).`);
+      setEdicaoComercial({ open: false, mode: null, values: { ...EMPTY_COMMERCIAL_BATCH } });
+      setSelectedItems([]);
+      await queryClient.invalidateQueries({ queryKey: ['pesagens-individuais'] });
+    } catch (error) {
+      toast.error(error.message || 'Não foi possível atualizar os dados comerciais.');
+    } finally {
+      setBulkSaving(false);
     }
   };
 
@@ -634,7 +868,80 @@ export default function PesagensIndividuais() {
                       );
                     }
                     if (coluna.id === 'acoes') {
-                      return <TableHead key="acoes" className="text-xs !p-0 text-center"></TableHead>;
+                      return (
+                        <TableHead key="acoes" className="text-xs !p-0 text-center">
+                          {podeEditar && selectedItems.length > 0 ? (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  aria-label={`Ações para ${fmtInt(selectedItems.length)} registros selecionados`}
+                                  title={`Ações em lote · ${fmtInt(selectedItems.length)} selecionado(s)`}
+                                >
+                                  <MoreVertical className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start" className="d17c-bulk-actions-menu">
+                                <DropdownMenuLabel className="d17c-bulk-actions-menu__summary">
+                                  {fmtInt(selectedItems.length)} registro(s) selecionado(s)
+                                </DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuLabel className="d17c-bulk-actions-menu__group">Identificação e cadastro</DropdownMenuLabel>
+                                <DropdownMenuItem
+                                  className="d17c-bulk-actions-menu__item"
+                                  disabled={selectionSummary.animalIds.length === 0}
+                                  onClick={() => setShowEditarPerfil(true)}
+                                >
+                                  <Tags aria-hidden="true" />
+                                  <span><strong>Identificação e classificação</strong><small>Marca, raça, sexo, era e categoria</small></span>
+                                  <em>{fmtInt(selectionSummary.animalIds.length)}</em>
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuLabel className="d17c-bulk-actions-menu__group">Movimentação</DropdownMenuLabel>
+                                <DropdownMenuItem className="d17c-bulk-actions-menu__item" onClick={handleEditarLote}>
+                                  <MapPinned aria-hidden="true" />
+                                  <span><strong>Data, apartação e lote</strong><small>Aplicar aos lançamentos selecionados</small></span>
+                                  <em>{fmtInt(selectedItems.length)}</em>
+                                </DropdownMenuItem>
+                                {podeEditarComercial ? (<>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuLabel className="d17c-bulk-actions-menu__group">Dados comerciais</DropdownMenuLabel>
+                                  <DropdownMenuItem
+                                    className="d17c-bulk-actions-menu__item"
+                                    disabled={selectionSummary.cadastros.length === 0}
+                                    onClick={() => openCommercialBatch('cadastro')}
+                                  >
+                                    <Store aria-hidden="true" />
+                                    <span><strong>Compra / cadastro</strong><small>Origem e valor por cabeça</small></span>
+                                    <em>{fmtInt(selectionSummary.cadastros.length)}</em>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="d17c-bulk-actions-menu__item"
+                                    disabled={selectionSummary.vendas.length === 0}
+                                    onClick={() => openCommercialBatch('venda')}
+                                  >
+                                    <ShoppingCart aria-hidden="true" />
+                                    <span><strong>Venda</strong><small>Comprador, destino e valores</small></span>
+                                    <em>{fmtInt(selectionSummary.vendas.length)}</em>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    className="d17c-bulk-actions-menu__item"
+                                    disabled={selectionSummary.abates.length === 0}
+                                    onClick={() => openCommercialBatch('abate')}
+                                  >
+                                    <Factory aria-hidden="true" />
+                                    <span><strong>Abate</strong><small>Frigorífico e valores</small></span>
+                                    <em>{fmtInt(selectionSummary.abates.length)}</em>
+                                  </DropdownMenuItem>
+                                </>) : null}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          ) : null}
+                        </TableHead>
+                      );
                     }
                     const isRight = coluna.align === 'right';
                     return (
@@ -842,18 +1149,22 @@ export default function PesagensIndividuais() {
       </Dialog>
 
       {/* Dialog de Edição em Lote */}
-      <Dialog open={showEditarLote} onOpenChange={setShowEditarLote}>
-        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--medium">
+      <Dialog open={showEditarLote} onOpenChange={(open) => { if (!progressoEdicao.show) setShowEditarLote(open); }}>
+        <DialogContent
+          className="d17b-standard-dialog d17b-standard-dialog--medium"
+          onInteractOutside={(event) => event.preventDefault()}
+          onEscapeKeyDown={(event) => event.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="text-sm flex items-center gap-2">
               <Layers className="w-4 h-4 text-blue-600" />
-              Editar {fmtInt(selectedItems.length)} Registro(s) em Lote
+              Movimentação em lote
             </DialogTitle>
           </DialogHeader>
           
           <div className="d17b-standard-dialog__body space-y-3">
             <div className="bg-blue-50 border border-blue-200 rounded p-2">
-              <p className="text-xs text-blue-800">Apenas data, apartação e lote podem ser alterados em lote. Sexo, raça, era e marca pertencem ao cadastro atual; fatos históricos não são reescritos.</p>
+              <p className="text-xs text-blue-800">As alterações abaixo serão aplicadas a {fmtInt(selectedItems.length)} lançamento(s). Identificação e classificação ficam em uma ação separada para preservar o cadastro do animal.</p>
             </div>
 
             {progressoEdicao.show && (
@@ -920,15 +1231,214 @@ export default function PesagensIndividuais() {
               </div>
             </div>
 
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <Button variant="outline" onClick={() => setShowEditarLote(false)} size="sm" className="h-7 text-xs" disabled={progressoEdicao.show}>
-                Cancelar
-              </Button>
+            <div className="d17b-standard-dialog__footer">
               <Button onClick={confirmarEdicaoLote} size="sm" className="emp-toolbar-btn emp-toolbar-btn-save" disabled={progressoEdicao.show}>
                 {progressoEdicao.show ? 'Atualizando...' : `Atualizar ${fmtInt(selectedItems.length)}`}
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showEditarPerfil} onOpenChange={(open) => { if (!bulkSaving) setShowEditarPerfil(open); }}>
+        <DialogContent
+          className="d17b-standard-dialog d17b-standard-dialog--medium d17c-bulk-dialog"
+          onInteractOutside={(event) => event.preventDefault()}
+          onEscapeKeyDown={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <Tags className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+              Identificação e classificação
+            </DialogTitle>
+          </DialogHeader>
+          <div className="d17b-standard-dialog__body d17c-bulk-dialog__body">
+            <div className="d17c-bulk-dialog__notice">
+              <strong>{fmtInt(selectionSummary.animalIds.length)} animal(is)</strong>
+              <span>A alteração é aplicada ao cadastro atual e refletida em todo o histórico desses animais. Campos vazios permanecem inalterados.</span>
+            </div>
+            <div className="d17c-bulk-form-grid">
+              <div className="d17c-bulk-field">
+                <Label>Marca</Label>
+                <Select value={edicaoPerfil.marca_id || '__unchanged__'} onValueChange={(value) => setEdicaoPerfil((current) => ({ ...current, marca_id: value === '__unchanged__' ? '' : value }))}>
+                  <SelectTrigger><SelectValue placeholder="Não alterar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__unchanged__">Não alterar</SelectItem>
+                    {catalogosAuxiliares.marcas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="d17c-bulk-field">
+                <Label>Raça</Label>
+                <Select value={edicaoPerfil.raca_id || '__unchanged__'} onValueChange={(value) => setEdicaoPerfil((current) => ({ ...current, raca_id: value === '__unchanged__' ? '' : value }))}>
+                  <SelectTrigger><SelectValue placeholder="Não alterar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__unchanged__">Não alterar</SelectItem>
+                    {catalogosAuxiliares.racas.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="d17c-bulk-field">
+                <Label>Sexo</Label>
+                <Select value={edicaoPerfil.sexo || '__unchanged__'} onValueChange={(value) => setEdicaoPerfil((current) => ({ ...current, sexo: value === '__unchanged__' ? '' : value }))}>
+                  <SelectTrigger><SelectValue placeholder="Não alterar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__unchanged__">Não alterar</SelectItem>
+                    <SelectItem value="M">Macho</SelectItem>
+                    <SelectItem value="F">Fêmea</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="d17c-bulk-field">
+                <Label>Era</Label>
+                <Input
+                  list="d17c-bulk-eras"
+                  value={edicaoPerfil.era}
+                  onChange={(event) => setEdicaoPerfil((current) => ({ ...current, era: event.target.value }))}
+                  placeholder="Não alterar"
+                />
+                <datalist id="d17c-bulk-eras">{erasExistentes.map((era) => <option key={era} value={era} />)}</datalist>
+              </div>
+              <div className="d17c-bulk-field d17c-bulk-field--wide">
+                <Label>Categoria</Label>
+                <Select value={edicaoPerfil.categoria_id || '__unchanged__'} onValueChange={(value) => setEdicaoPerfil((current) => ({ ...current, categoria_id: value === '__unchanged__' ? '' : value }))}>
+                  <SelectTrigger><SelectValue placeholder="Não alterar" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__unchanged__">Não alterar</SelectItem>
+                    {catalogosAuxiliares.categorias.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="d17b-standard-dialog__footer">
+            <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save" onClick={confirmarEdicaoPerfil} disabled={bulkSaving}>
+              {bulkSaving ? 'Atualizando...' : `Atualizar ${fmtInt(selectionSummary.animalIds.length)} animal(is)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={edicaoComercial.open}
+        onOpenChange={(open) => { if (!bulkSaving) setEdicaoComercial((current) => ({ ...current, open })); }}
+      >
+        <DialogContent
+          className="d17b-standard-dialog d17b-standard-dialog--medium d17c-bulk-dialog"
+          onInteractOutside={(event) => event.preventDefault()}
+          onEscapeKeyDown={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm">
+              <BadgeDollarSign className="h-4 w-4 text-emerald-600" aria-hidden="true" />
+              {edicaoComercial.mode === 'cadastro' ? 'Dados de compra / cadastro' : edicaoComercial.mode === 'venda' ? 'Dados de venda' : 'Dados de abate'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="d17b-standard-dialog__body d17c-bulk-dialog__body">
+            <div className="d17c-bulk-dialog__notice">
+              <strong>{fmtInt(commercialRows.length)} lançamento(s) compatível(is)</strong>
+              <span>Somente os registros do tipo correspondente serão atualizados. Campos vazios permanecem inalterados.</span>
+            </div>
+            <div className="d17c-bulk-form-grid">
+              {edicaoComercial.mode === 'cadastro' ? (<>
+                <div className="d17c-bulk-field">
+                  <Label>Vendedor / origem</Label>
+                  <Select value={edicaoComercial.values.origem_animal || '__unchanged__'} onValueChange={(value) => updateCommercialBatchValue('origem_animal', value === '__unchanged__' ? '' : value)}>
+                    <SelectTrigger><SelectValue placeholder="Não alterar" /></SelectTrigger>
+                    <SelectContent><SelectItem value="__unchanged__">Não alterar</SelectItem>{catalogosAuxiliares.vendedores.filter((item) => item.ativo !== false).map((item) => <SelectItem key={item.id} value={item.nome}>{item.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="d17c-bulk-field">
+                  <Label>Valor por cabeça</Label>
+                  <Input inputMode="decimal" value={edicaoComercial.values.valor_pago_cabeca} onChange={(event) => updateCommercialBatchValue('valor_pago_cabeca', event.target.value)} placeholder="Não alterar" />
+                </div>
+                <div className="d17c-bulk-field">
+                  <Label>Número da GTA</Label>
+                  <Input value={edicaoComercial.values.compra_gta} onChange={(event) => updateCommercialBatchValue('compra_gta', event.target.value)} placeholder="Não alterar" />
+                </div>
+                <div className="d17c-bulk-field">
+                  <Label>Número da NF-e</Label>
+                  <Input value={edicaoComercial.values.compra_nfe} onChange={(event) => updateCommercialBatchValue('compra_nfe', event.target.value)} placeholder="Não alterar" />
+                </div>
+                <div className="d17c-bulk-field">
+                  <Label>Frete</Label>
+                  <Input inputMode="decimal" value={edicaoComercial.values.compra_frete} onChange={(event) => updateCommercialBatchValue('compra_frete', event.target.value)} placeholder="Não alterar" />
+                </div>
+                <div className="d17c-bulk-field">
+                  <Label>Observação da compra</Label>
+                  <Input value={edicaoComercial.values.compra_observacao} onChange={(event) => updateCommercialBatchValue('compra_observacao', event.target.value)} placeholder="Não alterar" />
+                </div>
+              </>) : null}
+
+              {edicaoComercial.mode === 'venda' ? (<>
+                <div className="d17c-bulk-field">
+                  <Label>Comprador</Label>
+                  <Select value={edicaoComercial.values.comprador || '__unchanged__'} onValueChange={(value) => updateCommercialBatchValue('comprador', value === '__unchanged__' ? '' : value)}>
+                    <SelectTrigger><SelectValue placeholder="Não alterar" /></SelectTrigger>
+                    <SelectContent><SelectItem value="__unchanged__">Não alterar</SelectItem>{catalogosAuxiliares.compradores.filter((item) => item.ativo !== false).map((item) => <SelectItem key={item.id} value={item.nome}>{item.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="d17c-bulk-field"><Label>Destino</Label><Input value={edicaoComercial.values.destino_venda} onChange={(event) => updateCommercialBatchValue('destino_venda', event.target.value)} placeholder="Não alterar" /></div>
+                <div className="d17c-bulk-field"><Label>Valor total</Label><Input inputMode="decimal" value={edicaoComercial.values.valor_venda_total} onChange={(event) => updateCommercialBatchValue('valor_venda_total', event.target.value)} placeholder="Não alterar" /></div>
+                <div className="d17c-bulk-field"><Label>Valor da arroba</Label><Input inputMode="decimal" value={edicaoComercial.values.valor_arroba} onChange={(event) => updateCommercialBatchValue('valor_arroba', event.target.value)} placeholder="Não alterar" /></div>
+              </>) : null}
+
+              {edicaoComercial.mode === 'abate' ? (<>
+                <div className="d17c-bulk-field">
+                  <Label>Frigorífico</Label>
+                  <Select value={edicaoComercial.values.frigorifico || '__unchanged__'} onValueChange={(value) => updateCommercialBatchValue('frigorifico', value === '__unchanged__' ? '' : value)}>
+                    <SelectTrigger><SelectValue placeholder="Não alterar" /></SelectTrigger>
+                    <SelectContent><SelectItem value="__unchanged__">Não alterar</SelectItem>{catalogosAuxiliares.frigorificos.filter((item) => item.ativo !== false).map((item) => <SelectItem key={item.id} value={item.nome}>{item.nome}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div className="d17c-bulk-field"><Label>Valor total</Label><Input inputMode="decimal" value={edicaoComercial.values.valor_total_abate} onChange={(event) => updateCommercialBatchValue('valor_total_abate', event.target.value)} placeholder="Não alterar" /></div>
+                <div className="d17c-bulk-field d17c-bulk-field--wide"><Label>Valor da arroba</Label><Input inputMode="decimal" value={edicaoComercial.values.valor_arroba_abate} onChange={(event) => updateCommercialBatchValue('valor_arroba_abate', event.target.value)} placeholder="Não alterar" /></div>
+              </>) : null}
+
+              {edicaoComercial.mode === 'venda' || edicaoComercial.mode === 'abate' ? (<>
+                <div className="d17c-bulk-field">
+                  <Label>Embarque</Label>
+                  <Select
+                    value={edicaoComercial.values.embarque_id || '__unchanged__'}
+                    onValueChange={(value) => {
+                      updateCommercialBatchValue('embarque_id', value === '__unchanged__' ? '' : value);
+                      updateCommercialBatchValue('documento_embarque_id', '');
+                    }}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Não alterar" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__unchanged__">Não alterar</SelectItem>
+                      <SelectItem value="__remove__">Remover embarque e documento</SelectItem>
+                      {dadosEmbarque.embarques.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome || item.destino || `Embarque ${item.data || ''}`}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="d17c-bulk-field">
+                  <Label>Documento do embarque</Label>
+                  <Select
+                    value={edicaoComercial.values.documento_embarque_id || '__unchanged__'}
+                    onValueChange={(value) => updateCommercialBatchValue('documento_embarque_id', value === '__unchanged__' ? '' : value)}
+                    disabled={!edicaoComercial.values.embarque_id || edicaoComercial.values.embarque_id === '__remove__'}
+                  >
+                    <SelectTrigger><SelectValue placeholder="Selecione o documento" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__unchanged__" disabled>Selecione o documento</SelectItem>
+                      {documentosComerciais.map((item) => (
+                        <SelectItem key={item.id} value={item.id}>
+                          {item.tipo_documento || 'Documento'} · {item.tipo_documento === 'GTA+NF-e' ? `GTA ${item.numero_gta || '-'} / NF-e ${item.numero_nfe || '-'}` : (item.numero_gta || item.numero_nfe || '-')}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>) : null}
+            </div>
+          </div>
+          <DialogFooter className="d17b-standard-dialog__footer">
+            <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save" onClick={confirmarEdicaoComercial} disabled={bulkSaving || commercialRows.length === 0}>
+              {bulkSaving ? 'Atualizando...' : `Atualizar ${fmtInt(commercialRows.length)} lançamento(s)`}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

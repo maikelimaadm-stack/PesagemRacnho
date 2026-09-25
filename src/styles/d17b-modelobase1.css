@@ -4650,3 +4650,97 @@ html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope 
   border-color: #484f58 !important;
   background: #21262d !important;
 }
+
+/* Relação de Pesagens — o gatilho coletivo reutiliza exatamente o botão ghost de
+   três pontos das linhas; abaixo ficam somente os estilos do conteúdo do menu. */
+html body .d17c-bulk-actions-menu {
+  width: 332px;
+  max-width: calc(100vw - 24px);
+  padding: 6px;
+  border-color: #dce3e8;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 14px 34px rgb(15 23 42 / 16%);
+}
+html body .d17c-bulk-actions-menu__summary {
+  padding: 7px 9px;
+  color: #243248;
+  font-size: 12px;
+  font-weight: 750;
+}
+html body .d17c-bulk-actions-menu__group {
+  padding: 7px 9px 3px;
+  color: #778396;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .055em;
+  text-transform: uppercase;
+}
+html body .d17c-bulk-actions-menu__item {
+  display: grid;
+  min-height: 46px;
+  grid-template-columns: 28px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 9px;
+  color: #263449;
+}
+html body .d17c-bulk-actions-menu__item > svg {
+  width: 16px;
+  height: 16px;
+  color: #50627a;
+}
+html body .d17c-bulk-actions-menu__item > span { display: flex; min-width: 0; flex-direction: column; gap: 1px; }
+html body .d17c-bulk-actions-menu__item strong { overflow: hidden; font-size: 12px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+html body .d17c-bulk-actions-menu__item small { overflow: hidden; color: #7a8798; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+html body .d17c-bulk-actions-menu__item em {
+  min-width: 24px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #eef2f5;
+  color: #526174;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 750;
+  text-align: center;
+}
+html body .d17c-bulk-actions-menu__item:hover:not([data-disabled]) { background: #effbf3; color: #123d24; }
+html body .d17c-bulk-actions-menu__item:hover:not([data-disabled]) > svg { color: #16a34a; }
+html body .d17c-bulk-actions-menu__item[data-disabled] { opacity: .42; }
+
+html body .d17c-bulk-dialog__body { display: flex; flex-direction: column; gap: 12px; }
+html body .d17c-bulk-dialog__notice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 11px;
+  border: 1px solid #bde9ca;
+  border-radius: 10px;
+  background: #f1fbf4;
+  color: #355143;
+  font-size: 11px;
+  line-height: 1.35;
+}
+html body .d17c-bulk-dialog__notice strong { color: #147a38; font-size: 12px; }
+html body .d17c-bulk-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 12px; }
+html body .d17c-bulk-field { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+html body .d17c-bulk-field--wide { grid-column: 1 / -1; }
+html body .d17c-bulk-field > label { color: #536176; font-size: 11px; font-weight: 650; }
+
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-actions-menu { border-color: #39414c; background: #20262e; }
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-actions-menu__summary,
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-actions-menu__item { color: #e6edf3; }
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-actions-menu__group,
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-actions-menu__item small { color: #9da7b3; }
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-actions-menu__item > svg { color: #aab4c0; }
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-actions-menu__item em { background: #303844; color: #d7dee7; }
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-actions-menu__item:hover:not([data-disabled]) { background: #263b31; color: #f0fff5; }
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-dialog__notice { border-color: #2f6641; background: #1d3325; color: #b8cfc0; }
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-dialog__notice strong { color: #57df86; }
+html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-field > label { color: #aab4c0; }
+
+@media (max-width: 640px) {
+  html body .d17c-bulk-form-grid { grid-template-columns: 1fr; }
+  html body .d17c-bulk-field--wide { grid-column: auto; }
+}

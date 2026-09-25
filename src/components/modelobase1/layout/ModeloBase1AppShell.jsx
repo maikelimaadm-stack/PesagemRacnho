@@ -185,6 +185,7 @@ export default function ModeloBase1AppShell({ children, navItems, navGroups = DE
           {!isOperationalInsight ? themeToggle : null}
           <span className="mb1-shell-offline"><CloudOff aria-hidden="true" /> Offline</span>
           <span className="mb1-shell-product-mark" aria-label={`Pesagens Individuais ${APP_VERSION}`} title={`Pesagens Individuais · versão ${APP_VERSION}`}>PI</span>
+          <span className="mb1-shell-version-badge" aria-label={`Versão instalada ${APP_VERSION}`}>v{APP_VERSION}</span>
         </div>
       </header>
 
@@ -200,7 +201,7 @@ export default function ModeloBase1AppShell({ children, navItems, navGroups = DE
         </button>
         <ShellIdentity compact />
         {themeToggle}
-        <span className="mb1-mobile-local" title={`Versão ${APP_VERSION}`}>Local</span>
+        <span className="mb1-mobile-local" title={`Versão ${APP_VERSION}`}>Local · v{APP_VERSION}</span>
       </header>
 
       <div className="mb1-shell-content">

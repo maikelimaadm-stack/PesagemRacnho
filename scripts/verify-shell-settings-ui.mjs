@@ -42,6 +42,9 @@ function checkShell(s) {
   assert.ok(!/accessPolicy|useAuth/.test(s.shell), 'shell não consulta a política de acesso');
   assert.match(s.shell, /navItems={navItems}|items={navItems}/, 'shell renderiza os itens recebidos do Layout');
   assert.match(s.shell, /APP_VERSION/, 'shell expõe a versão do app na topbar (título do selo PI)');
+  assert.match(s.shell, /className="mb1-shell-version-badge"[^>]*>v\{APP_VERSION\}<\/span>/, 'desktop mostra a versão instalada como texto permanente');
+  assert.match(s.shell, /Local · v\{APP_VERSION\}/, 'celular mostra a versão instalada como texto permanente');
+  assert.match(s.shellCss, /\.mb1-shell-version-badge\s*\{/, 'selo de versão visível tem estilo próprio');
   assert.match(s.shellCss, /\.mb1-shell-topbar-button\.mb1-user-menu__trigger/, 'CSS do gatilho do menu do usuário na topbar');
   assert.match(s.shellCss, /html\.dark \[data-radix-menu-content\]\.mb1-user-menu/, 'menu do usuário tem tema escuro (portal fora do .mb1-scope)');
   assert.match(s.shellCss, /\.mb1-user-panel__actions/, 'painel do usuário do menu lateral (celular) estilizado');

@@ -31,7 +31,7 @@ const createWindow = () => {
     height: 900,
     minWidth: 1024,
     minHeight: 700,
-    title: 'Pesagens Individuais',
+    title: `Pesagens Individuais ${app.getVersion()}`,
     icon: isDev
       ? path.join(getAppRoot(), 'build', 'icon.ico')
       : path.join(process.resourcesPath, 'icon.ico'),

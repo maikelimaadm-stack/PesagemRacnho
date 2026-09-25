@@ -75,7 +75,7 @@ assert(
 
 const main = readFileSync(join(root, 'electron/main.cjs'), 'utf8');
 assert(main.includes("app.getPath('userData')"), 'data in userData');
-assert(main.includes("title: 'Pesagens Individuais'"), 'window title');
+assert(main.includes('title: `Pesagens Individuais ${app.getVersion()}`'), 'window title mostra a versão instalada');
 assert(main.includes("path.join(process.resourcesPath, 'icon.ico')"), 'janela empacotada usa o ícone distribuído');
 
 console.log('OK verify-desktop-smoke');

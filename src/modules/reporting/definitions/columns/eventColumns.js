@@ -28,6 +28,29 @@ export const SEXO_OPTIONS = [
 
 const textKey = (id, text) => (row) => row[id] || (row[text] ? `txt:${normalizeText(row[text])}` : null);
 
+const purchaseDocumentation = (row) => {
+  const value = row?.documentacao;
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const purchaseFreight = (row) => {
+  const raw = purchaseDocumentation(row).frete;
+  if (raw === null || raw === undefined || raw === '') return null;
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : null;
+  const normalized = String(raw).trim().replace(/\s/g, '').replace(/R\$/gi, '');
+  const numeric = normalized.includes(',')
+    ? Number(normalized.replace(/\./g, '').replace(',', '.'))
+    : Number(normalized);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
 export const EVENT_COLUMNS = [
   defineColumn({ id: 'data_pesagem', label: 'Data', type: 'date', grains: EVENT_GRAINS, groupable: true, defaultVisible: true, defaultWidth: 108 }),
   defineColumn({ id: 'tipo_manejo', label: 'Tipo', type: 'enum', options: TIPO_MANEJO_OPTIONS, grains: EVENT_GRAINS, groupable: true, defaultVisible: true, defaultWidth: 112 }),
@@ -71,6 +94,9 @@ export const EVENT_COLUMNS = [
   }),
   defineColumn({ id: 'valor_pago_cabeca', label: 'Valor compra', type: 'money', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'origem_animal', label: 'Origem', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'legado-texto' }),
+  defineColumn({ id: 'compra_gta', label: 'GTA compra', type: 'text', grains: EVENT_GRAINS, accessor: (row) => purchaseDocumentation(row).gta || null, source: 'legado-documentacao' }),
+  defineColumn({ id: 'compra_nfe', label: 'NF-e compra', type: 'text', grains: EVENT_GRAINS, accessor: (row) => purchaseDocumentation(row).nfe || null, source: 'legado-documentacao' }),
+  defineColumn({ id: 'compra_frete', label: 'Frete compra', type: 'money', grains: EVENT_GRAINS, accessor: purchaseFreight, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'], source: 'legado-documentacao' }),
   defineColumn({ id: 'comprador', label: 'Comprador', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'legado-texto' }),
   defineColumn({ id: 'destino_venda', label: 'Destino', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'legado-texto' }),
   defineColumn({ id: 'valor_venda_total', label: 'Valor venda', type: 'money', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
@@ -123,7 +149,7 @@ export const EVENT_COLUMNS = [
 // Colunas que a Relação de Pesagens oferece (mesma ordem da tela). As demais são exclusivas dos relatórios.
 export const RELATION_COLUMN_IDS = Object.freeze([
   'data_pesagem', 'tipo_manejo', 'motivo_saida', 'numero_animal', 'marca', 'sexo', 'raca', 'era', 'peso', 'nome_lote',
-  'nome_apartacao', 'valor_pago_cabeca', 'origem_animal', 'comprador', 'destino_venda', 'valor_venda_total', 'valor_arroba',
+  'nome_apartacao', 'valor_pago_cabeca', 'origem_animal', 'compra_gta', 'compra_nfe', 'compra_frete', 'comprador', 'destino_venda', 'valor_venda_total', 'valor_arroba',
   'quantidade_arrobas', 'frigorifico', 'embarque_nome', 'documento_tipo', 'documento_numero', 'motorista_nome', 'placa_carreta',
   'doc_qtd', 'dias', 'ganho', 'gmd', 'observacao',
 ]);

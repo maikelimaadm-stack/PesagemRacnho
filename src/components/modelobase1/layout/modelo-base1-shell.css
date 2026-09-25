@@ -114,6 +114,21 @@
 }
 .mb1-app-shell .mb1-shell-offline svg { width: 12px; height: 12px; }
 .mb1-app-shell .mb1-shell-product-mark { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; background: rgba(255, 255, 255, .92); color: #1f5130; font-size: 10px; font-weight: 800; }
+.mb1-app-shell .mb1-shell-version-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  margin-left: -3px;
+  padding: 0 8px;
+  border: 1px solid rgba(31, 81, 48, .12);
+  border-radius: var(--mb1-radius-pill);
+  background: rgba(255, 255, 255, .72);
+  color: #1f5130;
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: .01em;
+  white-space: nowrap;
+}
 
 .mb1-app-shell .mb1-floating-sidebar {
   position: absolute;

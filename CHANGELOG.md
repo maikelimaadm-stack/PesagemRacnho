@@ -3,6 +3,50 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.3.2] — 2026-09-24
+
+Esquema Dexie **8** e backup **formato 3**, sem migração de dados. Instalador de diagnóstico não
+assinado em `release-unsigned/`. Notas em `docs/release/1.3.2/RELEASE-NOTES.md`.
+
+### Changed
+- A versão instalada passou a aparecer permanentemente na barra superior, ao lado do selo PI, e na
+  barra móvel; antes ficava apenas em tooltip, autenticação, menu do usuário e Configurações.
+- O título nativo da janela agora inclui a versão obtida pelo Electron (`app.getVersion()`), evitando
+  confusão entre uma instância antiga ainda aberta e o executável recém-instalado.
+- O gatilho de ações em lote no cabeçalho da tabela agora é somente o botão de três pontos, igual ao
+  menu de ações das linhas; a quantidade selecionada permanece no resumo interno e na descrição.
+
+### Fixed
+- Diagnóstico de atualização deixa explícito quando o Windows ainda está executando a versão
+  anterior e impede que o usuário interprete a tela antiga como a nova instalação.
+
+## [1.3.1] — 2026-09-23
+
+Esquema Dexie **8** e backup **formato 3**, sem alteração destrutiva no banco. Instalador de
+diagnóstico não assinado em `release-unsigned/`; assinatura Authenticode permanece pendente.
+Notas em `docs/release/1.3.1/RELEASE-NOTES.md`.
+
+### Added
+- Ações em lote diretamente no cabeçalho da coluna Ações da Relação de Pesagens, organizadas em
+  Identificação e cadastro, Movimentação e Dados comerciais.
+- Edição coletiva do cadastro canônico do animal: marca, raça, sexo, era e categoria, com
+  sincronização dos snapshots históricos e bloqueio de colisão número + marca.
+- Edição coletiva de compra/cadastro com vendedor/origem, valor por cabeça, GTA, NF-e, frete e
+  observação; novas colunas configuráveis GTA compra, NF-e compra e Frete compra.
+- Edição coletiva de venda e abate com parceiro, destino, valores, embarque e documento vinculado.
+- Gate automatizado específico para ações em lote e integridade do histórico.
+
+### Changed
+- Menu coletivo informa quantos registros da seleção são compatíveis com cada operação e desativa
+  ações sem registros aplicáveis.
+- Pop-ups coletivos seguem o padrão visual da aplicação, inclusive modo escuro, fechamento por X e
+  botões verdes que preservam a cor no hover.
+
+### Fixed
+- Campos comerciais vazios não sobrescrevem informações existentes durante a atualização em lote.
+- Documentos só podem ser vinculados ao embarque ao qual pertencem; a remoção limpa também os
+  campos derivados de motorista, placa, tipo e número do documento.
+
 ## [1.3.0] — 2026-09-17
 
 Esquema Dexie **8** (aditivo), backup **formato 3**. Instalador candidato (não assinado) em

@@ -33,6 +33,7 @@ const denied = {
   updateEntry: await codeOf(() => weighingService.updateEntry('cad', { observacao: 'x' })),
   deleteEntry: await codeOf(() => weighingService.deleteEntry('cad')),
   bulkUpdateEntries: await codeOf(() => weighingService.bulkUpdateEntries([{ id: 'cad', patch: { observacao: 'x' } }])),
+  bulkUpdateAnimalProfiles: await codeOf(() => weighingService.bulkUpdateAnimalProfiles([{ animalId: 'a900', patch: { sexo: 'F' } }])),
   bulkDeleteEntries: await codeOf(() => weighingService.bulkDeleteEntries(['cad'])),
   bulkCreateEntries: await codeOf(() => weighingService.bulkCreateEntries([{ ...base, numero_animal: '901', tipo_manejo: 'Cadastro', data_pesagem: '2026-09-01', peso: 250 }])),
 };
