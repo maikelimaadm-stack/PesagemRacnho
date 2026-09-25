@@ -4,6 +4,7 @@
 // Qual propriedade vai no cabeçalho: a do filtro do relatório (quando houver exatamente uma), senão a
 // marcada como Padrão; sem nenhuma, só o nome do sistema — nunca quebra a impressão.
 import { cleanText, isAlphanumericCnpj, normalizeDocument, normalizeName } from './normalize.js';
+import { formatDocumentMask } from './documentMask.js';
 
 export const LOGO_MAX_WIDTH_PX = 400;
 export const LOGO_MAX_BYTES = 300 * 1024;
@@ -54,15 +55,15 @@ export function fitWithin(width, height, maxWidth = LOGO_MAX_WIDTH_PX) {
 
 /**
  * 11 dígitos → CPF 000.000.000-00; 14 posições (numérico ou alfanumérico válido) → CNPJ
- * 00.000.000/0000-00; outro tamanho → como está.
+ * 00.000.000/0000-00; outro tamanho → como está. A posição dos separadores é a mesma da máscara da
+ * ficha (formatDocumentMask): a ficha mostra o documento como a folha imprime.
  */
 export function formatDocumento(value) {
   const normalized = normalizeDocument(value) ?? '';
-  const cnpjMask = (text) => `${text.slice(0, 2)}.${text.slice(2, 5)}.${text.slice(5, 8)}/${text.slice(8, 12)}-${text.slice(12)}`;
-  if (isAlphanumericCnpj(normalized)) return { tipo: 'CNPJ', texto: cnpjMask(normalized) };
+  if (isAlphanumericCnpj(normalized)) return { tipo: 'CNPJ', texto: formatDocumentMask(normalized) };
   const digits = normalized.replace(/\D+/g, '');
-  if (digits.length === 11) return { tipo: 'CPF', texto: `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}` };
-  if (digits.length === 14) return { tipo: 'CNPJ', texto: cnpjMask(digits) };
+  if (digits.length === 11) return { tipo: 'CPF', texto: formatDocumentMask(digits) };
+  if (digits.length === 14) return { tipo: 'CNPJ', texto: formatDocumentMask(digits) };
   return digits ? { tipo: 'CPF/CNPJ', texto: digits } : null;
 }
 

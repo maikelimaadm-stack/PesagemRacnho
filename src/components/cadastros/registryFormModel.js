@@ -5,6 +5,12 @@
 import { parseBrazilianNumber } from '../../modules/weighing/domain/brazilianValues.js';
 import { coerceRecord } from '../../modules/catalog/domain/registryDefinitions.js';
 import { buildPropertyHeader } from '../../modules/catalog/domain/propertyHeader.js';
+import { documentToForm } from '../../modules/catalog/domain/documentMask.js';
+
+// Campo CPF/CNPJ (Propriedades e Parceiros, id 'documento'): máscara ao digitar (DocumentInput.jsx) e o
+// valor guardado aparece formatado ao abrir a ficha. Ao salvar segue o texto mascarado, e o serviço grava
+// normalizeDocument como antes.
+export const isDocumentField = (campo) => campo?.id === 'documento' && (campo.tipo ?? 'texto') === 'texto';
 
 // Valor sentinela do item "Nenhum" (Radix não aceita item com valor vazio).
 export const NONE_OPTION = '__nenhum__';
@@ -33,7 +39,7 @@ export const hasFieldValue = (value) => (Array.isArray(value) ? value.length > 0
 
 // Estado do formulário: texto/número como string (número em formato brasileiro),
 // booleano como boolean, select como string ('' = nenhum), multiselect como array,
-// imagem como o data URL ('' = sem imagem).
+// imagem como o data URL ('' = sem imagem), CPF/CNPJ já com a máscara.
 export function fieldToForm(campo, value) {
   switch (campo.tipo) {
     case 'booleano': return value == null ? Boolean(campo.defaultValue ?? false) : Boolean(value);
@@ -41,7 +47,9 @@ export function fieldToForm(campo, value) {
     case 'multiselect': return Array.isArray(value) ? [...value] : (Array.isArray(campo.defaultValue) ? [...campo.defaultValue] : []);
     case 'select': return value == null ? String(campo.defaultValue ?? '') : String(value);
     case 'imagem': return typeof value === 'string' ? value : '';
-    default: return value == null ? String(campo.defaultValue ?? '') : String(value);
+    default:
+      if (value == null) return String(campo.defaultValue ?? '');
+      return isDocumentField(campo) ? documentToForm(value) : String(value);
   }
 }
 export const emptyFor = (definition) => Object.fromEntries(definition.campos.map((campo) => [campo.id, fieldToForm(campo, undefined)]));

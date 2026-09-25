@@ -268,7 +268,7 @@ export const PARCEIROS = definicao({
   campos: [
     NOME('Nome/Razão social'),
     campo('tipo_pessoa', 'Tipo de pessoa', { tipo: 'select', opcoes: opcoes(PARCEIRO_TIPOS_PESSOA, TIPO_PESSOA_LABELS), compacto: true }),
-    campo('documento', 'CPF/CNPJ', { compacto: true, ajuda: 'Somente os dígitos são guardados; único por empresa quando informado.' }),
+    campo('documento', 'CPF/CNPJ', { compacto: true, ajuda: 'Digite ou cole com ou sem pontuação: a máscara se ajusta. Guardado sem pontuação (o CNPJ alfanumérico com as letras); único por empresa quando informado.' }),
     campo('papeis', 'Papéis', { tipo: 'multiselect', obrigatorio: true, opcoes: opcoes(PARCEIRO_PAPEIS, PARCEIRO_PAPEL_LABELS), largo: true }),
     campo('telefone', 'Telefone', { compacto: true }),
     campo('email', 'E-mail', { largo: true }),
@@ -318,7 +318,7 @@ export const PROPRIEDADES = definicao({
     // tem índice de documento e o mesmo produtor pode ter várias fazendas.
     campo('titular_nome', 'Produtor / razão social', { largo: true, secao: 'cabecalho', ajuda: 'Sem ele o cabeçalho usa o nome da propriedade.' }),
     campo('endereco', 'Endereço', { largo: true, secao: 'cabecalho' }),
-    campo('documento', 'CPF/CNPJ', { compacto: true, secao: 'cabecalho', ajuda: 'Somente os dígitos são guardados.' }),
+    campo('documento', 'CPF/CNPJ', { compacto: true, secao: 'cabecalho', ajuda: 'Digite ou cole com ou sem pontuação: a máscara se ajusta. Guardado sem pontuação (o CNPJ alfanumérico com as letras).' }),
     campo('inscricao_estadual', 'Inscrição estadual', { compacto: true, secao: 'cabecalho', ajuda: 'Texto livre (ex.: ISENTO).' }),
     campo('mostrar_documento_no_cabecalho', 'Mostrar CPF/CNPJ e IE no cabeçalho', { tipo: 'booleano', defaultValue: false, desligadoComoNulo: true, widthType: 'CAMPO_PRINCIPAL', secao: 'cabecalho' }),
     campo('telefone', 'Telefone', { compacto: true, secao: 'cabecalho' }),

@@ -40,11 +40,13 @@ import {
   formatCellValue,
   groupFields,
   hasFieldValue,
+  isDocumentField,
   multiLabels,
   payloadFromForm,
   recordCodeOf,
   referenceOptionsFor,
 } from './registryFormModel.js';
+import DocumentInput from './DocumentInput.jsx';
 import LogoField from './LogoField.jsx';
 import PropertyHeaderPreview from './PropertyHeaderPreview.jsx';
 import '@/styles/auxiliary-registries.css';
@@ -139,15 +141,20 @@ function Field({ campo, value, onChange, options, disabled }) {
   return (
     <div className={fieldClass} data-field={campo.id} data-width-type={widthType} title={campo.ajuda || undefined}>
       <label className={labelClass} htmlFor={`aux-${campo.id}`}>{campo.label}</label>
-      <input
-        id={`aux-${campo.id}`}
-        value={value ?? ''}
-        onChange={(event) => onChange(event.target.value)}
-        type="text"
-        inputMode={isNumber ? 'decimal' : undefined}
-        disabled={disabled}
-        placeholder=" "
-      />
+      {/* CPF/CNPJ (Propriedades e Parceiros): máscara ao digitar, mesmo invólucro e estilo dos outros campos. */}
+      {isDocumentField(campo) ? (
+        <DocumentInput id={`aux-${campo.id}`} value={value} onChange={onChange} disabled={disabled} />
+      ) : (
+        <input
+          id={`aux-${campo.id}`}
+          value={value ?? ''}
+          onChange={(event) => onChange(event.target.value)}
+          type="text"
+          inputMode={isNumber ? 'decimal' : undefined}
+          disabled={disabled}
+          placeholder=" "
+        />
+      )}
     </div>
   );
 }
