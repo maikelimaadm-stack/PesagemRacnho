@@ -1,0 +1,46 @@
+PROMPT-00B — Aplicar as decisões da E0 (arrumação do Git + ajuste do plano)
+
+Pré-requisito: docs/evidence/e0/REPORT.md CONCLUÍDA (ok, revisada em 25/09/2026).
+Leia: docs/plano-mestre/prompts/_REGRAS-COMUNS.txt e docs/evidence/e0/REPORT.md.
+
+Respostas da responsável às perguntas do REPORT da E0 (25/09/2026):
+1. main: AUTORIZADO avançar main até o HEAD atual de program/sanity-launch-import, SOMENTE fast-forward
+   (`git merge --ff-only`), sem push.
+2. Correção do diálogo "Data, apartação e lote": NÃO gerar 1.3.3. A correção (05e6d33) segue na 1.4.0 (E1).
+3. Limpeza: AUTORIZADO arquivar as 4 branches antigas e remover o worktree ../MAKGESTAO-1.1.18.
+4. Tags: criar tag anotada v1.3.2 no commit 1bb027c (é o código do instalador 1.3.2 distribuído), com a
+   mensagem "instalador 1.3.2 — contém o erro do diálogo Data, apartação e lote, corrigido em 05e6d33".
+   Não criar v1.3.1 (não há commit próprio; o CHANGELOG já registra).
+
+Tarefas, nesta ordem:
+1. `git status` limpo; confirmar que o HEAD é 6ccf960 (ou posterior só com docs).
+2. main: `git checkout main && git merge --ff-only program/sanity-launch-import`; voltar para a linha
+   de integração. Se o ff-only falhar, PARE e reporte (não faça merge comum).
+3. Tag v1.3.2 conforme o item 4 acima.
+4. Arquivar: para cada branch program/reporting-1.3.0, program/pesagens-master-evolution,
+   preview/1.2.0-demo e release/1.1.18 → `git tag archive/<nome-com-hifens> <branch>`; conferir que a tag
+   aponta para o mesmo commit; só então `git branch -D <branch>`. Listar as tags archive/* no REPORT.
+5. Worktree ../MAKGESTAO-1.1.18, do jeito seguro descrito no REPORT da E0:
+   a) contar arquivos de MAKGESTAO-main\node_modules (antes);
+   b) `cmd /c rmdir "..\MAKGESTAO-1.1.18\node_modules"` (remove só a junção);
+   c) `git worktree remove ../MAKGESTAO-1.1.18` (sem --force; se recusar, PARE e reporte);
+   d) `git worktree prune`; contar node_modules de novo (depois) — tem que ser igual.
+6. Corrigir o conflito do plano apontado na E0: em docs/plano-mestre/00-LEIA-PRIMEIRO.md §4 item 9 e em
+   docs/plano-mestre/prompts/_REGRAS-COMUNS.txt, a regra passa a ser a MESMA:
+   "Cada etapa cria sua branch program/e<N>-<nome> a partir de main. Ao concluir com gates verdes,
+   main só avança (fast-forward) para a branch da etapa com autorização da responsável, dada na resposta
+   ao REPORT. Nunca push sem autorização."
+7. Pequena correção de comportamento (import:idempotency): o duplo clique em gravar a importação ainda
+   cria dois jobs (um termina FALHOU). Adicione uma trava de "gravação em andamento" no serviço de
+   importação (por fingerprint/plano, dentro do processo) para que o segundo clique seja ignorado ou
+   devolva o mesmo job, sem criar outro. Depois volte a asserção do gate ao estrito original
+   (todos CONCLUIDA). Rode o gate 20 vezes: 20/20 verdes. Se a correção não for pequena e segura, NÃO
+   faça: deixe como está e explique no REPORT.
+8. `npm run test:quick` verde. Commits pequenos na linha de integração e ff de main de novo até eles
+   (autorizado para este prompt).
+
+Não faça: build/instalador, push, qualquer mudança da E1.
+
+Entrega: docs/evidence/e0b/REPORT.md (formato §6 do 00-LEIA-PRIMEIRO) + resumo no chat com: HEAD de main,
+tags criadas, branches restantes (`git branch -a`), `git worktree list`, contagem do node_modules
+antes/depois e resultado do test:quick.
