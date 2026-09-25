@@ -30,6 +30,29 @@ Sem agrupamento, só `DATA` (nível 0) e `GRAND_TOTAL`. Rótulo da métrica (`ag
 "Registros" (`count` sem coluna), "Animais únicos" (`countDistinct` em `animal`/`numero_animal`), senão
 "`<operação>` — `<Coluna (unidade)>`". Cabeçalho da coluna: `headerLabel` → "Peso (kg)".
 
+### 2.1 Modo Resumido (1.4.0)
+
+Quando `viewModel.mode === 'RESUMIDO'` (`isSummaryMode`), todos os destinos usam
+`buildSummaryLayout(viewModel, target)` (`domain/summaryLayout.js`) em vez das linhas acima: **uma linha
+por nó de grupo** (profundidade primeiro, na ordem de `summarySort`), sem linhas de dados.
+
+- Colunas: uma por nível de agrupamento (o rótulo fica na coluna do próprio nível) + uma por métrica.
+  Sem agrupamento: coluna "Resumo" e só a linha "Total geral". Sem totais configurados: métrica de
+  contagem de linhas.
+- Rótulos das métricas em linguagem simples (`summaryMetricLabel`, `domain/aggregateLabels.js`):
+  "Cabeças", "Pesagens", "Saídas", "Peso médio (kg)", "GMD (kg/dia)" (ponderado), "GMD simples
+  (kg/dia)", "Valor (R$)", "Arrobas (@)"…
+- Valores de cada nó recalculados sobre a população do nó; "Total geral" sobre a população inteira
+  (nunca soma das linhas).
+- CSV: colunas `tipo_linha`, `nivel` e as do resumo; XLSX: aba com as mesmas linhas (números como
+  números) e "Agrupado por: … · Resumido (uma linha por grupo)" nos metadados; JSON: `mode`, `drill`, `summary {headers, metrics, rows}` e
+  `data: []`; impressão: tabela `tr.sum.lvlN`, A4 retrato quando cabe (`decideSummaryPrintLayout`).
+- Manifesto: `presetId` (visão antiga), `mode`, `summarySort` e `drill`.
+- `drill` (clique no grupo): corte exato por `groupKeyOf` do caminho escolhido, aplicado antes do
+  agrupamento; aparece em "Filtros" como "(detalhe do grupo)".
+
+Gate: `reports:summary-export-parity:verify` (mesmas células em tela, CSV, XLSX, impressão e JSON).
+
 ## 3. Formatação canônica (`formatCell(column, value, target)`)
 
 | Tipo | `screen` / `print` | `csv` | `xlsx` | `json` |

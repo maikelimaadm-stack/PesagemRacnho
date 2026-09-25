@@ -1,5 +1,42 @@
 # Catálogo de relatórios
 
+## 0. Catálogo consolidado (1.4.0, E1)
+
+Desde a 1.4.0 o catálogo tem **12 relatórios** (`visibility: 'catalog'`), **4 de controle** na
+Manutenção (`'maintenance'`) e **17 ocultos** (`'hidden'`: 7 de cadastros e os 10 bloqueados). As
+33 definições antigas que eram variações de agrupamento/filtro viraram **visões**
+(`LEGACY_REPORT_ALIASES` em `definitions/legacyAliases.js`): `resolveReportId(id)` devolve a definição
+nova + a seleção equivalente (colunas, grupos, filtros, condições fixas, modo). Gates:
+`reports:catalog-consolidation:verify` (equivalência das 33 visões e migração de preferências),
+`reports:summary-mode:verify` e `reports:summary-export-parity:verify`.
+
+| id | Título | Grão | Abre | Agrupamento padrão | Filtro rápido | Visões antigas |
+|---|---|---|---|---|---|---|
+| `rebanho.atual` | Rebanho atual | ANIMAL_CURRENT | Resumido | Lote atual | Sem pesagem há mais de 30 dias | `rebanho.inventario`, `rebanho.dimensao.*` (8), `rebanho.sem-pesagem-recente` |
+| `rebanho.ocupacao-lotes` | Ocupação de lotes | LOT | Resumido | Apartação | — | — |
+| `pesagens` | Pesagens | EVENT | Resumido | Sessão | Somente entradas e saídas | `pesagens.periodo/sessao/lote/operador/origem`, `movimentacao.entradas-saidas` |
+| `controle.fechamento-dia` | Fechamento do dia (imprimível) | EVENT | Detalhado | Sessão | — | — |
+| `desempenho` | Desempenho | ANIMAL_PERIOD | Resumido | Lote | Somente perdendo peso | `desempenho.individual`, `desempenho.lote`, `desempenho.dimensao.*` (6), `desempenho.perdendo-peso`, `desempenho.faixa-peso` |
+| `movimentacao.lotes` | Movimentação de lotes | LOT_STAY | Resumido | Lote | Somente mudanças de lote no período | `movimentacao.mudancas-lote`, `movimentacao.permanencias-lote` |
+| `saidas` | Saídas | EXIT | Resumido | Motivo | Somente mortes | `saidas.motivo`, `saidas.mortes`, `saidas.mortes.causa/categoria/lote` |
+| `comercial.vendas` | Vendas do período | EXIT | Detalhado | — | — | — |
+| `comercial.abates` | Abates do período | EXIT | Detalhado | — | — | — |
+| `comercial.compras` | Compras do período | EVENT | Detalhado | — | — | — |
+| `embarques.romaneio` | Romaneio de embarque | EXIT | Resumido | Embarque › Documento | — | — |
+| `embarques.previsto-realizado` | Embarques: previsto × realizado | SHIPMENT_DOCUMENT | Resumido | Embarque | — | — |
+
+Manutenção › aba Controle: `controle.auditoria`, `controle.qualidade-dados`, `controle.backups`,
+`pesagens.pendencias` (todos abrem Detalhados). Ocultos: `cadastros.*` (as telas de Cadastros listam e
+exportam) e os bloqueados (`blocked()`), que continuam resolvíveis por id mas não aparecem.
+
+Regra de modo: `defaultMode` explícito ou, na falta, Resumido quando há `defaultGroups`. Visão antiga
+com agrupamento abre Resumida; sem agrupamento, Detalhada.
+
+As seções abaixo descrevem o catálogo **até a 1.3.2** e continuam válidas como referência das visões
+(os ids antigos seguem abrindo pelo alias).
+
+## Catálogo até a 1.3.2
+
 Fonte: `src/modules/reporting/definitions/reportCatalog.js`, que importa `pesagens.js`, `rebanho.js`,
 `desempenho.js`, `operacional.js` e `controle.js`. Total: **61 definições** — **51 disponíveis** e
 **10 bloqueadas**. Ordem do catálogo na tela: Rebanho, Pesagens, Desempenho, Movimentação, Saídas,
