@@ -107,14 +107,22 @@ export function buildPropertyHeader(propriedade) {
   };
 }
 
-/** Valores positivos (in/equals) de um filtro serializável; negativos e vazios não escolhem propriedade. */
+/**
+ * Valores EXATOS de um filtro serializável: a lista marcada (o motor de filtros a compara valor a valor,
+ * qualquer que seja o operador positivo) ou um texto em "igual a". Texto digitado em "contém", "começa
+ * com" ou "termina com", negativos e vazios não escolhem propriedade: "Boa" em "contém" pode pegar outra
+ * fazenda, e o cabeçalho não pode mostrar uma propriedade que não é a do relatório.
+ */
 function positiveValues(filter) {
   if (!filter || typeof filter !== 'object') return [];
   if (['not_in', 'not_equals', 'not_contains', 'empty', 'not_empty'].includes(filter.operator)) return [];
-  if (Array.isArray(filter.values) && filter.values.length) return filter.values.map(String);
-  const value = filter.value;
-  return value === null || value === undefined || value === '' ? [] : [String(value)];
+  if (Array.isArray(filter.values) && filter.values.length) return filter.values.filter((value) => value !== null && value !== undefined && value !== '').map(String);
+  if ((filter.operator ?? 'equals') !== 'equals') return [];
+  return filter.value === null || filter.value === undefined || filter.value === '' ? [] : [String(filter.value)];
 }
+
+// Nome comparado como no motor de filtros: sem acento, sem diferença de maiúsculas e de espaços.
+const foldName = (value) => normalizeName(value).normalize('NFD').replace(/[̀-ͯ]/g, '');
 
 /**
  * Propriedade do cabeçalho: filtro/condição/detalhe do relatório em UMA propriedade (coluna
@@ -125,7 +133,13 @@ function positiveValues(filter) {
  */
 export function resolveHeaderProperty(propriedades = [], { filters = {}, lockedFilters = {}, drill = [] } = {}) {
   const rows = (propriedades || []).filter((row) => row && !row.deleted_at);
-  const byValue = (value) => rows.find((row) => row.id === value) ?? rows.find((row) => normalizeName(row.nome) === normalizeName(value)) ?? null;
+  // Por id; senão pelo nome — só se UMA propriedade tiver esse nome (duas homônimas → cai na Padrão).
+  const byValue = (value) => {
+    const byId = rows.find((row) => row.id === value);
+    if (byId) return byId;
+    const named = rows.filter((row) => foldName(row.nome) === foldName(value));
+    return named.length === 1 ? named[0] : null;
+  };
   const candidates = [
     ...(drill || []).filter((part) => part?.columnId === 'propriedade').map((part) => [String(part.key)]),
     positiveValues(lockedFilters?.propriedade),

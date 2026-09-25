@@ -27,10 +27,14 @@ export function isAlphanumericCnpj(value) {
 // Documento (CPF/CNPJ) é guardado só com dígitos; vazio ou sem dígitos → null. Exceção: CNPJ
 // alfanumérico VÁLIDO (dígitos verificadores conferidos) é guardado com as letras, em maiúsculas —
 // senão "12.ABC.345/01DE-35" viraria "123450135", um documento que não existe. Letra solta em outro
-// texto ("CPF 123.456.789-01") continua sendo descartada.
+// texto ("CPF 123.456.789-01") continua sendo descartada: só vale como CNPJ alfanumérico o texto com a
+// forma de CNPJ (14 posições, com ou sem os pontos, a barra e o hífen nos lugares certos) — senão
+// "CPF 699.577.406-01" (CPF + 11 dígitos = 14 posições) podia passar pelos dígitos verificadores.
+const CNPJ_SHAPE = /^[0-9A-Z]{2}\.?[0-9A-Z]{3}\.?[0-9A-Z]{3}\/?[0-9A-Z]{4}-?\d{2}$/;
 export function normalizeDocument(value) {
-  const compact = String(value ?? '').toLocaleUpperCase('pt-BR').replace(/[\s./-]+/g, '');
-  if (isAlphanumericCnpj(compact)) return compact;
+  const shaped = String(value ?? '').trim().toLocaleUpperCase('pt-BR');
+  const compact = shaped.replace(/[./-]+/g, '');
+  if (CNPJ_SHAPE.test(shaped) && isAlphanumericCnpj(compact)) return compact;
   const digits = String(value ?? '').replace(/\D+/g, '');
   return digits || null;
 }

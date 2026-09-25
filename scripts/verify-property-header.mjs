@@ -149,6 +149,10 @@ assert.equal(coagido.documento, '12345678901', 'documento guardado só com dígi
 assert.equal(coerceRecord(PROPRIEDADES, { ...base, documento: '12.ABC.345/01DE-35' }).documento, '12ABC34501DE35', 'CNPJ alfanumérico preservado');
 assert.equal(coerceRecord(PROPRIEDADES, { ...base, documento: 'CPF 123.456.789-01' }).documento, '12345678901', 'prefixo "CPF" descartado');
 assert.equal(coerceRecord(PROPRIEDADES, { ...base, documento: '12.ABC.345/01DE-36' }).documento, '123450136', 'alfanumérico com dígito verificador errado não vira CNPJ');
+assert.equal(coerceRecord(PROPRIEDADES, { ...base, documento: '12ABC34501DE35' }).documento, '12ABC34501DE35', 'CNPJ alfanumérico sem pontuação também vale');
+// Revisão final: "CPF " + 11 dígitos tem 14 posições e às vezes fecha os dígitos verificadores do CNPJ
+// alfanumérico (CPF69957740601) — sem a forma de CNPJ, fica o CPF (só dígitos).
+assert.equal(coerceRecord(PROPRIEDADES, { ...base, documento: 'CPF 699.577.406-01' }).documento, '69957740601', 'NEGATIVO: "CPF 699.577.406-01" continua CPF');
 assert.equal(buildPropertyHeader({ ...base, documento: '12ABC34501DE35', mostrar_documento_no_cabecalho: true }).documentos, 'CNPJ 12.ABC.345/01DE-35', 'cabeçalho com o CNPJ alfanumérico formatado');
 assert.equal(coagido.inscricao_estadual, 'ISENTO', "IE 'ISENTO' preservada (sem virar null)");
 assert.equal(coagido.logo, PNG_1X1, 'logo: só tira espaço das pontas, conteúdo intacto');
@@ -303,6 +307,14 @@ const lista = [padrao, outra, inativa, excluida];
 assert.equal(resolveHeaderProperty(lista)?.id, 'p-a', 'padrão: a marcada como Padrão');
 assert.equal(resolveHeaderProperty(lista, { filters: { propriedade: { operator: 'in', values: ['p-b'] } } })?.id, 'p-b', 'filtrado por id');
 assert.equal(resolveHeaderProperty(lista, { filters: { propriedade: { operator: 'equals', value: 'fazenda  boa vista', match: 'label' } } })?.id, 'p-b', 'filtrado por nome (match label, nome normalizado)');
+// Revisão final da E1B: nome sem acento acha como o motor de filtros; texto digitado não escolhe;
+// homônimas → Padrão.
+const acentuada = { id: 'p-e', nome: 'Fazenda São João', padrao: false, ativo: true };
+assert.equal(resolveHeaderProperty([...lista, acentuada], { filters: { propriedade: { operator: 'equals', value: 'fazenda sao joao', match: 'label' } } })?.id, 'p-e', 'nome sem acento acha a propriedade (como o filtro)');
+assert.equal(resolveHeaderProperty(lista, { filters: { propriedade: { operator: 'contains', value: 'Fazenda A', match: 'label' } } })?.id, 'p-a', 'NEGATIVO: texto em "contém" não escolhe (cai na Padrão)');
+assert.equal(resolveHeaderProperty([...lista, acentuada], { filters: { propriedade: { operator: 'starts_with', value: 'Fazenda São', match: 'label' } } })?.id, 'p-a', 'NEGATIVO: "começa com" não escolhe');
+const homonima = { id: 'p-f', nome: 'FAZENDA BOA VISTA', padrao: false, ativo: true };
+assert.equal(resolveHeaderProperty([...lista, homonima], { filters: { propriedade: { operator: 'equals', value: 'Fazenda Boa Vista', match: 'label' } } })?.id, 'p-a', 'NEGATIVO: duas propriedades com o mesmo nome → Padrão');
 assert.equal(resolveHeaderProperty(lista, { filters: { propriedade: { operator: 'contains', values: ['FAZENDA VELHA'], match: 'label' } } })?.id, 'p-c', 'filtro numa inativa usa a dela');
 assert.equal(resolveHeaderProperty(lista, { lockedFilters: { propriedade: { operator: 'equals', value: 'p-b' } } })?.id, 'p-b', 'condição fixa do relatório');
 assert.equal(resolveHeaderProperty(lista, { drill: [{ columnId: 'marca', key: 'm1' }, { columnId: 'propriedade', key: 'p-b', label: 'Fazenda Boa Vista' }] })?.id, 'p-b', 'detalhe (drill) numa propriedade');
