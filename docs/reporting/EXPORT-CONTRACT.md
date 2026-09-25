@@ -60,8 +60,8 @@ por nó de grupo** (profundidade primeiro, na ordem de `summarySort`), sem linha
 - `drill` (clique no grupo): corte exato por `groupKeyOf` do caminho escolhido, aplicado antes do
   agrupamento; aparece em "Filtros" como "(detalhe do grupo)".
 - E1B: rótulos da definição (`metricLabels`, ex.: "Qtd", "Faixa mínima do lote (kg)") no cabeçalho;
-  métricas de par fora do nível certo saem de todos os canais (`hiddenMetrics` — ex.: faixa do lote
-  agrupando só por data); com par `leafOnly`, as métricas do par ficam **vazias** nas linhas acima do nível
+  métricas de par fora do nível certo saem da folha, do CSV/XLSX, dos chips da grade e do `summary` do
+  JSON (`hiddenMetrics` — ex.: faixa do lote agrupando só por data); com par `leafOnly`, as métricas do par ficam **vazias** nas linhas acima do nível
   folha e no Total geral (`leafOnlyMetricKeys`/`isLeafGroupLevel`), também nas linhas `SUBTOTAL`/
   `GRAND_TOTAL` do Detalhado e nos chips da grade. O JSON mantém os agregados brutos da árvore.
 - Manifesto E1B: `arrobaDivisor` (30 ou 15) usado nas colunas em @.
@@ -117,7 +117,8 @@ Preenchimento das colunas fixas:
 - Linhas: `GROUP` (Grupo = rótulo, Métrica = "N registro(s)"), `DATA` (Grupo = caminho), `SUBTOTAL` e
   `GRAND_TOTAL` (Grupo = caminho ou "Total geral").
 - **Números são células numéricas** (nunca texto), com formato `#,##0.00`, `#,##0.000` (GMD), `#,##0.0`
-  (kg com 1 casa, E1B) ou `#,##0` (inteiro).
+  (totais em kg com 1 casa, E1B — as linhas de dados do Detalhado seguem as casas da coluna) ou `#,##0`
+  (inteiro).
 - Aba 2 **Manifesto**: uma linha por chave do manifesto (objetos em JSON), **sem** o `sha256`, que é do
   próprio arquivo e é calculado depois.
 - Controle de XML: escape de `& < > " '` e remoção de caracteres de controle inválidos.
@@ -213,7 +214,10 @@ o mesmo HTML em modo `fragment` interativo; `printDocument.buildPrintDocument` e
   Emissão <8> · <relatório>".
 - Ordem dos irmãos: `orderNodes` (mesma de `buildSummaryRows`); rótulo compara `compareGroupLabels`
   (chave `groupOrder` da coluna quando existe — Sessão pela data — senão o rótulo).
-- Formato na folha: kg com **1 casa**, @ com 2, GMD com 3 (`aggregateLabels`); XLSX usa `#,##0.0` para kg.
+- Formato na folha: kg com **1 casa**, @ com 2, GMD com 3 (`aggregateLabels`; no Detalhado como folha, as
+  colunas de peso das linhas também com 1 casa); XLSX usa `#,##0.0` para os totais em kg.
+- O bloco `TOTAL POR`, as notas e o rodapé existem **só na folha** (tela, impressão, PDF). CSV/XLSX/JSON do
+  Resumido têm uma linha por nó do agrupamento + Total geral (§2.1) — os mesmos números por nó.
 
 **Página** (`decideSheetLayout`): largura útil A4 com margens de 10 mm = **718 px** (retrato) e **1047 px**
 (paisagem) a 96 dpi; fonte 8,5 / 7,6 / 6,8 pt (`m`, `s`, `xs`). `auto` tenta retrato m → paisagem m → s → xs;

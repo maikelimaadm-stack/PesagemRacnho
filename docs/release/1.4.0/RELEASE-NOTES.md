@@ -13,7 +13,8 @@ Data: 25/09/2026 · Esquema Dexie 8 (sem mudança) · Backup formato 3 · Instal
 - **Agrupar por** fica na barra: escolha Lote, Categoria, Raça… e a tabela muda na hora.
 - **Filtros rápidos** de um clique: "Somente mortes", "Somente perdendo peso", "Sem pesagem há mais
   de 30 dias", "Somente entradas e saídas", "Somente mudanças de lote no período".
-- O que aparece na tela é o que sai na impressão A4, no Excel (CSV e XLSX) e no JSON.
+- O que aparece na tela é o que sai na impressão A4; no Excel (CSV e XLSX) e no JSON vão os mesmos números,
+  uma linha por grupo (o bloco "TOTAL POR" e as notas ficam só na folha).
 
 ### O relatório virou uma folha (E1B)
 - O Resumido aparece na tela **como a folha impressa**: cabeçalho com o **logo e os dados da fazenda**,

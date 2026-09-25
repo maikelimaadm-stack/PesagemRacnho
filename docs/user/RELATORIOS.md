@@ -3,7 +3,8 @@
 Os relatórios respondem às perguntas do dia a dia: **quantas cabeças tem em cada lote, quanto pesam,
 quanto ganharam, quem saiu**. Desde a versão 1.4.0 eles abrem **resumidos** e aparecem na tela como
 **a folha que sai na impressora**: cabeçalho da fazenda com o logo, seções por grupo, subtotais e total
-geral. Os números da tela, da impressão, do PDF e dos arquivos são **sempre os mesmos**.
+geral. Os números da tela, da impressão, do PDF e dos arquivos são **sempre os mesmos** (os arquivos
+trazem uma linha por grupo e o total geral; o bloco "TOTAL POR" e as notas existem só na folha).
 
 ## 1. Abrir
 
@@ -48,8 +49,8 @@ No alto da tela há o botão **Resumido | Detalhado**:
 
 - **Resumido** — aparece como **a folha** (item 7): uma linha por grupo, com os totais em colunas,
   subtotal de cada seção e total geral. É exatamente o que sai na impressão e no PDF.
-- **Detalhado** — todos os animais (ou pesagens) de cada grupo numa **grade** que dá para ordenar,
-  filtrar pelo título da coluna e mudar a largura, com o subtotal no fim de cada grupo. O botão
+- **Detalhado** — todos os animais (ou pesagens) de cada grupo numa **grade** que dá para ordenar e
+  filtrar pelo título da coluna, com o subtotal no fim de cada grupo. O botão
   **Ver como folha** (ícone de folha, ao lado) mostra o Detalhado no formato da impressão; clique de novo
   para voltar à grade.
 
@@ -110,7 +111,13 @@ Em **Pesagens**:
 | **Por data** | Uma linha por data (sem a Faixa exigida, que é de cada lote) |
 | **Analítico por animal** | Detalhado, uma linha por pesagem |
 
-Nos relatórios sem tipos próprios aparecem **Resumo por <agrupamento padrão>** e **Analítico**.
+Nos relatórios sem tipos próprios aparecem **Resumo por <agrupamento padrão>** (ou **Lista por …**, nos
+que abrem no Detalhado), quando o relatório tem agrupamento padrão, e sempre **Analítico (uma linha por
+registro)**.
+
+O Tipo só aparece escolhido quando está aplicado por inteiro (agrupamento, modo e totais; no Detalhado,
+também as colunas). Se você mudar os totais ou as colunas, ele passa a mostrar **Personalizado**; escolher
+o Tipo de novo volta ao jeito dele.
 
 ## 6. Filtrar
 
@@ -192,8 +199,9 @@ máximo 400 pixels de largura e 300 KB — não precisa preparar a imagem. **Tro
 vai junto no backup e volta na restauração.
 
 **Qual propriedade vai no cabeçalho:** a do filtro do relatório, quando o relatório está filtrado (ou
-detalhado) por uma única propriedade; senão, a propriedade marcada como **Padrão**. Sem propriedade
-cadastrada, vai só o nome do sistema.
+detalhado) por uma única propriedade — marcada na lista ou em "igual a" (texto em "contém", "começa com"
+ou "termina com" não escolhe, porque pode pegar outra fazenda); senão, a propriedade marcada como
+**Padrão**. Sem propriedade cadastrada, vai só o nome do sistema.
 
 ## 9. Totais
 
@@ -232,8 +240,10 @@ tiver.
 No alto, à direita:
 
 - **Imprimir** (verde) — imprime **a folha** em A4, na orientação escolhida na barra.
-- **Excel** — planilha XLSX com a mesma tabela da tela (no Resumido, a tabela resumida; no Detalhado,
-  todas as linhas). Pesos com 1 casa.
+- **Excel** — planilha XLSX com os mesmos números da tela: no Resumido, uma linha por grupo (apartação,
+  data e lote, cada um no seu nível) e o Total geral — o bloco "TOTAL POR" e as notas ficam só na folha;
+  no Detalhado, todas as linhas. Totais em kg com 1 casa; as linhas de dados do Detalhado saem com as
+  casas da coluna.
 - **PDF** — a mesma folha em A4, com **Página X de Y** no rodapé de cada página.
 - **⋯ (Outros formatos)** — **CSV** (Excel pt-BR) e **JSON com manifesto**.
 
@@ -299,7 +309,8 @@ Quem não abre Backup e Manutenção (OPERADOR e CONSULTA) encontra **Pendência
 - **Fechamento do dia**, **Histórico de backups** e **Trilha de auditoria**: só ADMIN e GESTOR.
 - **Comercial** (Vendas, Abates, Compras): só ADMIN e GESTOR.
 - Quem não pode ver valores vê os relatórios normalmente, sem as colunas e totais de preço, valor,
-  arrobas e carcaça — também no Resumido e nos arquivos.
+  arrobas de carcaça e carcaça (Comercial) — também no Resumido e nos arquivos. A **@ de peso vivo** da
+  folha (Média @, Total @, ganho em @ = kg ÷ 30 ou 15) não é valor comercial e aparece para todos.
 - Senhas e chaves de recuperação **nunca** aparecem em relatório.
 - O **cabeçalho da propriedade** e o **divisor da @** são editados por quem pode alterar Cadastros e
   Configurações; todos os perfis que abrem o relatório veem a folha com eles.

@@ -15,7 +15,9 @@ em `release-unsigned/`. Notas em `docs/release/1.4.0/RELEASE-NOTES.md`.
   cabeçalho da propriedade com logo, título "Relatório de … (Sintético/Analítico)", seções por nível
   (APARTAÇÃO › DATA › tabela por lote), subtotal alinhado sob cada coluna, bloco **TOTAL POR LOTE – <apartação>**
   com três níveis, **TOTAL GERAL**, notas e rodapé com filtros, "@ = peso vivo ÷ 30", quem emitiu, data/hora,
-  versão e **Página X de Y**. Um documento e um renderizador só para tela, impressão e PDF.
+  versão e **Página X de Y**. Um documento e um renderizador só para tela, impressão e PDF. CSV, XLSX e
+  JSON continuam com uma linha por grupo e o Total geral (mesmos números); o bloco TOTAL POR e as notas
+  existem só na folha.
 - Regras da folha: cada célula sob o cabeçalho da sua coluna (gate por índice); coluna sem nenhum valor
   no relatório some (botão **Mostrar colunas vazias**); GMD sem pesagem anterior é "—", nunca "0,000",
   com a nota "GMD calculado com N de M animais"; kg com 1 casa, @ com 2, GMD com 3.
@@ -75,7 +77,7 @@ em `release-unsigned/`. Notas em `docs/release/1.4.0/RELEASE-NOTES.md`.
 - E1B: modelo salvo antes da 1.4.0 (sem modo) abre no Resumido só se tiver agrupamento; sem agrupamento,
   no Detalhado.
 - E1B: impressão e PDF passam a ser a folha: margens de 10 mm, "Página X de Y" pela própria página (sem
-  o rodapé nativo do Chromium), logo embutido (CSP `img-src data:`); XLSX com kg em `#,##0.0`.
+  o rodapé nativo do Chromium), logo embutido (CSP `img-src data:`); XLSX com os totais em kg em `#,##0.0`.
 - E1B: a **Faixa exigida** (faixa de peso do cadastro atual do lote) só aparece no nível do lote — vazia
   nos subtotais de data/apartação e no total geral, na folha, no CSV/XLSX e nos subtotais do Detalhado.
 
