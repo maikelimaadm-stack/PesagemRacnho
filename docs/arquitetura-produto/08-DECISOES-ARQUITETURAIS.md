@@ -418,6 +418,44 @@ sem segredos.
 storage, backup, restore e versão atualizados para a v8; `migration:v7:verify` continua provando
 v6 → v7 dentro da cadeia.
 
+## ADR-050 — Atualização automática via Electron Updater e Supabase Storage
+
+**Status:** proposta aprovada para fundação; ativação em produção bloqueada até assinatura
+Authenticode e configuração do projeto Supabase.
+
+**Contexto:** instalações existentes só recebem uma versão nova por execução manual do Setup. O
+produto deve continuar offline, mas, quando houver internet, detectar uma release estável, baixar em
+segundo plano e oferecer reinício controlado sem remover o banco local.
+
+**Decisão:** usar `electron-updater` com o alvo NSIS existente e provider HTTP genérico. O Supabase
+Storage será somente a origem de distribuição dos artefatos; autenticação online e sincronização dos
+dados operacionais são projetos separados. O bucket terá leitura pública apenas para os objetos de
+release e nenhuma escrita anônima. A chave `service_role` existirá somente na máquina/CI de release.
+O canal estável conterá `latest.yml`, Setup versionado, blockmap, manifesto, assinatura do manifesto e
+notas. Binários serão imutáveis; o ponteiro `latest.yml` será publicado por último.
+
+**Experiência:** checagem 45 segundos após iniciar, a cada seis horas e por ação manual; falha de rede
+é silenciosa e não bloqueia o uso. Download pode ocorrer em segundo plano, mas a instalação nunca
+interrompe uma operação: o usuário escolhe "Reiniciar e atualizar" ou a atualização é aplicada ao
+encerrar. A UI mostra versão disponível, progresso, versão pronta e erro resumido.
+
+**Segurança:** produção exige HTTPS, Authenticode confiável, validação de assinatura do binário,
+SHA-512 do feed, manifesto assinado e bloqueio de downgrade. Sem certificado, apenas homologação
+local/notificação — nenhum download será executado automaticamente. Segredos de publicação nunca
+entram no `app.asar`, renderer, preload ou repositório.
+
+**Bootstrap:** usuários atuais instalarão manualmente uma última versão que contém o atualizador.
+Somente versões posteriores a ela poderão ser instaladas pelo próprio aplicativo.
+
+**Migração e rollback:** o banco continua fora da pasta do programa. A migração existente cria backup
+validado antes de abrir esquema novo. Rollback automático de binário é proibido quando o esquema já
+avançou; recuperação ocorre por release corretiva adiante ou restauração explícita do backup com
+versão compatível.
+
+**Publicação:** artefatos grandes usam upload TUS retomável; Setup e blockmap sobem antes do manifesto
+e do `latest.yml`. Se qualquer gate falhar, o ponteiro não é atualizado e nenhum cliente vê a release
+parcial. Detalhes e critérios em `15-ATUALIZACAO-AUTOMATICA-SUPABASE.md`.
+
 ### DEC-031 — Manejo reclassifica a categoria automática (confirmado em 17/09/2026; complementa ADR-028)
 
 Regra vigente confirmada pelo responsável: no Cadastro com categoria "Automático" a categoria é
@@ -427,4 +465,3 @@ de ADR-028 foi substituída pelo peso em 16/09/2026); cada Manejo de animal com 
 Categoria escolhida à mão nunca muda. Pesagem sem peso (saída por morte, doação ou transferência) ou
 com peso fora de toda faixa preserva a última categoria válida. Gates: `category-projection:verify` e
 `animal:history-integrity:verify`.
-

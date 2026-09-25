@@ -52,6 +52,7 @@ funcionalidade deve melhorar pelo menos um destes resultados:
 | [07-ROADMAP-E-CRITERIOS-DE-ACEITE.md](./07-ROADMAP-E-CRITERIOS-DE-ACEITE.md) | Em qual ordem implementar e como provar que ficou pronto? |
 | [08-DECISOES-ARQUITETURAIS.md](./08-DECISOES-ARQUITETURAIS.md) | Quais decisões são obrigatórias e quais estão pendentes? |
 | [09-PESQUISA-E-REFERENCIAS.md](./09-PESQUISA-E-REFERENCIAS.md) | Quais produtos e fontes embasaram o desenho? |
+| [15-ATUALIZACAO-AUTOMATICA-SUPABASE.md](./15-ATUALIZACAO-AUTOMATICA-SUPABASE.md) | Como publicar versões no Supabase e atualizar o Electron com segurança? |
 
 ## Entregas por fase
 
