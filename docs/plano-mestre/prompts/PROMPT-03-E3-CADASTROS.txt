@@ -1,6 +1,6 @@
 PROMPT-03 — E3 — Cadastros reorganizados + proprietário no animal + metas (versão 1.6.0, Dexie v9)
 
-Pré-requisito: docs/evidence/e1/REPORT.md CONCLUÍDA e test:quick verde na linha de integração. Se não, PARE e reporte.
+Pré-requisito: docs/evidence/e1/REPORT.md CONCLUÍDA e test:quick verde em main (main avançada até a E1 com autorização da responsável). Se não, PARE e reporte.
 
 Leia: docs/plano-mestre/prompts/_REGRAS-COMUNS.txt, docs/plano-mestre/00-LEIA-PRIMEIRO.md,
 docs/plano-mestre/E3-CADASTROS.md, src/storage/indexedDb/schema.js, src/storage/migrations/**, src/modules/catalog/**, src/components/cadastros/**, src/pages/{Marcas,Racas,Categorias,Parceiros,Propriedades,CausasMorte,Sanidade}.jsx, src/Layout.jsx, src/pages.config.js.

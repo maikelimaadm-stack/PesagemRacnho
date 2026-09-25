@@ -1,11 +1,18 @@
 PROMPT-01 — E1: Relatórios resumidos + catálogo enxuto (versão 1.4.0, sem mudança de esquema)
 
-Pré-requisito: docs/evidence/e0/REPORT.md com STATUS CONCLUÍDA e test:quick verde. Se não, PARE.
+Pré-requisito: docs/evidence/e0b/REPORT.md CONCLUÍDA (revisada e aprovada em 25/09/2026), main = 6cccb5f
+ou posterior, test:quick verde. Se não, PARE.
+
+Respostas da responsável ao REPORT da E0B:
+1. AUTORIZADO iniciar a E1 a partir de main, criando program/e1-relatorios.
+2. PROMPT-03 já foi corrigido ("linha de integração" → main). Este prompt e o PROMPT-03 estão alterados
+   na pasta, sem commit: faça deles o PRIMEIRO commit da branch program/e1-relatorios
+   ("docs(plano-mestre): PROMPT-01 e PROMPT-03 atualizados após a E0B").
 
 Leia: docs/plano-mestre/prompts/_REGRAS-COMUNS.txt, docs/plano-mestre/00-LEIA-PRIMEIRO.md,
 docs/plano-mestre/E1-RELATORIOS.md, docs/reporting/*.md, src/modules/reporting/**, src/components/reports/**.
 
-Branch: program/e1-relatorios.
+Branch: program/e1-relatorios (a partir de main).
 
 Execute a especificação E1-RELATORIOS.md inteira, nesta ordem:
 1. Modo Resumido no domínio (reportService, summaryLayout, reportLayout) + gates reports:summary-mode e
@@ -14,10 +21,16 @@ Execute a especificação E1-RELATORIOS.md inteira, nesta ordem:
 3. Consolidação do catálogo para 12 relatórios com LEGACY_REPORT_ALIASES, migração de favoritos/recentes/
    modelos, mover os 4 de controle para Manutenção, esconder cadastros.* e blocked. Gate
    reports:catalog-consolidation.
-4. docs/user/RELATORIOS.md reescrito em linguagem simples; CHANGELOG [1.4.0]; docs/release/1.4.0/.
-5. Versão 1.4.0 em package.json + contrato de versão; test:quick verde; build.
+4. docs/user/RELATORIOS.md reescrito em linguagem simples.
+5. CHANGELOG [1.4.0] com data real, incluindo também as duas correções já commitadas que ainda não
+   saíram em versão: 05e6d33 (tela Relação quebrava ao abrir "Data, apartação e lote" — erro do
+   instalador 1.3.2) e 70f43c6 (trava de gravação em andamento na importação). docs/release/1.4.0/
+   com notas em linguagem simples e checklist.
+6. Versão 1.4.0 em package.json/lock/appVersion + contrato de versão; test:quick verde; build.
+   Gere o instalador SEM assinatura (dist:unsigned) para a responsável testar; não publique nada.
 
-Não faça: mudar esquema Dexie, criar relatórios novos de outras etapas (evolução, acerto, sanidade, estoque).
+Não faça: mudar esquema Dexie, criar relatórios de outras etapas (evolução, acerto, sanidade, estoque),
+push, avançar main (isso só depois da minha autorização na resposta ao REPORT).
 
 Entrega: docs/evidence/e1/REPORT.md + capturas de tela do Resumido (Rebanho atual por lote, Desempenho
-por lote) em docs/evidence/e1/ + resumo no chat.
+por lote) em docs/evidence/e1/ + caminho e SHA-256 do instalador 1.4.0 + resumo no chat.
