@@ -14,7 +14,7 @@ import { GRAIN_LABELS, grainHasAnimal } from '../domain/reportGrain.js';
 import { describePeriod, localToday, resolvePeriod } from '../domain/reportPeriod.js';
 import { assertCanRunReport, canRunReport, canSeeColumn, forbiddenColumnIds } from '../domain/reportPermissions.js';
 import { SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC, buildSummaryRows } from '../domain/summaryLayout.js';
-import { forbiddenError } from '../../auth/domain/permissionService.js';
+import { can, forbiddenError } from '../../auth/domain/permissionService.js';
 import { listReportDefinitions, resolveReportId } from '../definitions/reportCatalog.js';
 import { aliasSelection, getLegacyAlias } from '../definitions/legacyAliases.js';
 import { getReportSource } from '../infrastructure/reportSources/index.js';
@@ -31,27 +31,39 @@ function newEmissionId() {
   return globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `em-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+const summaryOf = (definition, role, overrides = {}) => ({
+  id: definition.id,
+  title: definition.title,
+  description: definition.description,
+  family: definition.family,
+  grain: definition.grain,
+  classification: definition.classification,
+  metrics: definition.metrics,
+  requires: definition.requires,
+  status: definition.status,
+  blockedReason: definition.blockedReason ?? null,
+  available: canRunReport(definition, role),
+  defaultMode: definition.defaultMode,
+  visibility: definition.visibility,
+  ...overrides,
+});
+
 /**
  * Catálogo filtrado pelo papel. E1: por área da interface — `catalog` (os 12 de Relatórios, padrão)
  * ou `maintenance` (aba Controle). Bloqueados e cadastros ficam fora (visibility hidden).
+ * E1B (resposta 2 da responsável): quem NÃO abre Backup e Manutenção (sem `maintenance.backup`) vê em
+ * Relatórios, na família "Controle", os relatórios da aba Controle que o papel pode abrir (hoje
+ * Pendências de pesagem e Qualidade dos dados para OPERADOR/CONSULTA). ADMIN/GESTOR: os 12 + aba Controle.
  */
 export function listReports(actor, { visibility = REPORT_VISIBILITY.CATALOG } = {}) {
   const { role } = requireActor(actor);
-  return listReportDefinitions({ visibility }).map((definition) => ({
-    id: definition.id,
-    title: definition.title,
-    description: definition.description,
-    family: definition.family,
-    grain: definition.grain,
-    classification: definition.classification,
-    metrics: definition.metrics,
-    requires: definition.requires,
-    status: definition.status,
-    blockedReason: definition.blockedReason ?? null,
-    available: canRunReport(definition, role),
-    defaultMode: definition.defaultMode,
-    visibility: definition.visibility,
-  })).filter((item) => item.status === 'blocked' || item.available);
+  const items = listReportDefinitions({ visibility }).map((definition) => summaryOf(definition, role));
+  if (visibility === REPORT_VISIBILITY.CATALOG && !can(role, 'maintenance.backup')) {
+    for (const definition of listReportDefinitions({ visibility: REPORT_VISIBILITY.MAINTENANCE })) {
+      if (canRunReport(definition, role)) items.push(summaryOf(definition, role, { family: 'controle', controlInCatalog: true }));
+    }
+  }
+  return items.filter((item) => item.status === 'blocked' || item.available);
 }
 
 /**

@@ -30,6 +30,22 @@ for (const actor of [ADMIN, GESTOR, OPERADOR, CONSULTA]) {
   assert.ok(ids.includes('pesagens') && ids.includes('rebanho.atual') && ids.includes('desempenho'), `${actor.role} vê relatórios operacionais`);
 }
 
+// E1B (resposta 2 da responsável): quem não abre Backup e Manutenção (sem maintenance.backup) vê em
+// Relatórios, família "Controle", os relatórios da aba Controle que o papel pode abrir.
+for (const actor of [OPERADOR, CONSULTA]) {
+  assert.equal(can(actor.role, 'maintenance.backup'), false, `${actor.role} não abre a Manutenção`);
+  const controle = listReports(actor).filter((item) => item.available && item.family === 'controle').map((item) => item.id).sort();
+  assert.deepEqual(controle, ['controle.qualidade-dados', 'pesagens.pendencias'], `${actor.role}: Pendências de pesagem e Qualidade dos dados em Relatórios › Controle`);
+  assert.ok(!listReports(actor).some((item) => ['controle.auditoria', 'controle.backups'].includes(item.id)), `${actor.role}: auditoria e backups continuam fora (sem permissão)`);
+  assert.equal(await code(() => runReport('pesagens.pendencias', { today: TODAY, params: period }, actor)), 'OK', `${actor.role} abre Pendências de pesagem`);
+}
+for (const actor of [ADMIN, GESTOR]) {
+  const catalogo = listReports(actor).filter((item) => item.available);
+  assert.equal(catalogo.length, 12, `${actor.role}: os 12 (controle fica na aba da Manutenção)`);
+  assert.ok(!catalogo.some((item) => item.family === 'controle'), `${actor.role}: nenhum relatório de controle no catálogo`);
+  assert.ok(listReports(actor, { visibility: 'maintenance' }).some((item) => item.id === 'pesagens.pendencias' && item.available), `${actor.role}: Pendências na aba Controle`);
+}
+
 // Sem sessão / papel desconhecido → recusado no serviço
 assert.equal(await code(() => runReport('pesagens.periodo', { today: TODAY, params: period }, null)), 'AUTH_FORBIDDEN');
 assert.equal(await code(() => runReport('pesagens.periodo', { today: TODAY, params: period }, { id: 'x', role: 'ROOT' })), 'AUTH_FORBIDDEN');

@@ -184,13 +184,16 @@ pesagem**. Abrem na mesma tela de relatório, com o botão **Manutenção** para
 Manutenção volta como estava, sem refazer a verificação). Ali não há estrela nem "Salvar modelo":
 favoritos e modelos ficam em Relatórios.
 
+Quem não abre Backup e Manutenção (OPERADOR e CONSULTA) encontra **Pendências de pesagem** e
+**Qualidade dos dados** na própria tela de Relatórios, no grupo **Controle**.
+
 ## 12. O que cada perfil pode fazer
 
 | Perfil | Abrir relatórios | Imprimir / exportar / PDF | Preços e valores | Auditoria | Modelo compartilhado |
 |---|---|---|---|---|---|
 | **ADMIN** | Todos | Sim | Sim | Sim | Sim |
 | **GESTOR** | Todos | Sim | Sim | Sim | Sim |
-| **OPERADOR** | Rebanho, Pesagens, Desempenho, Movimentação, Saídas, Embarques | **Não** | Não | Não | Não |
+| **OPERADOR** | Rebanho, Pesagens, Desempenho, Movimentação, Saídas, Embarques e, no grupo Controle, Pendências de pesagem e Qualidade dos dados | **Não** | Não | Não | Não |
 | **CONSULTA** | Os mesmos do OPERADOR | Sim (sem valores) | Não | Não | Não |
 
 - **Fechamento do dia**, **Histórico de backups** e **Trilha de auditoria**: só ADMIN e GESTOR.

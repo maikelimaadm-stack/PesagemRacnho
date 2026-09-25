@@ -119,8 +119,12 @@ assert.equal(reqModo.selection.mode, 'RESUMIDO');
 const vmModo = await runReport(reqModo.reportId, { today: TODAY, params: reqModo.params, selection: reqModo.selection }, GESTOR);
 assert.equal(vmModo.mode, 'RESUMIDO');
 assert.deepEqual(vmModo.summarySort, { key: 'gmd', direction: 'desc' });
-assert.equal(templateToRequest({ ...comModo, mode: undefined }, 'GESTOR').selection.mode, 'RESUMIDO', 'sem modo → defaultMode de "desempenho" (agrupado)');
-assert.equal(templateToRequest({ ...comModo, baseReportId: 'comercial.vendas', columns: [], groups: [], aggregates: [], sort: [], filters: {}, mode: undefined }, 'GESTOR').selection.mode, 'DETALHADO', 'sem modo → defaultMode de relatório sem grupo');
+// Modelo sem modo (anterior à 1.4.0) — resposta 3 da responsável: Resumido só se tiver agrupamento.
+assert.equal(templateToRequest({ ...comModo, groups: [{ columnId: 'lote', direction: 'asc' }], mode: undefined }, 'GESTOR').selection.mode, 'RESUMIDO', 'sem modo + agrupado → Resumido');
+assert.equal(templateToRequest({ ...comModo, groups: [], mode: undefined }, 'GESTOR').selection.mode, 'DETALHADO', 'sem modo + sem agrupamento → Detalhado (mesmo em relatório que nasce resumido)');
+assert.equal(templateToRequest({ ...comModo, baseReportId: 'embarques.romaneio', columns: [], groups: [], aggregates: [], sort: [], filters: {}, mode: undefined }, 'GESTOR').selection.mode, 'DETALHADO', 'Romaneio salvo como lista abre Detalhado (não um Resumido só com o Total geral)');
+assert.equal(templateToRequest({ ...comModo, baseReportId: 'comercial.vendas', columns: [], groups: [], aggregates: [], sort: [], filters: {}, mode: undefined }, 'GESTOR').selection.mode, 'DETALHADO', 'sem modo → relatório sem grupo abre Detalhado');
+assert.equal(templateToRequest({ ...comModo, groups: [], mode: 'RESUMIDO' }, 'GESTOR').selection.mode, 'RESUMIDO', 'modo gravado prevalece');
 assert.equal(await code(() => saveTemplate({ ...config, name: 'Modo ruim', mode: 'COMPACTO' }, GESTOR)), 'REPORT_TEMPLATE_INVALID', 'NEGATIVO: modo inválido');
 await deleteTemplate(comModo.id, GESTOR);
 

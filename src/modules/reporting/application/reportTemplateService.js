@@ -401,7 +401,8 @@ export async function deleteTemplate(templateId, actor, { empresaId = 'local' } 
 /**
  * Modelo salvo → seleção para runReport. Revalida contra a definição ATUAL e o papel de quem
  * abre: colunas/filtros removidos ou sem permissão saem com aviso (nunca amplia permissão).
- * Modelo sem `mode` (anterior à 1.4.0) abre no modo padrão da definição (E1 §7).
+ * Modelo sem `mode` (anterior à 1.4.0) abre Resumido se tem agrupamento, Detalhado se não tem
+ * (E1 §7 ajustada pela responsável em 25/09/2026).
  */
 export function templateToRequest(source, role) {
   const template = migrateLegacyTemplate(source) ?? source;
@@ -426,7 +427,9 @@ export function templateToRequest(source, role) {
       columns, filters, groups, sort, aggregates, search: template.search || '',
       // Condição fixa do relatório antigo (modelo convertido): nunca some, nem por perfil.
       fixedFilters: { ...(template.fixedFilters || {}) },
-      mode: normalizeReportMode(template.mode, definition.defaultMode),
+      // Modelo de antes da 1.4.0 (sem modo) — resposta 3 da responsável ao REPORT da E1: abre Resumido
+      // só se tiver agrupamento; salvo como lista abre Detalhado (nunca um Resumido só com o Total geral).
+      mode: template.mode ? normalizeReportMode(template.mode, definition.defaultMode) : (groups.length ? REPORT_MODES.RESUMIDO : REPORT_MODES.DETALHADO),
       summarySort: template.summarySort ?? null,
     },
     widths: template.widths || {},
