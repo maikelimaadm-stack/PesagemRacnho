@@ -70,7 +70,9 @@ for (const relativePath of dialogFiles) {
 // 17/09/2026: a Relação perdeu dois diálogos (importação e vinculação de lotes) quando a
 // importação virou tela própria — o assistente de Importação usa o mesmo contrato padrão e é
 // auditado por scripts/verify-import-ui.mjs.
-assert.equal(dialogCount, 11, 'a auditoria deve cobrir os onze diálogos dos fluxos operacionais verificados');
+// 23/09/2026 (1.3.1): a Relação ganhou dois diálogos de ações em lote (identificação/classificação e
+// dados comerciais), ambos no contrato padrão — cobertos também por weighing:bulk-actions:verify.
+assert.equal(dialogCount, 13, 'a auditoria deve cobrir os treze diálogos dos fluxos operacionais verificados');
 const importDialog = readFileSync(join(root, 'src/components/importacao/ConfirmarImportacaoDialog.jsx'), 'utf8');
 for (const opening of importDialog.match(/<DialogContent\b[^>]*>/g) || []) {
   assert.match(opening, /d17b-standard-dialog--(?:compact|medium|large)/, 'a confirmação da importação segue o contrato padrão de diálogo');

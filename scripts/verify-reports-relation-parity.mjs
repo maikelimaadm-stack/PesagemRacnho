@@ -74,7 +74,8 @@ assert.notDeepEqual(reportAll.rows.map((row) => row.id), relationWrong.map((row)
 const consulta = await runReport('pesagens.periodo', { today: TODAY, params: { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } }, selection: { columns: [...RELATION_COLUMN_IDS], sort: [{ columnId: 'data_pesagem', direction: 'asc' }] } }, CONSULTA);
 assert.deepEqual(consulta.rows.map((row) => row.id), reportAll.rows.map((row) => row.id));
 assert.ok(!consulta.columns.some((column) => column.sensitive === 'commercial'), 'CONSULTA sem colunas comerciais');
-assert.deepEqual(consulta.hiddenByPermission.sort(), ['quantidade_arrobas', 'valor_arroba', 'valor_pago_cabeca', 'valor_venda_total']);
+// 1.3.1: "Frete compra" (compra_frete) é valor comercial e também fica oculto para CONSULTA.
+assert.deepEqual(consulta.hiddenByPermission.sort(), ['compra_frete', 'quantidade_arrobas', 'valor_arroba', 'valor_pago_cabeca', 'valor_venda_total']);
 
 // A tela usa exatamente estas funções.
 const page = readFileSync(new URL('../src/pages/PesagensIndividuais.jsx', import.meta.url), 'utf8');

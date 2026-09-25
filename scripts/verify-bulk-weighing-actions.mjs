@@ -150,6 +150,20 @@ assert.match(relationSource, /shipmentService\.listShipments/);
 assert.match(relationSource, /shipmentService\.listDocuments/);
 assert.doesNotMatch(relationCss, /\.d17c-bulk-actions-trigger/);
 
+// 25/09/2026: o ícone Layers saiu do import e o diálogo "Movimentação em lote" quebrava ao abrir
+// (ReferenceError só em tempo de execução; o build não acusa). Todo componente JSX precisa existir.
+const declaredNames = new Set();
+for (const [, clause] of relationSource.matchAll(/^import\s+([\s\S]*?)\s+from\s+["'][^"']+["'];?$/gm)) {
+  for (const name of clause.replace(/[{}]/g, ',').split(',')) {
+    const local = name.trim().split(/\s+as\s+/).pop().replace(/^\*\s*/, '').trim();
+    if (local) declaredNames.add(local);
+  }
+}
+for (const [, name] of relationSource.matchAll(/^\s*(?:export\s+default\s+)?(?:function|const|let|class)\s+([A-Z]\w*)/gm)) declaredNames.add(name);
+const undeclaredJsx = [...new Set([...relationSource.matchAll(/<([A-Z]\w*)[\s/>]/g)].map(([, name]) => name))]
+  .filter((name) => !declaredNames.has(name));
+assert.deepEqual(undeclaredJsx, [], `componentes JSX sem import na Relação: ${undeclaredJsx.join(', ')}`);
+
 setActorProvider(null);
 await deleteDbForTests();
 

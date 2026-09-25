@@ -252,7 +252,17 @@ await rejects(analyzeImport({ text: original, type: 'HISTORICO' }), 'AUTH_FORBID
 setActorProvider(null);
 const history = await listImportJobs({ limit: 3 });
 assert.equal(history.length, 3, 'histórico de jobs do assistente');
-assert.ok(history.every((row) => row.origem === 'assistente-importacao' && row.status === 'CONCLUIDA'));
+assert.ok(history.every((row) => row.origem === 'assistente-importacao'));
+// 25/09/2026: no duplo clique (5. cont.) as duas gravações podem passar pela checagem inicial e
+// criar um job cada; a perdedora termina FALHOU por plano velho e, conforme a ordem de criação,
+// fica entre os três mais recentes. Isso é histórico legítimo — só esse caso é tolerado.
+const raceLoser = (row) => row.status === 'FALHOU' && /refaça a análise/i.test(row.erro || '');
+assert.ok(
+  history.every((row) => row.status === 'CONCLUIDA' || raceLoser(row)),
+  `jobs concluídos (ou perdedor do duplo clique): ${JSON.stringify(history.map((row) => [row.status, row.erro]))}`,
+);
+assert.equal(history[0].status, 'CONCLUIDA', 'o job mais recente (cadastros mestres) concluiu');
+assert.ok(history.filter(raceLoser).length <= 1, 'no máximo um perdedor do duplo clique');
 assert.ok(history[0].created_at >= history[2].created_at, 'mais novo primeiro');
 await rejects(listImportJobs({}, { id: 'sem-papel' }), 'AUTH_FORBIDDEN');
 assert.equal(await deleteImportTemplate(template.id), true);

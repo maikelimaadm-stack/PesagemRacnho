@@ -31,7 +31,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Upload, Search, Trash2, FileSpreadsheet, Download, FileDown,
   ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X, Scale,
-  Settings, MoreVertical, ListFilter, ChevronLeft, ChevronRight,
+  Settings, MoreVertical, Layers, ListFilter, ChevronLeft, ChevronRight,
   Tags, MapPinned, ShoppingCart, Store, Factory, BadgeDollarSign
 } from "lucide-react";
 import {
