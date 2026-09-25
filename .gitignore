@@ -5,6 +5,10 @@ dist/
 /release/
 /release-unsigned/
 /release-archive/
+# Qualquer pasta de release na raiz (ex.: release-1.4.0/) e instaladores em qualquer lugar
+/release*/
+*.exe
+*.blockmap
 coverage/
 
 # Ambiente e segredos
