@@ -18,10 +18,11 @@ import '@/styles/auxiliary-registries.css';
 // Sentinela do select para "nenhum padrão" (o Radix Select não aceita valor vazio).
 const NONE = '__nenhuma__';
 
-// Seções e campos da configuração da empresa: quatro chaves versionadas de appSettings
-// (operational-defaults, weight-warning-policy, sales-policy, auth-policy — doc 11 §8, ADR-025/033/045),
-// lidas/gravadas pela visão mesclada do appConfigService. `kind`: ref (id de cadastro), integer,
-// decimal, boolean. `width` segue os presets do FormCard. `permission`: quem pode ver/gravar a seção.
+// Seções e campos da configuração da empresa: cinco chaves versionadas de appSettings
+// (operational-defaults, weight-warning-policy, sales-policy, auth-policy, report-settings — doc 11 §8,
+// ADR-025/033/045, E1B), lidas/gravadas pela visão mesclada do appConfigService. `kind`: ref (id de
+// cadastro), integer, decimal, boolean, choice (lista fixa em `options`, valores numéricos).
+// `width` segue os presets do FormCard. `permission`: quem pode ver/gravar a seção.
 const SECTIONS = [
   {
     id: 'geral',
@@ -69,6 +70,22 @@ const SECTIONS = [
       { id: 'lock_minutes', label: 'Duração do bloqueio (minutos)', kind: 'decimal', width: 'NUMERO', help: 'Tempo de espera após atingir o limite de tentativas (aceita fração, ex.: 0,5).' },
     ],
   },
+  {
+    id: 'relatorios',
+    title: 'Relatórios',
+    permission: 'settings.operational',
+    description: 'Arroba de peso vivo usada na folha dos relatórios (Média @, Total @, ganho em @) e mostrada no rodapé. Não muda a @ de carcaça do Comercial (carcaça ÷ 15, com rendimento).',
+    fields: [
+      {
+        id: 'arroba_divisor',
+        label: 'Divisor da arroba (kg de peso vivo)',
+        kind: 'choice',
+        width: 'CAMPO_PRINCIPAL',
+        options: [{ value: '30', label: '30 — @ de peso vivo (padrão)' }, { value: '15', label: '15' }],
+        help: 'Média (@) = peso médio ÷ divisor. O rodapé da folha mostra qual foi usado, por exemplo "@ = peso vivo ÷ 30".',
+      },
+    ],
+  },
 ];
 const ALL_FIELDS = SECTIONS.flatMap((section) => section.fields);
 
@@ -84,6 +101,7 @@ function toForm(config, fields) {
     const value = config[field.id];
     if (field.kind === 'ref') form[field.id] = value || NONE;
     else if (field.kind === 'boolean') form[field.id] = value ? 'true' : 'false';
+    else if (field.kind === 'choice') form[field.id] = value == null ? '' : String(value);
     else form[field.id] = formatDecimal(value);
   }
   return form;
@@ -103,7 +121,10 @@ function toPatch(form, config, fields) {
     let value;
     if (field.kind === 'ref') value = raw === NONE || !raw ? null : raw;
     else if (field.kind === 'boolean') value = raw === 'true';
-    else {
+    else if (field.kind === 'choice') {
+      if (!field.options.some((option) => option.value === raw)) throw invalid(field, `Escolha uma opção em "${field.label}".`);
+      value = Number(raw);
+    } else {
       value = parseDecimal(raw);
       if (value === null || !Number.isFinite(value)) throw invalid(field, `Informe um número válido em "${field.label}".`);
       if (field.kind === 'integer' && !Number.isInteger(value)) throw invalid(field, `"${field.label}" deve ser um número inteiro.`);
@@ -307,6 +328,9 @@ function ConfiguracoesContent() {
     if (field.kind === 'boolean') {
       return <SelectField key={field.id} field={field} value={form[field.id] || 'false'} options={booleanOptions} onChange={setField(field.id)} error={error} />;
     }
+    if (field.kind === 'choice') {
+      return <SelectField key={field.id} field={field} value={form[field.id] || field.options[0].value} options={field.options} onChange={setField(field.id)} error={error} />;
+    }
     return <TextField key={field.id} field={field} value={form[field.id]} onChange={setField(field.id)} error={error} />;
   };
   const sectionById = (id) => sections.find((section) => section.id === id);
@@ -387,6 +411,9 @@ function ConfiguracoesContent() {
                           <div className="emp-form-cards-row">
                             {renderSection('comercial')}
                             {renderSection('seguranca')}
+                          </div>
+                          <div className="emp-form-cards-row">
+                            {renderSection('relatorios')}
                           </div>
                           <div className="emp-form-cards-row">
                             <FormCard title="Dados" description="Backup, restauração, importação, migração e verificação de integridade ficam em Backup e Manutenção." full>

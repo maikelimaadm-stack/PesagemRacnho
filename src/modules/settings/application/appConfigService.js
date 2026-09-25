@@ -1,9 +1,11 @@
-// Configurações da empresa em QUATRO chaves versionadas de appSettings (doc 18 do programa,
+// Configurações da empresa em CINCO chaves versionadas de appSettings (doc 18 do programa,
 // ADR-025 rendimento com origem, ADR-033 documento na venda, ADR-045 política de sessão):
 //   auth-policy:<empresa>            { versao, inactivity_lock_minutes, failed_attempt_limit, lock_minutes }
 //   operational-defaults:<empresa>   { versao, marca/raca/propriedade/apartacao padrão, intervalo, rendimento }
 //   sales-policy:<empresa>           { versao, exigir_documento_venda }
 //   weight-warning-policy:<empresa>  { versao, faixa_peso_min/max, limite_gmd_alerta, variacao_max_percent }
+//   report-settings:<empresa>        { versao, arroba_divisor } (E1B 1.4.0: @ de PESO VIVO da folha dos
+//                                    relatórios — não é a @ de carcaça do Comercial, que continua ÷ 15)
 // getAppConfig() devolve a visão MESCLADA (chaves planas) e updateAppConfig() distribui o
 // patch pelos grupos. A chave antiga 'config:<empresa>' (revisão 1) é migrada uma vez e removida.
 // Permissões (ADR-042): settings.auth (ADMIN) para auth-policy; settings.operational
@@ -46,12 +48,19 @@ export const WEIGHT_WARNING_POLICY_DEFAULTS = Object.freeze({
   variacao_max_percent: 35,
 });
 
+// Divisor da @ de peso vivo (kg por arroba) na folha dos relatórios: 30 (@ viva, padrão) ou 15.
+export const ARROBA_DIVISORS = Object.freeze([30, 15]);
+export const REPORT_SETTINGS_DEFAULTS = Object.freeze({
+  arroba_divisor: 30,
+});
+
 // Grupo → { prefixo da chave, defaults, permissão exigida para gravar }.
 export const CONFIG_GROUPS = Object.freeze({
   auth: Object.freeze({ prefix: 'auth-policy', defaults: AUTH_POLICY_DEFAULTS, permission: 'settings.auth' }),
   operational: Object.freeze({ prefix: 'operational-defaults', defaults: OPERATIONAL_DEFAULTS, permission: 'settings.operational' }),
   sales: Object.freeze({ prefix: 'sales-policy', defaults: SALES_POLICY_DEFAULTS, permission: 'settings.operational' }),
   weightWarning: Object.freeze({ prefix: 'weight-warning-policy', defaults: WEIGHT_WARNING_POLICY_DEFAULTS, permission: 'settings.operational' }),
+  reports: Object.freeze({ prefix: 'report-settings', defaults: REPORT_SETTINGS_DEFAULTS, permission: 'settings.operational' }),
 });
 const GROUP_NAMES = Object.freeze(Object.keys(CONFIG_GROUPS));
 
@@ -62,6 +71,7 @@ export const APP_CONFIG_DEFAULTS = Object.freeze({
   ...WEIGHT_WARNING_POLICY_DEFAULTS,
   ...SALES_POLICY_DEFAULTS,
   ...AUTH_POLICY_DEFAULTS,
+  ...REPORT_SETTINGS_DEFAULTS,
 });
 const CONFIG_KEYS = Object.freeze(Object.keys(APP_CONFIG_DEFAULTS));
 
@@ -150,6 +160,11 @@ const NORMALIZERS = {
     if (config.faixa_peso_min >= config.faixa_peso_max) throw configError('faixa_peso_min deve ser menor que faixa_peso_max.', 'faixa_peso_min');
     return config;
   },
+  reports(raw) {
+    const divisor = Number(raw.arroba_divisor);
+    if (!ARROBA_DIVISORS.includes(divisor)) throw configError('Divisor da arroba deve ser 30 ou 15.', 'arroba_divisor');
+    return { arroba_divisor: divisor };
+  },
 };
 
 function pickGroup(group, source = {}) {
@@ -221,7 +236,7 @@ function flatten(groups) {
   return flat;
 }
 
-/** Visão mesclada (chaves planas) dos quatro grupos; defaults cobrem o que faltar. */
+/** Visão mesclada (chaves planas) dos cinco grupos; defaults cobrem o que faltar. */
 export async function getAppConfig(empresaId = DEFAULT_EMPRESA_ID) {
   return flatten(await readAllGroups(empresaId));
 }
@@ -244,6 +259,12 @@ export async function getSalesPolicy(empresaId = DEFAULT_EMPRESA_ID) {
 export async function getWeightWarningPolicy(empresaId = DEFAULT_EMPRESA_ID) {
   await migrateLegacyConfig(empresaId);
   return readGroup('weightWarning', empresaId);
+}
+
+/** Configurações dos relatórios (E1B): { versao, arroba_divisor } — valor inválido gravado volta ao padrão 30. */
+export async function getReportSettings(empresaId = DEFAULT_EMPRESA_ID) {
+  await migrateLegacyConfig(empresaId);
+  return readGroup('reports', empresaId);
 }
 
 /** Atalho usado pela sessão: minutos de inatividade (0 desliga). */

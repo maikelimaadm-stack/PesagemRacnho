@@ -128,9 +128,14 @@ function checkSettings(s) {
     assert.ok(page.includes(`id: '${key}'`), `campo do contrato presente: ${key}`);
   }
   assert.match(page, /origem fica registrada como padrão da empresa/, 'rendimento padrão explicita a origem (ADR-025: nunca 50 % silencioso)');
-  for (const title of ['Geral', 'Curral', 'Comercial', 'Segurança', 'Dados']) {
+  for (const title of ['Geral', 'Curral', 'Comercial', 'Segurança', 'Relatórios', 'Dados']) {
     assert.ok(new RegExp(`title: '${title}'|title="${title}"`).test(page), `seção ${title}`);
   }
+  // E1B: divisor da @ de peso vivo como lista fixa (30/15), explicando que não é a @ de carcaça.
+  assert.match(page, /id: 'arroba_divisor',\s*label: 'Divisor da arroba \(kg de peso vivo\)',\s*kind: 'choice'/, 'divisor da @ como escolha fixa (não texto livre)');
+  assert.match(page, /options: \[\{ value: '30', label: '30 — @ de peso vivo \(padrão\)' \}, \{ value: '15', label: '15' \}\]/, 'opções 30 (padrão) e 15');
+  assert.ok(page.includes('Não muda a @ de carcaça do Comercial'), 'ajuda separa @ de peso vivo da @ de carcaça');
+  assert.ok(page.includes("{renderSection('relatorios')}"), 'seção Relatórios renderizada');
   assert.match(page, /<form className="aux-modelobase1-form" onSubmit=\{save\}/, 'Enter salva (form onSubmit=save)');
   assert.match(page, /emp-toolbar-btn emp-toolbar-btn-save d17c-launch-button aux-form-action" onClick=\{save\}/, 'Salvar na barra de ações');
   assert.match(page, /aux-cancel-button aux-form-action" onClick=\{cancel\}/, 'Cancelar na barra de ações');
@@ -181,6 +186,8 @@ const negatives = [
   ['Configurações gravando sem ator', mutated('settings', 'updateAppConfig(actor, patch, empresaId)', 'updateAppConfig(null, patch, empresaId)')],
   ['Configurações sem seção Dados', mutated('settings', 'title="Dados"', 'title="Outros"')],
   ['Configurações sem navegar para Manutenção', mutated('settings', "createPageUrl('ManutencaoSistema')", "createPageUrl('Outra')")],
+  ['Configurações sem a seção Relatórios', mutated('settings', "{renderSection('relatorios')}", '')],
+  ['divisor da @ como texto livre', mutated('settings', "kind: 'choice',", "kind: 'integer',")],
 ];
 for (const [name, mutatedSources] of negatives) {
   assert.throws(() => runAll(mutatedSources), `mutação deveria falhar: ${name}`);
@@ -209,6 +216,11 @@ assert.equal(saved.inactivity_lock_minutes, 0, '0 desliga o bloqueio (aceito)');
 assert.equal(saved.lock_minutes, 0.5, 'fração de minuto aceita (0,5 na tela)');
 assert.equal(saved.rendimento_padrao_origem, 'PADRAO_EMPRESA', 'origem do rendimento continua explícita');
 assert.equal((await getAppConfig()).intervalo_pesagem_dias, 45, 'gravação persistida');
+// E1B: divisor da @ aceita 15, recusa 20 apontando o campo que a página foca.
+const divisorInvalido = await updateAppConfig(admin, { arroba_divisor: 20 }).then(() => null, (err) => err);
+assert.equal(divisorInvalido?.code, 'CONFIG_INVALID', 'divisor 20 recusado');
+assert.equal(divisorInvalido?.field, 'arroba_divisor', 'erro identifica o campo do divisor');
+assert.equal((await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { arroba_divisor: 15 })).arroba_divisor, 15, 'GESTOR grava o divisor (settings.operational)');
 await deleteDbForTests();
 
 console.log('OK verify-shell-settings-ui');

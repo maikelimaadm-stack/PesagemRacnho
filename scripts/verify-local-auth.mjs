@@ -303,12 +303,14 @@ assert.deepEqual(defaults, {
   faixa_peso_max: 1500,
   limite_gmd_alerta: 5,
   variacao_max_percent: 35,
-}, 'visão mesclada com os defaults dos quatro grupos');
+  arroba_divisor: 30,
+}, 'visão mesclada com os defaults dos cinco grupos (E1B: report-settings)');
 assert.equal(defaults.bloqueio_inatividade_minutos, undefined, 'campo da rev. 1 não existe mais');
 assert.deepEqual(await appConfig.getOperationalDefaults(), { versao: 1, marca_padrao_id: null, raca_padrao_id: null, propriedade_padrao_id: null, apartacao_padrao_id: null, intervalo_pesagem_dias: 30, rendimento_padrao: null, rendimento_padrao_origem: 'PADRAO_EMPRESA' });
 assert.deepEqual(await appConfig.getSalesPolicy(), { versao: 1, exigir_documento_venda: false });
 assert.deepEqual(await appConfig.getWeightWarningPolicy(), { versao: 1, faixa_peso_min: 20, faixa_peso_max: 1500, limite_gmd_alerta: 5, variacao_max_percent: 35 });
 assert.deepEqual(await appConfig.getAuthPolicy(), { versao: 1, inactivity_lock_minutes: 30, failed_attempt_limit: 5, lock_minutes: 0.5 });
+assert.deepEqual(await appConfig.getReportSettings(), { versao: 1, arroba_divisor: 30 }, 'E1B: @ de peso vivo ÷ 30 por padrão');
 assert.equal(await appConfig.getInactivityMinutes(), 30);
 assert.equal(await db2.table('appSettings').count(), 0, 'defaults não gravam nada');
 
@@ -327,6 +329,8 @@ await rejectsWithCode(appConfig.updateAppConfig(actorAdmin, { variacao_max_perce
 await rejectsWithCode(appConfig.updateAppConfig(actorAdmin, { exigir_documento_venda: 'sim' }), 'CONFIG_INVALID', 'booleano exigido');
 await rejectsWithCode(appConfig.updateAppConfig(actorAdmin, { chave_desconhecida: 1 }), 'CONFIG_INVALID', 'chave desconhecida recusada');
 await rejectsWithCode(appConfig.updateAppConfig(actorAdmin, { bloqueio_inatividade_minutos: 10 }), 'CONFIG_INVALID', 'chave da rev. 1 recusada no patch');
+await rejectsWithCode(appConfig.updateAppConfig(actorAdmin, { arroba_divisor: 20 }), 'CONFIG_INVALID', 'divisor da @ só 30 ou 15');
+await rejectsWithCode(appConfig.updateAppConfig({ id: 'o1', role: 'OPERADOR' }, { arroba_divisor: 15 }), 'AUTH_FORBIDDEN', 'OPERADOR não altera o divisor da @');
 assert.deepEqual(await appConfig.getAppConfig('local'), defaults, 'patches recusados não alteram nada');
 
 const updated = await appConfig.updateAppConfig(actorAdmin, { intervalo_pesagem_dias: 15, inactivity_lock_minutes: 0, exigir_documento_venda: true, rendimento_padrao: 52.5, rendimento_padrao_origem: 'INFORMADO', variacao_max_percent: 40 });
@@ -353,6 +357,14 @@ assert.ok(configAudit.every((row) => row.acao === 'ATUALIZAR'));
 assert.equal(configAudit.find((row) => row.entidade_id === 'auth-policy:local').usuario_id, admin.id);
 assert.equal(configAudit.find((row) => row.entidade_id === 'weight-warning-policy:local' && row.campos_alterados.includes('faixa_peso_min')).usuario_id, 'g1');
 assert.equal(await appConfig.updateAppConfig(actorAdmin, { intervalo_pesagem_dias: 15 }).then(() => db2.table('auditoria').where('entidade').equals('appSettings').count()), 5, 'patch sem mudança não audita');
+// E1B: GESTOR troca o divisor da @ (grupo report-settings, settings.operational), auditado.
+const divisor15 = await appConfig.updateAppConfig(actorGestor, { arroba_divisor: 15 });
+assert.equal(divisor15.arroba_divisor, 15);
+assert.deepEqual(await appConfig.getReportSettings('local'), { versao: 1, arroba_divisor: 15 });
+assert.deepEqual((await db2.table('appSettings').get('report-settings:local')).value, { versao: 1, arroba_divisor: 15 }, 'chave report-settings:local');
+assert.equal(await db2.table('auditoria').where('entidade').equals('appSettings').count(), 6, 'troca do divisor auditada');
+await db2.table('appSettings').put({ key: 'report-settings:local', value: { versao: 1, arroba_divisor: 7 } });
+assert.equal((await appConfig.getReportSettings('local')).arroba_divisor, 30, 'divisor inválido gravado volta ao padrão 30');
 
 // Migração da chave antiga 'config:<empresa>' (rev. 1): uma vez, sem sobrescrever grupos novos, e removida.
 await deleteDbForTests();
