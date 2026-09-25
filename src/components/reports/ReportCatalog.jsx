@@ -54,6 +54,14 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
   const [pendingDelete, setPendingDelete] = useState(null);
   const reports = useMemo(() => listReports(actor), [actor]);
   const byId = useMemo(() => new Map(reports.map((report) => [report.id, report])), [reports]);
+  // Modelos, favoritos e recentes de relatórios que saíram da lista na 1.4.0 (aba Controle,
+  // cadastros) continuam aparecendo para abrir e desmarcar/excluir — são do usuário e não podem
+  // ficar inalcançáveis. A lista "Todos" continua só com os 12.
+  const offCatalogById = useMemo(() => new Map(["maintenance", "hidden"]
+    .flatMap((visibility) => listReports(actor, { visibility }))
+    .filter((report) => report.available)
+    .map((report) => [report.id, report])), [actor]);
+  const anyReport = (reportId) => byId.get(reportId) ?? offCatalogById.get(reportId);
 
   useEffect(() => {
     getFavorites(actor).then(setFavorites).catch(() => setFavorites([]));
@@ -113,11 +121,11 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
   const favoriteCards = favorites
     .filter((key) => {
       const { reportId, presetId } = parseFavoriteKey(key);
-      const report = byId.get(reportId);
+      const report = anyReport(reportId);
       if (!report?.available) return false;
       return matches(report, presetId ? getLegacyAlias(presetId)?.title ?? "" : "");
     })
-    .map((key) => (key.includes("#") ? presetCard(key) : card(byId.get(key))))
+    .map((key) => (key.includes("#") ? presetCard(key) : card(anyReport(key))))
     .filter(Boolean);
 
   const families = (list) => FAMILY_ORDER
@@ -146,11 +154,12 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
   } else if (tab === "favoritos") {
     content = favoriteCards.length ? <ul className="rpt-card-list">{favoriteCards}</ul> : <p className="rpt-empty">Nenhum favorito ainda. Use a estrela para marcar.</p>;
   } else if (tab === "meus") {
-    const list = templates.filter((template) => byId.has(template.baseReportId) && (!term || normalizeText(template.name).includes(term)));
+    const baseOf = (template) => anyReport(template.baseReportId);
+    const list = templates.filter((template) => baseOf(template) && (!term || normalizeText(template.name).includes(term)));
     content = list.length ? (
       <ul className="rpt-card-list">
         {list.map((template) => {
-          const base = byId.get(template.baseReportId);
+          const base = baseOf(template);
           const canDelete = template.scope === "PERSONAL" ? template.ownerUserId === actor.id : can("reports.templates.share");
           return (
             <li key={template.id} className="rpt-card">
@@ -162,6 +171,7 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
                   {template.groups?.length ? <span>{template.groups.length} nível(is) de agrupamento</span> : null}
                   {template.mode ? <span className="rpt-badge">{template.mode === "RESUMIDO" ? "Resumido" : "Detalhado"}</span> : null}
                   {template.migratedFrom ? <span className="rpt-badge">Convertido na 1.4.0</span> : null}
+                  {!byId.has(template.baseReportId) ? <span className="rpt-badge">{base.visibility === "maintenance" ? "Relatório da aba Controle" : "Relatório fora da lista"}</span> : null}
                 </span>
               </button>
               {canDelete && pendingDelete !== template.id ? (
@@ -183,11 +193,11 @@ export default function ReportCatalog({ actor, onOpen, refreshKey = 0 }) {
       </ul>
     ) : <p className="rpt-empty">Nenhum modelo salvo. Abra um relatório e use “Salvar modelo”.</p>;
   } else {
-    const list = recents.filter((item) => byId.get(item.reportId)?.available);
+    const list = recents.filter((item) => anyReport(item.reportId)?.available);
     content = list.length ? (
       <ul className="rpt-card-list">
         {list.map((item) => {
-          const report = byId.get(item.reportId);
+          const report = anyReport(item.reportId);
           const template = item.templateId ? templates.find((candidate) => candidate.id === item.templateId) : null;
           const preset = !template && item.presetId ? getLegacyAlias(item.presetId) : null;
           const title = template ? `${template.name} (${report.title})` : preset ? `${preset.title} (${report.title})` : report.title;

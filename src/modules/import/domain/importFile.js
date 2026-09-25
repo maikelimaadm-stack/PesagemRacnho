@@ -12,8 +12,9 @@ const stripBom = (text) => (text.startsWith(BOM) ? text.slice(1) : text);
 const DELIMITER_ALIASES = Object.freeze({ ';': ';', ',': ',', '\t': '\t', tab: '\t', TAB: '\t' });
 
 // O CSV canônico (csvExporter.protectFormula) prefixa com apóstrofo o texto iniciado por
-// =, +, @ ou - não numérico; na leitura o apóstrofo sai e o valor volta ao original.
-const unprotectFormula = (value) => (/^'[=+@-]/.test(value) && !/^'-\d/.test(value) ? value.slice(1) : value);
+// =, +, @ ou - que não seja número negativo; na leitura o apóstrofo sai e o valor volta ao original.
+// Espelho exato da regra do exportador (1.4.0: "-1+1" também é protegido).
+const unprotectFormula = (value) => (/^'[=+@]/.test(value) || (/^'-/.test(value) && !/^'-\d+(?:[.,]\d+)?$/.test(value)) ? value.slice(1) : value);
 
 /** Texto canônico para o hash: sem BOM, quebras como LF e sem linhas vazias no fim. */
 export function normalizeImportText(text) {

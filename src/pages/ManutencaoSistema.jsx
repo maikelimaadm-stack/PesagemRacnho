@@ -22,8 +22,10 @@ import { createPageUrl } from "@/utils";
 
 // Abas (E1 1.4.0): "Sistema" = banco, backup, migração e diagnóstico (como antes); "Controle" =
 // relatórios de conferência que saíram do catálogo de Relatórios, abertos na mesma tela de relatório.
+// "Sistema" são os próprios cartões da grade da página (sem painel envolvente): a aba não aponta
+// aria-controls para um id que não existe.
 const MANUTENCAO_ABAS = [
-  { id: "sistema", label: "Sistema" },
+  { id: "sistema", label: "Sistema", panelId: null },
   { id: "controle", label: "Controle" },
 ];
 
@@ -783,23 +785,29 @@ export default function ManutencaoSistema() {
   const aba = query.get("aba") === "controle" ? "controle" : "sistema";
   const base = createPageUrl("ManutencaoSistema");
   const report = aba === "controle" && query.get("r") ? resolveReportId(query.get("r")) : null;
-  if (report?.definition && actor) {
-    return (
-      <ReportView
-        key={report.definition.id}
-        reportId={report.definition.id}
-        actor={actor}
-        backLabel="Manutenção"
-        onBack={() => navigate(`${base}?aba=controle`)}
-      />
-    );
-  }
+  const reportOpen = Boolean(report?.definition && actor);
+  // O painel continua montado (só escondido) enquanto o relatório está aberto: voltar não refaz a
+  // verificação de integridade nem perde simulação/diagnóstico em andamento.
   return (
-    <ManutencaoSistemaPainel
-      aba={aba}
-      actor={actor}
-      onAba={(id) => navigate(id === "controle" ? `${base}?aba=controle` : base)}
-      onOpenReport={(id) => navigate(`${base}?aba=controle&r=${encodeURIComponent(id)}`)}
-    />
+    <>
+      <div style={{ display: reportOpen ? "none" : "contents" }}>
+        <ManutencaoSistemaPainel
+          aba={aba}
+          actor={actor}
+          onAba={(id) => navigate(id === "controle" ? `${base}?aba=controle` : base)}
+          onOpenReport={(id) => navigate(`${base}?aba=controle&r=${encodeURIComponent(id)}`)}
+        />
+      </div>
+      {reportOpen ? (
+        <ReportView
+          key={report.definition.id}
+          reportId={report.definition.id}
+          actor={actor}
+          backLabel="Manutenção"
+          allowPreferences={false}
+          onBack={() => navigate(`${base}?aba=controle`)}
+        />
+      ) : null}
+    </>
   );
 }

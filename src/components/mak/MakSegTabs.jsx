@@ -1,6 +1,7 @@
 // Abas na estrutura oficial do ModeloBase1 (mg-panel-tabs-strip → mg-panel-tabs-rail → seg-control
 // com seg-tab-slider) — a mesma de SanidadeTabs e dos painéis dos cadastros mestres, sem nome de
-// tela. Setas esquerda/direita trocam de aba (padrão tablist).
+// tela. Setas esquerda/direita trocam de aba (padrão tablist). `panelId: null` numa aba omite
+// aria-controls (conteúdo sem painel próprio); sem panelId, aponta para `<idPrefix>-panel-<id>`.
 import { useLayoutEffect, useRef } from 'react';
 
 export default function MakSegTabs({ tabs, activeTab, onChange, idPrefix, label, className = '' }) {
@@ -40,7 +41,7 @@ export default function MakSegTabs({ tabs, activeTab, onChange, idPrefix, label,
                   type="button"
                   role="tab"
                   aria-selected={active}
-                  aria-controls={`${idPrefix}-panel-${tab.id}`}
+                  aria-controls={tab.panelId === null ? undefined : tab.panelId ?? `${idPrefix}-panel-${tab.id}`}
                   tabIndex={active ? 0 : -1}
                   className={`seg-tab${active ? ' active' : ''}`}
                   onClick={() => onChange(tab.id)}

@@ -5,7 +5,7 @@
 //
 // Toda operação valida permissão aqui (não só na tela). O mesmo view model é a população
 // única: exportadores não voltam ao banco nem refazem conta.
-import { applyFilters, serializeFilters } from '../domain/filterEngine.js';
+import { applyFilters, isFilterActive, serializeFilters } from '../domain/filterEngine.js';
 import { sortRows } from '../domain/sortEngine.js';
 import { groupRows, MAX_GROUP_LEVELS, NONE_GROUP_KEY, NONE_GROUP_LABEL } from '../domain/groupEngine.js';
 import { aggregateSpecId, assertAggregateSpec, computeAggregates } from '../domain/reportAggregates.js';
@@ -16,7 +16,7 @@ import { assertCanRunReport, canRunReport, canSeeColumn, forbiddenColumnIds } fr
 import { SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC, buildSummaryRows } from '../domain/summaryLayout.js';
 import { forbiddenError } from '../../auth/domain/permissionService.js';
 import { listReportDefinitions, resolveReportId } from '../definitions/reportCatalog.js';
-import { aliasSelection } from '../definitions/legacyAliases.js';
+import { aliasSelection, getLegacyAlias } from '../definitions/legacyAliases.js';
 import { getReportSource } from '../infrastructure/reportSources/index.js';
 import { APP_VERSION, DATA_BUILD_ID, DB_SCHEMA_VERSION } from '../../../versioning/versionInfo.js';
 
@@ -65,6 +65,20 @@ function mergeAliasSelection(alias, selection = {}, params = {}) {
   for (const key of ['columns', 'groups', 'filters', 'sort', 'aggregates', 'mode']) {
     if (merged[key] === undefined && preset[key] !== undefined) merged[key] = preset[key];
   }
+  // A chamada trouxe filtros próprios: as condições que eram do relatório antigo (motivo = Morte,
+  // ganho < 0, parâmetro de dias…) continuam valendo — como filtro comum se a coluna está livre,
+  // como condição fixa se a chamada também filtra aquela coluna (as duas valem, como na 1.3.x).
+  if (selection.filters !== undefined) {
+    const filters = { ...selection.filters };
+    const fixedFilters = { ...(selection.fixedFilters ?? {}) };
+    for (const id of alias.fixed ?? []) {
+      if (!preset.filters[id]) continue;
+      if (isFilterActive(filters[id])) fixedFilters[id] = preset.filters[id];
+      else filters[id] = preset.filters[id];
+    }
+    merged.filters = filters;
+    if (Object.keys(fixedFilters).length) merged.fixedFilters = fixedFilters;
+  }
   return merged;
 }
 
@@ -112,6 +126,16 @@ export function resolveSelection(definition, selection = {}, role) {
     return canSeeColumn(resolve(spec.columnId).column, role);
   });
 
+  // Condições fixas de um modelo convertido na 1.4.0 (a condição do relatório antigo numa coluna em
+  // que o modelo também filtrava): aplicadas como as `lockedFilters` da definição. Nunca são
+  // removidas por perfil — tirar uma condição ampliaria a população.
+  const fixedFilters = serializeFilters(selection.fixedFilters ?? {});
+  for (const id of Object.keys(fixedFilters)) {
+    const accessor = resolve(id);
+    if (!accessor) throw new Error(`relatório ${definition.id}: condição fixa em coluna desconhecida (${id})`);
+    if (!canSeeColumn(accessor.column, role)) throw forbiddenError(role, 'commercial.values');
+  }
+
   const searchColumnIds = definition.searchColumns.filter((id) => canSeeColumn(resolve(id).column, role));
 
   // Modo: RESUMIDO | DETALHADO (padrão da definição — Resumido quando nasce agrupada).
@@ -134,7 +158,7 @@ export function resolveSelection(definition, selection = {}, role) {
     const known = key === SUMMARY_LABEL_SORT || key === SUMMARY_ROWS_METRIC || aggregates.some((spec) => aggregateSpecId(spec) === key);
     if (known) summarySort = { key, direction: selection.summarySort.direction === 'desc' ? 'desc' : 'asc' };
   }
-  return { resolve, columns, filters, search: String(selection.search ?? '').trim(), searchColumnIds, sort, groups, aggregates, warnings, hiddenByPermission, mode, drill, summarySort };
+  return { resolve, columns, filters, fixedFilters, search: String(selection.search ?? '').trim(), searchColumnIds, sort, groups, aggregates, warnings, hiddenByPermission, mode, drill, summarySort };
 }
 
 function applyDrill(rows, drill, resolve) {
@@ -176,6 +200,8 @@ function publicColumn(accessor) {
     decimals: column.decimals, sensitive: column.sensitive, source: column.source, groupable: column.groupable,
     aggregations: column.aggregations, defaultWidth: column.defaultWidth, options: column.options ?? null,
     description: column.description ?? null,
+    // Só o id da coluna de peso da média ponderada (rótulo "Preço médio da @" no Resumido).
+    weightedBy: typeof column.weightedBy === 'string' ? column.weightedBy : null,
   };
 }
 
@@ -194,12 +220,18 @@ export async function runReport(definitionOrId, request = {}, actor) {
   const definition = resolved?.definition ?? null;
   if (!definition) throw new Error(`relatório desconhecido (${definitionOrId})`);
   assertCanRunReport(definition, role);
+  const requestedPreset = !resolved.aliasId && request.presetId ? getLegacyAlias(request.presetId) : null;
+  const preset = resolved.aliasId
+    ? { id: resolved.aliasId, alias: resolved.alias }
+    : requestedPreset?.id === definition.id ? { id: request.presetId, alias: requestedPreset } : { id: null, alias: null };
   const startedAt = now();
   const today = request.today || localToday();
   const params = resolveParams(definition, request.params, today);
   const selection = resolveSelection(definition, mergeAliasSelection(resolved.alias, request.selection, request.params), role);
-  // Condição fixa do relatório (ex.: ganho < 0 em "perdendo peso"): sempre aplicada, sempre exibida.
-  const lockedFilters = definition.lockedFilters ? serializeFilters(definition.lockedFilters(params)) : {};
+  // Condição fixa do relatório (ex.: motivo = Venda em "Vendas do período"): sempre aplicada, sempre
+  // exibida. Mais as condições fixas de um modelo convertido (o catálogo garante que um relatório
+  // com visões antigas de condição fixa não tem lockedFilters próprias, então as chaves não colidem).
+  const lockedFilters = { ...(definition.lockedFilters ? serializeFilters(definition.lockedFilters(params)) : {}), ...selection.fixedFilters };
   const source = getReportSource(definition.source);
   const empresaId = request.empresaId ?? 'local';
   const sourceKey = JSON.stringify([definition.id, definition.version, empresaId, today, params, role]);
@@ -240,9 +272,10 @@ export async function runReport(definitionOrId, request = {}, actor) {
     reportId: definition.id,
     reportName: definition.title,
     reportDefinitionVersion: definition.version,
-    // Aberto por id antigo consolidado (favorito/modelo/link de antes da 1.4.0).
-    presetId: resolved.aliasId,
-    presetTitle: resolved.alias?.title ?? null,
+    // Aberto por id antigo consolidado (favorito/modelo/link de antes da 1.4.0). A tela chama com o id
+    // novo e a seleção já aplicada, e informa a visão em `request.presetId` só para rastreabilidade.
+    presetId: preset.id,
+    presetTitle: preset.alias?.title ?? null,
     family: definition.family,
     grain: definition.grain,
     grainLabel: GRAIN_LABELS[definition.grain],

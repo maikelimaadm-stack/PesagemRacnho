@@ -99,8 +99,21 @@ for (const row of telaResumo.rows) {
 }
 assert.equal((resumoDoc.html.match(/<tr class="sum lvl/g) || []).length, vmResumo.summaryRows.length);
 assert.equal(resumoDoc.manifest.mode, 'RESUMIDO', 'manifesto da impressão registra o modo');
-const muitasMetricas = decideSummaryPrintLayout({ groupHeaders: ['a', 'b', 'c'], metrics: Array.from({ length: 10 }, () => ({})) });
+// Larguras pelo conteúdo (rótulos, cabeçalhos e números já formatados): 3 níveis + 10 métricas não
+// cabem em retrato → paisagem; 3 níveis + 20 métricas não cabem nem em paisagem → aviso (nunca corta).
+const syntheticSummary = (metricCount) => {
+  const groupHeaders = ['Apartação', 'Lote', 'Sexo'];
+  const metricHeaders = Array.from({ length: metricCount }, (_, index) => `Peso inicial médio ${index} (kg)`);
+  const row = ['Engorda', 'Lote 01', 'Macho', ...metricHeaders.map(() => '12.345,67')];
+  return { headers: [...groupHeaders, ...metricHeaders], groupHeaders, metrics: metricHeaders.map((label) => ({ label })), rows: [{ cells: row }, { cells: ['Total geral', '', '', ...metricHeaders.map(() => '123.456,78')] }] };
+};
+const muitasMetricas = decideSummaryPrintLayout(syntheticSummary(10));
 assert.equal(muitasMetricas.orientation, 'landscape', 'Resumido largo demais vai para paisagem (nunca corta coluna)');
+assert.equal(muitasMetricas.fits, true);
+const largoDemais = decideSummaryPrintLayout(syntheticSummary(20));
+assert.equal(largoDemais.fits, false, 'nem paisagem: não cabe');
+assert.equal(largoDemais.warning?.code, 'PRINT_TOO_WIDE', 'aviso "muitas colunas" em vez de cortar');
+assert.ok(!/text-overflow:\s*ellipsis/.test(resumoDoc.html), 'Resumido impresso nunca corta texto com reticências');
 
 await resetDb();
 console.log(JSON.stringify({ gate: 'reports:print-contract:verify', ok: true, stats, summaryStats: resumoDoc.stats, htmlBytes: html.length }, null, 2));

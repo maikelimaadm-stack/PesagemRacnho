@@ -14,7 +14,7 @@ import {
 } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { aliasSelection } from '../src/modules/reporting/definitions/legacyAliases.js';
 import {
-  PREFERENCES_MIGRATION_ORIGIN, favoriteKey, getFavorites, getRecents, listTemplates, migrateReportPreferences, parseFavoriteKey, templateToRequest,
+  PREFERENCES_MIGRATION_ORIGIN, favoriteKey, getFavorites, getRecents, listTemplates, migrateReportPreferences, parseFavoriteKey, saveTemplate, templateToRequest,
 } from '../src/modules/reporting/application/reportTemplateService.js';
 
 const plain = (value) => JSON.parse(JSON.stringify(value));
@@ -105,17 +105,18 @@ const favorites = await getFavorites(GESTOR);
 assert.deepEqual(favorites, ['rebanho.atual#rebanho.dimensao.raca', 'pesagens#pesagens.periodo', 'comercial.vendas', 'rebanho.atual#rebanho.inventario'], 'favoritos: id novo + visão do antigo');
 assert.deepEqual((await dexie.table('appSettings').get(`report-favorites:local:${GESTOR.id}`)).value, favorites, 'favoritos reescritos no banco');
 const recents = await getRecents(GESTOR);
-assert.deepEqual(recents.map((item) => [item.reportId, item.presetId, item.templateId]), [['saidas', 'saidas.mortes.causa', null], ['desempenho', 'desempenho.individual', 't-individual']], 'recentes reescritos');
+// Recente de modelo não leva presetId (o modelo convertido já tem a seleção): reabrir não duplica.
+assert.deepEqual(recents.map((item) => [item.reportId, item.presetId, item.templateId]), [['saidas', 'saidas.mortes.causa', null], ['desempenho', null, 't-individual']], 'recentes reescritos');
 const stored = (await dexie.table('appSettings').get('report-templates:local')).value.templates;
 assert.ok(stored.every((template) => !isLegacyReportId(template.baseReportId) && getReportDefinition(template.baseReportId)), 'nenhum modelo órfão / com id antigo');
 const mortes = stored.find((t) => t.id === 't-mortes');
 assert.equal(mortes.baseReportId, 'saidas');
 assert.equal(mortes.migratedFrom, 'saidas.mortes.causa');
-assert.deepEqual(mortes.filters.motivo_saida, { operator: 'in', values: ['Morte'] }, 'condição fixa "só mortes" acrescentada ao modelo');
+assert.deepEqual(mortes.filters.motivo_saida, { operator: 'in', values: ['Morte'], match: 'code' }, 'condição fixa "só mortes" acrescentada ao modelo (comparada pelo código, como era)');
 assert.deepEqual(mortes.columns, ['data_pesagem', 'numero_animal', 'causa_morte'], 'o que o modelo guardava prevalece');
 assert.equal(mortes.mode, 'RESUMIDO', 'modelo agrupado migra para Resumido');
 const semPesagem = stored.find((t) => t.id === 't-sem-pesagem');
-assert.deepEqual(semPesagem.filters.dias_sem_pesagem, { operator: 'greater', value: '60' }, 'parâmetro 60 dias vira filtro > 60');
+assert.deepEqual(semPesagem.filters.dias_sem_pesagem, { operator: 'greater', value: '60', match: 'code' }, 'parâmetro 60 dias vira filtro > 60');
 assert.equal(semPesagem.params.dias_sem_pesagem, undefined, 'parâmetro extinto removido');
 assert.equal(stored.find((t) => t.id === 't-individual').mode, 'DETALHADO', 'modelo sem grupo migra para Detalhado');
 assert.equal(stored.find((t) => t.id === 't-vendas').migratedFrom, undefined, 'modelo de relatório que continua existindo não muda');
@@ -139,11 +140,84 @@ for (const template of await listTemplates(GESTOR)) {
 // Modelo antigo que ainda não passou pela migração também abre (conversão na hora)
 const naHora = templateToRequest(legacyTemplates[0], 'GESTOR');
 assert.equal(naHora.reportId, 'saidas');
-assert.deepEqual(naHora.selection.filters.motivo_saida, { operator: 'in', values: ['Morte'] });
+assert.deepEqual(naHora.selection.filters.motivo_saida, { operator: 'in', values: ['Morte'], match: 'code' });
 
 // Outro usuário: as preferências dele migram quando ele abre
 await put(`report-favorites:local:${OPERADOR.id}`, ['desempenho.lote']);
 assert.deepEqual(await getFavorites(OPERADOR), ['desempenho#desempenho.lote']);
+
+// ---- 4b. Casos de conversão apontados na revisão da E1 ----
+const legacy = (id, name, baseReportId, extra = {}) => ({
+  version: 1, id, name, baseReportId, baseReportVersion: 1, scope: 'PERSONAL', ownerUserId: GESTOR.id, ownerName: GESTOR.nome,
+  columns: [], filters: {}, groups: [], aggregates: [{ id: 'registros', op: 'count' }], sort: [], period: null, params: {}, search: '', widths: {}, orientation: 'auto',
+  createdAt: '2026-09-01T00:00:00.000Z', updatedAt: '2026-09-01T00:00:00.000Z', updatedBy: GESTOR.id, ...extra,
+});
+const reviewTemplates = [
+  // Filtro do próprio modelo na coluna da condição fixa: as duas valem, como na 1.3.x.
+  legacy('t-so-saidas', 'Só saídas', 'movimentacao.entradas-saidas', { filters: { tipo_manejo: { operator: 'in', value: '', valueTo: '', values: ['Saída'] } }, period: P.periodo }),
+  legacy('t-100-dias', 'Mais de 100 dias', 'rebanho.sem-pesagem-recente', { params: { dias_sem_pesagem: 4 }, filters: { dias_sem_pesagem: { operator: 'greater', value: '100', valueTo: '', values: [] } } }),
+  // Modelo salvo sem nenhum total continua sem totais.
+  legacy('t-sem-totais', 'Sessões sem totais', 'pesagens.sessao', { groups: [{ columnId: 'sessao', direction: 'asc' }], aggregates: [], period: P.periodo }),
+  // Dois "Machos" em relatórios que viraram um só.
+  legacy('t-machos-raca', 'Machos', 'rebanho.dimensao.raca', { groups: [{ columnId: 'raca', direction: 'asc' }] }),
+  legacy('t-machos-sexo', 'Machos', 'rebanho.dimensao.sexo', { groups: [{ columnId: 'sexo', direction: 'asc' }] }),
+];
+await put('report-templates:local', { version: 1, templates: reviewTemplates });
+await put(`report-favorites:local:${GESTOR.id}`, ['saidas.mortes', 'rebanho.dimensao.lote']);
+await put(`report-recents:local:${GESTOR.id}`, [{ reportId: 'pesagens.origem', templateId: null, at: '2026-09-10T10:00:00.000Z' }]);
+const auditBeforeReview = (await dexie.table('auditoria').toArray()).filter((row) => row.origem === PREFERENCES_MIGRATION_ORIGIN).length;
+// As telas leem favoritos, recentes e modelos EM PARALELO: uma auditoria por item, não 2–3.
+await Promise.all([getFavorites(GESTOR), getRecents(GESTOR), listTemplates(GESTOR), getFavorites(GESTOR)]);
+const reviewAudits = (await dexie.table('auditoria').toArray()).filter((row) => row.origem === PREFERENCES_MIGRATION_ORIGIN).slice(auditBeforeReview);
+assert.equal(reviewAudits.length, reviewTemplates.length + 2 + 1, `chamadas simultâneas: exatamente uma auditoria por item (${reviewAudits.length})`);
+assert.equal(new Set(reviewAudits.map((row) => row.resumo)).size, reviewAudits.length, 'nenhuma auditoria repetida');
+assert.ok(reviewAudits.some((row) => row.resumo.includes('“Só saídas”')), 'auditoria do modelo diz qual modelo mudou');
+
+const reviewed = new Map((await dexie.table('appSettings').get('report-templates:local')).value.templates.map((template) => [template.id, template]));
+const soSaidas = reviewed.get('t-so-saidas');
+assert.deepEqual(soSaidas.filters.tipo_manejo.values, ['Saída'], 'filtro do modelo mantido');
+assert.deepEqual(soSaidas.fixedFilters?.tipo_manejo?.values, ['Cadastro', 'Saída'], 'condição fixa preservada à parte (as duas valem)');
+const openTemplate = async (template) => {
+  const request = templateToRequest(template, GESTOR.role);
+  return runReport(request.reportId, { today: TODAY, params: request.params, selection: request.selection }, GESTOR);
+};
+const soSaidasVm = await openTemplate(soSaidas);
+const soSaidasEsperado = await run('pesagens', { selection: { groups: [], filters: { tipo_manejo: { operator: 'in', values: ['Saída'] } } } });
+assert.deepEqual(soSaidasVm.rows.map((row) => row.id).sort(), soSaidasEsperado.rows.map((row) => row.id).sort(), 'modelo "Só saídas" = só as saídas (não volta a mostrar os cadastros)');
+assert.ok(soSaidasVm.rows.length > 0, 'massa com saídas no período');
+assert.deepEqual(soSaidasVm.lockedFilters.tipo_manejo.values, ['Cadastro', 'Saída'], 'condição fixa exibida com cadeado');
+const cemDias = reviewed.get('t-100-dias');
+assert.deepEqual(cemDias.filters.dias_sem_pesagem, { operator: 'greater', value: '100', valueTo: '', values: [] }, 'filtro do modelo (> 100) mantido');
+assert.deepEqual(cemDias.fixedFilters?.dias_sem_pesagem, { operator: 'greater', value: '4' }, 'parâmetro antigo (> 4) vira condição fixa');
+assert.deepEqual((await openTemplate(cemDias)).rows.map((row) => row.animal_id), [], 'modelo "> 100 dias" continua vazio (1.3.x: > 4 E > 100)');
+const semTotais = reviewed.get('t-sem-totais');
+assert.deepEqual(semTotais.aggregates, [], 'modelo sem totais continua sem totais');
+assert.equal((await openTemplate(semTotais)).aggregates.length, 0, 'abre sem totais');
+const machos = [reviewed.get('t-machos-raca'), reviewed.get('t-machos-sexo')];
+assert.deepEqual(machos.map((template) => template.name), ['Machos', 'Machos (Rebanho por sexo)'], 'nome repetido ganha a visão antiga entre parênteses');
+assert.equal(machos[1].renamedFrom, 'Machos');
+for (const template of machos) {
+  const saved = await saveTemplate({ ...template, id: template.id }, GESTOR);
+  assert.equal(saved.name, template.name, `modelo "${template.name}" pode ser salvo por cima`);
+}
+// Regravar o modelo convertido mantém a condição fixa.
+const resaved = await saveTemplate({ ...soSaidas }, GESTOR);
+assert.deepEqual(resaved.fixedFilters?.tipo_manejo?.values, ['Cadastro', 'Saída'], 'salvar de novo não perde a condição fixa');
+// Id antigo pelo serviço com filtros próprios: a condição do relatório antigo continua valendo.
+const mortesComFiltro = await run('saidas.mortes', { selection: { filters: { sexo: { operator: 'in', values: ['Macho', 'Fêmea'], match: 'label' } } } });
+assert.ok(mortesComFiltro.rows.every((row) => row.motivo_saida === 'Morte'), 'saidas.mortes + filtro de sexo continua só com mortes');
+const cemPeloServico = await run('rebanho.sem-pesagem-recente', { params: { dias_sem_pesagem: 4 }, selection: { filters: { dias_sem_pesagem: { operator: 'greater', value: '100' } } } });
+assert.deepEqual(cemPeloServico.rows, [], 'id antigo + filtro na coluna da condição: as duas valem (> 4 E > 100)');
+assert.deepEqual(cemPeloServico.lockedFilters.dias_sem_pesagem, { operator: 'greater', value: '4', valueTo: '', values: [] }, 'condição exibida como fixa');
+// Condição herdada comparada pelo código (match 'code'), nunca pelo rótulo normalizado da tela.
+const { applyFilters } = await import('../src/modules/reporting/domain/filterEngine.js');
+const legacyRows = [{ id: 'r1', code: 'Morte', label: 'Morte' }, { id: 'r2', code: 'MORTE', label: 'Morte' }];
+const accessor = { filterType: 'enum', displayOf: (row) => row.label, filterValueOf: (row) => row.code, valueOf: (row) => row.code };
+assert.deepEqual(applyFilters(legacyRows, { filters: { motivo: { operator: 'in', values: ['Morte'], match: 'code' } } }, () => accessor).map((row) => row.id), ['r1'], 'match code: só o código exato (como o relatório antigo)');
+assert.deepEqual(applyFilters(legacyRows, { filters: { motivo: { operator: 'in', values: ['Morte'], match: 'label' } } }, () => accessor).map((row) => row.id), ['r1', 'r2'], 'match label: pelo rótulo exibido');
+
+// O catálogo recusa alias com condição fixa apontando para relatório com lockedFilters (mapa por coluna).
+for (const [id, entry] of Object.entries(LEGACY_REPORT_ALIASES)) if (entry.fixed.length) assert.ok(!getReportDefinition(entry.id).lockedFilters, `${id}: destino sem lockedFilters`);
 
 // ---- 5. Aceite 6: favorito antigo "Rebanho por raça" abre agrupado por raça ----
 const { reportId, presetId } = parseFavoriteKey('rebanho.atual#rebanho.dimensao.raca');

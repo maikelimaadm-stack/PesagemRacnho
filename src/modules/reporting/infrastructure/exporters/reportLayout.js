@@ -5,7 +5,8 @@
 import { aggregateLabel, aggregateValueColumn } from '../../domain/aggregateLabels.js';
 import { REPORT_MODES } from '../../domain/reportDefinition.js';
 import { formatCell, headerLabel } from '../../domain/reportFormatting.js';
-import { buildSummaryLayout } from '../../domain/summaryLayout.js';
+import { NONE_GROUP_KEY } from '../../domain/groupEngine.js';
+import { buildSummaryLayout, formatGroupLabel } from '../../domain/summaryLayout.js';
 
 export { aggregateLabel, aggregateValueColumn };
 
@@ -27,12 +28,17 @@ export function isSummaryMode(viewModel) {
  * @returns {{ mode, headers: string[], lines: { type, level, group, metric?, value?, cells: any[], row? }[], summary? }}
  */
 export function buildReportLines(viewModel, target) {
+  // Rótulos de grupo de data e sim/não no formato do destino (dd/mm/aaaa, Sim/Não).
+  const allColumns = viewModel.availableColumns ?? viewModel.columns ?? [];
+  const columnOf = (columnId) => allColumns.find((column) => column.id === columnId) ?? null;
+  const partLabel = (part) => formatGroupLabel(columnOf(part.columnId), part.label, target, part.key === NONE_GROUP_KEY);
+  const pathText = (path) => path.map(partLabel).join(' > ');
   if (isSummaryMode(viewModel)) {
     const summary = buildSummaryLayout(viewModel, target);
     const lines = summary.rows.map((row) => ({
       type: row.type,
       level: row.level,
-      group: row.node ? row.node.path.map((part) => part.label).join(' > ') : '',
+      group: row.node ? pathText(row.node.path) : '',
       label: row.label,
       rowCount: row.node ? row.node.rowCount : viewModel.rowCount,
       cells: row.cells,
@@ -70,8 +76,9 @@ export function buildReportLines(viewModel, target) {
 
   if (viewModel.tree.length) {
     const walk = (node) => {
-      const group = node.path.map((part) => part.label).join(' > ');
-      lines.push({ type: LINE_TYPES.GROUP, level: node.level, group, label: `${node.columnLabel}: ${node.label}`, rowCount: node.rowCount, cells: columns.map(() => (target === 'xlsx' ? null : '')) });
+      const group = pathText(node.path);
+      const label = formatGroupLabel(columnOf(node.columnId), node.label, target, node.missing);
+      lines.push({ type: LINE_TYPES.GROUP, level: node.level, group, label: `${node.columnLabel}: ${label}`, rowCount: node.rowCount, cells: columns.map(() => (target === 'xlsx' ? null : '')) });
       if (node.children.length) node.children.forEach(walk);
       else node.rows.forEach((row) => lines.push(dataLine(row, node.level, group)));
       lines.push(...totalLines(LINE_TYPES.SUBTOTAL, node.aggregates, node.level, group));

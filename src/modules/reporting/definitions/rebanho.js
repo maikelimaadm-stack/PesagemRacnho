@@ -42,7 +42,9 @@ export const REBANHO_ATUAL = defineReport({
     { id: 'peso_medio', columnId: 'ultimo_peso_kg', op: 'avg' },
     { id: 'peso_total', columnId: 'ultimo_peso_kg', op: 'sum' },
   ],
-  quickGroups: ['lote_atual', 'apartacao_atual', 'categoria', 'raca', 'marca', 'sexo', 'faixa_peso', 'situacao'],
+  // Sem "situação": o relatório abre só com ativos, então agrupar por situação daria uma linha "Ativo".
+  // O antigo "Rebanho por situação" (favorito/link) continua abrindo sem esse filtro.
+  quickGroups: ['lote_atual', 'apartacao_atual', 'categoria', 'raca', 'marca', 'sexo', 'faixa_peso'],
   quickFilters: [
     { id: 'sem-pesagem-30', label: 'Sem pesagem há mais de 30 dias', filters: { dias_sem_pesagem: { operator: 'greater', value: '30' } } },
   ],

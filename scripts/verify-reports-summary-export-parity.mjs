@@ -77,11 +77,13 @@ for (const testCase of cases) {
 
   // CSV
   const csv = parseCsv((await prepareEmission(vm, 'csv', ADMIN)).content).filter((row) => row.length > 1);
-  assert.deepEqual(csv[0], ['tipo_linha', 'nivel', ...screen.headers], `${testCase.name}: cabeçalho CSV = tela`);
+  assert.deepEqual(csv[0], ['tipo_linha', 'nivel', 'grupo', ...screen.headers], `${testCase.name}: cabeçalho CSV = tela`);
   const csvBody = csv.slice(1);
   assert.deepEqual(csvBody.map((row) => row[0]), screen.rows.map((row) => row.type), `${testCase.name}: tipos de linha CSV`);
   assert.deepEqual(csvBody.map((row) => Number(row[1])), screen.rows.map((row) => row.level), `${testCase.name}: níveis CSV`);
-  assert.deepEqual(normalizeRows(csvBody.map((row) => row.slice(2)), groupCount, metrics, (cell) => readNumber(cell)), expected, `${testCase.name}: CSV = tela`);
+  // "grupo" = caminho completo: a linha de nível 2/3 leva o pai (a hierarquia sobrevive a ordenar no Excel).
+  assert.deepEqual(csvBody.map((row) => row[2]), screen.rows.map((row) => (row.node ? row.node.path.map((part) => part.label).join(' > ') : '')), `${testCase.name}: caminho do grupo no CSV`);
+  assert.deepEqual(normalizeRows(csvBody.map((row) => row.slice(3)), groupCount, metrics, (cell) => readNumber(cell)), expected, `${testCase.name}: CSV = tela`);
 
   // XLSX (7 linhas de topo: título, 4 metadados, branco, cabeçalho)
   const xlsx = xlsxRows((await prepareEmission(vm, 'xlsx', ADMIN)).content);
@@ -106,6 +108,44 @@ for (const testCase of cases) {
 
   results.push({ caso: testCase.name, linhas: expected.length, colunas: screen.headers.length });
 }
+
+// Rótulo de grupo de data e de sim/não no formato brasileiro em tela, impressão, CSV e XLSX (JSON canônico).
+const byDate = await runReport('pesagens', { today: TODAY, params: P, selection: { mode: 'RESUMIDO', groups: [{ columnId: 'data_pesagem' }] } }, ADMIN);
+const dateLabels = buildSummaryLayout(byDate, 'screen').rows.filter((row) => row.node && !row.node.missing).map((row) => row.label);
+assert.ok(dateLabels.length > 0 && dateLabels.every((label) => /^\d{2}\/\d{2}\/\d{4}$/.test(label)), `data agrupada em dd/mm/aaaa: ${dateLabels.join(', ')}`);
+assert.ok(buildSummaryLayout(byDate, 'csv').rows.filter((row) => row.node && !row.node.missing).every((row) => /^\d{2}\/\d{2}\/\d{4}$/.test(row.label)), 'CSV: data em dd/mm/aaaa');
+assert.ok(buildSummaryLayout(byDate, 'json').rows.filter((row) => row.node && !row.node.missing).every((row) => /^\d{4}-\d{2}-\d{2}/.test(row.label)), 'JSON: data canônica');
+const byBool = await runReport('movimentacao.lotes', { today: TODAY, params: P, selection: { mode: 'RESUMIDO', groups: [{ columnId: 'mudanca' }] } }, ADMIN);
+const boolLabels = buildSummaryLayout(byBool, 'print').rows.filter((row) => row.node && !row.node.missing).map((row) => row.label);
+assert.ok(boolLabels.length > 0 && boolLabels.every((label) => ['Sim', 'Não'].includes(label)), `sim/não por extenso: ${boolLabels.join(', ')}`);
+
+// Média de coluna inteira (dias no lote) mantém a fração em tela, CSV e XLSX.
+const stays = await runReport('movimentacao.lotes', { today: TODAY, params: P, selection: { mode: 'RESUMIDO', aggregates: [{ id: 'dias_medio', op: 'avg', columnId: 'dias_no_lote' }] } }, ADMIN);
+const staysLayout = buildSummaryLayout(stays, 'xlsx');
+const rawAvg = staysLayout.rows.map((row) => row.rawValues[0]).filter((value) => typeof value === 'number' && !Number.isInteger(value));
+assert.ok(rawAvg.length > 0, 'massa com média de dias fracionária');
+for (const row of staysLayout.rows) {
+  if (typeof row.rawValues[0] === 'number') assert.equal(row.cells.at(-1), roundTo(row.rawValues[0], 1), 'XLSX grava a média com 1 casa (não o inteiro arredondado)');
+}
+
+// CSV: texto que o Excel leria como fórmula ganha apóstrofo; número negativo não; a importação desfaz.
+const { protectFormula } = await import('../src/modules/reporting/infrastructure/exporters/csvExporter.js');
+for (const hostile of ['-1+1', "-2+3+cmd|' /C calc'!A0", '=1+1', '+5', '@SUM(1)', '-A1']) assert.equal(protectFormula(hostile), `'${hostile}`, `fórmula protegida: ${hostile}`);
+for (const number of ['-12', '-1,5', '-1234,56', '-0.5', '12']) assert.equal(protectFormula(number), number, `número sem apóstrofo: ${number}`);
+const { readImportFile } = await import('../src/modules/import/domain/importFile.js');
+const reimported = readImportFile(`marca;peso;obs\r\n${protectFormula('-1+1')};${protectFormula('-12')};${protectFormula('=HYPERLINK(1)')}\r\n`, { delimiter: ';' });
+assert.deepEqual(reimported.rows[0].values, { marca: '-1+1', peso: '-12', obs: '=HYPERLINK(1)' }, 'importação desfaz o apóstrofo (ida e volta)');
+
+// Impressão do Resumido: nada é cortado com "…" e a largura estimada cobre o maior rótulo/número.
+const perf = await runReport('desempenho', { today: TODAY, params: P, selection: { mode: 'RESUMIDO', groups: [{ columnId: 'apartacao' }, { columnId: 'lote' }] } }, ADMIN);
+const perfPrint = preparePrint(perf, ADMIN, {});
+assert.ok(!/text-overflow:\s*ellipsis/.test(perfPrint.html), 'impressão do Resumido sem reticências');
+assert.ok(/table\.summary th \{ white-space: normal/.test(perfPrint.html), 'cabeçalho das métricas quebra entre palavras');
+const { summaryColumnWidths } = await import('../src/modules/reporting/infrastructure/exporters/printDocument.js');
+const longLayout = buildSummaryLayout(perf, 'print');
+const longWidths = summaryColumnWidths({ ...longLayout, rows: [...longLayout.rows, { cells: ['Pasto Norte Grande - Piquete A', ...longLayout.rows[0].cells.slice(1)] }] });
+assert.ok(longWidths[0] >= 150, 'rótulo longo alarga a coluna (até o máximo; acima disso quebra linha)');
+assert.ok(longWidths.slice(longLayout.groupHeaders.length).every((width) => width >= 44), 'métricas com largura mínima');
 
 // Negativo: um layout adulterado é detectado pela comparação.
 const vm = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: { mode: 'RESUMIDO' } }, ADMIN);

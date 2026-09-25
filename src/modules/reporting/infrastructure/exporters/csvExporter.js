@@ -6,8 +6,9 @@
 //   GROUP       → cabeçalho do grupo em "grupo";
 //   SUBTOTAL    → uma linha por total do grupo (metrica + valor);
 //   GRAND_TOTAL → uma linha por total geral.
-// Estrutura RESUMIDO (E1): tipo_linha;nivel;<um por nível de agrupamento>;<uma por métrica>
-//   SUMMARY     → uma linha por grupo (mesmas células da tela);
+// Estrutura RESUMIDO (E1): tipo_linha;nivel;grupo;<um por nível de agrupamento>;<uma por métrica>
+//   SUMMARY     → uma linha por grupo (mesmas células da tela); "grupo" = caminho "Engorda > Lote 01",
+//                 para a hierarquia sobreviver a ordenar/filtrar no Excel;
 //   GRAND_TOTAL → Total geral.
 import { buildReportLines } from './reportLayout.js';
 
@@ -15,10 +16,14 @@ export const CSV_BOM = '\uFEFF';
 export const CSV_SEPARATOR = ';';
 export const CSV_NEWLINE = '\r\n';
 
-/** Mitiga injeção de fórmula ao abrir no Excel: texto iniciado por =, +, @ ou - (não numérico) ganha apóstrofo. */
+/**
+ * Mitiga injeção de fórmula ao abrir no Excel: texto iniciado por =, +, @ ou - ganha apóstrofo.
+ * Só número negativo de verdade ("-12", "-1,5", "-1234,56") passa sem apóstrofo — "-1+1" ou
+ * "-2+3+cmd|…" (texto livre de marca, lote, comprador…) são fórmula para o Excel.
+ */
 export function protectFormula(value) {
   const text = String(value ?? '');
-  return /^[=+@]/.test(text) || (/^-/.test(text) && !/^-\d/.test(text)) ? `'${text}` : text;
+  return /^[=+@]/.test(text) || (/^-/.test(text) && !/^-\d+(?:[.,]\d+)?$/.test(text)) ? `'${text}` : text;
 }
 
 /** Escapa uma célula: aspas se tiver separador, aspas, quebra de linha ou espaço nas bordas. */
@@ -31,8 +36,8 @@ export function csvCell(value) {
 export function buildCsv(viewModel) {
   const { mode, headers, lines } = buildReportLines(viewModel, 'csv');
   if (mode === 'RESUMIDO') {
-    const out = [['tipo_linha', 'nivel', ...headers].map(csvCell).join(CSV_SEPARATOR)];
-    for (const line of lines) out.push([line.type, line.level, ...line.cells].map(csvCell).join(CSV_SEPARATOR));
+    const out = [['tipo_linha', 'nivel', 'grupo', ...headers].map(csvCell).join(CSV_SEPARATOR)];
+    for (const line of lines) out.push([line.type, line.level, line.group, ...line.cells].map(csvCell).join(CSV_SEPARATOR));
     return CSV_BOM + out.join(CSV_NEWLINE) + CSV_NEWLINE;
   }
   const out = [['tipo_linha', 'nivel', 'grupo', 'metrica', 'valor', ...headers].map(csvCell).join(CSV_SEPARATOR)];

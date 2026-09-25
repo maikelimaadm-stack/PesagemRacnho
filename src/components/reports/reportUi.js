@@ -59,7 +59,8 @@ export function toServiceFilters(uiFilters, columns) {
   for (const [columnId, filter] of Object.entries(uiFilters || {})) {
     if (!isFilterActive(filter)) continue;
     const column = columns.find((item) => item.id === columnId);
-    out[columnId] = column && ["entity", "enum"].includes(column.type) && typeof filter === "object" ? { ...filter, match: "label" } : filter;
+    // match "code": condição herdada de um relatório antigo, comparada pelo código como era.
+    out[columnId] = column && ["entity", "enum"].includes(column.type) && typeof filter === "object" && filter.match !== "code" ? { ...filter, match: "label" } : filter;
   }
   return out;
 }

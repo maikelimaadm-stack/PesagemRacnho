@@ -64,6 +64,12 @@ assert.ok(ctlGestor.has('controle.auditoria') && !ctlOperador.has('controle.audi
 assert.ok(!ctlOperador.has('controle.backups') && !ctlConsulta.has('controle.backups') && ctlGestor.has('controle.backups'), 'backups: maintenance.backup');
 assert.ok(!listReports(ADMIN).some((r) => r.status === 'blocked'), 'bloqueados não aparecem mais no catálogo');
 assert.ok(![...admin].some((id) => id.startsWith('cadastros.')), 'cadastros.* fora do catálogo');
+// Usuários continua só ADMIN (oculto não é liberado: abre por link/modelo, e o serviço barra).
+const ocultos = (actor) => visible(actor, 'hidden');
+assert.ok(ocultos(ADMIN).has('cadastros.usuarios') && !ocultos(GESTOR).has('cadastros.usuarios') && !ocultos(OPERADOR).has('cadastros.usuarios') && !ocultos(CONSULTA).has('cadastros.usuarios'), 'usuários só ADMIN');
+for (const actor of [GESTOR, OPERADOR, CONSULTA]) {
+  await assert.rejects(() => runReport('cadastros.usuarios', { today: TODAY }, actor), (error) => error.code === 'AUTH_FORBIDDEN', `NEGATIVO: ${actor.role} não abre Usuários (nem por link)`);
+}
 
 // ---- Resultados conferidos à mão ----
 await seedReportFixture();

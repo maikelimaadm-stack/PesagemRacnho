@@ -10,18 +10,38 @@ export const PRINT_LIMITS = Object.freeze({
   PORTRAIT_MAX_COLUMNS: 8,
   PORTRAIT_MAX_WIDTH: 1000, // soma das larguras (px de tela) que cabe em A4 retrato a 8,5 pt
   LANDSCAPE_MAX_WIDTH: 1520, // idem A4 paisagem
-  // Resumido (E1): colunas de métrica são números curtos — até 11 colunas cabem em retrato.
-  SUMMARY_PORTRAIT_MAX_COLUMNS: 11,
-  SUMMARY_GROUP_WIDTH: 150,
-  SUMMARY_METRIC_WIDTH: 84,
+  // Resumido (E1): larguras estimadas pelo conteúdo, em px impressos (96 dpi) a 8,5 pt. Área útil do
+  // A4 com as margens do documento (10 mm de cada lado): 190 mm em retrato, 277 mm em paisagem.
+  SUMMARY_PORTRAIT_WIDTH_PX: 718,
+  SUMMARY_LANDSCAPE_WIDTH_PX: 1047,
+  SUMMARY_CELL_PADDING_PX: 11, // 1,4 mm de cada lado
+  SUMMARY_LABEL_MIN_PX: 60,
+  SUMMARY_LABEL_MAX_PX: 200, // rótulo maior quebra linha (nunca é cortado)
+  SUMMARY_METRIC_MIN_PX: 44,
 });
 
-/** Larguras (px de tela) das colunas do Resumido: níveis de grupo + métricas. */
+// Largura média de caractere (px) em Arial: 8,5 pt ≈ 11,3 px; negrito e algarismos ≈ 0,55 em.
+const CHAR_PX = Object.freeze({ label: 6.2, number: 6.4, header: 6.0 });
+const longestWord = (text) => String(text ?? '').split(/\s+/).reduce((max, word) => Math.max(max, word.length), 0);
+const textLength = (text) => String(text ?? '').length;
+
+/**
+ * Larguras (px impressos) das colunas do Resumido pelo conteúdo: rótulo de grupo (quebra acima do
+ * máximo), métrica = maior entre a palavra mais longa do cabeçalho (o cabeçalho quebra entre
+ * palavras) e o maior número já formatado (número nunca quebra nem é cortado).
+ */
 export function summaryColumnWidths(summary) {
-  return [
-    ...summary.groupHeaders.map(() => PRINT_LIMITS.SUMMARY_GROUP_WIDTH),
-    ...summary.metrics.map(() => PRINT_LIMITS.SUMMARY_METRIC_WIDTH),
-  ];
+  const pad = PRINT_LIMITS.SUMMARY_CELL_PADDING_PX;
+  const groupCount = summary.groupHeaders.length;
+  return summary.headers.map((header, index) => {
+    const cells = summary.rows.map((row) => row.cells[index]);
+    if (index < groupCount) {
+      const widest = Math.max(longestWord(header) * CHAR_PX.header, ...cells.map((cell) => textLength(cell) * CHAR_PX.label));
+      return Math.round(Math.min(PRINT_LIMITS.SUMMARY_LABEL_MAX_PX, Math.max(PRINT_LIMITS.SUMMARY_LABEL_MIN_PX, widest + pad)));
+    }
+    const widest = Math.max(longestWord(header) * CHAR_PX.header, ...cells.map((cell) => textLength(cell) * CHAR_PX.number));
+    return Math.round(Math.max(PRINT_LIMITS.SUMMARY_METRIC_MIN_PX, widest + pad));
+  });
 }
 
 /** Orientação do Resumido: retrato sempre que couber (E1 §1.8: "Resumido cabe em A4 retrato"). */
@@ -29,8 +49,8 @@ export function decideSummaryPrintLayout(summary, { orientation = 'auto' } = {})
   const widths = summaryColumnWidths(summary);
   const totalWidth = widths.reduce((sum, width) => sum + width, 0);
   const count = widths.length;
-  const fitsPortrait = count <= PRINT_LIMITS.SUMMARY_PORTRAIT_MAX_COLUMNS && totalWidth <= PRINT_LIMITS.PORTRAIT_MAX_WIDTH;
-  const fitsLandscape = totalWidth <= PRINT_LIMITS.LANDSCAPE_MAX_WIDTH;
+  const fitsPortrait = totalWidth <= PRINT_LIMITS.SUMMARY_PORTRAIT_WIDTH_PX;
+  const fitsLandscape = totalWidth <= PRINT_LIMITS.SUMMARY_LANDSCAPE_WIDTH_PX;
   const chosen = orientation === 'auto' ? (fitsPortrait ? 'portrait' : 'landscape') : orientation;
   const fits = chosen === 'portrait' ? fitsPortrait : fitsLandscape;
   return {
@@ -227,7 +247,9 @@ tr.grand .tl { text-transform: uppercase; letter-spacing: .04em; }
 .chip i { font-style: normal; color: #555; }
 .notes { margin: 2mm 0 0; padding-left: 4mm; font-size: 7pt; color: #444; }
 .doc-end { margin-top: 3mm; font-size: 7pt; color: #555; }
-table.summary td { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+table.summary th { white-space: normal; overflow-wrap: normal; word-break: normal; vertical-align: bottom; }
+table.summary td.lbl { white-space: normal; overflow-wrap: anywhere; }
+table.summary td.num { white-space: nowrap; }
 tr.sum:nth-child(even) td { background: #fafbfc; }
 tr.sum.lvl1 td { font-weight: 700; border-top: .5pt solid #b7c2cc; }
 tr.sum.lvl2 td.own { padding-left: 4mm; }

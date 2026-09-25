@@ -82,6 +82,18 @@ export function summaryMetrics(viewModel) {
   return viewModel.aggregates.map((spec, index) => ({ key: spec.id, spec, label: labels[index], column: aggregateValueColumn(spec, columns) }));
 }
 
+const FORMATTED_LABEL_TYPES = new Set(['date', 'datetime', 'boolean']);
+
+/**
+ * Rótulo de grupo no formato do destino: data vira dd/mm/aaaa e sim/não vira "Sim"/"Não" (a chave
+ * ISO continua sendo a da ordenação). JSON leva o rótulo canônico.
+ * @param column coluna do nível (availableColumns) ou null
+ */
+export function formatGroupLabel(column, label, target, missing = false) {
+  if (missing || target === 'json' || !column || !FORMATTED_LABEL_TYPES.has(column.type)) return label;
+  return formatCell(column, label, target) ?? label;
+}
+
 /**
  * Layout do Resumido para um destino.
  * @param viewModel resultado de runReport (qualquer modo; usa summaryRows, ou monta a partir da árvore)
@@ -95,17 +107,22 @@ export function buildSummaryLayout(viewModel, target = 'screen') {
   const blank = target === 'xlsx' || target === 'json' ? null : '';
   const nodes = viewModel.summaryRows ?? buildSummaryRows(viewModel.tree, { summarySort: viewModel.summarySort });
   const format = (metric, value) => formatCell(metric.column, value ?? null, target);
-  const rows = nodes.map((node) => ({
-    type: SUMMARY_LINE_TYPES.SUMMARY,
-    level: node.level,
-    node,
-    label: node.label,
-    cells: [
-      ...groupHeaders.map((_, index) => (index === node.level - 1 ? node.label : blank)),
-      ...metrics.map((metric) => format(metric, metricValue(node, metric.key))),
-    ],
-    rawValues: metrics.map((metric) => metricValue(node, metric.key)),
-  }));
+  const columns = viewModel.availableColumns ?? viewModel.columns ?? [];
+  const levelColumns = levels.map((level) => columns.find((column) => column.id === level.columnId) ?? null);
+  const rows = nodes.map((node) => {
+    const label = formatGroupLabel(levelColumns[node.level - 1], node.label, target, node.missing);
+    return {
+      type: SUMMARY_LINE_TYPES.SUMMARY,
+      level: node.level,
+      node,
+      label,
+      cells: [
+        ...groupHeaders.map((_, index) => (index === node.level - 1 ? label : blank)),
+        ...metrics.map((metric) => format(metric, metricValue(node, metric.key))),
+      ],
+      rawValues: metrics.map((metric) => metricValue(node, metric.key)),
+    };
+  });
   const totalsNode = { rowCount: viewModel.rowCount, aggregates: viewModel.totals };
   rows.push({
     type: SUMMARY_LINE_TYPES.GRAND_TOTAL,

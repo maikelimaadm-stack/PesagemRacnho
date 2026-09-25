@@ -11,9 +11,11 @@ import MakFilterPill from "@/components/mak/MakFilterPill";
 import MakFilterRail from "@/components/mak/MakFilterRail";
 import MgTablePanelStrip from "@/components/mak/MgTablePanelStrip";
 import { ModeloBase1PageContainer, ModeloBase1PageHeader } from "@/components/modelobase1";
-import { describeFilter, isFilterActive } from "@/modules/reporting/domain/filterEngine";
+import { describeFilter, isFilterActive, normalizeFilter } from "@/modules/reporting/domain/filterEngine";
 import { PERIOD_PRESETS, describePeriod } from "@/modules/reporting/domain/reportPeriod";
 import { REPORT_FAMILIES, REPORT_MODES } from "@/modules/reporting/domain/reportDefinition";
+import { formatGroupLabel } from "@/modules/reporting/domain/summaryLayout";
+import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { aliasSelection, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
@@ -37,6 +39,7 @@ function initialState(definition, template, preset, role) {
     return {
       params: request.params,
       uiFilters: request.selection.filters,
+      fixedFilters: request.selection.fixedFilters,
       columns: request.selection.columns.length ? request.selection.columns : definition.defaultColumns,
       groups: request.selection.groups,
       aggregates: request.selection.aggregates,
@@ -52,9 +55,15 @@ function initialState(definition, template, preset, role) {
   for (const param of definition.params) if (param.default != null) params[param.id] = param.default;
   // Visão de um relatório antigo (favorito, recente ou link de antes da 1.4.0): mesma seleção.
   const legacy = preset ? aliasSelection(preset) : null;
+  // Condições que eram fixas no relatório antigo comparavam o código (motivo = Morte, tipo
+  // Cadastro/Saída): continuam por código, não pelo rótulo exibido — mesma população do relatório antigo.
+  const legacyFilters = legacy
+    ? Object.fromEntries(Object.entries(legacy.filters).map(([columnId, filter]) => [columnId, preset.fixed.includes(columnId) ? { ...filter, match: "code" } : filter]))
+    : null;
   return {
     params,
-    uiFilters: legacy?.filters ?? definition.defaultFilters ?? {},
+    uiFilters: legacyFilters ?? definition.defaultFilters ?? {},
+    fixedFilters: {},
     columns: legacy?.columns ?? definition.defaultColumns,
     groups: legacy?.groups ?? definition.defaultGroups,
     aggregates: legacy?.aggregates ?? definition.defaultAggregates,
@@ -67,9 +76,21 @@ function initialState(definition, template, preset, role) {
   };
 }
 
-const sameFilter = (left, right) => JSON.stringify({ ...left, match: undefined }) === JSON.stringify({ ...right, match: undefined });
+// Filtro rápido "ligado": compara a forma normalizada (modelo salvo e pílula guardam valueTo/values
+// vazios e match, o atalho não).
+const sameFilter = (left, right) => {
+  const plain = (filter) => {
+    const { match: _match, ...rest } = normalizeFilter(filter);
+    return JSON.stringify(rest);
+  };
+  return plain(left) === plain(right);
+};
 
-export default function ReportView({ reportId, presetId = null, template, actor, onBack, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null }) {
+/**
+ * @param allowPreferences false quando aberto fora de Relatórios (aba Controle da Manutenção): sem
+ *   estrela, sem "Salvar modelo" e sem recente — só Relatórios lista favoritos, modelos e recentes.
+ */
+export default function ReportView({ reportId, presetId = null, template, actor, onBack, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true }) {
   const can = useCan();
   const definition = getReportDefinition(reportId);
   const preset = presetId ? getLegacyAlias(presetId) : null;
@@ -92,9 +113,10 @@ export default function ReportView({ reportId, presetId = null, template, actor,
   const favKey = favoriteKey(definition.id, preset ? presetId : null);
 
   useEffect(() => {
+    if (!allowPreferences) return;
     recordRecent(definition.id, actor, { templateId: template?.id ?? null, presetId: preset ? presetId : null }).catch(() => {});
     getFavorites(actor).then((keys) => setFavorite(keys.includes(favKey))).catch(() => {});
-  }, [definition.id, template?.id, presetId, preset, favKey, actor]);
+  }, [definition.id, template?.id, presetId, preset, favKey, actor, allowPreferences]);
 
   const serviceFilters = useMemo(() => toServiceFilters(state.uiFilters, definition.columns), [state.uiFilters, definition]);
 
@@ -108,10 +130,12 @@ export default function ReportView({ reportId, presetId = null, template, actor,
       const result = await runReport(definition.id, {
         params: state.params,
         selection: {
-          columns: state.columns, filters: serviceFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort, search: state.search,
+          columns: state.columns, filters: serviceFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort, search: state.search,
           mode: state.mode, summarySort: state.summarySort, drill: state.drill,
         },
         reuse: reload ? null : lastViewModel.current,
+        // Visão antiga (favorito/link de antes da 1.4.0): vai para o manifesto das emissões.
+        presetId: preset && !template ? presetId : null,
       }, actor);
       if (seq !== runSeq.current) return;
       lastViewModel.current = result;
@@ -122,7 +146,7 @@ export default function ReportView({ reportId, presetId = null, template, actor,
     } finally {
       if (seq === runSeq.current) setLoading(false);
     }
-  }, [definition.id, state, serviceFilters, actor]);
+  }, [definition.id, state, serviceFilters, actor, preset, presetId, template]);
 
   useEffect(() => {
     const timer = setTimeout(() => execute(), 200);
@@ -143,9 +167,12 @@ export default function ReportView({ reportId, presetId = null, template, actor,
     // mostra o id técnico enquanto carrega.
     const source = available.length ? available : definition.columns.filter((column) => canSeeColumn(column, actor.role));
     const groupable = source.filter((column) => column.groupable);
-    const preferred = (definition.quickGroups ?? []).map((id) => groupable.find((column) => column.id === id)).filter(Boolean);
-    return preferred.length ? preferred : groupable.slice(0, 8);
+    // O agrupamento padrão do relatório está sempre entre as opções (ex.: Sessão no Fechamento do dia).
+    const quick = definition.quickGroups?.length ? definition.quickGroups : groupable.slice(0, 8).map((column) => column.id);
+    const ids = [...new Set([...(definition.defaultGroups ?? []).map((group) => group.columnId), ...quick])];
+    return ids.map((id) => groupable.find((column) => column.id === id)).filter(Boolean);
   }, [available, definition, actor.role]);
+  const columnLabel = (columnId) => (available.find((column) => column.id === columnId) ?? definition.columns.find((column) => column.id === columnId))?.label ?? columnId;
   const quickGroupValue = state.groups.length === 0 ? NO_GROUP
     : state.groups.length === 1 && quickGroupOptions.some((column) => column.id === state.groups[0].columnId) ? state.groups[0].columnId : CUSTOM_GROUP;
   const setGroups = (groups) => update({ groups, drill: [] });
@@ -174,7 +201,7 @@ export default function ReportView({ reportId, presetId = null, template, actor,
   // Clique num grupo do Resumido: Detalhado só daquele grupo (recorte exato pela chave do grupo).
   const onDrill = (node) => update({
     mode: REPORT_MODES.DETALHADO,
-    drill: node.path.map((part) => ({ columnId: part.columnId, key: part.key, label: part.label })),
+    drill: node.path.map((part) => ({ columnId: part.columnId, key: part.key, label: formatGroupLabel(definition.columns.find((column) => column.id === part.columnId), part.label, "screen", part.key === NONE_GROUP_KEY) })),
   });
 
   const exportAs = async (format) => {
@@ -205,15 +232,17 @@ export default function ReportView({ reportId, presetId = null, template, actor,
   const saveAsTemplate = async ({ id, name, scope }) => {
     setSavingTemplate(true);
     try {
+      // O detalhe de um grupo é passageiro: o modelo guarda a visão de onde ele saiu (o Resumido).
+      const drilling = state.drill.length > 0;
       const saved = await saveTemplate({
         id, name, scope, baseReportId: definition.id,
-        columns: state.columns, filters: state.uiFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort,
+        columns: state.columns, filters: state.uiFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort,
         search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)), widths: state.widths,
-        orientation, mode: state.mode, summarySort: state.summarySort,
+        orientation, mode: drilling ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
       }, actor);
       setCurrentTemplate(saved);
       setDialog(null);
-      toast.success(`Modelo “${saved.name}” salvo (${saved.scope === "SHARED" ? "compartilhado" : "pessoal"}).`);
+      toast.success(`Modelo “${saved.name}” salvo (${saved.scope === "SHARED" ? "compartilhado" : "pessoal"}).`, drilling ? { description: "O detalhe do grupo não fica no modelo: ele abre no Resumido." } : undefined);
       onTemplateSaved?.(saved);
     } catch (err) {
       toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode salvar este modelo." : err.message);
@@ -255,9 +284,11 @@ export default function ReportView({ reportId, presetId = null, template, actor,
               <span>{REPORT_FAMILIES[definition.family]}</span> › <strong>{definition.title}</strong>
               {currentTemplate ? <em> · modelo “{currentTemplate.name}”</em> : preset ? <em> · visão “{preset.title}”</em> : null}
             </span>
-            <button type="button" className={`rpt-star${favorite ? " is-on" : ""}`} aria-pressed={favorite} title={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"} aria-label={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"} onClick={async () => setFavorite((await toggleFavorite(favKey, actor)).includes(favKey))}>
-              <Star className="h-4 w-4" aria-hidden="true" />
-            </button>
+            {allowPreferences ? (
+              <button type="button" className={`rpt-star${favorite ? " is-on" : ""}`} aria-pressed={favorite} title={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"} aria-label={favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"} onClick={async () => setFavorite((await toggleFavorite(favKey, actor)).includes(favKey))}>
+                <Star className="h-4 w-4" aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
           <div className="mg-action-bar__end rpt-toolbar__right">
             {periodParam ? (
@@ -292,7 +323,7 @@ export default function ReportView({ reportId, presetId = null, template, actor,
                 <SelectContent>
                   <SelectItem value={NO_GROUP}>Sem agrupamento</SelectItem>
                   {quickGroupOptions.map((column) => <SelectItem key={column.id} value={column.id}>{column.label}</SelectItem>)}
-                  <SelectItem value={CUSTOM_GROUP}>{quickGroupValue === CUSTOM_GROUP ? state.groups.map((group) => available.find((column) => column.id === group.columnId)?.label ?? group.columnId).join(" › ") : "Mais níveis…"}</SelectItem>
+                  <SelectItem value={CUSTOM_GROUP}>{quickGroupValue === CUSTOM_GROUP ? state.groups.map((group) => columnLabel(group.columnId)).join(" › ") : "Mais níveis…"}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -300,7 +331,7 @@ export default function ReportView({ reportId, presetId = null, template, actor,
             <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("totals")} title="Totais (métricas do Resumido e dos subtotais)" aria-label="Totais"><Sigma className="h-3.5 w-3.5" aria-hidden="true" /></button>
             {!summaryMode ? <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("columns")} title="Colunas" aria-label="Colunas"><Columns3 className="h-3.5 w-3.5" aria-hidden="true" /></button> : null}
             <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => execute({ reload: true })} title="Atualizar (reler os dados do banco)" aria-label="Atualizar"><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" /></button>
-            <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("save")} title="Salvar modelo" aria-label="Salvar modelo"><Save className="h-3.5 w-3.5" aria-hidden="true" /></button>
+            {allowPreferences ? <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("save")} title="Salvar modelo" aria-label="Salvar modelo"><Save className="h-3.5 w-3.5" aria-hidden="true" /></button> : null}
             {can("reports.export") ? <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" disabled={!viewModel || loading} onClick={() => emitDocument("print")} title="Imprimir (A4)" aria-label="Imprimir"><Printer className="h-3.5 w-3.5" aria-hidden="true" /></button> : null}
             {can("reports.export") ? (
               <DropdownMenu>

@@ -49,6 +49,9 @@ for (const definition of DEFINITIONS) {
 for (const [legacyId, entry] of Object.entries(LEGACY_REPORT_ALIASES)) {
   if (BY_ID.has(legacyId)) throw new Error(`catálogo: alias ${legacyId} colide com relatório existente`);
   if (!BY_ID.has(entry.id)) throw new Error(`catálogo: alias ${legacyId} aponta para relatório inexistente (${entry.id})`);
+  // Modelo convertido leva a condição fixa do alias para `fixedFilters`, somada às lockedFilters da
+  // definição num mapa por coluna: o relatório de destino não pode ter lockedFilters próprias.
+  if (entry.fixed.length && BY_ID.get(entry.id).lockedFilters) throw new Error(`catálogo: alias ${legacyId} com condição fixa aponta para relatório com lockedFilters (${entry.id})`);
 }
 
 /** Relatórios de uma área da interface (padrão: catálogo de Relatórios — os 12). */

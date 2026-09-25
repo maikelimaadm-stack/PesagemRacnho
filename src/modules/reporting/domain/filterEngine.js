@@ -8,7 +8,7 @@
 // - datas civis YYYY-MM-DD comparadas como texto (sem fuso), com between/not_between;
 // - filtros são objetos serializáveis { operator, value, valueTo, values, match? };
 //   match: 'label' (enum/entidade) compara o rótulo exibido — é o que a tela e os modelos salvos
-//   guardam; sem match, compara o código/id.
+//   guardam; sem match ou com match 'code', compara o código/id.
 // Função pura: o mesmo filtro produz a mesma população na tela, no relatório e na exportação.
 
 export const FILTER_OPERATORS = Object.freeze({
@@ -100,7 +100,7 @@ export function normalizeFilter(filter, filterType = 'text') {
       value: filter.value ?? '',
       valueTo: filter.valueTo ?? '',
       values: Array.isArray(filter.values) ? filter.values.map((item) => (item === null || item === undefined ? '' : String(item))) : [],
-      ...(filter.match === 'label' ? { match: 'label' } : {}),
+      ...(filter.match === 'label' || filter.match === 'code' ? { match: filter.match } : {}),
     };
   }
   return { operator: defaultOperatorFor(filterType), value: filter == null ? '' : String(filter), valueTo: '', values: [] };
@@ -293,7 +293,9 @@ export function serializeFilters(filters = {}) {
       value: source.value ?? '',
       valueTo: source.valueTo ?? '',
       values: Array.isArray(source.values) ? source.values.map((item) => (item === null || item === undefined ? '' : String(item))) : [],
-      ...(source.match === 'label' ? { match: 'label' } : {}),
+      // 'label' compara o rótulo exibido; 'code' fixa a comparação pelo código (condição herdada de
+      // relatório antigo) — a tela não troca por 'label' nem ao salvar o modelo.
+      ...(source.match === 'label' || source.match === 'code' ? { match: source.match } : {}),
     };
   }
   return out;

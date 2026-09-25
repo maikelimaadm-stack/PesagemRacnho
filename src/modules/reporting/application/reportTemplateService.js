@@ -17,7 +17,7 @@ import { aliasSelection, getLegacyAlias } from '../definitions/legacyAliases.js'
 import { REPORT_MODES, normalizeReportMode } from '../domain/reportDefinition.js';
 import { canRunReport, canSeeColumn } from '../domain/reportPermissions.js';
 import { MAX_GROUP_LEVELS } from '../domain/groupEngine.js';
-import { serializeFilters } from '../domain/filterEngine.js';
+import { isFilterActive, serializeFilters } from '../domain/filterEngine.js';
 import { PERIOD_PRESETS } from '../domain/reportPeriod.js';
 
 export const TEMPLATE_VERSION = 1;
@@ -77,6 +77,9 @@ function validFavoriteKey(key) {
  * Modelo salvo num relatório antigo → modelo do relatório novo com a seleção equivalente.
  * O que o modelo guardava prevalece; o que ele não guardava (condições fixas do relatório antigo,
  * colunas/ordem/totais padrão do antigo) vem do alias. Parâmetros extintos viram filtros.
+ * Condição fixa numa coluna em que o modelo já tinha filtro próprio: as DUAS valem, como na 1.3.x —
+ * o filtro do modelo fica em `filters` e a condição vai para `fixedFilters` (sempre aplicada, exibida
+ * com cadeado). Sem conflito, a condição vira filtro comum, como nas visões antigas.
  * @returns {object|null} modelo migrado, ou null se o id não é antigo.
  */
 export function migrateLegacyTemplate(template) {
@@ -84,7 +87,15 @@ export function migrateLegacyTemplate(template) {
   if (!alias) return null;
   const definition = getReportDefinition(alias.id);
   const preset = aliasSelection(alias, template.params || {});
-  const fixed = Object.fromEntries((alias.fixed || []).filter((id) => preset.filters[id]).map((id) => [id, preset.filters[id]]));
+  const own = template.filters || {};
+  const filters = { ...own };
+  const fixedFilters = { ...(template.fixedFilters || {}) };
+  for (const id of alias.fixed || []) {
+    if (!preset.filters[id]) continue;
+    if (isFilterActive(own[id])) fixedFilters[id] = preset.filters[id];
+    // Pelo código, como a condição do relatório antigo (a tela não troca por rótulo).
+    else filters[id] = { ...preset.filters[id], match: 'code' };
+  }
   const params = { ...(template.params || {}) };
   for (const param of Object.keys(alias.legacyParams || {})) delete params[param];
   const groups = Array.isArray(template.groups) ? template.groups : preset.groups;
@@ -93,15 +104,40 @@ export function migrateLegacyTemplate(template) {
     baseReportId: alias.id,
     baseReportVersion: definition.version,
     migratedFrom: template.baseReportId,
+    // Colunas e ordenação vazias já significavam "as do relatório" (o antigo = o alias).
     columns: template.columns?.length ? template.columns : (preset.columns ?? []),
-    filters: { ...(template.filters || {}), ...fixed },
+    filters,
+    ...(Object.keys(fixedFilters).length ? { fixedFilters } : {}),
     groups,
     sort: template.sort?.length ? template.sort : (preset.sort ?? []),
-    aggregates: template.aggregates?.length ? template.aggregates : (preset.aggregates ?? []),
+    // Totais vazios eram escolha do usuário (modelo sem totais): só herda do alias se o campo não existe.
+    aggregates: Array.isArray(template.aggregates) ? template.aggregates : (preset.aggregates ?? []),
     params,
     // O relatório antigo não tinha modo: agrupado abre Resumido, lista abre Detalhado.
     mode: template.mode ?? (groups.length ? REPORT_MODES.RESUMIDO : REPORT_MODES.DETALHADO),
   };
+}
+
+const templateNameKey = (template) => [template.baseReportId, template.scope, template.scope === TEMPLATE_SCOPES.SHARED ? '' : template.ownerUserId, String(template.name ?? '').toLowerCase()].join('|');
+
+/**
+ * Dois modelos de mesmo nome em relatórios antigos que viraram um só colidiriam no relatório novo
+ * (saveTemplate recusa nome repetido): o convertido ganha o nome da visão antiga entre parênteses.
+ */
+function renameCollisions(templates, migratedIds) {
+  const taken = new Set(templates.filter((template) => !migratedIds.has(template.id)).map(templateNameKey));
+  return templates.map((template) => {
+    if (!migratedIds.has(template.id)) return template;
+    let next = template;
+    if (taken.has(templateNameKey(next))) {
+      const suffix = ` (${getLegacyAlias(template.migratedFrom)?.title ?? template.migratedFrom})`;
+      let name = `${String(template.name).slice(0, Math.max(1, 80 - suffix.length))}${suffix}`;
+      for (let n = 2; taken.has(templateNameKey({ ...template, name })); n += 1) name = `${String(template.name).slice(0, Math.max(1, 80 - suffix.length - 4))}${suffix} ${n}`;
+      next = { ...template, name, renamedFrom: template.name };
+    }
+    taken.add(templateNameKey(next));
+    return next;
+  });
 }
 
 function migrateFavoriteList(list) {
@@ -125,7 +161,9 @@ function migrateRecentList(list) {
     const alias = getLegacyAlias(item?.reportId);
     if (!alias) return item;
     changes.push({ from: item.reportId, to: alias.id });
-    return { ...item, reportId: alias.id, presetId: item.presetId ?? item.reportId };
+    // Recente de modelo: o modelo convertido já leva a seleção da visão antiga (sem presetId, o
+    // mesmo modelo aberto de novo substitui esta entrada em vez de duplicá-la).
+    return { ...item, reportId: alias.id, presetId: item.templateId ? null : item.presetId ?? item.reportId };
   });
   return { list: out, changes };
 }
@@ -141,7 +179,7 @@ async function auditConsolidation(key, changes, actor, kind) {
       entidade_id: key,
       acao: 'ATUALIZAR',
       origem: PREFERENCES_MIGRATION_ORIGIN,
-      resumo: `Relatório consolidado: ${change.from} → ${change.to} (${kind}).`,
+      resumo: `Relatório consolidado: ${change.from} → ${change.to} (${kind}${change.detail ? ` ${change.detail}` : ''}).`,
       campos_alterados: ['reportId'],
       usuario_id: actor?.id ?? null,
       usuario_nome_snapshot: actor?.nome ?? null,
@@ -150,14 +188,28 @@ async function auditConsolidation(key, changes, actor, kind) {
   }
 }
 
+// Uma conversão por empresa+usuário de cada vez: as telas leem favoritos, recentes e modelos em
+// paralelo, e cada leitura converte — sem isto, cada item ganhava 2–3 auditorias iguais.
+const inFlightMigrations = new Map();
+
 /**
  * Reescreve favoritos/recentes do ator e os modelos da empresa que ainda citam relatórios antigos.
- * Idempotente (sem id antigo → nada grava). Falha de gravação (ex.: banco em somente leitura) não
- * impede a leitura: quem chama recebe as listas já convertidas em memória.
+ * Idempotente (sem id antigo → nada grava). Chamadas simultâneas compartilham a mesma execução.
+ * Falha de gravação (ex.: banco em somente leitura) não impede a leitura: quem chama recebe as
+ * listas já convertidas em memória.
  * @returns {Promise<{ favorites: string[], recents: object[], templates: object[], migrated: number }>}
  */
-export async function migrateReportPreferences(actor, { empresaId = 'local' } = {}) {
+export function migrateReportPreferences(actor, { empresaId = 'local' } = {}) {
   requireActor(actor);
+  const key = `${empresaId}|${actor.id}`;
+  const running = inFlightMigrations.get(key);
+  if (running) return running;
+  const promise = migrateReportPreferencesOnce(actor, empresaId).finally(() => inFlightMigrations.delete(key));
+  inFlightMigrations.set(key, promise);
+  return promise;
+}
+
+async function migrateReportPreferencesOnce(actor, empresaId) {
   const [storedTemplates, favorites, recents] = await Promise.all([
     readAppSetting(templatesKey(empresaId)),
     readAppSetting(favoritesKey(empresaId, actor.id)),
@@ -165,13 +217,19 @@ export async function migrateReportPreferences(actor, { empresaId = 'local' } = 
   ]);
   const templateStore = storedTemplates && typeof storedTemplates === 'object' && Array.isArray(storedTemplates.templates)
     ? storedTemplates : { version: TEMPLATE_VERSION, templates: [] };
-  const templateChanges = [];
-  const templates = templateStore.templates.map((template) => {
+  const migratedIds = new Set();
+  const converted = templateStore.templates.map((template) => {
     const migrated = migrateLegacyTemplate(template);
     if (!migrated) return template;
-    templateChanges.push({ from: template.baseReportId, to: migrated.baseReportId });
+    migratedIds.add(template.id);
     return migrated;
   });
+  const templates = renameCollisions(converted, migratedIds);
+  const templateChanges = templates.filter((template) => migratedIds.has(template.id)).map((template) => ({
+    from: template.migratedFrom,
+    to: template.baseReportId,
+    detail: `“${template.renamedFrom ?? template.name}”${template.renamedFrom ? `, agora “${template.name}”` : ''}`,
+  }));
   const fav = migrateFavoriteList(favorites);
   const rec = migrateRecentList(recents);
   const migrated = templateChanges.length + fav.changes.length + rec.changes.length;
@@ -236,11 +294,13 @@ export function normalizeTemplateConfig(definition, config = {}) {
   const unknown = (list) => list.filter((id) => !ids.has(id));
   const columns = Array.isArray(config.columns) ? config.columns.map(String) : [];
   const filters = serializeFilters(config.filters || {});
+  // Condições fixas herdadas de um modelo convertido na 1.4.0 (não editáveis na tela; regravadas como estão).
+  const fixedFilters = serializeFilters(config.fixedFilters || {});
   const groups = (config.groups || []).filter((group) => group?.columnId).map((group) => ({ columnId: String(group.columnId), direction: group.direction === 'desc' ? 'desc' : 'asc' }));
   const aggregates = (config.aggregates || []).map((spec) => ({ ...(spec.id ? { id: String(spec.id) } : {}), op: String(spec.op), ...(spec.columnId ? { columnId: String(spec.columnId) } : {}) }));
   const sort = (config.sort || []).filter((item) => item?.columnId).map((item) => ({ columnId: String(item.columnId), direction: item.direction === 'desc' ? 'desc' : 'asc' }));
   const bad = [
-    ...unknown(columns), ...unknown(Object.keys(filters)), ...unknown(groups.map((g) => g.columnId)),
+    ...unknown(columns), ...unknown(Object.keys(filters)), ...unknown(Object.keys(fixedFilters)), ...unknown(groups.map((g) => g.columnId)),
     ...unknown(sort.map((s) => s.columnId)), ...unknown(aggregates.filter((a) => a.columnId).map((a) => a.columnId)),
   ];
   if (bad.length) throw templateError(`Modelo com coluna inexistente no relatório: ${[...new Set(bad)].join(', ')}`);
@@ -268,7 +328,10 @@ export function normalizeTemplateConfig(definition, config = {}) {
   }
   const widths = {};
   for (const [id, width] of Object.entries(config.widths || {})) if (ids.has(id) && Number.isFinite(Number(width))) widths[id] = Math.max(60, Math.min(600, Number(width)));
-  return { columns, filters, groups, aggregates, sort, mode, summarySort, period, params, search: String(config.search ?? ''), widths, orientation: ['portrait', 'landscape', 'auto'].includes(config.orientation) ? config.orientation : 'auto' };
+  return {
+    columns, filters, ...(Object.keys(fixedFilters).length ? { fixedFilters } : {}), groups, aggregates, sort, mode, summarySort, period, params,
+    search: String(config.search ?? ''), widths, orientation: ['portrait', 'landscape', 'auto'].includes(config.orientation) ? config.orientation : 'auto',
+  };
 }
 
 /** Cria ou atualiza. PERSONAL: só o dono edita. SHARED: exige reports.templates.share. */
@@ -284,7 +347,7 @@ export async function saveTemplate(input, actor, { empresaId = 'local', now = ne
   if (scope === TEMPLATE_SCOPES.SHARED && !can(actor.role, 'reports.templates.share')) throw forbiddenError(actor.role, 'reports.templates.share');
   const config = normalizeTemplateConfig(definition, input);
   // Modelo não pode carregar colunas/filtros que o autor não vê.
-  const hidden = [...config.columns, ...Object.keys(config.filters), ...config.groups.map((g) => g.columnId)]
+  const hidden = [...config.columns, ...Object.keys(config.filters), ...Object.keys(config.fixedFilters ?? {}), ...config.groups.map((g) => g.columnId)]
     .filter((id) => !canSeeColumn(definition.columns.find((column) => column.id === id), actor.role));
   if (hidden.length) throw forbiddenError(actor.role, 'commercial.values');
 
@@ -338,7 +401,7 @@ export async function deleteTemplate(templateId, actor, { empresaId = 'local' } 
 /**
  * Modelo salvo → seleção para runReport. Revalida contra a definição ATUAL e o papel de quem
  * abre: colunas/filtros removidos ou sem permissão saem com aviso (nunca amplia permissão).
- * Modelo sem `mode` (anterior à 1.4.0) abre no modo padrão da definição.
+ * Modelo sem `mode` (anterior à 1.4.0) abre no modo padrão da definição (E1 §7).
  */
 export function templateToRequest(source, role) {
   const template = migrateLegacyTemplate(source) ?? source;
@@ -361,6 +424,8 @@ export function templateToRequest(source, role) {
     params: { ...(template.period ? { periodo: template.period } : {}), ...(template.params || {}) },
     selection: {
       columns, filters, groups, sort, aggregates, search: template.search || '',
+      // Condição fixa do relatório antigo (modelo convertido): nunca some, nem por perfil.
+      fixedFilters: { ...(template.fixedFilters || {}) },
       mode: normalizeReportMode(template.mode, definition.defaultMode),
       summarySort: template.summarySort ?? null,
     },
