@@ -115,6 +115,8 @@ for (const testCase of cases) {
     const cells = sheetRows.get(nodeId);
     metrics.forEach((metric, metricIndex) => {
       if (!(metric.key in cells)) {
+        // A contagem de linhas (Resumido sem totais) nunca some: é a única coluna da folha.
+        assert.notEqual(metric.key, '__rows__', `${testCase.name}: contagem de linhas (sem totais) presente na folha`);
         assert.ok(printed.document.hiddenColumns.some((column) => column.key === metric.key) || printed.document.columns.some((column) => column.kind === 'pair' && [column.from.key, column.to.key].includes(metric.key)), `${testCase.name}: métrica ${metric.key} só falta na folha se for coluna vazia (oculta) ou par "de–até"`);
         return;
       }

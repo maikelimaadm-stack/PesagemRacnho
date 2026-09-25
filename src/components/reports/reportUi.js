@@ -6,6 +6,7 @@ import { aggregateLabel, aggregateValueColumn, cellRawValue } from "@/modules/re
 import { isFilterActive } from "@/modules/reporting/domain/filterEngine";
 import { isLeafGroupLevel, leafOnlyMetricKeys } from "@/modules/reporting/domain/summaryLayout";
 import { rangeText } from "@/modules/reporting/domain/reportDocument";
+import { filtersForDisplay } from "@/modules/reporting/domain/reportViews";
 
 /** Ator da sessão para os serviços ({ id, nome, role }); null fora do AuthGate. */
 export function useReportActor() {
@@ -66,6 +67,9 @@ export function toServiceFilters(uiFilters, columns) {
   }
   return out;
 }
+
+/** Filtros em código → rótulo exibido (ver domain/reportViews.filtersForDisplay). */
+export const toDisplayFilters = filtersForDisplay;
 
 export function screenCell(viewModel, column, row) {
   return formatCell(column, cellRawValue(viewModel, column, row), "screen");

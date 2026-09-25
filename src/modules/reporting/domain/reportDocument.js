@@ -164,6 +164,9 @@ function summaryColumns(viewModel) {
 
 function metricIsEmpty(column, totals) {
   if (column.kind === 'label') return false;
+  // Sem totais configurados, a métrica é a contagem de linhas (rowCount do nó), que não mora em totals:
+  // nunca é "vazia" quando há linhas (buildReportDocument só chama isto com hasRows).
+  if (column.key === SUMMARY_ROWS_METRIC) return false;
   if (column.kind === 'pair') return isMissingValue(totals?.[column.from.key]?.value) && isMissingValue(totals?.[column.to.key]?.value);
   const value = totals?.[column.key]?.value ?? null;
   if (isMissingValue(value)) return true;

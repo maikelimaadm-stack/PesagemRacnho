@@ -498,7 +498,9 @@ export async function saveReportViewState(reportId, config, actor, { empresaId =
   const definition = getReportDefinition(reportId);
   if (!definition || resolveReportId(reportId)?.aliasId) throw templateError('Relatório inexistente');
   if (!canRunReport(definition, actor.role)) throw forbiddenError(actor.role, definition.requires.find((action) => !can(actor.role, action)) || 'reports.read');
-  const normalized = normalizeTemplateConfig(definition, config);
+  // Condição fixa (de modelo convertido ou visão antiga) é do modelo/visão, nunca do último estado: se
+  // entrasse aqui, o relatório comum reabriria travado numa condição que nenhum controle tira.
+  const { fixedFilters: _fixed, ...normalized } = normalizeTemplateConfig(definition, { ...config, fixedFilters: {} });
   const hidden = [...normalized.columns, ...Object.keys(normalized.filters), ...normalized.groups.map((group) => group.columnId)]
     .filter((id) => !canSeeColumn(definition.columns.find((column) => column.id === id), actor.role));
   if (hidden.length) throw forbiddenError(actor.role, 'commercial.values');
@@ -528,8 +530,11 @@ export async function getReportViewState(reportId, actor, { empresaId = 'local' 
   const state = stored?.reports?.[definition.id];
   if (!state || typeof state !== 'object') return null;
   try {
-    const request = templateToRequest({ ...state, baseReportId: definition.id }, actor.role);
-    return { ...request, showEmptyColumns: state.showEmptyColumns === true, updatedAt: state.updatedAt ?? null };
+    // Estado gravado por versão anterior pode trazer fixedFilters: descartado (ver saveReportViewState).
+    const { fixedFilters: _fixed, ...clean } = state;
+    const request = templateToRequest({ ...clean, baseReportId: definition.id }, actor.role);
+    const { fixedFilters: _requestFixed, ...selection } = request.selection;
+    return { ...request, selection, showEmptyColumns: state.showEmptyColumns === true, updatedAt: state.updatedAt ?? null };
   } catch {
     return null;
   }

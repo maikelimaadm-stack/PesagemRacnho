@@ -6,7 +6,7 @@ import { ADMIN, CONSULTA, GESTOR, OPERADOR, TODAY, resetDb, seedReportFixture } 
 import storage from '../src/storage/storageAdapter.js';
 import { STORE_NAMES } from '../src/storage/indexedDb/schema.js';
 import {
-  TEMPLATE_VERSION, deleteTemplate, getFavorites, getRecents, listTemplates, recordRecent, saveTemplate, templateToRequest, toggleFavorite,
+  TEMPLATE_VERSION, deleteTemplate, getFavorites, getRecents, getReportViewState, listTemplates, recordRecent, saveReportViewState, saveTemplate, templateToRequest, toggleFavorite,
 } from '../src/modules/reporting/application/reportTemplateService.js';
 import { runReport } from '../src/modules/reporting/application/reportService.js';
 
@@ -142,6 +142,31 @@ await recordRecent('pesagens.periodo', GESTOR, { now: '2026-09-15T09:10:00.000Z'
 assert.deepEqual((await getRecents(GESTOR)).map((item) => `${item.reportId}#${item.presetId ?? ''}`), ['pesagens#pesagens.periodo', 'desempenho#'], 'recente sem duplicar, mais novo primeiro (id antigo → novo + visão)');
 assert.equal(await code(() => toggleFavorite('inexistente', GESTOR)), 'REPORT_TEMPLATE_INVALID');
 assert.equal(await code(() => toggleFavorite('pesagens#rebanho.dimensao.raca', GESTOR)), 'REPORT_TEMPLATE_INVALID', 'NEGATIVO: visão de outro relatório');
+
+// E1B: último estado de cada relatório por usuário (report-view-state) — preferência de tela, sem auditoria.
+const estado = {
+  columns: ['data_pesagem', 'numero_animal', 'peso'], filters: { sexo: { operator: 'in', values: ['Macho'] } },
+  fixedFilters: { tipo_manejo: { operator: 'in', values: ['Saída'], match: 'code' } },
+  groups: [{ columnId: 'nome_lote' }], aggregates: [{ id: 'qtd', columnId: 'numero_animal', op: 'countDistinct' }],
+  mode: 'RESUMIDO', orientation: 'landscape', period: { preset: 'ultimos_30_dias' }, showEmptyColumns: true,
+};
+const gravado = await saveReportViewState('pesagens', estado, OPERADOR, { now: '2026-09-15T11:00:00.000Z' });
+assert.equal(gravado.fixedFilters, undefined, 'condição fixa (de modelo/visão antiga) nunca entra no último estado');
+const reaberto = await getReportViewState('pesagens', OPERADOR);
+assert.deepEqual(reaberto.selection.groups.map((group) => group.columnId), ['nome_lote'], 'reabre com o agrupamento');
+assert.equal(reaberto.selection.mode, 'RESUMIDO');
+assert.equal(reaberto.orientation, 'landscape');
+assert.equal(reaberto.showEmptyColumns, true);
+assert.equal(reaberto.selection.fixedFilters, undefined, 'reaberto sem condição fixa');
+assert.equal(await getReportViewState('pesagens', GESTOR), null, 'último estado é por usuário');
+// Estado gravado com condição fixa (versão de desenvolvimento anterior) → a condição é descartada ao ler.
+const chaveEstado = 'report-view-state:local:' + OPERADOR.id;
+const bruto = (await db.table('appSettings').get(chaveEstado)).value;
+bruto.reports.pesagens.fixedFilters = { tipo_manejo: { operator: 'in', values: ['Saída'], match: 'code' } };
+await db.table('appSettings').put({ key: chaveEstado, value: bruto });
+assert.equal((await getReportViewState('pesagens', OPERADOR)).selection.fixedFilters, undefined, 'NEGATIVO: condição fixa antiga não volta');
+assert.equal(await code(() => saveReportViewState('comercial.vendas', { ...estado, fixedFilters: {} }, OPERADOR)), 'AUTH_FORBIDDEN', 'NEGATIVO: relatório que o papel não abre');
+assert.equal(await getReportViewState('comercial.vendas', OPERADOR), null);
 
 // Persistência sobrevive a reabrir o banco
 storage.resetForTests?.();

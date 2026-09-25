@@ -80,13 +80,57 @@ export function viewSelection(view, definition) {
 }
 
 /**
- * Qual visão bate com o estado da tela (mesmas colunas de agrupamento, na mesma ordem e direção, e
- * mesmo modo). Nenhuma → null ("Personalizado"). Totais/colunas não entram na comparação.
- * @param {{ groups?: { columnId, direction? }[], mode?: string }} state
+ * Valor de uma opção de "Ordenar por" ("tipo:chave:direção") → partes. A chave pode ter ":" (total criado
+ * no diálogo Totais, ex. "sum:peso"): tipo = antes do 1º ":", direção = depois do último, chave = o meio.
+ * @returns {{ kind: string, key: string, direction: string }}
+ */
+export function parseSortChoice(value) {
+  const parts = String(value ?? '').split(':');
+  return { kind: parts[0], key: parts.slice(1, -1).join(':'), direction: parts.length > 1 ? parts.at(-1) : '' };
+}
+
+/**
+ * Filtros da definição (ex.: Rebanho atual abre com situação = ATIVO), de uma visão ou de um modelo
+ * antigo usam o CÓDIGO do enum; a tela (pílula/botão) marca e conta pelo RÓTULO exibido ("Ativo").
+ * Converte código → rótulo nas colunas enum; o serviço, com match "label", aceita os dois — a população
+ * não muda. Condição com match "code" (herdada de relatório antigo) fica como está.
+ */
+export function filtersForDisplay(filters, columns = []) {
+  const out = {};
+  for (const [columnId, filter] of Object.entries(filters || {})) {
+    const column = columns.find((item) => item.id === columnId);
+    const options = column?.type === 'enum' && Array.isArray(column.options) ? column.options : null;
+    if (!options || !filter || typeof filter !== 'object' || filter.match === 'code') { out[columnId] = filter; continue; }
+    const labelOf = (value) => options.find((option) => option.value === value)?.label ?? value;
+    out[columnId] = {
+      ...filter,
+      ...(Array.isArray(filter.values) ? { values: [...new Set(filter.values.map(labelOf))] } : {}),
+      ...(typeof filter.value === 'string' ? { value: labelOf(filter.value) } : {}),
+    };
+  }
+  return out;
+}
+
+const aggregatesKey = (list) => JSON.stringify((list ?? []).map((spec) => `${spec.id}|${spec.op}|${spec.columnId ?? ''}`).sort());
+
+/**
+ * Qual visão bate com o estado da tela: mesmas colunas de agrupamento (na mesma ordem e direção) e mesmo
+ * modo; quando o estado informa `aggregates`, os mesmos totais; no Detalhado, quando informa `columns`,
+ * as mesmas colunas. Nenhuma → null ("Personalizado") — assim o seletor nunca mostra um tipo que não está
+ * aplicado de fato (e escolhê-lo de novo reaplica a visão).
+ * @param {{ groups?: { columnId, direction? }[], mode?: string, aggregates?: object[], columns?: string[] }} state
  */
 export function matchView(definition, state = {}) {
   const groups = (state.groups ?? definition?.defaultGroups ?? []).filter((group) => group?.columnId);
   const mode = state.mode ?? definition?.defaultMode ?? REPORT_MODES.DETALHADO;
-  const found = listReportViews(definition).find((view) => view.mode === mode && sameGroups(view.groups, groups));
+  const found = listReportViews(definition).find((view) => {
+    if (view.mode !== mode || !sameGroups(view.groups, groups)) return false;
+    if (Array.isArray(state.aggregates) && aggregatesKey(state.aggregates) !== aggregatesKey(view.aggregates ?? definition.defaultAggregates)) return false;
+    if (mode === REPORT_MODES.DETALHADO && Array.isArray(state.columns)) {
+      const expected = view.columns ?? definition.defaultColumns ?? [];
+      if (state.columns.join('|') !== expected.join('|')) return false;
+    }
+    return true;
+  });
   return found?.id ?? null;
 }

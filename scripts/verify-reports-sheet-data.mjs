@@ -19,7 +19,7 @@ import { SHEET_TOTALS } from '../src/modules/reporting/definitions/pesagens.js';
 import { defineReport, createColumnResolver } from '../src/modules/reporting/domain/reportDefinition.js';
 import { defineColumn } from '../src/modules/reporting/domain/columnDefinition.js';
 import { GRAINS } from '../src/modules/reporting/domain/reportGrain.js';
-import { listReportViews, matchView, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
+import { filtersForDisplay, listReportViews, matchView, parseSortChoice, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
 import { buildSummaryLayout, summaryMetrics, SUMMARY_LABEL_SORT } from '../src/modules/reporting/domain/summaryLayout.js';
 import { groupRows } from '../src/modules/reporting/domain/groupEngine.js';
 import { buildReportDocument, orderNodes } from '../src/modules/reporting/domain/reportDocument.js';
@@ -215,6 +215,27 @@ for (const view of views) {
 assert.equal(matchView(PESAGENS, { groups: [{ columnId: 'data_pesagem' }], mode: 'RESUMIDO' }), null, 'NEGATIVO: direção diferente não é "Por data"');
 assert.equal(matchView(PESAGENS, { groups: [{ columnId: 'nome_lote' }], mode: 'DETALHADO' }), null, 'NEGATIVO: modo diferente → Personalizado');
 assert.equal(matchView(PESAGENS, { groups: [{ columnId: 'marca' }], mode: 'RESUMIDO' }), null, 'agrupamento sem visão → Personalizado');
+// Revisão final: o tipo só aparece quando está aplicado de fato (totais; colunas no Detalhado) — senão
+// "Personalizado", e escolher o tipo de novo o reaplica.
+const porLoteSel = viewSelection('por-lote', PESAGENS);
+assert.equal(matchView(PESAGENS, { groups: porLoteSel.groups, mode: porLoteSel.mode, aggregates: porLoteSel.aggregates, columns: porLoteSel.columns }), 'por-lote', 'mesmos totais → Por lote');
+assert.equal(matchView(PESAGENS, { groups: porLoteSel.groups, mode: porLoteSel.mode, aggregates: [] }), null, 'NEGATIVO: sem os totais da visão → Personalizado');
+assert.equal(matchView(PESAGENS, { groups: porLoteSel.groups, mode: porLoteSel.mode, aggregates: [...porLoteSel.aggregates].reverse() }), 'por-lote', 'ordem dos totais não importa');
+const analiticoSel = viewSelection('analitico', PESAGENS);
+assert.equal(matchView(PESAGENS, { groups: [], mode: 'DETALHADO', aggregates: analiticoSel.aggregates, columns: analiticoSel.columns }), 'analitico');
+assert.equal(matchView(PESAGENS, { groups: [], mode: 'DETALHADO', aggregates: analiticoSel.aggregates, columns: analiticoSel.columns.slice(1) }), null, 'NEGATIVO: Detalhado com outras colunas → Personalizado');
+// "Ordenar por": chave de total com ":" (criada no diálogo Totais) não se perde.
+assert.deepEqual(parseSortChoice('metrica:sum:peso:asc'), { kind: 'metrica', key: 'sum:peso', direction: 'asc' }, 'chave com ":"');
+assert.deepEqual(parseSortChoice('metrica:peso_medio:desc'), { kind: 'metrica', key: 'peso_medio', direction: 'desc' });
+assert.deepEqual(parseSortChoice('rotulo:desc'), { kind: 'rotulo', key: '', direction: 'desc' });
+assert.deepEqual(parseSortChoice('nivel:1:desc'), { kind: 'nivel', key: '1', direction: 'desc' });
+// Filtro da definição em código (Rebanho atual: situação = ATIVO) vai para a tela como rótulo ("Ativo"):
+// o botão Status marca e conta certo, e a população é a mesma.
+const REBANHO = getReportDefinition('rebanho.atual');
+const shown = filtersForDisplay(REBANHO.defaultFilters, REBANHO.columns);
+assert.deepEqual(shown.situacao.values, ['Ativo'], 'ATIVO → Ativo');
+assert.deepEqual(filtersForDisplay({ situacao: { operator: 'in', values: ['ATIVO'], match: 'code' } }, REBANHO.columns).situacao.values, ['ATIVO'], 'condição por código fica como está');
+assert.deepEqual(filtersForDisplay({ situacao: { operator: 'in', values: ['ATIVO', 'Ativo'] } }, REBANHO.columns).situacao.values, ['Ativo'], 'código e rótulo do mesmo valor contam uma vez');
 const apData = await run(viewSelection('por-apartacao-data', PESAGENS), { arrobaDivisor: 30 });
 for (const apartacao of apData.summaryRows.filter((row) => row.level === 1)) {
   const datas = apData.summaryRows.filter((row) => row.level === 2 && row.path[0].key === apartacao.key).map((row) => row.key);
@@ -271,6 +292,11 @@ for (const view of rebanhoViews) {
   assert.equal(vm.mode, view.mode, `rebanho.atual ${view.id}: executa no modo da visão`);
   assert.equal(matchView(rebanho, { groups: view.groups, mode: view.mode }), view.id);
 }
+const rebanhoCodigo = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: { mode: 'DETALHADO', groups: [], filters: REBANHO.defaultFilters } }, ADMIN);
+const rebanhoRotulo = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: { mode: 'DETALHADO', groups: [], filters: { situacao: { ...shown.situacao, match: 'label' } } } }, ADMIN);
+const rebanhoTodos = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: { mode: 'DETALHADO', groups: [], filters: {} } }, ADMIN);
+assert.ok(rebanhoCodigo.rows.length > 0 && rebanhoCodigo.rows.length < rebanhoTodos.rows.length, 'massa tem ativos e não ativos');
+assert.deepEqual(ids(rebanhoRotulo), ids(rebanhoCodigo), 'filtro pelo rótulo "Ativo" = filtro pelo código ATIVO (mesma população)');
 let generatedChecked = 0;
 for (const definition of listAllReportDefinitions().filter((item) => item.status !== 'blocked')) {
   const list = listReportViews(definition);

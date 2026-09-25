@@ -15,7 +15,9 @@ export default function ReportSheetView({ viewModel, header = null, orientation 
     () => buildReportDocument(viewModel, { header, orientation, showEmptyColumns, maxDataRows: SCREEN_MAX_DATA_ROWS }),
     [viewModel, header, orientation, showEmptyColumns],
   );
-  const html = useMemo(() => renderSheetBody(doc, { mode: "fragment", interactive: true, sort }), [doc, sort]);
+  // Sem clique no grupo nem ordenação (Detalhado como folha): nenhum botão na folha.
+  const interactive = Boolean(onDrill || onSort);
+  const html = useMemo(() => renderSheetBody(doc, { mode: "fragment", interactive, sort }), [doc, interactive, sort]);
 
   const activate = useCallback((target) => {
     const drill = target.closest?.("[data-drill]");

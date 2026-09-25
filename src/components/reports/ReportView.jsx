@@ -16,7 +16,7 @@ import { REPORT_FAMILIES, REPORT_MODES } from "@/modules/reporting/domain/report
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
-import { listReportViews, matchView, viewSelection } from "@/modules/reporting/domain/reportViews";
+import { listReportViews, matchView, parseSortChoice, viewSelection } from "@/modules/reporting/domain/reportViews";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { aliasSelection, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
 import { runReport } from "@/modules/reporting/application/reportService";
@@ -29,7 +29,7 @@ import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } fr
 import ReportFilterBar from "./ReportFilterBar";
 import ReportSheetView from "./ReportSheetView";
 import ReportTable from "./ReportTable";
-import { pillFilterType, pillOptions, toServiceFilters, useCan } from "./reportUi";
+import { pillFilterType, pillOptions, toDisplayFilters, toServiceFilters, useCan } from "./reportUi";
 
 const NO_GROUP = "__nenhum__";
 const CUSTOM_GROUP = "__personalizado__";
@@ -52,7 +52,7 @@ const FILTER_BUTTONS = Object.freeze([
 function stateFromRequest(definition, request, extra = {}) {
   return {
     params: request.params,
-    uiFilters: request.selection.filters,
+    uiFilters: toDisplayFilters(request.selection.filters, definition.columns),
     fixedFilters: request.selection.fixedFilters ?? {},
     columns: request.selection.columns.length ? request.selection.columns : definition.defaultColumns,
     groups: request.selection.groups,
@@ -91,7 +91,7 @@ function initialState(definition, template, preset, role, savedState) {
     : null;
   return {
     params,
-    uiFilters: legacyFilters ?? definition.defaultFilters ?? {},
+    uiFilters: toDisplayFilters(legacyFilters ?? definition.defaultFilters ?? {}, definition.columns),
     fixedFilters: {},
     columns: legacy?.columns ?? definition.defaultColumns,
     groups: legacy?.groups ?? definition.defaultGroups,
@@ -244,20 +244,32 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   const columnOf = useCallback((columnId) => available.find((column) => column.id === columnId) ?? null, [available]);
   const summaryMode = (viewModel?.mode ?? state.mode) === REPORT_MODES.RESUMIDO;
 
-  // Último estado do usuário: grava (com espera curta) como a pessoa deixou. Falha de gravação
-  // (banco em somente leitura) não atrapalha a tela.
+  // Último estado do usuário: grava (com espera curta) como a pessoa deixou. Só quando o relatório foi
+  // aberto "puro" — aberto por modelo ou por visão antiga, quem guarda é o modelo/visão (e as condições
+  // fixas deles nunca vão para o último estado). Sair antes da espera grava na hora (desmontagem).
+  // Falha de gravação (banco em somente leitura) não atrapalha a tela.
+  const tracksViewState = allowPreferences && !template && !preset;
+  const pendingViewState = useRef(null);
   useEffect(() => {
-    if (!allowPreferences) return undefined;
+    if (!tracksViewState) return undefined;
+    const payload = {
+      columns: state.columns, filters: state.uiFilters, groups: state.groups, aggregates: state.aggregates,
+      sort: state.sort, search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)),
+      widths: state.widths, orientation: state.orientation, mode: state.drill.length ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
+      showEmptyColumns: state.showEmptyColumns,
+    };
+    pendingViewState.current = payload;
     const timer = setTimeout(() => {
-      saveReportViewState(definition.id, {
-        columns: state.columns, filters: state.uiFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: state.aggregates,
-        sort: state.sort, search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)),
-        widths: state.widths, orientation: state.orientation, mode: state.drill.length ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
-        showEmptyColumns: state.showEmptyColumns,
-      }, actor).catch(() => {});
+      pendingViewState.current = null;
+      saveReportViewState(definition.id, payload, actor).catch(() => {});
     }, 600);
     return () => clearTimeout(timer);
-  }, [allowPreferences, definition.id, state, period, periodParam, actor]);
+  }, [tracksViewState, definition.id, state, period, periodParam, actor]);
+  useEffect(() => () => {
+    const pending = pendingViewState.current;
+    pendingViewState.current = null;
+    if (pending) saveReportViewState(definition.id, pending, actor).catch(() => {});
+  }, [definition.id, actor]);
 
   // Agrupar por (rápido): colunas mais usadas do relatório; mais níveis pelo diálogo.
   const quickGroupOptions = useMemo(() => {
@@ -279,7 +291,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   const setMode = (mode) => update({ mode, drill: mode === REPORT_MODES.RESUMIDO ? [] : state.drill });
 
   // Tipo de relatório: atalho para agrupamento + modo (+ totais/colunas/ordem da visão) — nada de conta nova.
-  const viewId = matchView(definition, { groups: state.groups, mode: state.mode }) ?? "custom";
+  const viewId = matchView(definition, { groups: state.groups, mode: state.mode, aggregates: state.aggregates, columns: state.columns }) ?? "custom";
   const applyView = (id) => {
     const view = views.find((item) => item.id === id);
     if (!view) return;
@@ -292,7 +304,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       sort: selection.sort ?? state.sort,
       summarySort: selection.summarySort ?? null,
       // Só a visão que declara filtros mexe nos filtros; os da pessoa ficam.
-      ...(view.filters ? { uiFilters: { ...state.uiFilters, ...JSON.parse(JSON.stringify(view.filters)) } } : {}),
+      ...(view.filters ? { uiFilters: { ...state.uiFilters, ...toDisplayFilters(JSON.parse(JSON.stringify(view.filters)), definition.columns) } } : {}),
       drill: [],
     });
   };
@@ -306,8 +318,9 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       else update({ sort: definition.defaultSort });
       return;
     }
-    const [kind, key, direction] = value.split(":");
-    if (kind === "rotulo") update({ summarySort: { key: SUMMARY_LABEL_SORT, direction: key } });
+    // tipo:chave:direção — a chave pode ter ":" (total criado no diálogo, ex. "sum:peso").
+    const { kind, key, direction } = parseSortChoice(value);
+    if (kind === "rotulo") update({ summarySort: { key: SUMMARY_LABEL_SORT, direction } });
     else if (kind === "nivel") update({ summarySort: null, groups: state.groups.map((group, index) => (index === Number(key) ? { ...group, direction } : group)) });
     else if (kind === "metrica") update({ summarySort: { key, direction } });
     else if (kind === "coluna") update({ sort: [{ columnId: key, direction }] });
@@ -338,7 +351,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     else delete next[columnId];
     update({ uiFilters: next });
   };
-  // Clique num grupo da folha (ou num título de seção): Detalhado só daquele grupo (recorte exato pela chave).
+  // Clique num grupo da folha do Resumido (ou num título de seção): Detalhado só daquele grupo (recorte
+  // exato pela chave). A folha do Detalhado ("Ver como folha") não repassa o clique: é só leitura.
   const onDrill = (path) => update({
     mode: REPORT_MODES.DETALHADO,
     drill: path.map((part) => ({ columnId: part.columnId, key: part.key, label: formatGroupLabel(definition.columns.find((column) => column.id === part.columnId), part.label, "screen", part.key === NONE_GROUP_KEY) })),
@@ -564,7 +578,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
                 orientation={state.orientation}
                 showEmptyColumns={state.showEmptyColumns}
                 sort={viewModel.mode === REPORT_MODES.RESUMIDO ? state.summarySort : null}
-                onDrill={onDrill}
+                onDrill={viewModel.mode === REPORT_MODES.RESUMIDO ? onDrill : null}
                 onSort={viewModel.mode === REPORT_MODES.RESUMIDO ? onSheetSort : null}
               />
             ) : (
