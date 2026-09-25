@@ -6556,6 +6556,15 @@
   -webkit-text-fill-color: var(--text-1) !important;
 }
 
+/* Tema escuro (1.4.0): o texto dos campos segue a COR do campo. A regra acima força
+   -webkit-text-fill-color: var(--text-1) (#111827) e, no escuro, ela vencia o `color` claro que os temas
+   aplicam — o valor digitado (e o de seleção como "Própria", "Sim", "MT") ficava escuro sobre fundo escuro
+   em todas as fichas. currentColor = a cor que cada tema já dá ao campo; o tema claro não muda.
+   :not(#mg-dark-fill-none) só sobe a especificidade para vencer as regras !important do tema claro. */
+html:is(.dark, .tema-escuro, .escuro) body .mg-empresas-scope :is(.mg-prototype-form--edit, .mg-prototype-form--readonly) :is(input, textarea, .cmd-display, .mg-lookup-display, .mg-dp-field, .mg-tp-field, .emp-form-field-control, .erp-select-trigger, .erp-select-trigger *, .mg-prototype-autocomplete, .emp-form-autocomplete-wrap):not(#mg-dark-fill-none) {
+  -webkit-text-fill-color: currentColor !important;
+}
+
 .mg-empresas-scope .mg-prototype-form--edit .mg-prototype-field:not(.mg-field-locked) > input:not([disabled]):not([readonly]),
 .mg-empresas-scope .mg-prototype-form--edit .mg-prototype-field:not(.mg-field-locked) > textarea:not([disabled]):not([readonly]),
 .mg-empresas-scope .mg-prototype-form--edit .mg-prototype-field:not(.mg-field-locked) .emp-form-field-control input,
