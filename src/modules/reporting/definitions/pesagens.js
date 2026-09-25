@@ -76,6 +76,8 @@ export const PESAGENS = defineReport({
   source: 'events.byPeriod',
   requires: ['reports.read', 'weighing.read'],
   title: 'Pesagens',
+  // Folha: "Relatório de Pesagens Individuais (Sintético|Analítico)" (resposta 11 ao REPORT da E1B).
+  sheetTitle: 'Pesagens Individuais',
   description: 'Pesagens do período (cadastro, manejo e saída) — por sessão, lote, operador, tipo ou como preferir.',
   metrics: ['Pesagens', 'Cabeças', 'Peso médio', 'GMD'],
   params: [EVENT_PERIOD_PARAM],

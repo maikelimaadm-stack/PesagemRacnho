@@ -550,7 +550,7 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     mode: viewModel.mode,
     layout: summary ? 'summary' : 'detail',
     reportId: viewModel.reportId,
-    title: `Relatório de ${viewModel.reportName} (${summary ? 'Sintético' : 'Analítico'})`,
+    title: `Relatório de ${viewModel.sheetTitle ?? viewModel.reportName} (${summary ? 'Sintético' : 'Analítico'})`,
     subtitle: `${summary ? 'Resumido' : 'Detalhado'}${levels.length ? ` · ${levels.map((level) => level.label).join(' › ')}` : ''}`,
     header: header ?? null,
     periodText,

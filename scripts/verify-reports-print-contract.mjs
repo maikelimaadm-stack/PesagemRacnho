@@ -34,7 +34,7 @@ const vm = await runReport('pesagens.periodo', {
 const { html, layout, stats, manifest, document: doc } = preparePrint(vm, ADMIN, { header });
 
 // Cabeçalho da propriedade (com logo) + título + período + emissão
-for (const text of ['ZIGOMAR FERREIRA FRANCO FILHO', 'FAZENDA KAIMAN', 'GLEBA RICARDO FRANCO SN - ZONA RURAL, VILA BELA DA SST. TRINDADE-MT', 'Relatório de Pesagens (Analítico)', 'Detalhado · Apartação › Lote', 'Período: 01/08/2026 a 15/09/2026', 'Emitido em']) {
+for (const text of ['ZIGOMAR FERREIRA FRANCO FILHO', 'FAZENDA KAIMAN', 'GLEBA RICARDO FRANCO SN - ZONA RURAL, VILA BELA DA SST. TRINDADE-MT', 'Relatório de Pesagens Individuais (Analítico)', 'Detalhado · Apartação › Lote', 'Período: 01/08/2026 a 15/09/2026', 'Emitido em']) {
   assert.ok(decode(html).includes(text), `cabeçalho contém: ${text}`);
 }
 assert.ok(html.includes(`<img class="sheet-logo" src="${LOGO}"`), 'logo embutido no cabeçalho');

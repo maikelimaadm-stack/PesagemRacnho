@@ -178,6 +178,8 @@ export function defineReport(spec) {
   if (!spec?.id) throw new Error('relatório: id obrigatório');
   const context = `relatório ${spec.id}`;
   if (!spec.title) throw new Error(`${context}: título obrigatório`);
+  // Título da folha ("Relatório de <sheetTitle> (Sintético)") quando difere do nome do cartão (E1C).
+  if (spec.sheetTitle != null && (typeof spec.sheetTitle !== 'string' || !spec.sheetTitle.trim())) throw new Error(`${context}: sheetTitle deve ser texto não vazio`);
   if (!REPORT_FAMILIES[spec.family]) throw new Error(`${context}: família inválida (${spec.family})`);
   assertGrain(spec.grain, context);
   if (!Number.isInteger(spec.version) || spec.version < 1) throw new Error(`${context}: version inteira ≥ 1`);

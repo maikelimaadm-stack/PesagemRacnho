@@ -292,6 +292,12 @@ for (const view of rebanhoViews) {
   assert.equal(vm.mode, view.mode, `rebanho.atual ${view.id}: executa no modo da visão`);
   assert.equal(matchView(rebanho, { groups: view.groups, mode: view.mode }), view.id);
 }
+// E1C (resposta 11): título da folha de Pesagens = "Pesagens Individuais"; os demais com o próprio nome.
+assert.equal(buildReportDocument(apData).title, 'Relatório de Pesagens Individuais (Sintético)', 'título da folha de Pesagens (Resumido)');
+assert.equal(buildReportDocument(apDetalhe).title, 'Relatório de Pesagens Individuais (Analítico)', 'título da folha de Pesagens (Detalhado)');
+assert.equal(apData.reportName, 'Pesagens', 'o nome do relatório (cartão, arquivo, manifesto) continua "Pesagens"');
+const rebanhoFolha = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: viewSelection('padrao', REBANHO) }, ADMIN);
+assert.equal(buildReportDocument(rebanhoFolha).title, 'Relatório de Rebanho atual (Sintético)', 'outros relatórios com o próprio nome');
 const rebanhoCodigo = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: { mode: 'DETALHADO', groups: [], filters: REBANHO.defaultFilters } }, ADMIN);
 const rebanhoRotulo = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: { mode: 'DETALHADO', groups: [], filters: { situacao: { ...shown.situacao, match: 'label' } } } }, ADMIN);
 const rebanhoTodos = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: { mode: 'DETALHADO', groups: [], filters: {} } }, ADMIN);
@@ -330,6 +336,7 @@ assert.throws(() => defineReport({ ...valid, views: [{ ...okView, groups: [{ col
 assert.throws(() => defineReport({ ...valid, views: [{ ...okView, presetId: 'x' }] }), /chave desconhecida/, 'NEGATIVO: chave desconhecida na visão');
 assert.throws(() => defineReport({ ...valid, views: [{ ...okView, summarySort: { key: 'xpto' } }] }), /métrica desconhecida/, 'NEGATIVO: ordem do resumo em métrica inexistente');
 assert.throws(() => defineReport({ ...valid, metricLabels: { pm: '' } }), /rótulo vazio/, 'NEGATIVO: rótulo vazio');
+assert.throws(() => defineReport({ ...valid, sheetTitle: '  ' }), /sheetTitle/, 'NEGATIVO: sheetTitle vazio');
 assert.throws(() => defineReport({ ...valid, views: [okView], metricPairs: [{ id: 'f', label: 'F', from: 'pm', to: 'xpto' }] }), /métrica desconhecida/, 'NEGATIVO: par com métrica inexistente');
 
 // ---- 6. Cabeçalho do Resumido e casas decimais ----
