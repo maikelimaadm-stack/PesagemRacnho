@@ -5,7 +5,8 @@
 // POSSÍVEL DUPLICIDADE (não grava; grava só com acceptDuplicates); mesmo animal/data com outro peso
 // → CONFLITO; idempotência por `id` técnico e por `id_externo`; plano velho (banco mudou) recusado;
 // falha dentro da transação de um lote desfaz só aquele lote; job FALHOU com checkpoint e retomada
-// que conclui sem duplicar.
+// que conclui sem duplicar; trava de gravação em andamento (duplo clique → mesmo job, carona passa
+// pelas mesmas checagens) e guarda de concorrência do importWriter para chaves diferentes.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
 import { deleteDbForTests } from '../src/storage/indexedDb/db.js';
@@ -19,6 +20,7 @@ import {
   analyzeImport,
   applyImport,
   deleteImportTemplate,
+  importApplyFingerprint,
   listImportJobs,
   listImportTemplates,
   planToCsv,
@@ -118,6 +120,44 @@ const staleError = await rejects(applyImport(stale), 'IMPORT_STALE_PLAN');
 assert.deepEqual(staleError.lines, [2], 'linha divergente citada');
 assert.deepEqual(await counts(), beforeStale, 'plano velho → zero gravações');
 
+// 4a. Trava de gravação (PROMPT-00B): quem chega junto com uma gravação que é RECUSADA recebe a
+// mesma recusa, e a trava é liberada — a chamada seguinte é uma gravação nova (outro erro).
+const staleRace = await Promise.allSettled([applyImport(stale), applyImport(stale)]);
+assert.deepEqual(staleRace.map((item) => item.reason?.code), ['IMPORT_STALE_PLAN', 'IMPORT_STALE_PLAN'], 'carona recebe a mesma recusa');
+assert.equal(staleRace[1].reason, staleRace[0].reason, 'carona: mesmo erro, mesma gravação');
+const staleAgain = await rejects(applyImport(stale), 'IMPORT_STALE_PLAN');
+assert.notEqual(staleAgain, staleRace[0].reason, 'trava liberada depois da recusa');
+assert.deepEqual(await counts(), beforeStale, 'recusas concorrentes → zero gravações');
+
+// 4b. Carona não pula permissão: OPERADOR junto com GESTOR num plano que cria cadastro ausente.
+const GESTOR = { id: 'u-gestor', role: 'GESTOR' };
+const OPERADOR = { id: 'u-operador', role: 'OPERADOR' };
+const withMissing = await analyzeImport({ text: csv('Brinco;Marca;Sexo;Data;Peso', '950;Marca Carona;M;01/02/2026;210'), type: 'CADASTROS', rules: { categoryMode: 'AUTOMATICA', createMissingMasters: true } }, GESTOR);
+assert.equal(withMissing.blocking, false);
+assert.ok(withMissing.summary.cadastrosMestresAusentes.length > 0, 'plano cria cadastro ausente');
+const ownerRace = await Promise.allSettled([applyImport(withMissing, GESTOR), applyImport(withMissing, OPERADOR)]);
+assert.equal(ownerRace[0].status, 'fulfilled', ownerRace[0].reason?.message);
+assert.equal(ownerRace[1].reason?.code, 'AUTH_FORBIDDEN', 'OPERADOR não pega carona na criação de cadastros (registry.write)');
+
+// 4c. Guarda de concorrência do importWriter, FORA da trava: o mesmo arquivo analisado com
+// separador 'auto' e ';' tem o mesmo hash e chaves de trava diferentes — as duas gravações
+// correm de verdade e só a guarda dentro da transação impede o animal duplicado.
+const guardText = csv('Brinco;Marca;Sexo;Data;Peso', 'W1;ABC;M;03/01/2026;201', 'W1;ABC;M;03/02/2026;231');
+const guardAuto = await analyzeImport({ text: guardText, type: 'HISTORICO' });
+const guardSemi = await analyzeImport({ text: guardText, type: 'HISTORICO', delimiter: ';' });
+assert.equal(guardAuto.hash, guardSemi.hash);
+assert.notEqual(importApplyFingerprint(guardAuto), importApplyFingerprint(guardSemi), 'chaves diferentes: a trava não junta');
+const beforeGuard = await counts();
+const guardRace = await Promise.allSettled([applyImport(guardAuto), applyImport(guardSemi)]);
+const guardErr = guardRace.filter((item) => item.status === 'rejected').map((item) => item.reason);
+assert.equal(guardRace.filter((item) => item.status === 'fulfilled').length, 1, 'uma gravação conclui');
+assert.equal(guardErr.length, 1, 'a outra é recusada');
+assert.equal(guardErr[0].code, 'IMPORT_STALE_PLAN', guardErr[0].message);
+assert.match(guardErr[0].message, /foi cadastrado depois da análise/, 'recusa veio da guarda dentro da transação do importWriter');
+const afterGuard = await counts();
+assert.equal(afterGuard.animais - beforeGuard.animais, 1, 'guarda do writer: animal não duplica');
+assert.equal(afterGuard.pesagens - beforeGuard.pesagens, 2, 'guarda do writer: eventos não duplicam');
+
 // 5. Lotes atômicos, falha no meio e retomada pelo checkpoint.
 const bulk = csv('Brinco;Marca;Sexo;Data;Peso', ...Array.from({ length: 5 }, (_, index) => [
   `${100 + index};ABC;M;01/01/2026;${200 + index}`,
@@ -184,11 +224,23 @@ const racePlan = await analyzeImport({ text: csv('Brinco;Marca;Sexo;Data;Peso', 
 assert.equal(racePlan.summary.novos, 3);
 const beforeRace = await counts();
 const race = await Promise.allSettled([applyImport(racePlan), applyImport(racePlan)]);
-assert.ok(race.some((item) => item.status === 'fulfilled'), 'uma das gravações conclui');
-for (const item of race.filter((entry) => entry.status === 'rejected')) assert.equal(item.reason.code, 'IMPORT_STALE_PLAN', item.reason.message);
+// 25/09/2026 (PROMPT-00B): trava de gravação em andamento — o 2º clique recebe o MESMO job.
+assert.deepEqual(race.map((item) => item.status), ['fulfilled', 'fulfilled'], `duplo clique: as duas chamadas concluem (${race.map((item) => item.reason?.message || 'ok').join(' | ')})`);
+assert.ok(race[0].value.importacaoId, 'duplo clique: job criado');
+assert.equal(race[1].value.importacaoId, race[0].value.importacaoId, 'duplo clique: mesmo job, sem segundo');
 const afterRace = await counts();
-assert.equal(afterRace.pesagens - beforeRace.pesagens, 3, 'gravação concorrente não duplica eventos');
-assert.equal(afterRace.animais - beforeRace.animais, 1, 'gravação concorrente não duplica o animal');
+assert.equal(afterRace.importacoes - beforeRace.importacoes, 1, 'duplo clique: um único job gravado');
+assert.equal(afterRace.pesagens - beforeRace.pesagens, 3, 'duplo clique: eventos não duplicam');
+assert.equal(afterRace.animais - beforeRace.animais, 1, 'duplo clique: animal não duplica');
+// A trava vale só enquanto grava: depois de concluir, o mesmo plano volta ao caminho normal.
+assert.equal((await applyImport(racePlan)).status, 'SEM_ALTERACOES', 'depois da trava: plano já aplicado');
+// A chave da trava: mesmo arquivo com outra regra ou outro mapeamento NÃO pega carona.
+const fp = (input) => importApplyFingerprint({ type: 'HISTORICO', hash: 'h', input });
+assert.equal(fp({ mapping: { A: 'numero', B: 'peso' }, rules: { x: 1, y: [2, 3] } }), fp({ rules: { y: [2, 3], x: 1 }, mapping: { B: 'peso', A: 'numero' } }), 'ordem das chaves não importa');
+assert.notEqual(fp({ rules: {} }), fp({ rules: { acceptDuplicates: true } }), 'regra diferente → outra chave');
+assert.notEqual(fp({ mapping: { A: 'numero' } }), fp({ mapping: { A: 'id_externo' } }), 'mapeamento diferente → outra chave');
+assert.notEqual(fp({ rules: { ignoredLines: new Set([2]) } }), fp({ rules: { ignoredLines: new Set([3]) } }), 'Set não vira {}');
+assert.notEqual(importApplyFingerprint({ type: 'HISTORICO', hash: 'h1', input: {} }), importApplyFingerprint({ type: 'HISTORICO', hash: 'h2', input: {} }), 'arquivo diferente → outra chave');
 
 // 5a. Lote grande sem nenhuma leitura de categoria (categoria manual vazia e Manejos sem faixa):
 // dentro da transação só se aguarda operação do IndexedDB — senão o Dexie fecha a transação
@@ -252,17 +304,7 @@ await rejects(analyzeImport({ text: original, type: 'HISTORICO' }), 'AUTH_FORBID
 setActorProvider(null);
 const history = await listImportJobs({ limit: 3 });
 assert.equal(history.length, 3, 'histórico de jobs do assistente');
-assert.ok(history.every((row) => row.origem === 'assistente-importacao'));
-// 25/09/2026: no duplo clique (5. cont.) as duas gravações podem passar pela checagem inicial e
-// criar um job cada; a perdedora termina FALHOU por plano velho e, conforme a ordem de criação,
-// fica entre os três mais recentes. Isso é histórico legítimo — só esse caso é tolerado.
-const raceLoser = (row) => row.status === 'FALHOU' && /refaça a análise/i.test(row.erro || '');
-assert.ok(
-  history.every((row) => row.status === 'CONCLUIDA' || raceLoser(row)),
-  `jobs concluídos (ou perdedor do duplo clique): ${JSON.stringify(history.map((row) => [row.status, row.erro]))}`,
-);
-assert.equal(history[0].status, 'CONCLUIDA', 'o job mais recente (cadastros mestres) concluiu');
-assert.ok(history.filter(raceLoser).length <= 1, 'no máximo um perdedor do duplo clique');
+assert.ok(history.every((row) => row.origem === 'assistente-importacao' && row.status === 'CONCLUIDA'));
 assert.ok(history[0].created_at >= history[2].created_at, 'mais novo primeiro');
 await rejects(listImportJobs({}, { id: 'sem-papel' }), 'AUTH_FORBIDDEN');
 assert.equal(await deleteImportTemplate(template.id), true);
@@ -272,6 +314,6 @@ await deleteDbForTests();
 console.log(JSON.stringify({
   gate: 'import:idempotency:verify',
   ok: true,
-  cases: ['reimportação idêntica/LF/BOM/colunas reordenadas = zero gravações', 'parcialmente igual grava só as novas', 'sufixo do índice único', 'repesagem', 'id técnico e id_externo', 'plano velho recusado', 'lote atômico', 'checkpoint e retomada'],
-  negativeTests: ['conflito de peso', 'id_externo reutilizado', 'id técnico com outro peso', 'plano velho', 'falha no meio do lote', 'CONSULTA/OPERADOR/sem sessão recusados', 'modelo com campo inexistente'],
+  cases: ['reimportação idêntica/LF/BOM/colunas reordenadas = zero gravações', 'parcialmente igual grava só as novas', 'sufixo do índice único', 'repesagem', 'id técnico e id_externo', 'plano velho recusado', 'lote atômico', 'checkpoint e retomada', 'duplo clique → mesmo job (trava)', 'guarda do writer fora da trava'],
+  negativeTests: ['conflito de peso', 'id_externo reutilizado', 'id técnico com outro peso', 'plano velho', 'falha no meio do lote', 'CONSULTA/OPERADOR/sem sessão recusados', 'modelo com campo inexistente', 'carona sem registry.write recusada', 'carona em recusa recebe a mesma recusa'],
 }, null, 2));

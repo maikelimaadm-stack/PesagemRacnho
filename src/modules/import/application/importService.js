@@ -357,12 +357,57 @@ async function applySanityPlan(fresh, actor, { onProgress = null, batchRows = 20
   };
 }
 
+// Trava de "gravação em andamento" (25/09/2026, PROMPT-00B): duas chamadas simultâneas de
+// applyImport com o mesmo plano passavam pela revalidação e criavam um job cada (a perdedora
+// terminava FALHOU). Na tela o botão "Gravar agora" já fica desabilitado durante a gravação; o caso
+// vinha do gate (que simula o duplo clique) e vale para qualquer chamador programático. Dentro do
+// processo, o mesmo plano (tipo + hash do arquivo + mapeamento, regras e separador) em gravação
+// devolve a MESMA promessa — mesmo job, mesmo resultado. Planos com chave diferente continuam
+// protegidos pela guarda de concorrência dentro da transação do importWriter.
+const inFlightApplies = new Map();
+
+function stableJson(value) {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+  if (value instanceof Set) return `set${stableJson([...value].map(stableJson).sort())}`;
+  if (value instanceof Map) return `map${stableJson([...value.entries()].map(stableJson).sort())}`;
+  if (value && typeof value.toJSON === 'function') return JSON.stringify(value);
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().filter((key) => value[key] !== undefined)
+      .map((key) => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+  }
+  return JSON.stringify(value ?? null);
+}
+
+/** Chave da trava de gravação (exportada para o gate import:idempotency:verify). */
+export function importApplyFingerprint(plan) {
+  const { mapping = null, rules = {}, delimiter = 'auto' } = plan.input;
+  return `${plan.type}|${plan.hash}|${stableJson({ mapping, rules, delimiter })}`;
+}
+
 /**
  * applyImport(plan, actor, { onProgress, batchAnimals = 200 }) → ImportResult.
  * Recusa plano bloqueante. Refaz a análise contra o banco e recusa divergência (exceto a
  * retomada do próprio arquivo). Grava lotes de `batchAnimals` animais, cada lote numa transação.
+ * Chamada repetida com o mesmo plano enquanto a primeira grava → mesma promessa (sem 2º job);
+ * `onProgress` da chamada repetida não é chamado.
  */
-export async function applyImport(plan, actor = null, { onProgress = null, batchAnimals = 200 } = {}) {
+export async function applyImport(plan, actor = null, options = {}) {
+  // Todas as recusas síncronas (plano, permissões, bloqueio, somente leitura) valem para quem
+  // chega depois: nenhuma chamada recebe carona sem passar pelas mesmas checagens.
+  assertApplyAllowed(plan, actor);
+  const key = importApplyFingerprint(plan);
+  const running = inFlightApplies.get(key);
+  if (running) return running;
+  const promise = applyImportOnce(plan, actor, options);
+  inFlightApplies.set(key, promise);
+  try {
+    return await promise;
+  } finally {
+    if (inFlightApplies.get(key) === promise) inFlightApplies.delete(key);
+  }
+}
+
+function assertApplyAllowed(plan, actor) {
   if (!plan || !plan.input || !Array.isArray(plan.rows)) throw new ImportError('IMPORT_INVALID_PLAN', 'Plano de importação inválido: refaça a análise.');
   requireImportPermission(actor, permissionFor(plan.type));
   if (plan.rules?.createMissingMasters && plan.summary?.cadastrosMestresAusentes?.length) requireImportPermission(actor, 'registry.write');
@@ -370,6 +415,9 @@ export async function applyImport(plan, actor = null, { onProgress = null, batch
     throw new ImportError('IMPORT_BLOCKING', `O plano tem ${plan.summary.erros} erro(s), ${plan.summary.conflitos} conflito(s) e ${plan.summary.ambiguidades} ambiguidade(s). Resolva antes de gravar.`);
   }
   storage.assertWritable('Importação conciliada');
+}
+
+async function applyImportOnce(plan, actor = null, { onProgress = null, batchAnimals = 200 } = {}) {
   const db = await storage.ensureReady();
   let fresh = await analyzeImport(plan.input, actor);
   if (fresh.hash !== plan.hash) throw new ImportError('IMPORT_STALE_PLAN', 'O arquivo do plano mudou: refaça a análise.');
