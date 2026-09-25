@@ -64,7 +64,7 @@ lookups de eventos guardam só o nome do usuário.
 | `viewModel.availableColumns` | só colunas visíveis ao papel (diálogos de Colunas, Agrupar e Totais) |
 | `reportExportService.prepareEmission` / `reportPrintService.preparePrint` | papel obrigatório; mesma sessão que gerou o view model; `assertCanExport` |
 | `reportTemplateService` | ver §5 |
-| Cabeçalho da propriedade / divisor da @ (E1B) | editados no cadastro de Propriedades (`registry.write`) e em Configurações › Relatórios (`settings.operational`); o cabeçalho vai na folha de quem pode abrir o relatório. O estado por usuário (`report-view-state:*`) só guarda a seleção do próprio usuário |
+| Cabeçalho da propriedade / divisor da @ (E1B) | editados no cadastro de Propriedades (`registry.write`) e em Configurações › Relatórios (`settings.reports` = ADMIN e GESTOR, E1C; o serviço autoriza o grupo `report-settings` por ela). O menu Configurações e a página pedem `settings.operational` (ADMIN e GESTOR); dentro, o GESTOR vê só a seção Relatórios — Geral, Curral, Comercial e Dados pedem `settings.manage` e Segurança `settings.auth` (ADMIN). No serviço, os grupos operacionais continuam com `settings.operational` (a tela é o único ponto que os grava). O cabeçalho vai na folha de quem pode abrir o relatório. O estado por usuário (`report-view-state:*`) só guarda a seleção do próprio usuário |
 | UI (conforto) | item de menu com `reports.read`; botões **Imprimir**, **Excel**, **PDF** e **Outros formatos** só com `reports.export`; opção "Compartilhado" desabilitada sem `reports.templates.share`; excluir modelo só para dono (pessoal) ou quem compartilha |
 
 Mensagens de recusa na tela: "Seu perfil não pode abrir este relatório.", "Seu perfil não pode exportar

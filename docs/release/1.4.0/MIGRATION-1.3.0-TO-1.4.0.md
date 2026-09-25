@@ -72,6 +72,16 @@ Nada disso é convertido na atualização: não há passo de migração, backfil
 1.4.0 levam esses campos e chaves (as tabelas vão inteiras) e a restauração os devolve — gate
 `registry:property-header:verify` (backup → restore com logo).
 
+## 3.2 E1C: nada novo no banco
+
+Os ajustes finais não gravam nada novo nem mudam o formato do que já se grava:
+
+- a máscara de CPF/CNPJ é só da tela: o documento continua guardado sem pontuação, exatamente como antes
+  (o CNPJ alfanumérico com as letras); documentos antigos fora do padrão não são alterados ao abrir e
+  salvar a ficha sem mexer;
+- a permissão `settings.reports` (GESTOR em Configurações › Relatórios) está no código, não no banco;
+- o bloco TOTAL POR do XLSX e o título "Pesagens Individuais" só mudam o que é emitido.
+
 ## 4. Relatório esperado
 
 Em **Backup e Manutenção › aba Controle › Trilha de auditoria**, filtrar Origem =

@@ -5,10 +5,36 @@ Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PAT
 
 ## [1.4.0] — 2026-09-25
 
-Etapas E1 e E1B do Plano Mestre 2. Esquema Dexie **8** e backup **formato 3**, **sem mudança de
-esquema**. A única conversão é das preferências de relatório (favoritos, recentes e modelos salvos),
-feita ao abrir Relatórios, repetível e registrada na auditoria. Instalador de diagnóstico não assinado
-em `release-unsigned/`. Notas em `docs/release/1.4.0/RELEASE-NOTES.md`.
+Etapas E1, E1B e os ajustes finais (E1C) do Plano Mestre 2. Esquema Dexie **8** e backup **formato 3**,
+**sem mudança de esquema**. A única conversão é das preferências de relatório (favoritos, recentes e
+modelos salvos), feita ao abrir Relatórios, repetível e registrada na auditoria. Instalador de
+diagnóstico não assinado em `release-unsigned/`. Notas em `docs/release/1.4.0/RELEASE-NOTES.md`.
+
+### Added (E1C — ajustes finais pedidos no REPORT da E1B)
+- **CPF/CNPJ com máscara** nas fichas de Parceiros e de Propriedades: 000.000.000-00, 00.000.000/0000-00
+  e o CNPJ alfanumérico (em maiúsculas), ao digitar e ao colar (com ou sem pontuação, até com o rótulo
+  "CPF"/"CNPJ" na frente); no máximo 14 posições; o cursor fica onde a pessoa edita. O que é gravado não
+  muda (sem pontuação), e o documento aparece formatado ao abrir a ficha.
+- **Excel com o bloco TOTAL POR:** o XLSX do Resumido com 3 níveis (ex.: Pesagens › Por apartação) traz,
+  no fim de cada apartação, o mesmo bloco "TOTAL POR LOTE – <apartação>" da folha, com os mesmos números
+  (a mesma função calcula os dois). O CSV continua uma linha por grupo + total geral.
+- **Configurações › Relatórios liberada para o GESTOR:** o GESTOR vê Configurações no menu e, na tela, só o
+  cartão Relatórios (divisor da @). O resto de Configurações continua do ADMIN. Permissão nova
+  `settings.reports` (ADMIN e GESTOR).
+- Título da folha de Pesagens: **"Relatório de Pesagens Individuais (Sintético/Analítico)"**; os outros
+  relatórios continuam com o próprio nome.
+- Gates novos: `registry:document-mask`, `reports:sheet-xlsx-parity` e `ui:dark-field-text`.
+
+### Fixed (E1C)
+- **Tema escuro:** o texto digitado nas fichas (e o valor dos seletores, como "Própria", "Sim", "MT") ficava
+  escuro sobre fundo escuro em todas as fichas; agora segue a cor do campo. O tema claro não muda.
+- **Configurações:** com o "Rendimento de carcaça padrão (%)" em branco (o padrão), o Salvar de qualquer
+  seção era recusado; agora branco é "sem rendimento padrão".
+- Gates antigos do Dexie (`verify-dexie-backup.mjs`, `verify-dexie-import-restore.mjs`) esperavam 7
+  categorias semeadas; a semente tem 12 desde a 1.3.0. Passam a ler a quantidade da própria semente
+  (`storage:all:verify` verde).
+- Documentação de perfis: o OPERADOR abre os relatórios de curral (sem valores), só não imprime nem
+  exporta; a tabela oficial de permissões (doc 11 §4) voltou a bater com o código.
 
 ### Added (E1B — relatório em formato de folha)
 - **A folha do relatório:** o Resumido aparece na tela como a folha que sai na impressão e no PDF —

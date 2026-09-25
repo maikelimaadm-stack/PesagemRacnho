@@ -7,7 +7,7 @@ um **perfil**, que define o que ela pode fazer. Existem três perfis fixos:
 |---|---|---|
 | **ADMIN** | Responsável pelo sistema | Faz tudo, inclusive gerenciar usuários, restaurar backup, limpar dados e alterar configurações. |
 | **GESTOR** | Escritório / gerência | Lança e consulta pesagens, mantém os cadastros, fecha sessões, consulta relatórios e cria backups. Não gerencia usuários nem restaura/limpa dados. |
-| **OPERADOR** | Curral / campo | Lança pesagens e faz o cadastro rápido de animais. Consulta os cadastros, mas não os altera. Não acessa relatórios, backup nem configurações. |
+| **OPERADOR** | Curral / campo | Lança pesagens e faz o cadastro rápido de animais. Consulta os cadastros, mas não os altera. Abre os relatórios de curral (sem valores), mas não imprime nem exporta. Não acessa backup nem configurações. |
 
 Não é possível criar outros perfis nem editar permissões: o programa esconde
 o que o perfil não pode fazer e também recusa a ação por dentro, mesmo que
@@ -24,13 +24,18 @@ alguém tente pelo caminho errado.
 | Criar, alterar e inativar cadastros | sim | sim | não |
 | Operações comerciais e embarques (versões seguintes) | sim | sim | não |
 | Fechar e reabrir sessão de pesagem | sim | sim | não |
-| Relatórios | sim | sim | não |
+| Abrir relatórios (OPERADOR: os de curral, sem valores e sem Comercial) | sim | sim | sim |
+| Imprimir e exportar relatórios | sim | sim | não |
 | Criar backup completo | sim | sim | não |
 | Restaurar backup | sim | não | não |
 | Limpar dados operacionais / Reset completo | sim | não | não |
 | Continuar migração manualmente (Manutenção) | sim | não | não |
 | Gerenciar usuários | sim | não | não |
-| Configurações do sistema | sim | não | não |
+| Configurações › Relatórios (divisor da @ de peso vivo) | sim | sim | não |
+| Demais Configurações (Geral, Curral, Comercial, Segurança) | sim | não | não |
+
+O GESTOR vê **Sistema › Configurações** no menu, mas a tela mostra para ele só
+o cartão **Relatórios**.
 
 ## Tela Usuários (somente ADMIN)
 

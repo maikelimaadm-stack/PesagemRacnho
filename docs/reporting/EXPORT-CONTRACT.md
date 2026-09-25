@@ -116,6 +116,15 @@ Preenchimento das colunas fixas:
   congelado abaixo da linha 7.
 - Linhas: `GROUP` (Grupo = rótulo, Métrica = "N registro(s)"), `DATA` (Grupo = caminho), `SUBTOTAL` e
   `GRAND_TOTAL` (Grupo = caminho ou "Total geral").
+- **Resumido com 3 níveis (E1C):** no fim de cada nó de nível 1 (depois dos descendentes, antes do próximo
+  nível 1 ou do Total geral) vai o bloco da folha — `reportDocument.buildLeafTotalBlock(vm, nó, { target:
+  'xlsx' })`, o MESMO cálculo da folha: linha-título `TOTAL POR <NÍVEL FOLHA> – <NÍVEL 1>` (coluna A, estilo
+  de grupo em toda a largura; não entra na largura da coluna), uma linha por grupo do nível folha (rótulo na
+  coluna do nível folha, métricas nas colunas de sempre, números como números, faixa `leafOnly` só nessas
+  linhas) e a linha `Total <nível 1>` (coluna A, estilo de subtotal). Com 1 ou 2 níveis e no Detalhado, o
+  XLSX não muda; o **CSV e o JSON não levam o bloco**. Contagem 0 (`zeroAsEmpty`) fica 0 na planilha (na
+  folha, "—"); colunas sem valor, que somem na folha, continuam na planilha. Gate
+  `reports:sheet-xlsx-parity:verify` (folha × XLSX célula a célula, negativos com 2 níveis e no CSV).
 - **Números são células numéricas** (nunca texto), com formato `#,##0.00`, `#,##0.000` (GMD), `#,##0.0`
   (totais em kg com 1 casa, E1B — as linhas de dados do Detalhado seguem as casas da coluna) ou `#,##0`
   (inteiro).
@@ -216,8 +225,11 @@ o mesmo HTML em modo `fragment` interativo; `printDocument.buildPrintDocument` e
   (chave `groupOrder` da coluna quando existe — Sessão pela data — senão o rótulo).
 - Formato na folha: kg com **1 casa**, @ com 2, GMD com 3 (`aggregateLabels`; no Detalhado como folha, as
   colunas de peso das linhas também com 1 casa); XLSX usa `#,##0.0` para os totais em kg.
-- O bloco `TOTAL POR`, as notas e o rodapé existem **só na folha** (tela, impressão, PDF). CSV/XLSX/JSON do
-  Resumido têm uma linha por nó do agrupamento + Total geral (§2.1) — os mesmos números por nó.
+- As notas e o rodapé existem **só na folha** (tela, impressão, PDF). O bloco `TOTAL POR` existe na folha e,
+  desde a E1C, no XLSX (§5; mesma função `buildLeafTotalBlock`); CSV e JSON do Resumido têm uma linha por nó
+  do agrupamento + Total geral (§2.1) — os mesmos números por nó.
+- Título: `Relatório de <vm.sheetTitle> (Sintético|Analítico)` — `sheetTitle` da definição (Pesagens =
+  "Pesagens Individuais", E1C) ou o nome do relatório.
 
 **Página** (`decideSheetLayout`): largura útil A4 com margens de 10 mm = **718 px** (retrato) e **1047 px**
 (paisagem) a 96 dpi; fonte 8,5 / 7,6 / 6,8 pt (`m`, `s`, `xs`). `auto` tenta retrato m → paisagem m → s → xs;
@@ -244,7 +256,7 @@ reduzir totais/colunas, exportar, continuar). **Nenhuma coluna é escondida por 
 Gates: `reports:print-contract:verify` (estrutura, CSP, escape, cabeçalho/rodapé, orientação),
 `reports:pdf-contract:verify` (opções do IPC), `reports:document-layout:verify` (alinhamento, somas,
 colunas vazias, GMD "—", 0–3 níveis, Detalhado como folha), `reports:summary-export-parity:verify` (mesmos
-números em folha, CSV, XLSX e JSON).
+números em folha, CSV, XLSX e JSON), `reports:sheet-xlsx-parity:verify` (bloco TOTAL POR folha × XLSX).
 
 ## 10. Segurança do IPC (`electron/ipc/reportIpc.cjs`)
 

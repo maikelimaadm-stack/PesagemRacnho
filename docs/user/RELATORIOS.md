@@ -3,8 +3,9 @@
 Os relatórios respondem às perguntas do dia a dia: **quantas cabeças tem em cada lote, quanto pesam,
 quanto ganharam, quem saiu**. Desde a versão 1.4.0 eles abrem **resumidos** e aparecem na tela como
 **a folha que sai na impressora**: cabeçalho da fazenda com o logo, seções por grupo, subtotais e total
-geral. Os números da tela, da impressão, do PDF e dos arquivos são **sempre os mesmos** (os arquivos
-trazem uma linha por grupo e o total geral; o bloco "TOTAL POR" e as notas existem só na folha).
+geral. Os números da tela, da impressão, do PDF e dos arquivos são **sempre os mesmos**. O Excel (XLSX)
+traz também o bloco "TOTAL POR" da folha; o CSV e o JSON trazem uma linha por grupo e o total geral; as
+notas existem só na folha.
 
 ## 1. Abrir
 
@@ -146,8 +147,9 @@ A folha é a mesma na tela, na impressão e no PDF (A4):
 1. **Cabeçalho**: logo da fazenda à esquerda; no centro o produtor, a fazenda, o endereço e, se você
    quiser, CPF/CNPJ, inscrição estadual e telefone (item 8); à direita o período e a data/hora de emissão.
    Na impressão ele se repete em todas as páginas.
-2. **Título**: "Relatório de Pesagens (Sintético)" no Resumido, "(Analítico)" no Detalhado, e à direita o
-   modo e os níveis (ex.: Resumido · Apartação › Data › Lote).
+2. **Título**: "Relatório de <nome do relatório> (Sintético)" no Resumido, "(Analítico)" no Detalhado — em
+   Pesagens, "**Relatório de Pesagens Individuais (Sintético)**" —, e à direita o modo e os níveis (ex.:
+   Resumido · Apartação › Data › Lote).
 3. **Seções** por nível de agrupamento: **APARTAÇÃO: ENGORDA** › **DATA: 28/02/2026** › tabela com uma
    linha por lote.
 4. **Subtotal** no fim de cada tabela, na mesma coluna de cada valor (ex.: "Subtotal 28/02/2026 · Lotes: 3").
@@ -177,8 +179,8 @@ Regras da folha:
   assim couber, o programa avisa antes de imprimir (nunca corta coluna calado).
 
 **A arroba da folha.** Média (@), Total (@) e o ganho em @ usam a arroba de **peso vivo**: peso ÷ 30 (o
-padrão) ou peso ÷ 15. Quem escolhe é o ADMIN em **Configurações › Relatórios › Divisor da arroba**. O
-divisor usado aparece no rodapé de cada folha. Isso não muda a @ de carcaça do Comercial (carcaça ÷ 15).
+padrão) ou peso ÷ 15. Quem escolhe é o ADMIN ou o GESTOR em **Configurações › Relatórios › Divisor da
+arroba** (o GESTOR vê em Configurações só essa seção). O divisor usado aparece no rodapé de cada folha. Isso não muda a @ de carcaça do Comercial (carcaça ÷ 15).
 
 ## 8. Cabeçalho da propriedade
 
@@ -241,9 +243,11 @@ No alto, à direita:
 
 - **Imprimir** (verde) — imprime **a folha** em A4, na orientação escolhida na barra.
 - **Excel** — planilha XLSX com os mesmos números da tela: no Resumido, uma linha por grupo (apartação,
-  data e lote, cada um no seu nível) e o Total geral — o bloco "TOTAL POR" e as notas ficam só na folha;
-  no Detalhado, todas as linhas. Totais em kg com 1 casa; as linhas de dados do Detalhado saem com as
-  casas da coluna.
+  data e lote, cada um no seu nível) e o Total geral; com três níveis (ex.: Por apartação), no fim de cada
+  apartação vem também o bloco **TOTAL POR LOTE – ENGORDA** igual ao da folha (título, uma linha por
+  lote e a linha **Total Engorda**; a Faixa exigida só nas linhas de lote). No Detalhado, todas as linhas.
+  Os números são números de verdade (dá para somar e filtrar no Excel); totais em kg com 1 casa; as
+  linhas de dados do Detalhado saem com as casas da coluna. As notas ficam só na folha.
 - **PDF** — a mesma folha em A4, com **Página X de Y** no rodapé de cada página.
 - **⋯ (Outros formatos)** — **CSV** (Excel pt-BR) e **JSON com manifesto**.
 
@@ -252,7 +256,8 @@ com as opções: usar paisagem, reduzir totais/colunas, exportar ou continuar. N
 sem você saber.
 
 No CSV do Resumido, a coluna **grupo** traz o caminho completo (ex.: "Engorda > Lote 01"), para você
-poder ordenar ou filtrar no Excel sem perder de qual apartação é cada lote.
+poder ordenar ou filtrar no Excel sem perder de qual apartação é cada lote. O CSV não leva o bloco
+"TOTAL POR": é uma linha por grupo e o total geral.
 
 Cada emissão tem um número e um código de conferência (SHA-256). Junto do CSV, XLSX e PDF é salvo um
 arquivo `.manifest.json` com quem emitiu, quando, o período, os filtros, o modo e o divisor da @.
@@ -312,8 +317,9 @@ Quem não abre Backup e Manutenção (OPERADOR e CONSULTA) encontra **Pendência
   arrobas de carcaça e carcaça (Comercial) — também no Resumido e nos arquivos. A **@ de peso vivo** da
   folha (Média @, Total @, ganho em @ = kg ÷ 30 ou 15) não é valor comercial e aparece para todos.
 - Senhas e chaves de recuperação **nunca** aparecem em relatório.
-- O **cabeçalho da propriedade** e o **divisor da @** são editados por quem pode alterar Cadastros e
-  Configurações; todos os perfis que abrem o relatório veem a folha com eles.
+- O **cabeçalho da propriedade** é editado por quem altera Cadastros (ADMIN e GESTOR) e o **divisor da
+  @** em Configurações › Relatórios (ADMIN e GESTOR); todos os perfis que abrem o relatório veem a folha
+  com eles.
 
 ## 15. Relatórios comerciais: dados legados
 

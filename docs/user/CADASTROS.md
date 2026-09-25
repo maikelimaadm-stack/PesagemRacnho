@@ -74,8 +74,8 @@ sexo, mas nunca troca sozinho uma categoria que você informou.
 
 ## Parceiros
 
-Campos: **Nome**, **Tipo** (pessoa física ou jurídica), **CPF/CNPJ** (só
-números, opcional, mas único quando informado), **Papéis** (Comprador,
+Campos: **Nome**, **Tipo** (pessoa física ou jurídica), **CPF/CNPJ** (opcional,
+mas único quando informado; veja "CPF/CNPJ com máscara" abaixo), **Papéis** (Comprador,
 Vendedor, Frigorífico, Transportador, Proprietário de marca; pode marcar
 vários), **Telefone**, **E-mail**, **Cidade**, **UF**, **Registro SIF** (só para
 frigorífico), **Rendimento padrão** (sugestão de rendimento de carcaça para
@@ -88,6 +88,26 @@ parceiro, e não para o nome digitado.
 Os antigos "Cadastros Comerciais" (compradores, vendedores e frigoríficos em
 listas separadas) foram convertidos automaticamente em parceiros na primeira
 abertura da versão 1.2.0, unindo registros com o mesmo CPF/CNPJ ou o mesmo nome.
+
+### CPF/CNPJ com máscara (1.4.0)
+
+Nas fichas de **Parceiros** e de **Propriedades**, o campo **CPF/CNPJ** se
+formata enquanto você digita:
+
+| Você digita | Aparece |
+|---|---|
+| até 11 números | CPF `000.000.000-00` |
+| 12 a 14 números | CNPJ `00.000.000/0000-00` |
+| letras nas 12 primeiras posições | CNPJ alfanumérico `12.ABC.345/01DE-35` (em maiúsculas) |
+
+- **Colar** também funciona, com ou sem pontuação e até com o rótulo na frente:
+  "123.456.789-01", "12345678901", "CNPJ: 11.222.333/0001-81", "12abc34501de35".
+- Cabem no máximo **14** posições; a tecla a mais é ignorada.
+- Dá para corrigir no meio: o cursor fica onde você está e o Backspace logo
+  depois de um ponto apaga o número antes dele.
+- O que é **guardado** continua sem pontuação (só os números, ou o CNPJ
+  alfanumérico com as letras). Ao abrir a ficha de novo, o documento aparece
+  formatado. A dica de formato aparece quando você clica no campo.
 
 ## Propriedades
 

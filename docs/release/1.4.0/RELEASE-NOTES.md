@@ -13,8 +13,9 @@ Data: 25/09/2026 · Esquema Dexie 8 (sem mudança) · Backup formato 3 · Instal
 - **Agrupar por** fica na barra: escolha Lote, Categoria, Raça… e a tabela muda na hora.
 - **Filtros rápidos** de um clique: "Somente mortes", "Somente perdendo peso", "Sem pesagem há mais
   de 30 dias", "Somente entradas e saídas", "Somente mudanças de lote no período".
-- O que aparece na tela é o que sai na impressão A4; no Excel (CSV e XLSX) e no JSON vão os mesmos números,
-  uma linha por grupo (o bloco "TOTAL POR" e as notas ficam só na folha).
+- O que aparece na tela é o que sai na impressão A4; no Excel (XLSX), no CSV e no JSON vão os mesmos
+  números, uma linha por grupo; o XLSX leva também o bloco "TOTAL POR" da folha (as notas ficam só na
+  folha).
 
 ### O relatório virou uma folha (E1B)
 - O Resumido aparece na tela **como a folha impressa**: cabeçalho com o **logo e os dados da fazenda**,
@@ -32,6 +33,15 @@ Data: 25/09/2026 · Esquema Dexie 8 (sem mudança) · Backup formato 3 · Instal
   **logo** (o programa ajusta o tamanho), com pré-visualização.
 - **Configurações › Relatórios**: divisor da arroba de peso vivo (30 ou 15).
 - OPERADOR e CONSULTA veem **Pendências de pesagem** e **Qualidade dos dados** em Relatórios › Controle.
+
+### Ajustes finais (E1C)
+- A folha de Pesagens sai com o título **"Relatório de Pesagens Individuais (Sintético)"**.
+- **Excel (XLSX)** com o bloco **TOTAL POR LOTE – <apartação>** igual ao da folha, com os mesmos números.
+- **CPF/CNPJ com máscara** nas fichas de Parceiros e Propriedades (CPF, CNPJ e CNPJ alfanumérico), ao
+  digitar e ao colar.
+- O **GESTOR** passa a ajustar o **divisor da @** em Configurações › Relatórios (só essa seção).
+- **Tema escuro:** o texto digitado nas fichas de Cadastros voltou a aparecer.
+- **Configurações:** salvar com o "Rendimento de carcaça padrão" em branco voltou a funcionar.
 
 ### Menos relatórios na lista
 - A lista caiu de **51 para 12** relatórios: Rebanho atual, Ocupação de lotes, Pesagens, Fechamento do
