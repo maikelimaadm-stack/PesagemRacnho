@@ -58,6 +58,20 @@ Regras de segurança:
   a tela usa a conversão em memória e tenta de novo na próxima abertura. Nenhum favorito some.
 - Links antigos (`?r=rebanho.dimensao.raca`) não dependem da conversão: o id antigo é resolvido na hora.
 
+## 3.1 E1B: dados novos sem mudança de esquema
+
+Nenhuma tabela ou índice novo. O que a E1B grava:
+
+| Onde | O quê | Quando |
+|---|---|---|
+| `propriedades` (campos **não indexados**) | `titular_nome`, `endereco`, `documento`, `inscricao_estadual`, `mostrar_documento_no_cabecalho`, `telefone`, `logo` (data URL PNG/JPEG, ≤ 300 KB) | Só quando alguém preenche o cartão **Cabeçalho dos relatórios**; registros antigos continuam sem esses campos |
+| `appSettings` `report-settings:<empresa>` | `{ versao: 1, arroba_divisor: 30 \| 15 }` | Só ao salvar Configurações › Relatórios; sem a chave vale 30 |
+| `appSettings` `report-view-state:<empresa>:<usuário>` | Última seleção de cada relatório (tipo, período, agrupamento, filtros, orientação, colunas vazias) — nunca dados | Ao usar Relatórios; sem auditoria (é preferência de tela) |
+
+Nada disso é convertido na atualização: não há passo de migração, backfill nem backup extra. Backups da
+1.4.0 levam esses campos e chaves (as tabelas vão inteiras) e a restauração os devolve — gate
+`registry:property-header:verify` (backup → restore com logo).
+
 ## 4. Relatório esperado
 
 Em **Backup e Manutenção › aba Controle › Trilha de auditoria**, filtrar Origem =
@@ -93,6 +107,10 @@ estavam. Depois disso:
 - Os modelos salvos, favoritos e recentes **já convertidos** apontam para relatórios que a 1.3.2 não
   conhece (`rebanho.atual`, `desempenho`, `movimentacao.lotes`…). A 1.3.2 **esconde** esses itens (não
   apaga e não dá erro); reinstalando a 1.4.0 eles voltam.
+- Os campos do **cabeçalho da propriedade** (E1B) ficam guardados no registro: a 1.3.2 não os mostra e,
+  ao editar a propriedade nela, não os apaga (a gravação só altera os campos que a versão conhece). As
+  chaves `report-settings:*` e `report-view-state:*` são ignoradas pela 1.3.2. Reinstalando a 1.4.0,
+  tudo volta a aparecer.
 - Para ter na 1.3.2 os modelos e favoritos de antes, restaure o backup criado no passo 1 da seção 1.
   Atenção: a restauração volta **todo** o banco para aquele momento; o que foi lançado depois
   precisa ser lançado de novo. Por isso, se a volta for necessária, prefira fazê-la logo.

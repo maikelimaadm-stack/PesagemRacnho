@@ -1,8 +1,9 @@
 # Contrato de emissão: CSV, XLSX, JSON, impressão e PDF
 
 Fontes: `application/reportExportService.js`, `application/reportPrintService.js`,
-`domain/reportFormatting.js`, `infrastructure/exporters/reportLayout.js`, `csvExporter.js`,
-`jsonExporter.js`, `xlsxExporter.js`, `printDocument.js` e `electron/ipc/reportIpc.cjs`.
+`domain/reportFormatting.js`, `domain/reportDocument.js`, `infrastructure/exporters/reportLayout.js`,
+`csvExporter.js`, `jsonExporter.js`, `xlsxExporter.js`, `printDocument.js`, `sheetHtml.js`,
+`sheetStyles.js` e `electron/ipc/reportIpc.cjs`.
 
 ## 1. Princípios
 
@@ -49,11 +50,8 @@ por nó de grupo** (profundidade primeiro, na ordem de `summarySort`), sem linha
   grupo do Detalhado. Média de coluna inteira sai com 1 casa (`aggregateValueColumn`).
 - CSV: colunas `tipo_linha`, `nivel`, `grupo` (caminho "Engorda > Lote 01") e as do resumo; XLSX: aba
   com as mesmas linhas (números como números) e "Agrupado por: … · Resumido (uma linha por grupo)" nos
-  metadados; JSON: `mode`, `drill`, `summary {headers, metrics, rows}` e `data: []`; impressão: tabela
-  `tr.sum.lvlN`. Larguras estimadas pelo conteúdo (`summaryColumnWidths`: rótulo até 200 px e depois
-  quebra linha; métrica = maior entre a palavra mais longa do cabeçalho e o maior número); A4 retrato
-  até 718 px impressos, paisagem até 1047 px, acima disso o aviso "muitas colunas". Nada é cortado com
-  reticências.
+  metadados; JSON: `mode`, `drill`, `summary {headers, metrics, rows}` e `data: []`; tela, impressão e
+  PDF: **a folha** (§9), com as mesmas métricas e valores por nó. Nada é cortado com reticências.
 - Manifesto: `presetId` (visão antiga — também quando a tela abre pelo favorito/link antigo e chama o
   relatório novo com `request.presetId`), `mode`, `summarySort` e `drill`.
 - Proteção contra fórmula no CSV (`protectFormula`): apóstrofo em todo texto iniciado por `=`, `+`, `@`
@@ -61,6 +59,12 @@ por nó de grupo** (profundidade primeiro, na ordem de `summarySort`), sem linha
   a regra espelhada.
 - `drill` (clique no grupo): corte exato por `groupKeyOf` do caminho escolhido, aplicado antes do
   agrupamento; aparece em "Filtros" como "(detalhe do grupo)".
+- E1B: rótulos da definição (`metricLabels`, ex.: "Qtd", "Faixa mínima do lote (kg)") no cabeçalho;
+  métricas de par fora do nível certo saem de todos os canais (`hiddenMetrics` — ex.: faixa do lote
+  agrupando só por data); com par `leafOnly`, as métricas do par ficam **vazias** nas linhas acima do nível
+  folha e no Total geral (`leafOnlyMetricKeys`/`isLeafGroupLevel`), também nas linhas `SUBTOTAL`/
+  `GRAND_TOTAL` do Detalhado e nos chips da grade. O JSON mantém os agregados brutos da árvore.
+- Manifesto E1B: `arrobaDivisor` (30 ou 15) usado nas colunas em @.
 
 Gate: `reports:summary-export-parity:verify` (mesmas células em tela, CSV, XLSX, impressão e JSON).
 
@@ -112,8 +116,8 @@ Preenchimento das colunas fixas:
   congelado abaixo da linha 7.
 - Linhas: `GROUP` (Grupo = rótulo, Métrica = "N registro(s)"), `DATA` (Grupo = caminho), `SUBTOTAL` e
   `GRAND_TOTAL` (Grupo = caminho ou "Total geral").
-- **Números são células numéricas** (nunca texto), com formato `#,##0.00`, `#,##0.000` (GMD) ou `#,##0`
-  (inteiro).
+- **Números são células numéricas** (nunca texto), com formato `#,##0.00`, `#,##0.000` (GMD), `#,##0.0`
+  (kg com 1 casa, E1B) ou `#,##0` (inteiro).
 - Aba 2 **Manifesto**: uma linha por chave do manifesto (objetos em JSON), **sem** o `sha256`, que é do
   próprio arquivo e é calculado depois.
 - Controle de XML: escape de `& < > " '` e remoção de caracteres de controle inválidos.
@@ -172,34 +176,71 @@ Estrutura do arquivo:
 Integridade: se o writer devolve um SHA-256 diferente do conteúdo gerado → erro `REPORT_INTEGRITY`.
 Diálogo cancelado → `canceled: true`, nada gravado.
 
-## 9. Impressão e PDF (`printDocument.js`, `reportPrintService.js`)
+## 9. A folha: tela, impressão e PDF (E1B 1.4.0)
 
-- HTML autossuficiente, **sem script**, com CSP `default-src 'none'; style-src 'unsafe-inline'`; todo
-  texto passa por `escapeHtml`.
-- Papel **A4**; margens 12/10/14/10 mm; fonte 8,5 pt; `thead` repetido em cada página; linhas não quebram.
-- **Cabeçalho**: "Pesagens Individuais" (+ organização se informada), título, Período (ou "Sem período
-  (estado atual)"), Grão, Filtros (fixos marcados "(fixo)" e pesquisa), Agrupado por, selo de
-  classificação legada; à direita: emitido em/por (papel), Registros · Animais únicos, versão e esquema,
-  emissão (8 caracteres).
-- Corpo: linhas de grupo com "N registro(s)", dados, subtotal e **Total geral** com os totais em chips e
-  "(n de N)" quando há ausentes; sem totais configurados, "Registros: N".
-- Final: notas da definição; aviso de colunas omitidas pelo perfil; "Ausentes são exibidos como “—” e
-  não entram em médias e somas. Total geral recalculado sobre toda a população filtrada."
-- **Rodapé**: "Pesagens Individuais <versão> · Emissão <8> · <relatório>" e **"Página X de Y"** —
-  via `@page` (impressão/iframe) ou `footerTemplate` nativo do `printToPDF` (PDF, com não-ASCII
-  convertido em entidade numérica).
+Um documento e um renderizador para os três canais: `domain/reportDocument.js`
+(`buildReportDocument(viewModel, { header, orientation, showEmptyColumns, maxDataRows, widths })`, função
+pura) → `infrastructure/exporters/sheetHtml.js` (`renderSheetBody(doc, { mode: 'fragment'|'print',
+interactive })`) com o CSS de `sheetStyles.js`. A tela (`components/reports/ReportSheetView.jsx`) desenha
+o mesmo HTML em modo `fragment` interativo; `printDocument.buildPrintDocument` embrulha em modo `print`.
 
-**Regra de orientação** (`decidePrintLayout`, larguras = `widths` do modelo ou `defaultWidth`):
+**Documento** (`DOCUMENT_KIND = 'pesagens.report-document'`):
 
-| Condição | Resultado |
-|---|---|
-| ≤ 8 colunas **e** soma das larguras ≤ 1000 | retrato (`auto`) |
-| senão, soma ≤ 1520 | paisagem (`auto`) |
-| não cabe na orientação escolhida | `fits: false` + aviso `PRINT_TOO_WIDE` "Este relatório possui muitas colunas para impressão." |
+- `header` = `buildPropertyHeader(...)` (`catalog/domain/propertyHeader.js`, resolvido por
+  `catalog/application/propertyHeaderService.loadReportHeader`): logo (data URL PNG/JPEG validado por
+  assinatura e tamanho, ≤ 300 KB), titular, fazenda, endereço + município-UF, documentos (só com
+  `mostrar_documento_no_cabecalho`), telefone. Sem propriedade: só o nome do sistema. Propriedade do
+  cabeçalho: a de filtro/condição fixa/detalhe na coluna `propriedade` com um único valor; senão a padrão.
+- `title` "Relatório de <nome> (Sintético|Analítico)", `subtitle` modo · níveis, `periodText`, `emittedText`.
+- Resumido (`layout: 'summary'`): colunas = rótulo do nível folha + métricas (`summaryMetrics`, rótulos
+  `metricLabels`); par `metricPairs` vira **uma** coluna "de–até" (`rangeText`: `150–350`, `≥ 150`,
+  `≤ 350`, `—`) e, com `leafOnly`, só é preenchido nas linhas do nível folha. Seções: 1 nível = tabela
+  plana; 2 níveis = seção por nível 1 com tabela dos filhos + SUBTOTAL; 3 níveis = seção nível 1 ›
+  subseção nível 2 (tabela + SUBTOTAL) + bloco `TOTAL POR <folha> – <nível 1>` = `groupRows` da
+  população da seção de nível 1 pelo nível folha, com linha TOTAL; por fim `GRAND_TOTAL`.
+- Detalhado (`layout: 'detail'`, botão "Ver como folha"): seções por nível com as linhas de dados e o
+  subtotal em texto (`chips`); o par vira um item "Faixa exigida (kg): 150–350", só no subtotal do nível
+  folha. Na tela, até 2.000 linhas de dados (`maxDataRows`; nota avisa); impressão/PDF levam todas.
+- Cada linha é `columns.map(...)`: **uma célula por coluna, na ordem do cabeçalho** (`data-col` =
+  índice). Gate `reports:document-layout:verify` confere célula × coluna em todas as linhas.
+- **Colunas vazias somem**: métrica com total geral ausente (ou 0 com `zeroAsEmpty`) sai de `columns` e
+  vai para `hiddenColumns` + nota; `showEmptyColumns` desliga a regra (tela e impressão).
+- Notas: as da definição; "GMD calculado com N de M animais…" (N = `countDistinct` de
+  `animais_com_anterior`, M = de `numero_animal`); colunas ocultas; colunas omitidas pelo perfil;
+  "Ausentes aparecem como “—”…".
+- Rodapé (`footer`): Filtros (`describeReportFilters`), "@ = peso vivo ÷ 30|15" (quando há coluna em @),
+  "Emitido por <nome> em dd/mm/aaaa HH:MM", versão; `pageFooter` = "Pesagens Individuais v<versão> ·
+  Emissão <8> · <relatório>".
+- Ordem dos irmãos: `orderNodes` (mesma de `buildSummaryRows`); rótulo compara `compareGroupLabels`
+  (chave `groupOrder` da coluna quando existe — Sessão pela data — senão o rótulo).
+- Formato na folha: kg com **1 casa**, @ com 2, GMD com 3 (`aggregateLabels`); XLSX usa `#,##0.0` para kg.
 
-Com `fits: false` e sem `acceptTooWide`, `printReport`/`exportPdf` devolvem `{ blocked: true, layout }`.
-A tela oferece: Usar paisagem (se retrato), Reduzir colunas, Exportar CSV, Continuar mesmo assim.
-**Nenhuma coluna é escondida automaticamente.**
+**Página** (`decideSheetLayout`): largura útil A4 com margens de 10 mm = **718 px** (retrato) e **1047 px**
+(paisagem) a 96 dpi; fonte 8,5 / 7,6 / 6,8 pt (`m`, `s`, `xs`). `auto` tenta retrato m → paisagem m → s → xs;
+retrato/paisagem escolhidos só reduzem a fonte. Larguras estimadas pelo conteúdo (rótulo 64–210 px, métrica
+≥ 34 px); a **folga** da página vai primeiro para o rótulo do subtotal caber numa linha (até 300 px), sem
+mudar `fits`. Detalhado: soma das larguras de tela ≤ 1000 (retrato) / 1520 (paisagem). Não coube →
+`fits: false` + `PRINT_TOO_WIDE` "Este relatório possui muitas colunas para impressão." e, sem
+`acceptTooWide`, `printReport`/`exportPdf` devolvem `{ blocked: true, layout }` (a tela oferece paisagem,
+reduzir totais/colunas, exportar, continuar). **Nenhuma coluna é escondida por falta de espaço.**
+
+**Impressão / PDF** (`printDocument.js`, `reportPrintService.js`):
+
+- HTML autossuficiente, **sem script**, CSP `default-src 'none'; img-src data:; style-src
+  'unsafe-inline'` (só o logo embutido); todo texto passa por `escapeHtml`; texto em CSS por `cssString`.
+- `<table class="sheet-page">` externa: `thead` = cabeçalho da propriedade + título (**repete em cada
+  página**), `tfoot` = rodapé, `tbody` = conteúdo; linhas não quebram; títulos de seção não ficam órfãos.
+- `@page { size: A4 <orientação>; margin: 10mm 10mm 12mm 10mm }` com `@bottom-left` = `pageFooter` e
+  `@bottom-right` = **"Página X de Y"** (`counter(page)`/`counter(pages)`) — o mesmo na impressão, no PDF e
+  no iframe de desenvolvimento.
+- IPC `pdfOptions({ landscape })`: `pageSize: 'A4'`, `printBackground`, **`displayHeaderFooter: false`**,
+  **`preferCSSPageSize: true`** (o `@page` manda), margens de reserva 0,3937/0,4724 in.
+- Manifesto de impressão/PDF: `orientation` e `arrobaDivisor`; PDF também `sha256` e `size`.
+
+Gates: `reports:print-contract:verify` (estrutura, CSP, escape, cabeçalho/rodapé, orientação),
+`reports:pdf-contract:verify` (opções do IPC), `reports:document-layout:verify` (alinhamento, somas,
+colunas vazias, GMD "—", 0–3 níveis, Detalhado como folha), `reports:summary-export-parity:verify` (mesmos
+números em folha, CSV, XLSX e JSON).
 
 ## 10. Segurança do IPC (`electron/ipc/reportIpc.cjs`)
 

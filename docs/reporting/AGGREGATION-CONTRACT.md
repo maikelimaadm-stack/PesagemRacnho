@@ -61,7 +61,7 @@ sempre válido; com coluna, a coluna precisa existir e `op` precisa estar em `co
 | Coluna agrupável | coluna precisa ser `groupable`; a mesma coluna não pode repetir em dois níveis |
 | Chave e rótulo | `groupKeyOf` / `groupLabelOf` da coluna (id para entidade; data cortada em `YYYY-MM-DD`) |
 | "Não informado" | chave ausente (`null`, `undefined`, texto vazio) → grupo `__nao_informado__` com rótulo **"Não informado"**, sempre por **último** |
-| Ordem dos grupos | por rótulo com collator pt-BR (sem acento/caixa, numérico), `asc` ou `desc` por nível |
+| Ordem dos grupos | `compareGroupLabels`: pela chave `groupOrderOf` quando os dois grupos a têm (E1B: Sessão pela data da sessão — o rótulo "dd/mm/aaaa · status" não ordena por data), senão por rótulo com collator pt-BR (sem acento/caixa, numérico); `asc` ou `desc` por nível. O nó guarda `orderKey`. |
 | Ordem das linhas | a ordem da população (já ordenada por `sortRows`) é preservada dentro do grupo |
 | Saída | árvore estrutural (nunca HTML): `{ id, level, columnId, columnLabel, key, label, missing, path, rowCount, rows, aggregates, children }` |
 

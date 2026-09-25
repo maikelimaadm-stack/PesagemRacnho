@@ -5,12 +5,38 @@ Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PAT
 
 ## [1.4.0] — 2026-09-25
 
-Etapa E1 do Plano Mestre 2. Esquema Dexie **8** e backup **formato 3**, **sem mudança de esquema**. A
-única conversão é das preferências de relatório (favoritos, recentes e modelos salvos), feita ao abrir
-Relatórios, repetível e registrada na auditoria. Instalador de diagnóstico não assinado em
-`release-unsigned/`. Notas em `docs/release/1.4.0/RELEASE-NOTES.md`.
+Etapas E1 e E1B do Plano Mestre 2. Esquema Dexie **8** e backup **formato 3**, **sem mudança de
+esquema**. A única conversão é das preferências de relatório (favoritos, recentes e modelos salvos),
+feita ao abrir Relatórios, repetível e registrada na auditoria. Instalador de diagnóstico não assinado
+em `release-unsigned/`. Notas em `docs/release/1.4.0/RELEASE-NOTES.md`.
 
-### Added
+### Added (E1B — relatório em formato de folha)
+- **A folha do relatório:** o Resumido aparece na tela como a folha que sai na impressão e no PDF —
+  cabeçalho da propriedade com logo, título "Relatório de … (Sintético/Analítico)", seções por nível
+  (APARTAÇÃO › DATA › tabela por lote), subtotal alinhado sob cada coluna, bloco **TOTAL POR LOTE – <apartação>**
+  com três níveis, **TOTAL GERAL**, notas e rodapé com filtros, "@ = peso vivo ÷ 30", quem emitiu, data/hora,
+  versão e **Página X de Y**. Um documento e um renderizador só para tela, impressão e PDF.
+- Regras da folha: cada célula sob o cabeçalho da sua coluna (gate por índice); coluna sem nenhum valor
+  no relatório some (botão **Mostrar colunas vazias**); GMD sem pesagem anterior é "—", nunca "0,000",
+  com a nota "GMD calculado com N de M animais"; kg com 1 casa, @ com 2, GMD com 3.
+- **Pesagens › Tipo "Por apartação (resumo por data)"** (Apartação › Data › Lote, Resumido) com Qtd,
+  Faixa exigida, Menor, Maior, Peso médio, Média @, Peso total, Total @, Ganho médio (kg e @), Ganho total
+  (kg e @), Dias médios, GMD médio, Machos e Fêmeas. Também "Resumo por Sessão", "Por lote", "Por data" e
+  "Analítico por animal".
+- **Barra de filtros padrão** nos 12 relatórios: Data início/fim, Período com atalhos, Orientação,
+  **Tipo de relatório**, Agrupar por, **Ordenar por**, **Pesagem anterior** (Todos/Com/Sem) e os botões
+  Lotes, Apartações, Sexo, Raças, Era, Marcas, Categoria e Status com várias escolhas e contador
+  ("Lotes (2)"), mais Limpar filtros. O relatório reabre como o usuário deixou (estado por usuário).
+- Clique num grupo da folha abre o Detalhado filtrado; o Detalhado continua na grade e ganha **Ver como
+  folha**. Botões **Imprimir**, **Excel**, **PDF** e **⋯** (CSV, JSON).
+- **Cadastro de Propriedade › Cabeçalho dos relatórios:** produtor/razão social, endereço, CPF/CNPJ
+  (inclusive CNPJ alfanumérico), inscrição estadual, "mostrar CPF/CNPJ e IE", telefone e **logo** (PNG/JPG
+  reduzido para até 400 px e 300 KB), com pré-visualização. Vai no backup e volta na restauração.
+- **Configurações › Relatórios › Divisor da arroba** (30, padrão, ou 15) para as colunas em @ de peso vivo;
+  aparece no rodapé da folha e no manifesto.
+- Gates `reports:sheet-data`, `reports:document-layout` e `registry:property-header` no `test:quick`.
+
+### Added (E1)
 - **Relatórios resumidos:** os relatórios agrupados abrem no modo **Resumido**, com uma linha por grupo
   (lote, categoria, raça…) e os totais em colunas (Cabeças, Peso médio, GMD…). O botão **Resumido |
   Detalhado** alterna a visão; clicar no grupo abre o Detalhado só daquele grupo, com selo de volta. A
@@ -43,6 +69,15 @@ Relatórios, repetível e registrada na auditoria. Instalador de diagnóstico n�
   hierarquia sobreviver a ordenar/filtrar no Excel.
 - Barra do relatório: ações secundárias (Níveis, Totais, Colunas, Atualizar, Salvar modelo, Imprimir)
   viram ícones com dica, e a barra quebra linha em vez de cobrir a faixa de filtros.
+- E1B: OPERADOR e CONSULTA (que não abrem Backup e Manutenção) veem **Pendências de pesagem** e
+  **Qualidade dos dados** em Relatórios, no grupo **Controle**; ADMIN e GESTOR seguem com os 12 + aba
+  Controle.
+- E1B: modelo salvo antes da 1.4.0 (sem modo) abre no Resumido só se tiver agrupamento; sem agrupamento,
+  no Detalhado.
+- E1B: impressão e PDF passam a ser a folha: margens de 10 mm, "Página X de Y" pela própria página (sem
+  o rodapé nativo do Chromium), logo embutido (CSP `img-src data:`); XLSX com kg em `#,##0.0`.
+- E1B: a **Faixa exigida** (faixa de peso do cadastro atual do lote) só aparece no nível do lote — vazia
+  nos subtotais de data/apartação e no total geral, na folha, no CSV/XLSX e nos subtotais do Detalhado.
 
 ### Fixed
 - **Relação de Pesagens:** a tela quebrava ao abrir o diálogo coletivo "Data, apartação e lote"
@@ -58,6 +93,12 @@ Relatórios, repetível e registrada na auditoria. Instalador de diagnóstico n�
   "true/false"; agora "01/08/2026" e "Sim/Não" na tela, impressão, CSV e XLSX (JSON segue canônico).
 - **Relatórios — médias:** média de coluna inteira (dias no lote, dias sem pesagem) saía arredondada
   para inteiro (34 em vez de 33,5), inclusive no XLSX; agora com uma casa decimal.
+- E1B — **Relatórios por sessão:** as sessões saíam em ordem de texto ("01/01/2026" antes de
+  "01/10/2025"); agora em ordem de data.
+- E1B — **Detalhado (grade):** o grupo por data aparecia como "2026-02-28"; agora "28/02/2026", e os
+  totais usam os mesmos rótulos da folha ("Qtd", "Peso médio (kg)", "Faixa exigida (kg): 150–350").
+- E1B — o modelo antigo mostrava colunas desalinhadas (Peso total sob "Média (@)"), GMD "0,000" sem
+  pesagem anterior e colunas vazias ocupando espaço; a folha nova não tem nenhum dos três.
 
 ## [1.3.2] — 2026-09-24
 

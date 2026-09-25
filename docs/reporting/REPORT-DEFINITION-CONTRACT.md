@@ -103,6 +103,24 @@ REPORT-CATALOG.md).
 | `resolveReportId(id)` | `{ definition, aliasId, alias }`: id atual ou id antigo consolidado (`LEGACY_REPORT_ALIASES`). `getReportDefinition(idAntigo)` devolve a definição nova. |
 | `listReports(actor, { visibility })` | resumo por área, filtrado pelo papel (bloqueados só na área `hidden`). |
 
+## 4.2 Tipos de relatório, rótulos e pares da folha (E1B 1.4.0)
+
+| Campo / função | Regra |
+|---|---|
+| `views` | `[{ id, label, description?, groups, mode, aggregates?, columns?, sort?, summarySort?, filters? }]` — os "Tipos de relatório" da barra. `defineReport` valida: id único, `groups` só com colunas `groupable` (≤ 3, direção `asc`/`desc`), `mode` válido, agregações/colunas/ordem existentes, chave desconhecida recusada. Pesagens declara `por-apartacao-data` (Apartação › Data desc › Lote, Resumido), `por-lote`, `por-data` (sem a faixa) e `analitico`. |
+| `listReportViews(definition)` | visões declaradas; se nenhuma reproduz o agrupamento padrão, entra primeiro a gerada **"Resumo por <nível>"** (`padrao`, no `defaultMode`); sem nenhuma visão Detalhado, entra **"Analítico"** no fim. |
+| `viewSelection(view, definition)` / `matchView(definition, { groups, mode })` | seleção da visão (sem `drill`) / id da visão que casa com o estado atual, senão `null` ("Personalizado"). |
+| `metricLabels` | `{ <id da agregação>: 'rótulo de curral' }` — cabeçalho da folha, dos arquivos e chips (ex.: `qtd` → "Qtd"). Rótulo vazio recusado. |
+| `metricPairs` | `[{ id, label, from, to, leafOnly?, leafColumnId?, unit? }]` — duas agregações que viram UMA coluna "de–até" na folha (Faixa exigida = `faixa_min`–`faixa_max`). `leafColumnId`: o par só vale quando o nível folha do agrupamento é essa coluna; fora dele as duas métricas vão para `vm.hiddenMetrics` e saem de todos os canais. `leafOnly`: preenchido só nas linhas do nível folha (vazio acima e no Total geral). |
+
+View model (E1B): `arrobaDivisor` (30|15 — `request.arrobaDivisor` ou Configurações › Relatórios; outro
+valor → erro), `metricLabels`, `metricPairs` (só os pares ativos), `hiddenMetrics`.
+
+Estado por usuário (não é modelo): `saveReportViewState`/`getReportViewState`
+(`report-view-state:<empresa>:<usuário>` em appSettings, sem auditoria) guardam a última seleção de cada
+relatório + `showEmptyColumns`; a tela reabre por ele quando não há modelo nem visão antiga na URL.
+Modelo antigo sem `mode`: Resumido se tiver agrupamento, senão Detalhado (`templateToRequest`).
+
 Condições dos relatórios antigos (`alias.fixed`): viram filtros comuns com `match: 'code'`; quando a
 seleção também filtra a mesma coluna, a condição vai para `selection.fixedFilters` e é aplicada como as
 `lockedFilters` da definição (o catálogo recusa alias com condição fixa apontando para relatório com

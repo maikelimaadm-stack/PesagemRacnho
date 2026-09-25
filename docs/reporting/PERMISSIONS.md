@@ -57,14 +57,15 @@ lookups de eventos guardam só o nome do usuário.
 
 | Ponto | Aplicação |
 |---|---|
-| `reportService.listReports(actor, { visibility })` | por área da interface (1.4.0): `catalog` (padrão, Relatórios), `maintenance` (aba Controle) ou `hidden`; só relatórios executáveis pelo papel, mais os bloqueados como indisponíveis (que desde a 1.4.0 ficam só em `hidden`). Estar oculto não libera nada: `runReport` de um oculto (link ou modelo) passa pelas mesmas regras — `cadastros.usuarios` continua só ADMIN. A aba Controle fica dentro de Backup e Manutenção, que exige `maintenance.backup` |
+| `reportService.listReports(actor, { visibility })` | por área da interface (1.4.0): `catalog` (padrão, Relatórios), `maintenance` (aba Controle) ou `hidden`; só relatórios executáveis pelo papel, mais os bloqueados como indisponíveis (que desde a 1.4.0 ficam só em `hidden`). Estar oculto não libera nada: `runReport` de um oculto (link ou modelo) passa pelas mesmas regras — `cadastros.usuarios` continua só ADMIN. A aba Controle fica dentro de Backup e Manutenção, que exige `maintenance.backup`. **E1B:** para quem **não** tem `maintenance.backup` (OPERADOR, CONSULTA), `listReports(actor, { visibility: 'catalog' })` acrescenta os relatórios da área `maintenance` que o papel executa (Pendências de pesagem e Qualidade dos dados) na família **Controle** (`controlInCatalog: true`); ADMIN/GESTOR continuam com os 12 + aba Controle |
 | `selection.fixedFilters` (modelo convertido) | condição do relatório antigo; nunca removida por perfil (coluna sem permissão → `AUTH_FORBIDDEN`, pois tirar a condição ampliaria a população) |
 | `reportService.runReport` | ator com papel obrigatório; `assertCanRunReport` |
 | `reportService.resolveSelection` | remove colunas invisíveis (aviso `COLUMNS_HIDDEN_BY_PERMISSION`, lista em `hiddenByPermission`), remove filtros nelas (`FILTER_REMOVED_BY_PERMISSION`), ignora ordenação e totais nelas, restringe as colunas de pesquisa; agrupar por coluna invisível → `AUTH_FORBIDDEN` |
 | `viewModel.availableColumns` | só colunas visíveis ao papel (diálogos de Colunas, Agrupar e Totais) |
 | `reportExportService.prepareEmission` / `reportPrintService.preparePrint` | papel obrigatório; mesma sessão que gerou o view model; `assertCanExport` |
 | `reportTemplateService` | ver §5 |
-| UI (conforto) | item de menu com `reports.read`; botões **Imprimir** e **Exportar** só com `reports.export`; opção "Compartilhado" desabilitada sem `reports.templates.share`; excluir modelo só para dono (pessoal) ou quem compartilha |
+| Cabeçalho da propriedade / divisor da @ (E1B) | editados no cadastro de Propriedades (`registry.write`) e em Configurações › Relatórios (`settings.operational`); o cabeçalho vai na folha de quem pode abrir o relatório. O estado por usuário (`report-view-state:*`) só guarda a seleção do próprio usuário |
+| UI (conforto) | item de menu com `reports.read`; botões **Imprimir**, **Excel**, **PDF** e **Outros formatos** só com `reports.export`; opção "Compartilhado" desabilitada sem `reports.templates.share`; excluir modelo só para dono (pessoal) ou quem compartilha |
 
 Mensagens de recusa na tela: "Seu perfil não pode abrir este relatório.", "Seu perfil não pode exportar
 este relatório.", "Seu perfil não pode imprimir ou exportar este relatório.", "Seu perfil não pode salvar

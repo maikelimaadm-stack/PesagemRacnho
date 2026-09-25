@@ -15,6 +15,23 @@ Data: 25/09/2026 · Esquema Dexie 8 (sem mudança) · Backup formato 3 · Instal
   de 30 dias", "Somente entradas e saídas", "Somente mudanças de lote no período".
 - O que aparece na tela é o que sai na impressão A4, no Excel (CSV e XLSX) e no JSON.
 
+### O relatório virou uma folha (E1B)
+- O Resumido aparece na tela **como a folha impressa**: cabeçalho com o **logo e os dados da fazenda**,
+  seções por apartação e data, subtotal sob cada coluna, **TOTAL POR LOTE** de cada apartação,
+  **TOTAL GERAL**, e no rodapé os filtros, "@ = peso vivo ÷ 30", quem emitiu, a hora e **Página X de Y**.
+  A mesma folha sai na impressora e no PDF, em retrato ou paisagem.
+- **Pesagens › Tipo "Por apartação (resumo por data)"**: Qtd, Faixa exigida, Menor, Maior, Peso médio,
+  Média @, Peso total, Total @, Ganho médio e total (kg e @), Dias médios, GMD médio, Machos e Fêmeas.
+- Os três erros do relatório antigo não voltam: **colunas sempre alinhadas**, **GMD "—"** (nunca
+  "0,000") quando não há pesagem anterior, e **coluna vazia some**.
+- **Barra de filtros** igual em todos os relatórios: datas, período, orientação, **Tipo de relatório**,
+  agrupar, **ordenar**, **pesagem anterior** e os botões Lotes, Apartações, Sexo, Raças, Era, Marcas,
+  Categoria e Status (com contador e Limpar).
+- **Cadastro da Propriedade › Cabeçalho dos relatórios**: produtor, endereço, CPF/CNPJ, IE, telefone e
+  **logo** (o programa ajusta o tamanho), com pré-visualização.
+- **Configurações › Relatórios**: divisor da arroba de peso vivo (30 ou 15).
+- OPERADOR e CONSULTA veem **Pendências de pesagem** e **Qualidade dos dados** em Relatórios › Controle.
+
 ### Menos relatórios na lista
 - A lista caiu de **51 para 12** relatórios: Rebanho atual, Ocupação de lotes, Pesagens, Fechamento do
   dia, Desempenho, Movimentação de lotes, Saídas, Vendas, Abates e Compras do período, Romaneio de
@@ -31,6 +48,8 @@ Data: 25/09/2026 · Esquema Dexie 8 (sem mudança) · Backup formato 3 · Instal
   instalador 1.3.2. Corrigido.
 - **Importação:** dois cliques seguidos em **Aplicar** com o mesmo arquivo agora gravam uma vez só.
 - **Backup e Manutenção:** em telas de 1440×900 os cartões ficavam uns por cima dos outros. Corrigido.
+- **Relatórios por sessão:** as sessões agora saem em ordem de data (antes, em ordem de texto).
+- **Detalhado:** a data do grupo aparece como 28/02/2026 (antes 2026-02-28).
 
 ## Atualização
 - Feche todas as janelas da versão anterior antes de executar o **Setup 1.4.0**.
@@ -38,6 +57,9 @@ Data: 25/09/2026 · Esquema Dexie 8 (sem mudança) · Backup formato 3 · Instal
 - Na primeira vez que alguém abrir **Relatórios**, os favoritos, recentes e modelos salvos dessa
   pessoa são convertidos para os relatórios novos. É automático, não apaga nada e fica registrado na
   auditoria como "Relatório consolidado". Detalhes em `MIGRATION-1.3.0-TO-1.4.0.md`.
+- Depois de instalar, abra **Cadastros › Propriedades**, a propriedade padrão, e preencha o cartão
+  **Cabeçalho dos relatórios** (e o logo) para ele sair nas folhas. Sem isso, o cabeçalho mostra só o
+  nome da propriedade.
 
 ## Assinatura
 - O pacote continua **não assinado** e pode gerar aviso do SmartScreen/Defender (ou ser retirado da
@@ -45,5 +67,6 @@ Data: 25/09/2026 · Esquema Dexie 8 (sem mudança) · Backup formato 3 · Instal
   Authenticode confiável.
 
 ## Teste físico
-- Balança, impressora e curral: **não executados** nesta versão (nenhuma mudança nessas partes). A
-  impressão A4 do Resumido foi conferida só em PDF gerado pelo próprio aplicativo.
+- Balança, impressora e curral: **não executados** nesta versão. A folha A4 (retrato e paisagem) foi
+  conferida só em PDF gerado pelo Electron do projeto, com as mesmas opções do aplicativo; a impressão
+  numa impressora de verdade fica para o teste da responsável.

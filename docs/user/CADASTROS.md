@@ -100,6 +100,17 @@ primeira abertura, marcada como padrão. Renomeie para o nome da sua fazenda.
 Vendedores que tinham "propriedade" escrita em texto ganham uma propriedade de
 terceiro ligada a eles.
 
+### Cabeçalho dos relatórios (1.4.0)
+
+Na ficha da propriedade, o cartão **Cabeçalho dos relatórios** define o que sai
+no alto de cada relatório impresso: **Produtor / razão social**, **Endereço**,
+**CPF/CNPJ**, **Inscrição estadual**, **Mostrar CPF/CNPJ e IE no cabeçalho**,
+**Telefone** e **Logo** (PNG ou JPG; o programa reduz sozinho para até 400
+pixels de largura e 300 KB). Ao lado, a **pré-visualização** mostra como vai
+sair. Vale para a propriedade **Padrão** e para o relatório filtrado por aquela
+propriedade. O logo vai no backup e volta na restauração. Veja
+`RELATORIOS.md`, item "Cabeçalho da propriedade".
+
 ## Causas de Morte
 
 Campos: **Nome**, **Categoria** (Doença, Acidente, Predação, Parto,

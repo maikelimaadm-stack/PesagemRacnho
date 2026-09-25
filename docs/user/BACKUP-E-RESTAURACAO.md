@@ -9,6 +9,11 @@ lotes, embarques, histórico, importações, **cadastros** (marcas, raças,
 categorias, parceiros, propriedades, causas de morte, faixas de identificadores)
 e **usuários** (com o código derivado da senha, nunca a senha).
 
+Desde a 1.4.0, o **cabeçalho dos relatórios** de cada propriedade (produtor, endereço, documentos,
+telefone e o **logo**, até 300 KB) fica no próprio cadastro da propriedade e, por isso, vai no backup e
+volta na restauração. As escolhas de relatório (divisor da arroba, último jeito de ver cada relatório,
+favoritos e modelos) ficam nas configurações, que também vão no backup.
+
 O arquivo traz um manifesto com a versão do programa, a versão do banco, o
 formato do backup, o contrato de dados, o identificador de build da interface e
 a contagem de registros por tabela, além de um SHA-256 do conteúdo. Na

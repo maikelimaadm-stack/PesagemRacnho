@@ -24,6 +24,9 @@ SHIPMENT_DOCUMENT, AUDIT_ENTRY, DATA_ISSUE, BACKUP_ENTRY, REGISTRY_ITEM).
 | `weightedBy` | não | campo (string) ou função do peso; habilita `weightedAvg` |
 | `ratio` | não | `{ numerator, denominator }`; habilita `ratio` |
 | `groupKey`, `groupLabel` | não | funções de chave e rótulo de grupo (§3) |
+| `groupOrder` | não | função `(row) => chave de ordem` do grupo quando o rótulo não ordena (E1B: Sessão → `data|created_at` da sessão); precisa ser função |
+| `zeroAsEmpty` | não | E1B: na folha, contagem 0 aparece "—" e a coluna só com zeros some (o valor continua 0 no motor e no JSON) |
+| `metricOnly` | não | E1B: coluna só de cálculo (Machos, Fêmeas, animais com pesagem anterior): fora do seletor de colunas, filtros, ordenação e exportações; só alimenta agregações (`countDistinct`) |
 | `aggregations` | não | lista explícita; cada item precisa estar entre as permitidas (§4), senão erro |
 | `groupable` | não | só tipos categóricos (`text`, `identifier`, `enum`, `boolean`, `entity`) ou de data podem ser `true` |
 | `unit`, `decimals`, `description` | não | unidade do cabeçalho ("Peso (kg)"), casas decimais, texto de ajuda |
@@ -65,6 +68,7 @@ nome (exibição, pesquisa e ordenação). `enum`: valor é o código; exibiçã
 | `displayOf(column, row)` | `display(row)`; senão, para `enum`, o rótulo da opção; senão o valor |
 | `groupKeyOf(column, row)` | `groupKey(row)`; senão, para datas, os 10 primeiros caracteres (`YYYY-MM-DD`); senão o valor |
 | `groupLabelOf(column, row)` | `groupLabel(row)`; senão `displayOf` |
+| `groupOrderOf(column, row)` | `groupOrder(row)`; senão `null` (o grupo ordena pelo rótulo) |
 
 `createColumnResolver(columns)` (em `reportDefinition.js`) monta o *accessor* único usado por filtro,
 ordenação, agrupamento e agregação: `valueOf`, `displayOf`, `filterValueOf` (= valor), `sortValueOf`
