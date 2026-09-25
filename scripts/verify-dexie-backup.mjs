@@ -19,6 +19,9 @@ const { deleteDbForTests, ensureStorageReady } = await imp('src/storage/indexedD
 const { BACKUP_FORMAT, MASTER_REGISTRY_STORES, PROTECTED_STORES, SANITY_STORES, STORE_NAMES, STORES_V6 } = await imp('src/storage/indexedDb/schema.js');
 const { BACKUP_FORMAT_VERSION, DATA_CONTRACT_VERSION, DB_SCHEMA_VERSION, UI_BUILD_ID, APP_VERSION } = await imp('src/versioning/versionInfo.js');
 const { MIGRATION_STATUS, readMigrationState } = await imp('src/storage/migrations/migrationState.js');
+// Quantidade de categorias semeadas lida da própria semente (nunca número fixo: a semente mudou de 7
+// para 12 na 1.3.0 e o gate ficou vermelho sem que nada estivesse errado).
+const { CATEGORIAS_SEED } = await imp('src/modules/catalog/domain/seeds.js');
 const storage = (await imp('src/storage/storageAdapter.js')).default;
 const USERS = STORE_NAMES.includes('usuarios') ? 'usuarios' : 'usuarios';
 const HASH = USERS === 'usuarios' ? 'password_hash' : 'senha_hash';
@@ -168,7 +171,8 @@ assert.equal(await db.table('marcas').count(), 0, 'reset apaga cadastros');
 assert.equal(await db.table(USERS).count(), 0, 'reset apaga usuários');
 assert.ok((await db.table('backupHistory').count()) > 0, 'histórico de backups preservado');
 assert.equal((await readMigrationState(db, 7)).status, MIGRATION_STATUS.CONCLUIDA, 'estado técnico recriado');
-assert.equal(await db.table('categoriasAnimal').count(), 7, 'seeds recriados após o reset');
+assert.ok(CATEGORIAS_SEED.length > 0, 'semente de categorias não vazia');
+assert.equal(await db.table('categoriasAnimal').count(), CATEGORIAS_SEED.length, 'seeds recriados após o reset (todas as categorias da semente)');
 assert.equal((await readMigrationState(db, 8)).status, MIGRATION_STATUS.CONCLUIDA, 'estado técnico da v8 recriado pela cadeia');
 for (const name of SANITY_STORES) assert.equal(await db.table(name).count(), 0, `reset apaga ${name}`);
 

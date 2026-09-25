@@ -15,6 +15,8 @@ const imp = (rel) => import(pathToFileURL(join(root, rel)).href);
 const { deleteDbForTests, ensureStorageReady } = await imp('src/storage/indexedDb/db.js');
 const { BACKUP_FORMAT, SANITY_STORES, STORES_V6 } = await imp('src/storage/indexedDb/schema.js');
 const { MIGRATION_STATUS, readMigrationState } = await imp('src/storage/migrations/migrationState.js');
+// Quantidade de categorias semeadas lida da própria semente (nunca número fixo).
+const { CATEGORIAS_SEED } = await imp('src/modules/catalog/domain/seeds.js');
 const storage = (await imp('src/storage/storageAdapter.js')).default;
 
 await deleteDbForTests();
@@ -109,7 +111,8 @@ assert((await db.table('sessoesPesagem').where('id').equals('v6-s1').first()).st
 assert((await db.table('loteApartacoes').where('id').equals('v6-l1').first()).situacao === 'FECHADO', 'lote convertido');
 assert((await db.table('pesagens').toArray()).every((p) => !('status_animal' in p.legacy_payload) && !('created_date' in p.legacy_payload)), 'payload limpo');
 assert(!db.tables.some((t) => t.name === 'lotes'), 'store lotes não volta');
-assert(await db.table('categoriasAnimal').count() === 7, 'seeds criados');
+assert(CATEGORIAS_SEED.length > 0, 'semente de categorias não vazia');
+assert(await db.table('categoriasAnimal').count() === CATEGORIAS_SEED.length, `seeds criados (${CATEGORIAS_SEED.length} categorias da semente)`);
 const integV2 = await storage.logicalIntegrity();
 assert(integV2.ok && integV2.v7Contract === true, `integridade v7 após restore cruzado (${JSON.stringify(integV2.issues)})`);
 const history = (await db.table('backupHistory').toArray()).map((h) => h.tipo);
