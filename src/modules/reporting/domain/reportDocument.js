@@ -7,7 +7,7 @@
 //
 // Nenhuma conta nova: os valores são os agregados que o motor da E1 já calculou em cada nó (o pai recalcula
 // sobre a própria população, nunca soma filhos) e o "TOTAL POR" é o MESMO motor (groupRows) sobre a
-// população da seção de nível 1. Colunas: cada linha é gerada por columns.map — uma célula por coluna, na
+// população da seção de nível 1 (buildLeafTotalBlock — o XLSX grava o mesmo bloco). Colunas: cada linha é gerada por columns.map — uma célula por coluna, na
 // ordem do cabeçalho (o erro de colunas desalinhadas do modelo antigo fica impossível por construção).
 // Coluna sem nenhum valor no relatório inteiro some (opção showEmptyColumns desliga); GMD sem pesagem
 // anterior fica "—" (o motor exclui) e a nota diz com quantos animais foi calculado.
@@ -190,6 +190,45 @@ function summaryCell(column, index, { node, aggregates, isLeafRow, labelText }) 
 }
 
 // ---------------------------------------------------------------------------
+// Bloco "TOTAL POR <nível folha> – <nível 1>" (3 níveis)
+// ---------------------------------------------------------------------------
+
+/**
+ * Bloco "TOTAL POR <nível folha> – <nível 1>" de uma seção de nível 1 do Resumido com 3 níveis: o MESMO
+ * motor (groupRows) sobre a população do nó, reagrupada pelo nível folha (uma linha por lote, nunca soma de
+ * linhas), na ordem do Resumido, e o próprio nó como linha "Total <nível 1>". A folha (LEAF_TOTAL/TOTAL) e
+ * o XLSX (E1C) desenham ESTE bloco — mesmos grupos, rótulos e agregados por construção.
+ * @param viewModel resultado de runReport (usa groups, aggregates, summarySort e resolve)
+ * @param node nó de nível 1 da árvore (viewModel.tree, com as linhas da população)
+ * @param {{ target?: 'print'|'xlsx' }} options formato dos rótulos (data dd/mm/aaaa e Sim/Não nos dois)
+ * @returns {null | { id: string, title: string, leafLevel: object, lines: { id, node, label, path }[],
+ *   total: { id, node, label, path } }} null com menos de 3 níveis ou nó que não é de nível 1
+ */
+export function buildLeafTotalBlock(viewModel, node, { target = 'print' } = {}) {
+  const levels = viewModel.groups ?? [];
+  if (levels.length < 3 || node?.level !== 1) return null;
+  const columnOf = columnLookup(viewModel);
+  const leafLevel = levels[levels.length - 1];
+  const leafColumn = columnOf(leafLevel.columnId);
+  const nodeLabel = formatGroupLabel(columnOf(levels[0]?.columnId), node.label, target, node.missing || node.key === NONE_GROUP_KEY);
+  const specs = (viewModel.aggregates ?? []).map((spec) => ({ id: spec.id, op: spec.op, ...(spec.columnId ? { columnId: spec.columnId } : {}) }));
+  const regrouped = groupRows(node.rows, [{ columnId: leafLevel.columnId, direction: leafLevel.direction }], viewModel.resolve, { aggregates: specs });
+  const lines = orderNodes(regrouped.nodes, viewModel.summarySort).map((child) => ({
+    id: `${node.id}#total-por|${child.id}`,
+    node: child,
+    label: formatGroupLabel(leafColumn, child.label, target, child.missing),
+    path: [...node.path, ...child.path],
+  }));
+  return {
+    id: `${node.id}#total-por`,
+    title: `TOTAL POR ${upper(leafLevel.label)} – ${upper(nodeLabel)}`,
+    leafLevel,
+    lines,
+    total: { id: `${node.id}#total`, node, label: `Total ${nodeLabel}`, path: node.path },
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Corpo do Resumido
 // ---------------------------------------------------------------------------
 
@@ -201,7 +240,6 @@ function buildSummaryBody(viewModel, columns) {
   const nodeLabel = (node) => formatGroupLabel(levelColumn(node.level), node.label, 'print', node.missing || node.key === NONE_GROUP_KEY);
   const stats = { sections: 0, tables: 0, groupRows: 0, subtotalRows: 0, leafTotalRows: 0, totalRows: 0, dataRows: 0, grandRows: 0 };
   const drillTargets = {};
-  const specs = (viewModel.aggregates ?? []).map((spec) => ({ id: spec.id, op: spec.op, ...(spec.columnId ? { columnId: spec.columnId } : {}) }));
 
   const row = (type, id, cellsArgs, drill) => {
     if (drill) drillTargets[id] = drill;
@@ -228,7 +266,6 @@ function buildSummaryBody(viewModel, columns) {
   if (depth === 1) {
     flat = table('flat', 'FLAT', orderNodes(viewModel.tree, viewModel.summarySort).map(groupRow));
   } else if (depth >= 2) {
-    const leafLevel = levels[depth - 1];
     const buildSection = (node) => {
       stats.sections += 1;
       drillTargets[node.id] = node.path;
@@ -240,17 +277,17 @@ function buildSummaryBody(viewModel, columns) {
       } else {
         section.sections = children.map(buildSection);
       }
-      // 3 níveis: no fim da seção de nível 1, a mesma tabela consolidada por nível folha (todas as datas).
-      if (node.level === 1 && depth >= 3) {
-        const regrouped = groupRows(node.rows, [{ columnId: leafLevel.columnId, direction: leafLevel.direction }], viewModel.resolve, { aggregates: specs });
-        const rows = orderNodes(regrouped.nodes, viewModel.summarySort).map((child) => {
+      // 3 níveis: no fim da seção de nível 1, a mesma tabela consolidada por nível folha (todas as datas) —
+      // o bloco vem de buildLeafTotalBlock, o mesmo que o XLSX grava.
+      const block = node.level === 1 && depth >= 3 ? buildLeafTotalBlock(viewModel, node, { target: 'print' }) : null;
+      if (block) {
+        const rows = block.lines.map((line) => {
           stats.leafTotalRows += 1;
-          const id = `${node.id}#total-por|${child.id}`;
-          return row(DOC_ROW_TYPES.LEAF_TOTAL, id, { node: child, aggregates: child.aggregates, isLeafRow: true, labelText: formatGroupLabel(columnOf(leafLevel.columnId), child.label, 'print', child.missing) }, [...node.path, ...child.path]);
+          return row(DOC_ROW_TYPES.LEAF_TOTAL, line.id, { node: line.node, aggregates: line.node.aggregates, isLeafRow: true, labelText: line.label }, line.path);
         });
         stats.totalRows += 1;
-        rows.push(row(DOC_ROW_TYPES.TOTAL, `${node.id}#total`, { node, aggregates: node.aggregates, isLeafRow: false, labelText: `Total ${nodeLabel(node)}` }, node.path));
-        section.leafTotal = table(`${node.id}#total-por`, 'LEAF_TOTAL', rows, `TOTAL POR ${upper(leafLevel.label)} – ${upper(nodeLabel(node))}`);
+        rows.push(row(DOC_ROW_TYPES.TOTAL, block.total.id, { node, aggregates: node.aggregates, isLeafRow: false, labelText: block.total.label }, block.total.path));
+        section.leafTotal = table(block.id, 'LEAF_TOTAL', rows, block.title);
       }
       return section;
     };

@@ -7,7 +7,8 @@
 //
 // Nenhuma conta nova: os valores são os agregados que o groupEngine já calculou sobre a população de
 // cada grupo (nunca soma de filhos) e o total geral recalculado sobre a população inteira. Tela, CSV,
-// XLSX, impressão/PDF e JSON leem ESTE layout — paridade por construção.
+// XLSX, impressão/PDF e JSON leem ESTE layout — paridade por construção. (E1C: com 3 níveis o XLSX
+// acrescenta o bloco "TOTAL POR" da folha — reportDocument.buildLeafTotalBlock; o CSV e o JSON não.)
 import { aggregateValueColumn, summaryMetricLabels } from './aggregateLabels.js';
 import { formatCell } from './reportFormatting.js';
 import { compareGroupLabels } from './groupEngine.js';
@@ -22,7 +23,8 @@ function isMissingValue(value) {
   return value === null || value === undefined || (typeof value === 'number' && !Number.isFinite(value));
 }
 
-function metricValue(node, key) {
+/** Valor bruto de uma métrica do Resumido num nó (contagem de linhas quando não há totais). */
+export function summaryMetricValue(node, key) {
   if (key === SUMMARY_ROWS_METRIC) return node.rowCount;
   return node.aggregates?.[key]?.value ?? null;
 }
@@ -42,8 +44,8 @@ export function buildSummaryRows(tree, { summarySort = null } = {}) {
     return [...nodes].sort((left, right) => {
       if (left.missing !== right.missing) return left.missing ? 1 : -1;
       if (summarySort.key === SUMMARY_LABEL_SORT) return direction * compareGroupLabels(left, right);
-      const a = metricValue(left, summarySort.key);
-      const b = metricValue(right, summarySort.key);
+      const a = summaryMetricValue(left, summarySort.key);
+      const b = summaryMetricValue(right, summarySort.key);
       const missingA = isMissingValue(a);
       const missingB = isMissingValue(b);
       if (missingA || missingB) return missingA === missingB ? compareGroupLabels(left, right) : (missingA ? 1 : -1);
@@ -143,9 +145,9 @@ export function buildSummaryLayout(viewModel, target = 'screen') {
       label,
       cells: [
         ...groupHeaders.map((_, index) => (index === node.level - 1 ? label : blank)),
-        ...metrics.map((metric) => (shown(metric, node.level) ? format(metric, metricValue(node, metric.key)) : blank)),
+        ...metrics.map((metric) => (shown(metric, node.level) ? format(metric, summaryMetricValue(node, metric.key)) : blank)),
       ],
-      rawValues: metrics.map((metric) => (shown(metric, node.level) ? metricValue(node, metric.key) : null)),
+      rawValues: metrics.map((metric) => (shown(metric, node.level) ? summaryMetricValue(node, metric.key) : null)),
     };
   });
   const totalsNode = { rowCount: viewModel.rowCount, aggregates: viewModel.totals };
@@ -156,9 +158,9 @@ export function buildSummaryLayout(viewModel, target = 'screen') {
     label: 'Total geral',
     cells: [
       ...groupHeaders.map((_, index) => (index === 0 ? 'Total geral' : blank)),
-      ...metrics.map((metric) => (shown(metric, 0) ? format(metric, metricValue(totalsNode, metric.key)) : blank)),
+      ...metrics.map((metric) => (shown(metric, 0) ? format(metric, summaryMetricValue(totalsNode, metric.key)) : blank)),
     ],
-    rawValues: metrics.map((metric) => (shown(metric, 0) ? metricValue(totalsNode, metric.key) : null)),
+    rawValues: metrics.map((metric) => (shown(metric, 0) ? summaryMetricValue(totalsNode, metric.key) : null)),
   });
   return { headers: [...groupHeaders, ...metrics.map((metric) => metric.label)], groupHeaders, metrics, rows };
 }

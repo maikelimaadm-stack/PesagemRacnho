@@ -2,7 +2,8 @@
 // RESUMIDO têm as MESMAS linhas (mesma ordem) e os MESMOS valores da tela: rótulos de grupo iguais,
 // métricas iguais depois de lidas de volta (tela/impressão pt-BR, CSV pt-BR sem milhar, XLSX número,
 // JSON canônico arredondado na casa da coluna). Inclui 1, 2 e 3 níveis, ordem por métrica, valor
-// ausente e relatório sem agregação.
+// ausente e relatório sem agregação. (E1C: o XLSX com 3 níveis acrescenta o bloco "TOTAL POR" da folha,
+// conferido em reports:sheet-xlsx-parity:verify; fora dele, as linhas são as mesmas.)
 import assert from 'node:assert/strict';
 import { ADMIN, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
 import { runReport } from '../src/modules/reporting/application/reportService.js';
@@ -11,7 +12,7 @@ import { preparePrint } from '../src/modules/reporting/application/reportPrintSe
 import { buildSummaryLayout } from '../src/modules/reporting/domain/summaryLayout.js';
 import { DEFAULT_DECIMALS, roundTo } from '../src/modules/reporting/domain/reportFormatting.js';
 import { parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
-import { unzipStored } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
+import { buildSheetRows, unzipStored, XLSX_BLOCK_KINDS } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
 
 await seedReportFixture();
 const P = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
@@ -96,10 +97,19 @@ for (const testCase of cases) {
   assert.deepEqual(csvBody.map((row) => row[2]), screen.rows.map((row) => (row.node ? row.node.path.map((part) => part.label).join(' > ') : '')), `${testCase.name}: caminho do grupo no CSV`);
   assert.deepEqual(normalizeRows(csvBody.map((row) => row.slice(3)), groupCount, metrics, (cell) => readNumber(cell)), expected, `${testCase.name}: CSV = tela`);
 
-  // XLSX (7 linhas de topo: título, 4 metadados, branco, cabeçalho)
+  // XLSX (7 linhas de topo: título, 4 metadados, branco, cabeçalho). E1C: com 3 níveis a planilha leva
+  // também o bloco "TOTAL POR" da folha no fim de cada nível 1 — conferido célula a célula contra a folha
+  // em reports:sheet-xlsx-parity:verify; aqui as linhas do bloco saem pelo tipo (buildSheetRows) e o
+  // resto continua sendo exatamente uma linha por grupo + Total geral, iguais à tela.
   const xlsx = xlsxRows((await prepareEmission(vm, 'xlsx', ADMIN)).content);
   assert.deepEqual(xlsx[6].cells, screen.headers, `${testCase.name}: cabeçalho XLSX = tela`);
-  const xlsxBody = xlsx.slice(7).map((row) => row.cells);
+  const kinds = buildSheetRows(vm).rows.map((row) => row.kind);
+  assert.equal(kinds.length, xlsx.length, `${testCase.name}: linhas do arquivo = linhas montadas`);
+  const blockKinds = new Set(Object.values(XLSX_BLOCK_KINDS));
+  const blockRows = xlsx.filter((_, index) => blockKinds.has(kinds[index]));
+  assert.equal(blockRows.length > 0, vm.groups.length === 3, `${testCase.name}: bloco TOTAL POR no XLSX só com 3 níveis`);
+  assert.equal(blockRows.filter((row) => String(row.cells[0] ?? '').startsWith('TOTAL POR ')).length, vm.groups.length === 3 ? vm.tree.length : 0, `${testCase.name}: um título de bloco por nó de nível 1`);
+  const xlsxBody = xlsx.slice(7).filter((_, index) => !blockKinds.has(kinds[index + 7])).map((row) => row.cells);
   assert.ok(xlsxBody.flat().filter((cell, index) => typeof cell === 'string' && /^\d+([.,]\d+)?$/.test(cell) && index >= groupCount).length === 0, `${testCase.name}: XLSX com números de verdade`);
   assert.deepEqual(normalizeRows(xlsxBody, groupCount, metrics, (cell) => (cell === null ? null : Number(cell))), expected, `${testCase.name}: XLSX = tela`);
   assert.ok(String(xlsx[3].cells[1]).includes('Resumido'), `${testCase.name}: XLSX informa o modo`);

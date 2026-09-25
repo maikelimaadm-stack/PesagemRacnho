@@ -2,9 +2,13 @@
 // adaptado aos relatórios: ZIP "stored" + SpreadsheetML, números como números (nunca texto),
 // título, período, filtros e emissão no topo; mesma estrutura de linhas do CSV
 // (Tipo | Grupo | Métrica | Valor | colunas) e uma segunda aba com o manifesto.
+// E1C: o Resumido com 3 níveis leva também o bloco "TOTAL POR <nível folha> – <nível 1>" da folha, no fim
+// de cada nó de nível 1 (o CSV continua uma linha por grupo + total geral).
 import { describeFilters } from './printDocument.js';
 import { describePeriod } from '../../domain/reportPeriod.js';
-import { DEFAULT_DECIMALS } from '../../domain/reportFormatting.js';
+import { DEFAULT_DECIMALS, formatCell } from '../../domain/reportFormatting.js';
+import { buildLeafTotalBlock, DOC_ROW_TYPES } from '../../domain/reportDocument.js';
+import { leafOnlyMetricKeys, summaryMetricValue } from '../../domain/summaryLayout.js';
 import { aggregateValueColumn, buildReportLines } from './reportLayout.js';
 
 const encoder = new TextEncoder();
@@ -78,6 +82,34 @@ function metaRows(viewModel) {
   ];
 }
 
+// Tipos de linha do bloco "TOTAL POR" na planilha (os de linha e total são os mesmos da folha).
+export const XLSX_BLOCK_KINDS = Object.freeze({ TITLE: 'LEAF_TOTAL_TITLE', LEAF_TOTAL: DOC_ROW_TYPES.LEAF_TOTAL, TOTAL: DOC_ROW_TYPES.TOTAL });
+
+/**
+ * Bloco "TOTAL POR <nível folha> – <nível 1>" de um nó de nível 1 (3 níveis): linha-título (estilo de
+ * grupo), uma linha por grupo do nível folha (rótulo na coluna do nível folha) e a linha "Total <nível 1>"
+ * (estilo de subtotal). O MESMO bloco da folha (buildLeafTotalBlock), com as colunas e os formatos das
+ * outras linhas da planilha; a faixa (par leafOnly) só nas linhas do nível folha.
+ */
+function leafTotalSheetRows(viewModel, summary, node, width) {
+  const block = buildLeafTotalBlock(viewModel, node, { target: 'xlsx' });
+  if (!block) return [];
+  const { groupHeaders, metrics } = summary;
+  const leafOnly = leafOnlyMetricKeys(viewModel);
+  const cellsOf = (source, label, labelIndex, isLeaf, style) => [
+    ...groupHeaders.map((_, index) => [index === labelIndex ? label : null, style]),
+    ...metrics.map((metric) => {
+      const value = !leafOnly.has(metric.key) || isLeaf ? formatCell(metric.column, summaryMetricValue(source, metric.key), 'xlsx') : null;
+      return [value, typeof value === 'number' ? numberStyle(metric.column) : style];
+    }),
+  ];
+  return [
+    { kind: XLSX_BLOCK_KINDS.TITLE, cells: Array.from({ length: width }, (_, index) => [index === 0 ? block.title : null, STYLE.group]) },
+    ...block.lines.map((line) => ({ kind: XLSX_BLOCK_KINDS.LEAF_TOTAL, cells: cellsOf(line.node, line.label, groupHeaders.length - 1, true, STYLE.text) })),
+    { kind: XLSX_BLOCK_KINDS.TOTAL, cells: cellsOf(block.total.node, block.total.label, 0, false, STYLE.subtotal) },
+  ];
+}
+
 /** Resumido: mesma tabela da tela (níveis de grupo + métricas), números como números. */
 function buildSummarySheetRows(viewModel, layout) {
   const { headers, lines, summary } = layout;
@@ -85,7 +117,17 @@ function buildSummarySheetRows(viewModel, layout) {
   const groupCount = summary.groupHeaders.length;
   const rows = metaRows(viewModel);
   rows.push({ kind: 'HEADER', cells: headers.map((header) => [header, STYLE.header]) });
-  for (const line of lines) {
+  // 3 níveis: o bloco do nó de nível 1 fecha antes do próximo nível 1 (ou do Total geral). A linha do
+  // layout traz o nó do Resumido (sem as linhas); a população vem do nó da árvore com o mesmo id.
+  const blocks = (viewModel.groups ?? []).length >= 3;
+  const treeById = new Map((blocks ? viewModel.tree ?? [] : []).map((node) => [node.id, node]));
+  let openLevel1 = null;
+  const closeBlock = () => {
+    if (openLevel1) rows.push(...leafTotalSheetRows(viewModel, summary, openLevel1, width));
+    openLevel1 = null;
+  };
+  lines.forEach((line, lineIndex) => {
+    if (line.level <= 1) closeBlock();
     const total = line.type === 'GRAND_TOTAL';
     const labelStyle = total ? STYLE.total : line.level === 1 ? STYLE.group : STYLE.text;
     const cells = line.cells.map((value, index) => {
@@ -94,7 +136,9 @@ function buildSummarySheetRows(viewModel, layout) {
       return [value, typeof value === 'number' ? numberStyle(metric.column) : (total ? STYLE.total : STYLE.text)];
     });
     rows.push({ kind: line.type, cells });
-  }
+    if (blocks && line.level === 1) openLevel1 = treeById.get(summary.rows[lineIndex].node?.id) ?? null;
+  });
+  closeBlock();
   return { rows, width, dataHeaders: headers };
 }
 
@@ -157,7 +201,9 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 function workbookFiles(viewModel, manifest) {
   const { rows, width } = buildSheetRows(viewModel);
-  const widths = Array.from({ length: width }, (_, index) => Math.min(48, Math.max(10, rows.slice(6).reduce((max, row) => Math.max(max, String(row.cells[index]?.[0] ?? '').length), 0) + 2)));
+  // O título do bloco "TOTAL POR" transborda para as células vazias ao lado: não alarga a coluna A.
+  const measured = rows.slice(6).filter((row) => row.kind !== XLSX_BLOCK_KINDS.TITLE);
+  const widths = Array.from({ length: width }, (_, index) => Math.min(48, Math.max(10, measured.reduce((max, row) => Math.max(max, String(row.cells[index]?.[0] ?? '').length), 0) + 2)));
   const manifestRows = Object.entries(manifest || {}).map(([key, value]) => ({ cells: [[key, STYLE.meta], [typeof value === 'object' ? JSON.stringify(value) : value, STYLE.text]] }));
   return {
     '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
