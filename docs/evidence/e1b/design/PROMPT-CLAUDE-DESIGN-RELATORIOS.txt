@@ -1,0 +1,107 @@
+PROMPT PARA O CLAUDE DESIGN — Modelo visual dos relatórios do "Pesagens Individuais"
+
+Contexto
+Sou dona de um sistema desktop (Windows, offline) de pesagem individual de gado de corte chamado
+"Pesagens Individuais". Preciso do MODELO VISUAL da tela de relatórios e da folha impressa, para
+entregar ao desenvolvedor. Idioma: português do Brasil. Formato brasileiro: vírgula decimal, ponto
+de milhar, datas dd/mm/aaaa.
+
+Estilo
+- Limpo, profissional, fundo da tela cinza muito claro (#F5F6F8), cartões brancos com borda suave e
+  cantos arredondados 8 px, sombra leve.
+- Cor principal verde escuro (#0F8A5F) nos botões principais; texto quase preto (#1F2328);
+  cinza (#6B7280) para rótulos.
+- Fonte sem serifa (Inter ou similar). Números das tabelas em fonte monoespaçada, alinhados à direita.
+- Folha do relatório com aparência de papel A4 (sombra, margens de 10 mm), fundo branco, tabelas
+  com cabeçalho cinza claro (#F3F4F6) e linhas divisórias finas.
+
+Crie 3 telas (frames):
+
+=====================================================================
+TELA 1 — Relatório na tela (1440 × 900), modo PAISAGEM
+=====================================================================
+Topo: título "Relatório de Pesagens Individuais", subtítulo "Análise e impressão".
+À direita: botão verde "Imprimir" e botões secundários "Excel" e "PDF".
+
+Cartão de filtros (2 linhas):
+Linha 1 (campos com rótulo em cima):
+  Data início [01/06/2026] | Data fim [30/06/2026] | Orientação [Paisagem ▾] |
+  Tipo de relatório [Por apartação (resumo por data) ▾] | Ordenar por [Data (mais recente) ▾] |
+  Pesagem anterior [Todos ▾]
+Linha 2 (botões de filtro com contador quando houver seleção):
+  [Lotes] [Apartações (1)] [Sexo] [Raças] [Era] [Marcas] [Proprietário] [Categoria] [Status]
+  [Limpar filtros]
+Mostre a opção "Tipo de relatório" aberta em um detalhe ao lado com as opções:
+  Por apartação (resumo por data) · Por lote · Por data · Analítico por animal
+
+Abaixo, a FOLHA (pré-visualização do que sai na impressora):
+
+Cabeçalho da folha:
+  À esquerda: espaço do logo (quadrado 64 px, use as letras "ZF" em preto como logo de exemplo).
+  Centralizado:
+    ZIGOMAR FERREIRA FRANCO FILHO   (negrito, maior)
+    FAZENDA KAIMAN
+    GLEBA RICARDO FRANCO SN - ZONA RURAL, VILA BELA DA SST. TRINDADE-MT
+  À direita, pequeno: "Período: 01/06/2026 a 30/06/2026" e "Emitido em 25/09/2026 10:42"
+Título: "Relatório de Pesagens Individuais (Sintético)" com linha grossa embaixo.
+
+Seção: "APARTAÇÃO: APARTE 02/06"
+  Subtítulo: "DATA: 02/06/2026"
+  Tabela (nível lote). Colunas NESTA ordem, cada valor exatamente embaixo do seu cabeçalho:
+  Lote | Qtd | Faixa exigida | Menor | Maior | Peso médio | Média (@) | Peso total | Total (@) | Machos | Fêmeas
+  BOIADA | 56 | 250–500 kg | 250 kg | 412 kg | 286,9 kg | 9,56 | 16.065,0 kg | 535,50 | 56 | —
+  FUNDO  | 14 | 1–209 kg   | 183 kg | 284 kg | 208,1 kg | 6,94 |  2.913,0 kg |  97,10 | 14 | —
+  MEIO   | 33 | 210–249 kg | 212 kg | 249 kg | 232,3 kg | 7,74 |  7.665,0 kg | 255,50 | 33 | —
+  Linha de subtotal (fundo levemente destacado):
+  "Subtotal 02/06/2026: 103 animais · Peso médio 258,7 kg · Peso total 26.643,0 kg · Total 888,10 @ · Lotes: 3"
+  Nota pequena em cinza: "Sem pesagem anterior no período: colunas de ganho e GMD ocultas."
+
+Segunda seção (para mostrar as colunas de ganho):
+"APARTAÇÃO: APARTE 15/07" → "DATA: 15/07/2026"
+  Colunas: Lote | Qtd | Faixa exigida | Menor | Maior | Peso médio | Média (@) | Peso total | Total (@) |
+           Ganho médio | Ganho total | Dias médios | GMD médio | Machos | Fêmeas
+  BOIADA | 54 | 250–500 kg | 262 kg | 438 kg | 312,4 kg | 10,41 | 16.869,6 kg | 562,32 | 25,5 kg | 1.377,0 kg | 43 | 0,593 | 54 | —
+  MEIO   | 31 | 240–300 kg | 241 kg | 296 kg | 251,8 kg |  8,39 |  7.805,8 kg | 260,19 | 19,5 kg |   604,5 kg | 43 | 0,453 | 31 | —
+  Subtotal 15/07/2026: 85 animais · Peso médio 290,3 kg · Peso total 24.675,4 kg · GMD médio 0,542 kg/dia · Lotes: 2
+
+Bloco "TOTAL POR LOTE — APARTE 02/06" (tabela consolidada com as mesmas colunas da primeira seção)
+e, no fim, "TOTAL GERAL" em destaque.
+
+Rodapé da folha (pequeno, cinza, em linha):
+  "Filtros: Apartação = APARTE 02/06, APARTE 15/07 · @ = peso vivo ÷ 30 · Emitido por Maike em
+   25/09/2026 10:42 · Página 1 de 2 · Pesagens Individuais v1.4.0"
+
+=====================================================================
+TELA 2 — Folha impressa em A4 RETRATO (somente a folha, sem a barra de filtros)
+=====================================================================
+Mesma folha da Tela 1, reorganizada para retrato: cabeçalho igual, tabela da primeira seção
+com as colunas cabendo na largura (fonte 9 pt), cabeçalho da tabela repetido no topo da página 2,
+rodapé "Página 2 de 2". Nenhum título de seção pode ficar sozinho no fim de uma página.
+
+=====================================================================
+TELA 3 — Cadastro da Propriedade com "Cabeçalho dos relatórios" (1440 × 900)
+=====================================================================
+Layout: lista de propriedades à esquerda (busca no topo; itens "FAZENDA KAIMAN — Padrão",
+"Retiro Santa Luzia"), ficha da propriedade selecionada à direita.
+Ficha com seções:
+  Dados da propriedade: Nome [FAZENDA KAIMAN] · Tipo [Própria] · Município [Vila Bela da Santíssima
+  Trindade] · UF [MT] · Código oficial [ ] · [x] Propriedade padrão
+  Cabeçalho dos relatórios:
+    Produtor / razão social [ZIGOMAR FERREIRA FRANCO FILHO]
+    Endereço [GLEBA RICARDO FRANCO SN - ZONA RURAL]
+    CPF/CNPJ [ ]  Inscrição estadual [ ]  [ ] Mostrar CPF/CNPJ e IE no cabeçalho
+    Telefone [ ]
+    Logo: área de arrastar e soltar com o logo "ZF" carregado, botões "Trocar" e "Remover",
+          texto de ajuda "PNG ou JPG. Ajustamos o tamanho automaticamente."
+  Pré-visualização: caixa "Assim vai sair nos relatórios" mostrando o cabeçalho da folha
+  (logo + produtor + fazenda + endereço).
+Botões no rodapé da ficha: "Salvar" (verde) e "Cancelar".
+
+Regras que o modelo precisa respeitar
+1. Cada número exatamente embaixo do cabeçalho da sua coluna.
+2. Quando não há pesagem anterior, GMD e ganho aparecem como "—" ou a coluna some; nunca "0,000".
+3. Colunas totalmente vazias não aparecem.
+4. kg com 1 casa decimal, arroba (@) com 2, GMD com 3.
+5. Nada de gráficos nesta versão; o foco é a tabela limpa e fácil de imprimir.
+
+Entregue as 3 telas lado a lado, prontas para eu mostrar ao desenvolvedor.
