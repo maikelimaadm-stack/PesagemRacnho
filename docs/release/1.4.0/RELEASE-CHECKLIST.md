@@ -4,28 +4,28 @@ Versão 1.4.0 · esquema Dexie 8 (sem mudança) · backup formato 3 · `signed=f
 `program/e1-relatorios` (main só avança com autorização da responsável).
 
 ## Versão
-- [ ] `package.json`, `package-lock.json` e `src/lib/appVersion.js` em 1.4.0.
-- [ ] CHANGELOG `## [1.4.0] — 2026-09-25`, sem bloco "Não lançado".
-- [ ] `RELEASE-NOTES.md`, este checklist e `MIGRATION-1.3.0-TO-1.4.0.md` em `docs/release/1.4.0/`.
-- [ ] `docs/user/RELATORIOS.md`, `INSTALACAO-WINDOWS.md` e `TESTE-MAQUINA-LIMPA.md` citam a 1.4.0.
+- [x] `package.json`, `package-lock.json` e `src/lib/appVersion.js` em 1.4.0.
+- [x] CHANGELOG `## [1.4.0] — 2026-09-25`, sem bloco "Não lançado".
+- [x] `RELEASE-NOTES.md`, este checklist e `MIGRATION-1.3.0-TO-1.4.0.md` em `docs/release/1.4.0/`.
+- [x] `docs/user/RELATORIOS.md`, `INSTALACAO-WINDOWS.md` e `TESTE-MAQUINA-LIMPA.md` citam a 1.4.0.
 
 ## Validações automatizadas
-- [ ] `npm run test:quick` completo verde (inclui `reports:summary-mode:verify`,
+- [x] `npm run test:quick` completo verde (inclui `reports:summary-mode:verify`,
       `reports:summary-export-parity:verify` e `reports:catalog-consolidation:verify`).
-- [ ] `npm run release:version-contract:verify`.
-- [ ] `npm run docs:user:verify`.
-- [ ] `npm run dist:unsigned` (build + electron-builder sem assinatura + checksum + manifesto +
+- [x] `npm run release:version-contract:verify`.
+- [x] `npm run docs:user:verify`.
+- [x] `npm run dist:unsigned` (build + electron-builder sem assinatura + checksum + manifesto +
       `diagnostic:packaged:source:verify` + `diagnostic:packaged:build:verify` +
       `diagnostic:e2e:verify`).
-- [ ] SHA-256 do `Pesagens Individuais Setup 1.4.0.exe` anotado no REPORT da E1.
+- [x] SHA-256 do `Pesagens Individuais Setup 1.4.0.exe` anotado no REPORT da E1.
 
 ## Evidências (docs/evidence/e1/)
-- [ ] Resumido de **Rebanho atual por lote** (claro e escuro).
-- [ ] Resumido de **Desempenho por lote**.
-- [ ] Detalhado de um lote aberto pelo clique no grupo.
-- [ ] PDF A4 do Resumido de Desempenho (1 página, retrato).
-- [ ] XLSX do Resumido de Rebanho atual.
-- [ ] Manutenção › aba Controle.
+- [x] Resumido de **Rebanho atual por lote** (claro e escuro).
+- [x] Resumido de **Desempenho por lote**.
+- [x] Detalhado de um lote aberto pelo clique no grupo.
+- [x] PDF A4 do Resumido de Desempenho (1 página, retrato).
+- [x] XLSX do Resumido de Rebanho atual.
+- [x] Manutenção › aba Controle.
 
 ## Teste manual no app instalado (responsável)
 1. Fechar todas as janelas da versão 1.3.2.
