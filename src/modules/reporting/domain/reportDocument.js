@@ -307,7 +307,9 @@ function detailChips(viewModel, aggregates, rowCount, { leafLevel = false } = {}
     }
     if (paired.has(metric.key)) continue;
     const result = aggregates?.[metric.key];
-    const value = result?.value ?? null;
+    // Contagem 0 de coluna zeroAsEmpty (Machos/Fêmeas) = "—", como nas células da folha resumida.
+    const zeroAsEmpty = Boolean(available.find((column) => column.id === metric.spec?.columnId)?.zeroAsEmpty);
+    const value = zeroAsEmpty && result?.value === 0 ? null : result?.value ?? null;
     const partial = result && !COUNT_OPS.has(metric.spec?.op) && result.n_validos > 0 && result.n_validos < result.n_total ? ` (${result.n_validos} de ${result.n_total})` : '';
     const label = metric.label || aggregateLabel(metric.spec, available);
     items.push({ label, text: `${formatCell(metric.column ?? aggregateValueColumn(metric.spec, available), value, 'print')}${partial}` });
@@ -517,7 +519,9 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const body = summary ? buildSummaryBody(viewModel, columns) : buildDetailBody(viewModel, columns, { maxDataRows });
   const print = decideSheetLayout({ layout: summary ? 'summary' : 'detail', columns, rows: allRows(body) }, { orientation, widths });
 
-  const usesArroba = columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@');
+  // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
+  const usesArroba = columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
+    || (!summary && hasRows && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@'));
   const divisor = viewModel.arrobaDivisor ?? 30;
   const notes = [...(viewModel.notes ?? [])];
   const gmd = summary ? gmdNote(viewModel, columns) : null;

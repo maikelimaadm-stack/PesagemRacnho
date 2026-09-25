@@ -250,6 +250,12 @@ for (const { level, row } of chipRows) {
   assert.ok(!labels.some((label) => /Faixa (mínima|máxima)/.test(label)), 'folha do Detalhado: faixa num item só');
   assert.equal(labels.includes('Faixa exigida (kg)'), level === 3, `folha do Detalhado: faixa só no subtotal do lote (nível ${level})`);
 }
+assert.equal(detailDoc.footer.arroba, '@ = peso vivo ÷ 30', 'folha do Detalhado: totais em @ → rodapé explica o divisor');
+for (const { row } of chipRows) {
+  for (const item of row.chips.items.filter((chip) => chip.label === 'Machos' || chip.label === 'Fêmeas')) {
+    assert.notEqual(item.text, '0', `folha do Detalhado: contagem 0 de ${item.label} aparece "—", como no Resumido`);
+  }
+}
 assert.ok(!detailDoc.grandTotal.rows[0].chips.items.some((item) => item.label === 'Faixa exigida (kg)'), 'folha do Detalhado: sem faixa no Total geral');
 
 // Relatório sem visões declaradas: "Resumo por <agrupamento padrão>" + Analítico, e ambos executam.
