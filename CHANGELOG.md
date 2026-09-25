@@ -33,7 +33,14 @@ Relatórios, repetível e registrada na auditoria. Instalador de diagnóstico n�
   já agrupado e filtrado como antes. Os relatórios de cadastros saíram do catálogo (as telas de
   Cadastros já listam e exportam).
 - Favoritos, recentes e modelos salvos são convertidos para os relatórios novos na primeira abertura de
-  Relatórios, sem perder nada; cada conversão fica na auditoria ("Relatório consolidado: … → …").
+  Relatórios, sem perder nada; cada conversão fica na auditoria ("Relatório consolidado: … → …"), uma
+  vez por item. Modelo que filtrava a mesma coluna da condição do relatório antigo continua com as duas
+  regras (a antiga aparece com cadeado); modelo salvo sem totais continua sem totais; dois modelos de
+  mesmo nome que caíram no mesmo relatório ganham o nome da visão antiga entre parênteses.
+- Modelos, favoritos e recentes dos relatórios que foram para a aba Controle (ou que saíram da lista)
+  continuam em Relatórios para abrir e excluir; na aba Controle não há "Salvar modelo" nem estrela.
+- CSV do Resumido traz a coluna `grupo` com o caminho completo ("Engorda > Lote 01"), para a
+  hierarquia sobreviver a ordenar/filtrar no Excel.
 - Barra do relatório: ações secundárias (Níveis, Totais, Colunas, Atualizar, Salvar modelo, Imprimir)
   viram ícones com dica, e a barra quebra linha em vez de cobrir a faixa de filtros.
 
@@ -44,6 +51,13 @@ Relatórios, repetível e registrada na auditoria. Instalador de diagnóstico n�
   resultam em uma única gravação (trava de execução em andamento; commit 70f43c6).
 - **Backup e Manutenção:** em 1440×900 os cartões Status do banco × Backup e Limpeza × Diagnóstico se
   sobrepunham; as linhas da grade agora têm a altura do conteúdo.
+- **Relatórios — CSV:** texto começando com "-" seguido de conta ("-1+1", "-2+3+cmd|…") saía sem o
+  apóstrofo de proteção e o Excel o lia como fórmula; só número negativo passa sem apóstrofo (a
+  importação desfaz a proteção do mesmo jeito).
+- **Relatórios — rótulos de grupo:** agrupar por data mostrava "2026-08-01" e por sim/não mostrava
+  "true/false"; agora "01/08/2026" e "Sim/Não" na tela, impressão, CSV e XLSX (JSON segue canônico).
+- **Relatórios — médias:** média de coluna inteira (dias no lote, dias sem pesagem) saía arredondada
+  para inteiro (34 em vez de 33,5), inclusive no XLSX; agora com uma casa decimal.
 
 ## [1.3.2] — 2026-09-24
 

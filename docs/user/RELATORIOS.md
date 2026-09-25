@@ -141,6 +141,9 @@ modo). O Resumido cabe em **A4 retrato** na grande maioria dos casos. Se não co
 "Este relatório possui muitas colunas para impressão." com as opções: usar paisagem, reduzir
 totais/colunas, exportar CSV ou continuar. Nenhuma coluna é escondida sem você saber.
 
+No CSV do Resumido, a coluna **grupo** traz o caminho completo (ex.: "Engorda > Lote 01"), para você
+poder ordenar ou filtrar no Excel sem perder de qual apartação é cada lote.
+
 Cada emissão tem um número e um código de conferência (SHA-256). Junto do CSV, XLSX e PDF é salvo um
 arquivo `.manifest.json` com quem emitiu, quando, o período, os filtros e o modo.
 
@@ -163,13 +166,23 @@ raça**) e a marca "Visão salva de antes da 1.4.0".
 | Relatórios de cadastros (Marcas, Raças…) | As próprias telas de **Cadastros** já listam e exportam |
 
 A troca dos favoritos, recentes e modelos para os relatórios novos é automática e fica registrada na
-auditoria como "relatório consolidado".
+auditoria como "relatório consolidado". Um modelo convertido mostra exatamente os mesmos animais de
+antes: se ele filtrava a mesma coluna da condição do relatório antigo (ex.: "Só saídas" em "Entradas e
+saídas"), a condição antiga aparece como pílula com **cadeado**, somada ao filtro do modelo. Se dois
+modelos de mesmo nome caíram no mesmo relatório novo, o segundo ganha o nome antigo entre parênteses,
+por exemplo **Machos (Rebanho por sexo)**.
+
+Favoritos e modelos que você tinha em Auditoria, Qualidade dos dados, Histórico de backups, Pendências
+de pesagem ou nos relatórios de Cadastros continuam em **Favoritos** e **Meus relatórios** (com a
+marca "Relatório da aba Controle" ou "Relatório fora da lista") para abrir ou excluir.
 
 ## 11. Aba Controle (Backup e Manutenção)
 
 Em **Backup e Manutenção**, a aba **Controle** reúne os relatórios de conferência do sistema: **Trilha de
 auditoria** (quem fez o quê), **Qualidade dos dados**, **Histórico de backups** e **Pendências de
-pesagem**. Abrem na mesma tela de relatório, com o botão **Manutenção** para voltar.
+pesagem**. Abrem na mesma tela de relatório, com o botão **Manutenção** para voltar (a tela de
+Manutenção volta como estava, sem refazer a verificação). Ali não há estrela nem "Salvar modelo":
+favoritos e modelos ficam em Relatórios.
 
 ## 12. O que cada perfil pode fazer
 

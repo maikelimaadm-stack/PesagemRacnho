@@ -44,10 +44,21 @@ por nó de grupo** (profundidade primeiro, na ordem de `summarySort`), sem linha
   (kg/dia)", "Valor (R$)", "Arrobas (@)"…
 - Valores de cada nó recalculados sobre a população do nó; "Total geral" sobre a população inteira
   (nunca soma das linhas).
-- CSV: colunas `tipo_linha`, `nivel` e as do resumo; XLSX: aba com as mesmas linhas (números como
-  números) e "Agrupado por: … · Resumido (uma linha por grupo)" nos metadados; JSON: `mode`, `drill`, `summary {headers, metrics, rows}` e
-  `data: []`; impressão: tabela `tr.sum.lvlN`, A4 retrato quando cabe (`decideSummaryPrintLayout`).
-- Manifesto: `presetId` (visão antiga), `mode`, `summarySort` e `drill`.
+- Rótulo de grupo de coluna data/sim-não no formato do destino (`formatGroupLabel`): "01/08/2026",
+  "Sim"/"Não" na tela, impressão, CSV e XLSX; JSON leva o canônico. Vale também para o cabeçalho de
+  grupo do Detalhado. Média de coluna inteira sai com 1 casa (`aggregateValueColumn`).
+- CSV: colunas `tipo_linha`, `nivel`, `grupo` (caminho "Engorda > Lote 01") e as do resumo; XLSX: aba
+  com as mesmas linhas (números como números) e "Agrupado por: … · Resumido (uma linha por grupo)" nos
+  metadados; JSON: `mode`, `drill`, `summary {headers, metrics, rows}` e `data: []`; impressão: tabela
+  `tr.sum.lvlN`. Larguras estimadas pelo conteúdo (`summaryColumnWidths`: rótulo até 200 px e depois
+  quebra linha; métrica = maior entre a palavra mais longa do cabeçalho e o maior número); A4 retrato
+  até 718 px impressos, paisagem até 1047 px, acima disso o aviso "muitas colunas". Nada é cortado com
+  reticências.
+- Manifesto: `presetId` (visão antiga — também quando a tela abre pelo favorito/link antigo e chama o
+  relatório novo com `request.presetId`), `mode`, `summarySort` e `drill`.
+- Proteção contra fórmula no CSV (`protectFormula`): apóstrofo em todo texto iniciado por `=`, `+`, `@`
+  ou `-`, exceto número negativo puro (`-12`, `-1,5`); a importação (`importFile.unprotectFormula`) usa
+  a regra espelhada.
 - `drill` (clique no grupo): corte exato por `groupKeyOf` do caminho escolhido, aplicado antes do
   agrupamento; aparece em "Filtros" como "(detalhe do grupo)".
 

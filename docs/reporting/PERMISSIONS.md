@@ -57,7 +57,8 @@ lookups de eventos guardam só o nome do usuário.
 
 | Ponto | Aplicação |
 |---|---|
-| `reportService.listReports` | só relatórios executáveis pelo papel, **mais** os bloqueados (exibidos como indisponíveis para todos) |
+| `reportService.listReports(actor, { visibility })` | por área da interface (1.4.0): `catalog` (padrão, Relatórios), `maintenance` (aba Controle) ou `hidden`; só relatórios executáveis pelo papel, mais os bloqueados como indisponíveis (que desde a 1.4.0 ficam só em `hidden`). Estar oculto não libera nada: `runReport` de um oculto (link ou modelo) passa pelas mesmas regras — `cadastros.usuarios` continua só ADMIN. A aba Controle fica dentro de Backup e Manutenção, que exige `maintenance.backup` |
+| `selection.fixedFilters` (modelo convertido) | condição do relatório antigo; nunca removida por perfil (coluna sem permissão → `AUTH_FORBIDDEN`, pois tirar a condição ampliaria a população) |
 | `reportService.runReport` | ator com papel obrigatório; `assertCanRunReport` |
 | `reportService.resolveSelection` | remove colunas invisíveis (aviso `COLUMNS_HIDDEN_BY_PERMISSION`, lista em `hiddenByPermission`), remove filtros nelas (`FILTER_REMOVED_BY_PERMISSION`), ignora ordenação e totais nelas, restringe as colunas de pesquisa; agrupar por coluna invisível → `AUTH_FORBIDDEN` |
 | `viewModel.availableColumns` | só colunas visíveis ao papel (diálogos de Colunas, Agrupar e Totais) |

@@ -80,14 +80,33 @@ período como interseção") e, mesmo assim, período obrigatório.
 
 `status: 'blocked'` dispensa `source` e `columns`. Efeitos:
 
-- `listReports` devolve o relatório com `available: false` e `blockedReason` para **qualquer** papel; o
-  card aparece desabilitado com "Indisponível: <motivo>".
+- Desde a 1.4.0 o bloqueado tem `visibility: 'hidden'` (padrão de `blocked(...)`): não aparece em
+  nenhuma tela. `listReports(actor, { visibility: 'hidden' })` ainda o devolve com `available: false` e
+  `blockedReason` para qualquer papel (backlog), e `resolveReportId` continua achando o id.
 - `assertCanRunReport` verifica primeiro `requires` e depois lança erro com `code = 'REPORT_BLOCKED'`
   ("Relatório indisponível: <motivo>").
 - `canRunReport` retorna `false`; modelos de relatórios bloqueados não são listados nem salvos.
 
 Os bloqueados são criados pela função `blocked(...)` em `definitions/controle.js` (lista e motivos em
 REPORT-CATALOG.md).
+
+## 4.1 Visibilidade, modo padrão e visões antigas (1.4.0)
+
+| Campo / função | Regra |
+|---|---|
+| `visibility` | `'catalog'` (os 12 de Relatórios), `'maintenance'` (aba Controle da Manutenção) ou `'hidden'` (cadastros.* e bloqueados). Padrão: `hidden` se bloqueado, senão `catalog`. |
+| `defaultMode` | `'RESUMIDO'` ou `'DETALHADO'`. Padrão: Resumido quando há `defaultGroups`. |
+| `quickFilters` | `[{ id, label, filters }]` — atalhos de um clique na faixa de filtros. |
+| `quickGroups` | ids de colunas `groupable` oferecidos no "Agrupar por" rápido (o agrupamento padrão sempre entra). |
+| `listReportDefinitions({ visibility })` | só as definições daquela área (padrão `catalog`). |
+| `listAllReportDefinitions()` | todas as definições (gates e ferramentas). |
+| `resolveReportId(id)` | `{ definition, aliasId, alias }`: id atual ou id antigo consolidado (`LEGACY_REPORT_ALIASES`). `getReportDefinition(idAntigo)` devolve a definição nova. |
+| `listReports(actor, { visibility })` | resumo por área, filtrado pelo papel (bloqueados só na área `hidden`). |
+
+Condições dos relatórios antigos (`alias.fixed`): viram filtros comuns com `match: 'code'`; quando a
+seleção também filtra a mesma coluna, a condição vai para `selection.fixedFilters` e é aplicada como as
+`lockedFilters` da definição (o catálogo recusa alias com condição fixa apontando para relatório com
+`lockedFilters` próprias).
 
 ## 5. Classificação dos dados
 

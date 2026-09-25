@@ -38,12 +38,20 @@ configuração (`appSettings`) daquela pessoa e da empresa:
 |---|---|---|
 | Favoritos | ids de relatório | id antigo vira `relatório-novo#id-antigo` (a visão antiga continua aparecendo com o nome de antes) |
 | Recentes | id + modelo | id antigo vira o relatório novo + `presetId` com o id antigo |
-| Modelos salvos | colunas, filtros, agrupamento, totais | passam a apontar para o relatório novo; condições fixas do relatório antigo viram filtros; ganham o modo (Resumido se agrupado, Detalhado se não) e `migratedFrom` |
+| Modelos salvos | colunas, filtros, agrupamento, totais | passam a apontar para o relatório novo; condições fixas do relatório antigo viram filtros (comparados pelo código, como antes); ganham o modo (Resumido se agrupado, Detalhado se não) e `migratedFrom` |
 
 Regras de segurança:
 
 - **Nada é apagado.** O modelo convertido guarda o id antigo em `migratedFrom`.
-- **Repetível (idempotente):** abrir Relatórios de novo não converte nem audita duas vezes.
+- **A população do modelo não muda.** Se o modelo filtrava a mesma coluna da condição do relatório
+  antigo (ex.: "Só saídas" em "Entradas e saídas"), as duas regras continuam valendo: o filtro do
+  modelo fica como estava e a condição antiga vai para `fixedFilters` (aparece com cadeado). Modelo
+  salvo sem totais continua sem totais.
+- **Nomes repetidos:** dois modelos de mesmo nome que caem no mesmo relatório novo (ex.: "Machos" em
+  "Rebanho por raça" e em "Rebanho por sexo") — o segundo vira "Machos (Rebanho por sexo)"
+  (`renamedFrom` guarda o nome anterior), para os dois poderem ser salvos de novo.
+- **Repetível (idempotente):** abrir Relatórios de novo não converte nem audita duas vezes; leituras
+  simultâneas (a tela lê favoritos, recentes e modelos ao mesmo tempo) compartilham uma única conversão.
 - **Auditoria:** cada conversão grava `entidade = appSettings`, `acao = ATUALIZAR`,
   `origem = relatorios-consolidacao-1.4.0` e o resumo "Relatório consolidado: *antigo* → *novo*".
 - **Falha de gravação:** se a configuração não puder ser gravada (banco somente leitura, por exemplo),
@@ -56,10 +64,17 @@ Em **Backup e Manutenção › aba Controle › Trilha de auditoria**, filtrar O
 `relatorios-consolidacao-1.4.0`. Uma linha por preferência convertida, por exemplo:
 
 - "Relatório consolidado: rebanho.dimensao.raca → rebanho.atual (favorito)."
-- "Relatório consolidado: saidas.mortes.causa → saidas (modelo)."
+- "Relatório consolidado: saidas.mortes.causa → saidas (modelo salvo “Mortes do mês”)."
+- "Relatório consolidado: rebanho.dimensao.sexo → rebanho.atual (modelo salvo “Machos”, agora “Machos
+  (Rebanho por sexo)”)."
 
 Quem não tinha favoritos, recentes nem modelos não terá nenhuma linha. O gate
-`reports:catalog-consolidation:verify` confere essa conversão com 8 preferências antigas.
+`reports:catalog-consolidation:verify` confere essa conversão (8 preferências antigas, mais os casos de
+filtro na coluna da condição, modelo sem totais, nomes repetidos e leituras simultâneas).
+
+Favoritos, recentes e modelos dos relatórios que foram para a aba Controle (auditoria, qualidade,
+backups, pendências) ou saíram da lista (cadastros) **não são convertidos** — o id deles não mudou — e
+continuam aparecendo em Relatórios (Favoritos, Recentes, Meus relatórios) para abrir ou excluir.
 
 ## 5. Verificação após a atualização
 
