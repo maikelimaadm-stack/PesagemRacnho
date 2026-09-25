@@ -67,7 +67,9 @@ for (const def of REGISTRY_DEFINITIONS) {
   assert.ok(def.colunas.length > 0 && def.colunas[0].id === 'nome', `${def.store}: colunas começam por nome`);
   assert.ok(def.unicidade.includes('nome_normalizado'), `${def.store}: unicidade por nome`);
   for (const campo of def.campos) {
-    assert.ok(['texto', 'numero', 'booleano', 'select', 'multiselect'].includes(campo.tipo), `${def.store}.${campo.id}: tipo ${campo.tipo}`);
+    // E1B (1.4.0): 'imagem' é o logo da propriedade (data URL PNG/JPEG validado pela definição;
+    // regras no gate registry:property-header). Tipo fora da lista continua recusado.
+    assert.ok(['texto', 'numero', 'booleano', 'select', 'multiselect', 'imagem'].includes(campo.tipo), `${def.store}.${campo.id}: tipo ${campo.tipo}`);
   }
   assert.ok(def.validar({}).some((e) => /nome/i.test(e)), `${def.store}: validar sem nome falha`);
   assert.equal(getRegistryService(def.store).store, def.store);

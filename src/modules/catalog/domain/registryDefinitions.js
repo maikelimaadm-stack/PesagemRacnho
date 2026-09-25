@@ -4,6 +4,7 @@
 // `validar` e `unicidade`. Enumerações compartilhadas vêm de schema.js.
 import { PARCEIRO_PAPEIS } from '../../../storage/indexedDb/schema.js';
 import { cleanText, normalizeDocument, normalizeName } from './normalize.js';
+import { isAcceptedLogo, logoProblem } from './propertyHeader.js';
 
 export const RACA_GRUPOS = ['ZEBUINO', 'TAURINO', 'CRUZADO', 'OUTRO'];
 export const CATEGORIA_SEXOS = ['M', 'F'];
@@ -31,9 +32,17 @@ export const renderSimNao = (value) => (value ? 'Sim' : 'Não');
 export const renderSituacao = (value) => (value === false ? 'Inativo' : 'Ativo');
 export const renderPapeis = (value) => (Array.isArray(value) ? value.map((p) => PARCEIRO_PAPEL_LABELS[p] ?? p).join(', ') : '');
 
-// Campo do formulário. tipo: texto | numero | booleano | select | multiselect.
+// Campo do formulário. tipo: texto | numero | booleano | select | multiselect | imagem.
 // `referencia` (opcional) indica que o select é preenchido com outro cadastro:
 // { store, papel? } — a UI carrega as opções pelo serviço daquele store.
+// `secao` (opcional) põe o campo num cartão próprio da ficha: 'cabecalho' → "Cabeçalho
+// dos relatórios" (E1B). Sem seção, a ficha distribui o campo pelos cartões de sempre.
+// `imagem` guarda um data URL PNG/JPEG já ajustado pela tela (≤ 400 px de largura,
+// ≤ 300 KB); a definição só aceita o que passa em isAcceptedLogo (propertyHeader.js).
+// `desligadoComoNulo` (só booleano): opção desligada é gravada como null, igual ao
+// registro antigo que ainda não tinha o campo. Assim, salvar de novo um registro antigo
+// sem mexer na opção não vira "alteração" na auditoria (o serviço compara null com o
+// ausente); ligada continua gravando true.
 function campo(id, label, extra = {}) {
   return {
     id,
@@ -45,6 +54,7 @@ function campo(id, label, extra = {}) {
     compacto: false,
     defaultValue: null,
     ajuda: null,
+    secao: null,
     ...extra,
   };
 }
@@ -65,9 +75,11 @@ function coerceField(field, raw) {
   const missing = raw === undefined || raw === null || raw === '';
   switch (field.tipo) {
     case 'booleano': {
-      if (missing) return field.defaultValue ?? false;
-      if (typeof raw === 'string') return raw.trim().toLowerCase() === 'true';
-      return Boolean(raw);
+      let value;
+      if (missing) value = field.defaultValue ?? false;
+      else if (typeof raw === 'string') value = raw.trim().toLowerCase() === 'true';
+      else value = Boolean(raw);
+      return field.desligadoComoNulo && value !== true ? null : value;
     }
     case 'numero': {
       if (missing) return field.defaultValue ?? null;
@@ -84,6 +96,11 @@ function coerceField(field, raw) {
       if (missing) return Array.isArray(field.defaultValue) ? [...field.defaultValue] : [];
       const list = Array.isArray(raw) ? raw : String(raw).split(/[;,]/);
       return [...new Set(list.map((item) => String(item ?? '').trim().toLocaleUpperCase('pt-BR')).filter(Boolean))];
+    }
+    case 'imagem': {
+      // Data URL guardado como veio: só tira espaço das pontas (nunca colapsa o conteúdo).
+      if (missing) return null;
+      return String(raw).trim() || null;
     }
     default: {
       if (missing) return field.defaultValue ?? null;
@@ -115,6 +132,10 @@ function errosComuns(definition, record) {
     if (field.tipo === 'numero' && Number.isNaN(value)) erros.push(`${field.label}: informe um número válido.`);
     if (field.tipo === 'select' && value != null && field.opcoes && !field.referencia && !field.opcoes.some((o) => o.value === value)) {
       erros.push(`${field.label}: valor "${value}" não é permitido.`);
+    }
+    // Imagem: só data URL PNG/JPEG em base64 até 300 KB (svg, http:, file:, texto → recusa).
+    if (field.tipo === 'imagem' && value != null && !isAcceptedLogo(value)) {
+      erros.push(logoProblem(value) ?? 'O logo precisa ser uma imagem PNG ou JPG.');
     }
     if (field.obrigatorio && field.id !== 'nome') {
       const vazio = value == null || value === '' || (Array.isArray(value) && value.length === 0);
@@ -292,6 +313,16 @@ export const PROPRIEDADES = definicao({
     campo('municipio', 'Município'),
     UF,
     campo('codigo_oficial', 'Código oficial', { compacto: true, ajuda: 'Código usado na GTA; texto livre.' }),
+    // Cabeçalho dos relatórios (E1B 1.4.0): campos não indexados, sem mudança de esquema.
+    // O documento vai só com dígitos (coerceRecord) e NÃO entra na unicidade: a store não
+    // tem índice de documento e o mesmo produtor pode ter várias fazendas.
+    campo('titular_nome', 'Produtor / razão social', { largo: true, secao: 'cabecalho', ajuda: 'Sem ele o cabeçalho usa o nome da propriedade.' }),
+    campo('endereco', 'Endereço', { largo: true, secao: 'cabecalho' }),
+    campo('documento', 'CPF/CNPJ', { compacto: true, secao: 'cabecalho', ajuda: 'Somente os dígitos são guardados.' }),
+    campo('inscricao_estadual', 'Inscrição estadual', { compacto: true, secao: 'cabecalho', ajuda: 'Texto livre (ex.: ISENTO).' }),
+    campo('mostrar_documento_no_cabecalho', 'Mostrar CPF/CNPJ e IE no cabeçalho', { tipo: 'booleano', defaultValue: false, desligadoComoNulo: true, widthType: 'CAMPO_PRINCIPAL', secao: 'cabecalho' }),
+    campo('telefone', 'Telefone', { compacto: true, secao: 'cabecalho' }),
+    campo('logo', 'Logo', { tipo: 'imagem', largo: true, secao: 'cabecalho', ajuda: 'PNG ou JPG. Ajustamos o tamanho automaticamente.' }),
     PADRAO,
     ATIVO,
   ],

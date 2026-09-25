@@ -182,7 +182,9 @@ ok('modelo-formulario');
 // ---------------------------------------------------------------------------
 for (const def of REGISTRY_DEFINITIONS) {
   const grupos = groupFields(def);
-  const todos = [...grupos.primary, ...grupos.additional, ...grupos.contact, ...grupos.observation].map((c) => c.id).sort();
+  // E1B (1.4.0): 5º cartão "Cabeçalho dos relatórios" (campos com secao 'cabecalho', só em
+  // Propriedades); a regra continua: cada campo em exatamente um cartão.
+  const todos = [...grupos.primary, ...grupos.additional, ...grupos.contact, ...grupos.observation, ...grupos.header].map((c) => c.id).sort();
   assert.deepEqual(todos, def.campos.map((c) => c.id).sort(), `${def.store}: todo campo aparece uma única vez nos cards`);
   assert.ok(grupos.primary.some((c) => c.id === 'nome') && grupos.primary.some((c) => c.id === 'ativo'), `${def.store}: nome e situação ficam em Dados principais`);
 }

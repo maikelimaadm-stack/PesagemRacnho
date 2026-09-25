@@ -42,8 +42,11 @@ import {
   hasFieldValue,
   multiLabels,
   payloadFromForm,
+  recordCodeOf,
   referenceOptionsFor,
 } from './registryFormModel.js';
+import LogoField from './LogoField.jsx';
+import PropertyHeaderPreview from './PropertyHeaderPreview.jsx';
 import '@/styles/auxiliary-registries.css';
 import './cadastro-mestre.css';
 
@@ -70,8 +73,9 @@ function resolveFieldWidthType(campo) {
 }
 
 // Campo por tipo da definição: texto, número (pt-BR), booleano, select (enum ou
-// referência a outro cadastro) e multiselect (chips).
+// referência a outro cadastro), multiselect (chips) e imagem (logo, E1B).
 function Field({ campo, value, onChange, options, disabled }) {
+  if (campo.tipo === 'imagem') return <LogoField campo={campo} value={value} onChange={onChange} disabled={disabled} />;
   const hasValue = hasFieldValue(value);
   const widthType = resolveFieldWidthType(campo);
   const fieldClass = `fg mg-prototype-field aux-model-field${campo.largo ? ' is-wide' : ''}${hasValue ? ' mg-has-value' : ''}`;
@@ -547,7 +551,7 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
   const selectedAllInactive = selectedRecords.length > 0 && selectedRecords.every((record) => record.ativo === false);
   const selectedTab = selectedRecords.length === 1 ? (tabs.find((item) => item.id === selectedRecords[0]._tabId) || tab) : tab;
   const canSetDefault = canWrite && selectedRecords.length === 1 && selectedTab.definition.temPadrao && typeof selectedTab.persistence.setDefault === 'function' && selectedRecords[0].ativo !== false && !selectedRecords[0].padrao;
-  const { primary: primaryFields, additional: additionalFields, contact: contactFields, observation: observationFields } = groupFields(definition);
+  const { primary: primaryFields, additional: additionalFields, contact: contactFields, observation: observationFields, header: headerFields } = groupFields(definition);
   const typeField = {
     id: '__type',
     label: 'Tipo de cadastro',
@@ -571,7 +575,7 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
     const record = tabRecords[index];
     if (record) openEdit({ ...record, _tabId: tab.id });
   };
-  const recordCode = editingRecord ? (editingRecord.documento || editingRecord.abreviacao || editingRecord.codigo_oficial || definition.singular) : definition.singular;
+  const recordCode = recordCodeOf(definition, editingRecord);
   const formatCell = (column, record) => cellText(column, record) || '—';
   const readOnly = !canWrite;
   const editActionLabel = canWrite ? 'Editar' : 'Consultar';
@@ -759,6 +763,15 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
                                 <FormCard title="Informações adicionais" fields={additionalFields} form={form} setField={setField} options={referenceOptions} disabled={readOnly} full={!contactFields.length} />
                                 <FormCard title="Contato" fields={contactFields} form={form} setField={setField} options={referenceOptions} disabled={readOnly} full={!additionalFields.length} />
                               </div>
+                              {/* E1B: campos com secao 'cabecalho' (só Propriedades) + a pré-visualização da folha. */}
+                              {headerFields.length ? (
+                                // key por registro: trocar de propriedade remonta o cartão (um logo ainda sendo
+                                // ajustado nunca cai na ficha de outra propriedade; erro antigo não fica na tela).
+                                <div className="emp-form-cards-row" key={`cabecalho:${editingId ?? 'novo'}`}>
+                                  <FormCard title="Cabeçalho dos relatórios" fields={headerFields} form={form} setField={setField} options={referenceOptions} disabled={readOnly} />
+                                  <PropertyHeaderPreview definition={definition} form={form} recordId={editingId} />
+                                </div>
+                              ) : null}
                             </> : <div className="emp-form-cards-row"><FormCard title="Observações" fields={observationFields} form={form} setField={setField} options={referenceOptions} disabled={readOnly} full /></div>}
                           </div>
                         </div>

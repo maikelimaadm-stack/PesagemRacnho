@@ -18,6 +18,8 @@ export {
 } from './registryServices.js';
 export { createMasterRegistryService, DEFAULT_EMPRESA_ID, INACTIVE_DEFAULT_MESSAGE } from './masterRegistryService.js';
 export { REGISTRY_WRITE_PERMISSION, assertRegistryWrite, resolveWriterRole } from './registryAccess.js';
+// Cabeçalho dos relatórios (E1B): propriedade do filtro → Padrão → só o nome do sistema.
+export { loadReportHeader } from './propertyHeaderService.js';
 export { RESOLVER_GROUPS, buildNameIndex, resolveMany, resolveNamesAgainst } from './catalogResolver.js';
 export { RegistryError } from '../domain/registryErrors.js';
 export {

@@ -3,12 +3,16 @@
 // erro. Sem React e com imports relativos para o gate (scripts/verify-registry-ui.mjs)
 // exercitar as mesmas funções da tela em Node.
 import { parseBrazilianNumber } from '../../modules/weighing/domain/brazilianValues.js';
+import { coerceRecord } from '../../modules/catalog/domain/registryDefinitions.js';
+import { buildPropertyHeader } from '../../modules/catalog/domain/propertyHeader.js';
 
 // Valor sentinela do item "Nenhum" (Radix não aceita item com valor vazio).
 export const NONE_OPTION = '__nenhum__';
 export const OBSERVATION_FIELD_IDS = new Set(['observacao', 'observacoes', 'descricao', 'orientacao']);
 export const CONTACT_FIELD_IDS = new Set(['telefone', 'email']);
 export const ADDITIONAL_FIELD_IDS = new Set(['cidade', 'uf', 'municipio', 'registro_sif', 'rendimento_padrao', 'codigo_oficial']);
+// Seção da definição com os dados do cabeçalho dos relatórios (E1B): cartão próprio na ficha.
+export const HEADER_SECTION = 'cabecalho';
 // Contagem de uso por índice (barata): vira coluna da lista. Parceiros e causas
 // varrem eventos de saída/cadastro, então só contam sob demanda no registro aberto.
 export const USAGE_IN_LIST_STORES = new Set(['marcas', 'racas', 'categoriasAnimal', 'propriedades']);
@@ -28,13 +32,15 @@ export const multiLabels = (campo, value) => (Array.isArray(value) ? value.map((
 export const hasFieldValue = (value) => (Array.isArray(value) ? value.length > 0 : String(value ?? '').trim() !== '');
 
 // Estado do formulário: texto/número como string (número em formato brasileiro),
-// booleano como boolean, select como string ('' = nenhum), multiselect como array.
+// booleano como boolean, select como string ('' = nenhum), multiselect como array,
+// imagem como o data URL ('' = sem imagem).
 export function fieldToForm(campo, value) {
   switch (campo.tipo) {
     case 'booleano': return value == null ? Boolean(campo.defaultValue ?? false) : Boolean(value);
     case 'numero': return value == null ? formatNumberInput(campo.defaultValue) : formatNumberInput(value);
     case 'multiselect': return Array.isArray(value) ? [...value] : (Array.isArray(campo.defaultValue) ? [...campo.defaultValue] : []);
     case 'select': return value == null ? String(campo.defaultValue ?? '') : String(value);
+    case 'imagem': return typeof value === 'string' ? value : '';
     default: return value == null ? String(campo.defaultValue ?? '') : String(value);
   }
 }
@@ -56,6 +62,9 @@ export function payloadFromForm(definition, form) {
       payload[campo.id] = Array.isArray(value) ? [...value] : [];
     } else if (campo.tipo === 'booleano') {
       payload[campo.id] = Boolean(value);
+    } else if (campo.tipo === 'imagem') {
+      // Sem imagem → null (Remover); o data URL segue inteiro para a definição validar.
+      payload[campo.id] = String(value ?? '').trim() === '' ? null : String(value);
     } else {
       payload[campo.id] = String(value ?? '');
     }
@@ -63,15 +72,35 @@ export function payloadFromForm(definition, form) {
   return payload;
 }
 
-// Cards do registro: principais / adicionais / contato / observações.
+// Cards do registro: principais / adicionais / contato / observações / cabeçalho dos
+// relatórios. Os campos com `secao: 'cabecalho'` saem dos outros cards (o telefone da
+// propriedade vai para o cabeçalho; o do parceiro continua em Contato).
 export function groupFields(definition) {
   const { campos } = definition;
-  const observation = campos.filter((campo) => OBSERVATION_FIELD_IDS.has(campo.id));
-  const contact = campos.filter((campo) => CONTACT_FIELD_IDS.has(campo.id));
-  const additional = campos.filter((campo) => ADDITIONAL_FIELD_IDS.has(campo.id));
-  const classified = new Set([...observation, ...contact, ...additional].map((campo) => campo.id));
+  const header = campos.filter((campo) => campo.secao === HEADER_SECTION);
+  const semSecao = campos.filter((campo) => campo.secao !== HEADER_SECTION);
+  const observation = semSecao.filter((campo) => OBSERVATION_FIELD_IDS.has(campo.id));
+  const contact = semSecao.filter((campo) => CONTACT_FIELD_IDS.has(campo.id));
+  const additional = semSecao.filter((campo) => ADDITIONAL_FIELD_IDS.has(campo.id));
+  const classified = new Set([...header, ...observation, ...contact, ...additional].map((campo) => campo.id));
   const primary = campos.filter((campo) => !classified.has(campo.id));
-  return { primary, additional, contact, observation };
+  return { primary, additional, contact, observation, header };
+}
+
+// Código do painel de contexto do registro aberto: documento, abreviação ou código
+// oficial. Campo do cabeçalho dos relatórios fica fora (o CPF/CNPJ da propriedade só
+// aparece no cabeçalho, e só com a opção ligada).
+export function recordCodeOf(definition, record) {
+  if (!record) return definition.singular;
+  const doCabecalho = new Set(definition.campos.filter((campo) => campo.secao === HEADER_SECTION).map((campo) => campo.id));
+  const codigo = ['documento', 'abreviacao', 'codigo_oficial'].filter((id) => !doCabecalho.has(id)).map((id) => record[id]).find(Boolean);
+  return codigo || definition.singular;
+}
+
+// Pré-visualização "Assim vai sair nos relatórios": o formulário passa pela mesma coerção
+// do serviço e pelo mesmo modelo de cabeçalho que a folha desenha (buildPropertyHeader).
+export function headerPreviewFromForm(definition, form, { id = null } = {}) {
+  return buildPropertyHeader({ ...coerceRecord(definition, payloadFromForm(definition, form)), id });
 }
 
 // Texto de célula (tabela, cartões, filtros e pesquisa) a partir da definição.
