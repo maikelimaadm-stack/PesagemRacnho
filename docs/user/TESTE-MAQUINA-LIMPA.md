@@ -1,14 +1,15 @@
 # Teste em máquina limpa
 
-Este roteiro valida o pacote Windows da versão **1.2.0** em um computador ou
-usuário sem uma instalação anterior, e também a atualização a partir da 1.1.17.
+Este roteiro valida o pacote Windows da versão **1.4.0** em um computador ou
+usuário sem uma instalação anterior, a atualização a partir da 1.3.2 e, em
+máquina separada, a atualização histórica a partir da 1.1.17.
 Use somente um instalador acompanhado de `release-manifest.json` e SHA-256.
 Se o instalador não tiver assinatura Authenticode, o resultado vale apenas como
 diagnóstico, nunca como release oficial.
 
 ## Instalação e segurança
 
-- [ ] Conferir nome (`Pesagens Individuais Setup 1.2.0.exe`), tamanho e SHA-256
+- [ ] Conferir nome (`Pesagens Individuais Setup 1.4.0.exe`), tamanho e SHA-256
       contra `release-manifest.json` (`installer.sha256`, `installer.sizeBytes`).
 - [ ] Em **Propriedades > Assinaturas Digitais**, validar assinatura Authenticode,
       cadeia confiável e carimbo de tempo (ou registrar `signed: false`).
@@ -20,15 +21,15 @@ diagnóstico, nunca como release oficial.
 
 - [ ] A primeira tela é a **Configuração Inicial** (nenhuma tela de dados aparece antes).
 - [ ] Senha fraca (`123456`) e senha igual ao login são recusadas.
-- [ ] Criar o administrador; a tela de **login** aparece com a versão **1.2.0** no rodapé.
+- [ ] Criar o administrador; a tela de **login** aparece com a versão **1.4.0** no rodapé.
 - [ ] Login com senha errada mostra "Login ou senha inválidos"; 5 erros seguidos bloqueiam por 30 s.
 - [ ] Login correto abre o sistema com nome, perfil ADMIN e versão na barra superior.
 - [ ] **Bloquear** pede a senha do mesmo usuário; **Trocar usuário** volta ao login; **Sair** encerra.
 - [ ] Em **Sistema › Usuários**, criar um GESTOR e um OPERADOR; cada um deve trocar a senha na primeira entrada.
 - [ ] Como OPERADOR, o menu não mostra Usuários, Backup e Manutenção nem os botões de editar cadastros.
 - [ ] Tentar desativar o único ADMIN é recusado.
-- [ ] Em **Backup e Manutenção › Status**, confirmar versão **1.2.0**, banco **7**,
-      backup formato **3**, build UI e build de dados (`schema-v7`) e armazenamento
+- [ ] Em **Backup e Manutenção › Status**, confirmar versão **1.4.0**, banco **8**,
+      backup formato **3**, build UI e build de dados e armazenamento
       **IndexedDB local (Dexie)**.
 
 ## Cadastros
@@ -59,6 +60,19 @@ diagnóstico, nunca como release oficial.
 - [ ] Reabrir e comparar contagens e somas.
 - [ ] **Limpar dados operacionais**: pesagens somem, cadastros e usuários permanecem.
 - [ ] **Reset completo**: exige backup validado, senha e confirmação; volta à Configuração Inicial.
+
+## Atualização 1.3.2 → 1.4.0
+
+- [ ] Na 1.3.2: marcar como favoritos "Rebanho por raça" e "Mortes por causa", salvar um modelo de
+      "Desempenho por lote" e criar um backup completo.
+- [ ] Instalar a 1.4.0 por cima e abrir: nenhuma migração de banco; barra superior com **v1.4.0**.
+- [ ] Relatórios: 12 cartões; os dois favoritos aparecem com o nome antigo e abrem agrupados como antes;
+      o modelo abre no relatório **Desempenho**, com o selo "Convertido na 1.4.0".
+- [ ] Trilha de auditoria (Backup e Manutenção › Controle): linhas "Relatório consolidado".
+- [ ] Rebanho atual abre **resumido** por lote; clicar num lote mostra só os animais dele.
+- [ ] Imprimir o Resumido de Desempenho em A4; exportar XLSX e abrir.
+- [ ] Relação de Pesagens › Ações em lote › **Data, apartação e lote** abre sem erro.
+- [ ] Verificar integridade verde; contagens iguais às da 1.3.2.
 
 ## Atualização 1.1.17 → 1.2.0 (segunda máquina ou usuário)
 

@@ -3,6 +3,48 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.4.0] — 2026-09-25
+
+Etapa E1 do Plano Mestre 2. Esquema Dexie **8** e backup **formato 3**, **sem mudança de esquema**. A
+única conversão é das preferências de relatório (favoritos, recentes e modelos salvos), feita ao abrir
+Relatórios, repetível e registrada na auditoria. Instalador de diagnóstico não assinado em
+`release-unsigned/`. Notas em `docs/release/1.4.0/RELEASE-NOTES.md`.
+
+### Added
+- **Relatórios resumidos:** os relatórios agrupados abrem no modo **Resumido**, com uma linha por grupo
+  (lote, categoria, raça…) e os totais em colunas (Cabeças, Peso médio, GMD…). O botão **Resumido |
+  Detalhado** alterna a visão; clicar no grupo abre o Detalhado só daquele grupo, com selo de volta. A
+  tela, o CSV, o XLSX, o JSON e a impressão A4 saem com a mesma tabela resumida, e o Total geral é
+  calculado sobre a população inteira.
+- **Agrupar por** rápido na barra do relatório, sem abrir diálogo, e **filtros rápidos** de um clique
+  ("Sem pesagem há mais de 30 dias", "Somente entradas e saídas", "Somente perdendo peso", "Somente
+  mudanças de lote no período", "Somente mortes").
+- Ordenação dos grupos do Resumido pela coluna de total, salva no modelo junto com o modo.
+- **Backup e Manutenção › aba Controle**: Trilha de auditoria, Qualidade dos dados, Histórico de backups e
+  Pendências de pesagem.
+- Gates `reports:summary-mode`, `reports:summary-export-parity` e `reports:catalog-consolidation` no
+  `test:quick`.
+
+### Changed
+- **Catálogo consolidado de 51 para 12 relatórios** (mais 4 de controle na Manutenção): Rebanho atual, Ocupação de lotes, Pesagens,
+  Fechamento do dia, Desempenho, Movimentação de lotes, Saídas, Vendas, Abates e Compras do período,
+  Romaneio de embarque e Embarques previsto × realizado. Os 33 relatórios antigos viraram visões
+  (`LEGACY_REPORT_ALIASES`): favoritos, recentes, modelos salvos e links antigos abrem o relatório novo
+  já agrupado e filtrado como antes. Os relatórios de cadastros saíram do catálogo (as telas de
+  Cadastros já listam e exportam).
+- Favoritos, recentes e modelos salvos são convertidos para os relatórios novos na primeira abertura de
+  Relatórios, sem perder nada; cada conversão fica na auditoria ("Relatório consolidado: … → …").
+- Barra do relatório: ações secundárias (Níveis, Totais, Colunas, Atualizar, Salvar modelo, Imprimir)
+  viram ícones com dica, e a barra quebra linha em vez de cobrir a faixa de filtros.
+
+### Fixed
+- **Relação de Pesagens:** a tela quebrava ao abrir o diálogo coletivo "Data, apartação e lote"
+  (defeito presente no instalador 1.3.2; commit 05e6d33).
+- **Importação:** dois cliques seguidos em "Aplicar" com o mesmo arquivo e a mesma configuração agora
+  resultam em uma única gravação (trava de execução em andamento; commit 70f43c6).
+- **Backup e Manutenção:** em 1440×900 os cartões Status do banco × Backup e Limpeza × Diagnóstico se
+  sobrepunham; as linhas da grade agora têm a altura do conteúdo.
+
 ## [1.3.2] — 2026-09-24
 
 Esquema Dexie **8** e backup **formato 3**, sem migração de dados. Instalador de diagnóstico não
