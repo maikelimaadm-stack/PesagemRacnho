@@ -291,6 +291,16 @@ html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .d17b-
   color: var(--mb1-text-1) !important;
   box-shadow: none !important;
 }
+/* Configurações no tema escuro (E1C): os seletores (config-*, ex.: divisor da @ — o único campo que o
+   GESTOR vê) herdavam o fundo BRANCO do "campo preenchido" (--mg-field-filled-bg); com o texto do campo
+   seguindo a cor clara do tema (mg-layout.css), o valor sumia. Mesmo fundo/borda/cor de campo escuro das
+   fichas de Cadastros. :not(#config-dark-none) só sobe a especificidade acima da regra "preenchido". */
+html:is(.dark, .tema-escuro, .escuro) body .app-config-page.aux-registry-page .mg-prototype-form--edit .cmd-select.mg-has-value .cmd-display.aux-model-cmd-display[id^="config-"]:not(#config-dark-none) {
+  border-color: var(--mb1-border) !important;
+  background-color: var(--mb1-bg-field) !important;
+  color: var(--mb1-text-1) !important;
+  box-shadow: none !important;
+}
 html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-model-field input, .aux-model-field textarea, .aux-model-cmd-display):focus,
 html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-model-field input, .aux-model-field textarea, .aux-model-cmd-display):focus-visible,
 html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page .aux-model-cmd-display[data-state="open"] {

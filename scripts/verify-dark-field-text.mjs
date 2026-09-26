@@ -23,7 +23,7 @@ function specificity(selector) {
   const max = (list) => list.map(specificity).reduce((best, value) => (compare(value, best) > 0 ? value : best), [0, 0, 0]);
   // Argumentos de :is()/:not() contam pela maior especificidade; :where() conta zero.
   for (;;) {
-    const match = /:(is|not|where)\(/.exec(text);
+    const match = /:(is|not|where|has)\(/.exec(text);
     if (!match) break;
     let depth = 1;
     let end = match.index + match[0].length;
@@ -64,9 +64,27 @@ for (const rule of lightForced) {
 // O tema claro continua como era: a regra comum dos campos ainda pinta com var(--text-1).
 assert.ok(lightForced.some((rule) => /var\(--text-1\)/.test(fillOf(rule.body)[1])), 'tema claro: campos com var(--text-1)');
 
+// Configurações (revisão final E1C): com o texto seguindo a cor clara do tema, o seletor preenchido
+// (config-*, ex.: divisor da @ — o único campo do GESTOR) não pode ficar com o fundo BRANCO do "campo
+// preenchido" (--mg-field-filled-bg): a regra escura de auxiliary-registries.css dá o fundo de campo escuro
+// e vence a regra "preenchido" (medido: fundo rgb(33,38,45), contraste 12,88; sem ela, 1,18).
+const auxCss = readFileSync(join(root, 'src/styles/auxiliary-registries.css'), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const auxRules = [...auxCss.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map((match) => ({ selectors: match[1].split(/,(?![^(]*\))/).map((item) => item.trim()).filter(Boolean), body: match[2] }));
+const configDark = auxRules.find((rule) => rule.selectors.some((selector) => selector.includes('[id^="config-"]') && /html:is\(\.dark/.test(selector)));
+assert.ok(configDark, 'regra do escuro para os seletores de Configurações (config-*)');
+assert.match(configDark.body, /background-color:\s*var\(--mb1-bg-field\)\s*!important/, 'fundo de campo escuro');
+assert.match(configDark.body, /color:\s*var\(--mb1-text-1\)\s*!important/, 'texto claro');
+const filled = rules.find((rule) => /background:\s*var\(--mg-field-filled-bg\)\s*!important/.test(rule.body));
+assert.ok(filled, 'regra "campo preenchido" (fundo branco) existe no tema claro');
+const filledSpecificity = filled.selectors.map(specificity).reduce((best, value) => (compare(value, best) > 0 ? value : best));
+const configSpecificity = specificity(configDark.selectors.find((selector) => selector.includes('[id^="config-"]')));
+assert.ok(compare(configSpecificity, filledSpecificity) > 0, `regra escura de Configurações (${configSpecificity}) vence o "preenchido" (${filledSpecificity})`);
+
 // NEGATIVO: o cálculo de especificidade distingue os casos (sem o :not(#…) a regra do escuro perderia).
 assert.ok(compare(specificity('html:is(.dark) body .mg-empresas-scope :is(.mg-prototype-form--edit) :is(input)'), specificity('.mg-empresas-scope .mg-prototype-form--edit .mg-prototype-field:not(.mg-field-locked) > input:not([disabled]):not([readonly])')) < 0, 'NEGATIVO: sem o :not(#…) a regra do escuro perde');
 assert.deepEqual(specificity('#a .b c'), [1, 1, 1]);
 assert.deepEqual(specificity(':where(.a) .b'), [0, 1, 0]);
+assert.deepEqual(specificity('.a:has(> input:not(.b))'), [0, 2, 1], ':has conta o argumento');
+assert.ok(compare(specificity('html:is(.dark) body .app-config-page .cmd-display[id^="config-"]'), filledSpecificity) < 0, 'NEGATIVO: sem o :not(#…) a regra de Configurações perderia para o "preenchido"');
 
 console.log(JSON.stringify({ gate: 'ui:dark-field-text:verify', ok: true, darkSpecificity, lightRules: lightForced.length }, null, 2));
