@@ -350,13 +350,15 @@ assert.equal((await db2.table('appSettings').get('operational-defaults:local')).
 assert.equal((await db2.table('appSettings').get('weight-warning-policy:local')).value.variacao_max_percent, 40);
 assert.equal(await appConfig.getInactivityMinutes('local'), 0);
 assert.equal((await appConfig.getAppConfig('local')).faixa_peso_max, 1500, 'campos não informados mantêm o padrão');
-const gestorSaved = await appConfig.updateAppConfig(actorGestor, { faixa_peso_min: 25 });
-assert.equal(gestorSaved.faixa_peso_min, 25, 'GESTOR altera weight-warning-policy');
+// E1C: GESTOR não altera mais weight-warning-policy (settings.manage); o ADMIN altera, auditado.
+await rejectsWithCode(appConfig.updateAppConfig(actorGestor, { faixa_peso_min: 25 }), 'AUTH_FORBIDDEN', 'GESTOR não altera weight-warning-policy (E1C: settings.manage)');
+const adminSaved = await appConfig.updateAppConfig(actorAdmin, { faixa_peso_min: 25 });
+assert.equal(adminSaved.faixa_peso_min, 25, 'ADMIN altera weight-warning-policy');
 const configAudit = await db2.table('auditoria').where('entidade').equals('appSettings').toArray();
-assert.equal(configAudit.length, 5, 'uma linha de auditoria por grupo alterado (4 do ADMIN + 1 do GESTOR)');
+assert.equal(configAudit.length, 5, 'uma linha de auditoria por grupo alterado (4 do primeiro patch + 1 da faixa)');
 assert.ok(configAudit.every((row) => row.acao === 'ATUALIZAR'));
 assert.equal(configAudit.find((row) => row.entidade_id === 'auth-policy:local').usuario_id, admin.id);
-assert.equal(configAudit.find((row) => row.entidade_id === 'weight-warning-policy:local' && row.campos_alterados.includes('faixa_peso_min')).usuario_id, 'g1');
+assert.equal(configAudit.find((row) => row.entidade_id === 'weight-warning-policy:local' && row.campos_alterados.includes('faixa_peso_min')).usuario_id, admin.id);
 assert.equal(await appConfig.updateAppConfig(actorAdmin, { intervalo_pesagem_dias: 15 }).then(() => db2.table('auditoria').where('entidade').equals('appSettings').count()), 5, 'patch sem mudança não audita');
 // E1B/E1C: GESTOR troca o divisor da @ (grupo report-settings, settings.reports), auditado.
 const divisor15 = await appConfig.updateAppConfig(actorGestor, { arroba_divisor: 15 });

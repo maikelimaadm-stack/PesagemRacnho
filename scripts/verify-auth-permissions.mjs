@@ -210,16 +210,21 @@ await rejectsWithCode(appConfig.updateAppConfig(null, { faixa_peso_min: 10 }), '
 await rejectsWithCode(appConfig.updateAppConfig(actors.GESTOR, { inactivity_lock_minutes: 5 }), 'AUTH_FORBIDDEN', 'GESTOR não altera a política de autenticação');
 await rejectsWithCode(appConfig.updateAppConfig(actors.GESTOR, { intervalo_pesagem_dias: 7, lock_minutes: 2 }), 'AUTH_FORBIDDEN', 'patch misto com auth-policy é recusado por inteiro para GESTOR');
 assert.equal((await appConfig.getAppConfig()).intervalo_pesagem_dias, 30, 'patch misto recusado não gravou nada');
-assert.equal((await appConfig.updateAppConfig(actors.GESTOR, { intervalo_pesagem_dias: 7 })).intervalo_pesagem_dias, 7, 'GESTOR altera configurações operacionais');
+// E1C (resposta 10): o GESTOR não altera mais os grupos operacionais, nem pelo serviço (settings.manage).
+for (const patch of [{ intervalo_pesagem_dias: 7 }, { exigir_documento_venda: true }, { faixa_peso_min: 25 }, { rendimento_padrao: 52.5 }]) {
+  await rejectsWithCode(appConfig.updateAppConfig(actors.GESTOR, patch), 'AUTH_FORBIDDEN', `GESTOR não altera ${Object.keys(patch)[0]} (settings.manage)`);
+}
+assert.equal((await appConfig.getAppConfig()).intervalo_pesagem_dias, 30, 'recusas do GESTOR não gravaram nada');
+assert.equal((await appConfig.updateAppConfig(actorAdmin, { intervalo_pesagem_dias: 7 })).intervalo_pesagem_dias, 7, 'ADMIN altera configurações operacionais');
 assert.equal((await appConfig.updateAppConfig(actorAdmin, { inactivity_lock_minutes: 5 })).inactivity_lock_minutes, 5, 'ADMIN altera a política de autenticação');
 assert.equal((await appConfig.getAuthPolicy()).inactivity_lock_minutes, 5);
 
 // E1C: divisor da @ (report-settings) com permissão própria, settings.reports (ADMIN e GESTOR).
-// Os grupos operacionais continuam em settings.operational no serviço (decisão E1C: só a tela
-// deixa de mostrá-los ao GESTOR; nenhum outro ponto do app grava por eles).
+// Os grupos operacionais pedem settings.manage (ADMIN) no serviço — o mesmo que a tela exige para
+// mostrá-los (resposta 10: o resto de Configurações continua ADMIN).
 assert.equal(appConfig.CONFIG_GROUPS.reports.permission, 'settings.reports', 'report-settings autorizado por settings.reports');
 for (const group of ['operational', 'sales', 'weightWarning']) {
-  assert.equal(appConfig.CONFIG_GROUPS[group].permission, 'settings.operational', `${group} continua em settings.operational no serviço`);
+  assert.equal(appConfig.CONFIG_GROUPS[group].permission, 'settings.manage', `${group} só ADMIN no serviço (settings.manage)`);
 }
 assert.equal(appConfig.CONFIG_GROUPS.auth.permission, 'settings.auth', 'auth-policy continua só ADMIN');
 for (const name of ['OPERADOR', 'CONSULTA', 'sem ator', 'papel inventado', 'rev. 1 OPERADOR (perfil)']) {

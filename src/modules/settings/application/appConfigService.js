@@ -8,10 +8,11 @@
 //                                    relatórios — não é a @ de carcaça do Comercial, que continua ÷ 15)
 // getAppConfig() devolve a visão MESCLADA (chaves planas) e updateAppConfig() distribui o
 // patch pelos grupos. A chave antiga 'config:<empresa>' (revisão 1) é migrada uma vez e removida.
-// Permissões (ADR-042): settings.auth (ADMIN) para auth-policy; settings.reports (ADMIN e
-// GESTOR, E1C) para report-settings; settings.operational (ADMIN e GESTOR) para os demais grupos.
-// A tela de Configurações só mostra Geral/Curral/Comercial ao ADMIN (settings.manage); o serviço
-// mantém settings.operational nesses grupos de propósito (nada além da tela grava por eles).
+// Permissões: settings.auth (ADMIN) para auth-policy; settings.reports (ADMIN e GESTOR, E1C) para
+// report-settings; settings.manage (ADMIN) para operational-defaults, sales-policy e
+// weight-warning-policy. E1C (resposta 10 ao REPORT da E1B): "o resto de Configurações continua
+// ADMIN" vale também aqui — antes (ADR-042) esses três aceitavam o GESTOR (settings.operational), mas só
+// a tela de Configurações os grava e ela nunca os mostrou ao GESTOR; a recusa por dentro fecha o caminho.
 import storage from '../../../storage/storageAdapter.js';
 import { ensureStorageReady } from '../../../storage/indexedDb/db.js';
 import { authorize, roleOf } from '../../auth/domain/permissionService.js';
@@ -59,9 +60,9 @@ export const REPORT_SETTINGS_DEFAULTS = Object.freeze({
 // Grupo → { prefixo da chave, defaults, permissão exigida para gravar }.
 export const CONFIG_GROUPS = Object.freeze({
   auth: Object.freeze({ prefix: 'auth-policy', defaults: AUTH_POLICY_DEFAULTS, permission: 'settings.auth' }),
-  operational: Object.freeze({ prefix: 'operational-defaults', defaults: OPERATIONAL_DEFAULTS, permission: 'settings.operational' }),
-  sales: Object.freeze({ prefix: 'sales-policy', defaults: SALES_POLICY_DEFAULTS, permission: 'settings.operational' }),
-  weightWarning: Object.freeze({ prefix: 'weight-warning-policy', defaults: WEIGHT_WARNING_POLICY_DEFAULTS, permission: 'settings.operational' }),
+  operational: Object.freeze({ prefix: 'operational-defaults', defaults: OPERATIONAL_DEFAULTS, permission: 'settings.manage' }),
+  sales: Object.freeze({ prefix: 'sales-policy', defaults: SALES_POLICY_DEFAULTS, permission: 'settings.manage' }),
+  weightWarning: Object.freeze({ prefix: 'weight-warning-policy', defaults: WEIGHT_WARNING_POLICY_DEFAULTS, permission: 'settings.manage' }),
   reports: Object.freeze({ prefix: 'report-settings', defaults: REPORT_SETTINGS_DEFAULTS, permission: 'settings.reports' }),
 });
 const GROUP_NAMES = Object.freeze(Object.keys(CONFIG_GROUPS));
@@ -276,8 +277,8 @@ export async function getInactivityMinutes(empresaId = DEFAULT_EMPRESA_ID) {
 
 /**
  * Patch parcial distribuído pelos grupos. Cada grupo tocado exige a sua permissão
- * (settings.auth para auth-policy; settings.reports para report-settings; settings.operational
- * para os demais) — a autorização
+ * (settings.auth para auth-policy; settings.reports para report-settings; settings.manage para os
+ * demais) — a autorização
  * acontece ANTES de qualquer gravação. Chaves desconhecidas são recusadas. Devolve a
  * visão mesclada atualizada.
  */

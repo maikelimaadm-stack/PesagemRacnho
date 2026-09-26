@@ -83,7 +83,9 @@ dentro, cada seção pede a sua permissão — Relatórios (divisor da @) `setti
 Comercial e o cartão Dados `settings.manage`; Segurança `settings.auth`. Na prática o GESTOR vê só
 Relatórios. No serviço (`appConfigService`), `report-settings` exige `settings.reports`,
 `auth-policy` exige `settings.auth` e os grupos operacionais (`operational-defaults`, `sales-policy`,
-`weight-warning-policy`) continuam em `settings.operational` — só a tela deixou de mostrá-los ao GESTOR.
+`weight-warning-policy`) exigem `settings.manage` (ADMIN) — a mesma regra da tela, também por dentro
+(antes da E1C esses três aceitavam o GESTOR por `settings.operational`, mas só a tela os grava e ela
+nunca os mostrou ao GESTOR). `settings.operational` ficou só para abrir o menu e a página.
 
 ## 5. Fluxo
 

@@ -268,9 +268,12 @@ const forbidden = await updateAppConfig({ id: 'op', nome: 'Op', role: 'OPERADOR'
 assert.equal(forbidden?.code, 'AUTH_FORBIDDEN', 'OPERADOR não grava configurações');
 const gestorAuth = await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { inactivity_lock_minutes: 10 }).then(() => null, (err) => err);
 assert.equal(gestorAuth?.code, 'AUTH_FORBIDDEN', 'GESTOR não grava a seção Segurança (auth-policy)');
-// Decisão E1C: o serviço continua aceitando o GESTOR nos grupos operacionais (settings.operational);
-// só a tela deixou de mostrá-los a ele.
-assert.equal((await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { faixa_peso_min: 25 })).faixa_peso_min, 25, 'GESTOR ainda grava grupos operacionais pelo serviço');
+// E1C (resposta 10): "o resto de Configurações continua ADMIN" também no serviço — o GESTOR só grava o
+// divisor da @ (report-settings, settings.reports); os grupos operacionais pedem settings.manage.
+const gestorOperational = await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { faixa_peso_min: 25 }).then(() => null, (err) => err);
+assert.equal(gestorOperational?.code, 'AUTH_FORBIDDEN', 'GESTOR não grava grupos operacionais nem pelo serviço');
+assert.equal((await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { arroba_divisor: 15 })).arroba_divisor, 15, 'GESTOR grava o divisor da @');
+await updateAppConfig(admin, { arroba_divisor: 30 });
 const saved = await updateAppConfig(admin, { intervalo_pesagem_dias: 45, exigir_documento_venda: true, inactivity_lock_minutes: 0, lock_minutes: 0.5 });
 assert.equal(saved.intervalo_pesagem_dias, 45);
 assert.equal(saved.exigir_documento_venda, true);

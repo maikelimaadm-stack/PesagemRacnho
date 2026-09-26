@@ -41,9 +41,9 @@ export const MATRIX = Object.freeze({
   'maintenance.reset': row(true, false, false, false),
   'maintenance.migrate': row(true, false, false, false),
   'users.manage': row(true, false, false, false),
-  // Configurações (E1C 1.4.0): settings.operational abre a tela (ADMIN e GESTOR) e continua
-  // autorizando no serviço os grupos operacionais; settings.reports é a seção Relatórios (divisor
-  // da @), a única que o GESTOR vê; settings.manage mostra Geral, Curral, Comercial e Dados (ADMIN).
+  // Configurações (E1C 1.4.0): settings.operational abre a tela e o menu (ADMIN e GESTOR);
+  // settings.reports é a seção Relatórios (divisor da @), a única que o GESTOR vê e grava;
+  // settings.manage é Geral, Curral, Comercial e Dados — na tela e no serviço (ADMIN).
   'settings.operational': row(true, true, false, false),
   'settings.reports': row(true, true, false, false),
   'settings.auth': row(true, false, false, false),
