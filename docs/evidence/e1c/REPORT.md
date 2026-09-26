@@ -1,10 +1,12 @@
 # REPORT — E1C Ajustes finais da 1.4.0 (respostas ao REPORT da E1B) e instalador final
 
 **ETAPA:** E1C (ainda a 1.4.0, não distribuída) · **VERSÃO:** 1.4.0 (esquema Dexie 8 e backup formato 3,
-sem mudança) · **BRANCH:** `program/e1-relatorios` (de `180ccb1` a __HEAD__; main continua em `6cccb5f`) ·
+sem mudança) · **BRANCH:** `program/e1-relatorios` (de `180ccb1` até o build em `31f7733`, mais o commit
+deste REPORT; main continua em `6cccb5f`) ·
 **DATA:** 26/09/2026
 
-**STATUS: CONCLUÍDA.** test:quick __TQ__ e test:full __TF__. Tudo foi commitado antes do build
+**STATUS: CONCLUÍDA.** test:quick **85/85 verdes** e test:full **86/86 verdes**, os dois no commit do
+build. Tudo foi commitado antes do build
 (manifesto com `gitCommit` limpo) e o **instalador FINAL da 1.4.0** foi gerado (seção 3). Falta o seu
 teste único no instalador; depois dele vem o fast-forward da main.
 
@@ -135,7 +137,7 @@ reais: sessão simulada sem senha, Electron com perfil isolado e recriado, e dad
   - medidas em `capture-escuro-*.json` e `tema-escuro-configuracoes-medidas.json`.
 - **GESTOR em Configurações:** `gestor-configuracoes-so-relatorios.png`.
 
-## 2. Arquivos criados / alterados (43 arquivos, `180ccb1..HEAD`)
+## 2. Arquivos criados / alterados (43 arquivos de código e docs + 22 de evidências, `180ccb1..31f7733`)
 
 **Novos:**
 - `src/modules/catalog/domain/documentMask.js`
@@ -180,7 +182,8 @@ reais: sessão simulada sem senha, Electron com perfil isolado e recriado, e dad
 - `6ebb9e5` docs
 - `f8dae2c` e `edd7a47` correções da revisão final
 - `ee13452` correção da segunda rodada (Configurações no escuro)
-- __MAIS__
+- `31f7733` evidências, CHANGELOG e checklist (último commit antes do build)
+- commit final: só este REPORT preenchido e o checklist (docs, depois do build)
 
 **Sem push. main em `6cccb5f`.**
 
@@ -188,23 +191,26 @@ reais: sessão simulada sem senha, Electron com perfil isolado e recriado, e dad
 
 | Comando | Resultado |
 |---|---|
-| `npm run test:quick` | __TQ_LINHA__ |
-| `npm run test:full` | __TF_LINHA__ |
+| `npm run test:quick` | **85/85 verdes** no commit `31f7733`, com a árvore limpa (4,2 min; inclui os 3 gates novos) |
+| `npm run test:full` | **86/86 verdes** no commit `31f7733` (56 min, 50 deles no `import:performance`, como na rodada anterior; inclui `storage:all:verify`) |
 | `npm run storage:all:verify` | 10/10 verdes (inclui os 2 gates do Dexie corrigidos) |
 | `npm run registry:document-mask:verify` (novo) | OK: digitação progressiva, colar (formatado, cru, com rótulo, sobre seleção), cursor, Backspace/Delete em separador, limite de 14, paridade de persistência, rótulo com hífen digitado = colado, CNPJ alfanumérico inválido recusado na ficha, serviço real (unicidade dos Parceiros intacta; reabrir e salvar não regrava; documento antigo não é cortado), estrutura da ligação do campo |
 | `npm run reports:sheet-xlsx-parity:verify` (novo) | OK: bloco TOTAL POR folha × XLSX célula a célula (Pesagens por apartação e outros 3 níveis), faixa só no lote, negativos com 1 ou 2 níveis, CSV sem bloco, contrato `null` da função |
 | `npm run ui:dark-field-text:verify` (novo) | OK: regra do escuro com `currentColor`, cobre inputs, textareas e o valor dos seletores, vence as 5 regras do claro (especificidade [1,4,2] × [0,6,1]); negativo sem o `:not(#…)` |
 | `npm run auth:permissions:verify` / `auth:access:verify` / `auth:local:verify` / `ui:shell-settings:verify` | OK: GESTOR vê só Relatórios; serviço recusa o GESTOR em Geral, Curral e Comercial e aceita o divisor da @; OPERADOR e CONSULTA sem menu e sem página; doc 11 × MATRIX |
 | `npm run release:version-contract:verify` / `docs:user:verify` | OK |
-| `npm run dist:unsigned` | __DIST__ |
+| `npm run dist:unsigned` | OK: build, electron-builder sem assinatura, checksum, manifesto, `diagnostic:packaged:source:verify`, `diagnostic:packaged:build:verify` e `diagnostic:e2e:verify` |
+| `npm run release:current-only:verify` (depois do build) | OK: só a 1.4.0 na pasta do instalador |
+| Conteúdo do `app.asar` empacotado | Conferido: estão lá a regra do escuro, a dos seletores de Configurações, o título "Pesagens Individuais", `settings.reports`, "TOTAL POR" e o exemplo do CNPJ alfanumérico |
 
 **Instalador FINAL da 1.4.0 (sem assinatura; é o que você vai instalar):**
 - `C:\Users\maike\Desktop\projeto\MAKGESTAO-main\release-unsigned\Pesagens Individuais Setup 1.4.0.exe`
-- __SIZE__
-- **SHA-256 `__SHA__`** (igual ao `.sha256` e ao manifesto)
-- manifesto com `gitCommit: __GITCOMMIT__`, limpo (sem "-dirty"). Ele substitui o instalador da E1B
-  (`ee7c40b8…`), que não foi distribuído. Depois do build entrou só o commit deste REPORT e das
-  evidências.
+- 92.174.700 bytes (87,9 MB), gerado em 26/09/2026 às 15:59
+- **SHA-256 `e584a7face8792e5b8bc82595cecaedcfb4400add907e36a1b81997d03a49bec`** (igual ao `.sha256` e
+  ao manifesto)
+- manifesto com `gitCommit: 31f7733`, limpo (sem "-dirty"), versão 1.4.0, esquema 8, backup formato 3,
+  `signed: false`. Ele substitui o instalador da E1B (`ee7c40b8…`), que não foi distribuído. Depois do
+  build entrou só o commit deste REPORT preenchido e do checklist (docs; não muda o programa).
 
 **Não executado no `test:full`:** nada ficou de fora. O `e2e:installed:verify:dev` valida os artefatos
 sem abrir o app. A abertura do app empacotado (`D9_LAUNCH_PACKAGED=1`) é opcional, fica fora do

@@ -20,10 +20,11 @@ Versão 1.4.0 (E1 + E1B + E1C) · esquema Dexie 8 (sem mudança) · backup forma
 - [x] `npm run release:version-contract:verify`.
 - [x] `npm run docs:user:verify`.
 - [x] Tudo commitado ANTES do build (manifesto com `gitCommit` sem "-dirty").
-- [ ] `npm run dist:unsigned` (build + electron-builder sem assinatura + checksum + manifesto +
+- [x] `npm run dist:unsigned` (build + electron-builder sem assinatura + checksum + manifesto +
       `diagnostic:packaged:source:verify` + `diagnostic:packaged:build:verify` +
-      `diagnostic:e2e:verify`) — instalador FINAL da 1.4.0.
-- [ ] SHA-256 do `Pesagens Individuais Setup 1.4.0.exe` final anotado no REPORT da E1C.
+      `diagnostic:e2e:verify`) — instalador FINAL da 1.4.0, com `gitCommit` `31f7733`.
+- [x] SHA-256 do `Pesagens Individuais Setup 1.4.0.exe` final anotado no REPORT da E1C
+      (`e584a7fa…3a49bec`).
 
 ## Evidências
 - E1 (`docs/evidence/e1/`): Resumido de Rebanho atual (claro e escuro), Desempenho por lote, Detalhado
