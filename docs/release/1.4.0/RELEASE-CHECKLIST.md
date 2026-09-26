@@ -16,10 +16,10 @@ Versão 1.4.0 (E1 + E1B + E1C) · esquema Dexie 8 (sem mudança) · backup forma
 - [x] `npm run test:quick` completo verde (inclui, da E1B, `reports:sheet-data:verify`,
       `reports:document-layout:verify` e `registry:property-header:verify`; da E1C,
       `registry:document-mask:verify`, `reports:sheet-xlsx-parity:verify` e `ui:dark-field-text:verify`).
-- [ ] `npm run test:full` completo verde (inclui `storage:all:verify`, com os gates do Dexie corrigidos).
+- [x] `npm run test:full` completo verde (inclui `storage:all:verify`, com os gates do Dexie corrigidos).
 - [x] `npm run release:version-contract:verify`.
 - [x] `npm run docs:user:verify`.
-- [ ] Tudo commitado ANTES do build (manifesto com `gitCommit` sem "-dirty").
+- [x] Tudo commitado ANTES do build (manifesto com `gitCommit` sem "-dirty").
 - [ ] `npm run dist:unsigned` (build + electron-builder sem assinatura + checksum + manifesto +
       `diagnostic:packaged:source:verify` + `diagnostic:packaged:build:verify` +
       `diagnostic:e2e:verify`) — instalador FINAL da 1.4.0.
@@ -31,9 +31,9 @@ Versão 1.4.0 (E1 + E1B + E1C) · esquema Dexie 8 (sem mudança) · backup forma
 - E1B (`docs/evidence/e1b/`): Pesagens "Por apartação (resumo por data)" em paisagem na tela, a mesma
   folha em PDF A4 retrato e a ficha da Propriedade com logo e pré-visualização.
 - E1C (`docs/evidence/e1c/`):
-  - [ ] ficha com a máscara de CPF/CNPJ;
-  - [ ] XLSX aberto no Excel mostrando o bloco TOTAL POR;
-  - [x] tema escuro antes/depois (fichas de Propriedade e de Parceiro).
+  - [x] ficha com a máscara de CPF/CNPJ;
+  - [x] XLSX aberto no Excel mostrando o bloco TOTAL POR;
+  - [x] tema escuro antes/depois (fichas de Propriedade e de Parceiro; Configurações depois).
 
 ## Teste manual no app instalado (responsável)
 O roteiro completo e atualizado está em `docs/evidence/e1c/REPORT.md`, seção 7.

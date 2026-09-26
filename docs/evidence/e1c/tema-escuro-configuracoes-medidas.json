@@ -1,0 +1,1001 @@
+{
+ "mode": "conf",
+ "runs": {
+  "escuro:GESTOR": {
+   "com": {
+    "html": "tema-escuro escuro dark",
+    "rows": [
+     {
+      "id": "config-arroba_divisor",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "30 — @ de peso vivo (padrão)",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(230, 237, 243)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 12.88,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     }
+    ],
+    "inputs": []
+   },
+   "removed": 1,
+   "sem": {
+    "html": "tema-escuro escuro dark",
+    "rows": [
+     {
+      "id": "config-arroba_divisor",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "30 — @ de peso vivo (padrão)",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 1.17,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     }
+    ],
+    "inputs": []
+   },
+   "shots": [
+    "conf-escuro-GESTOR-com.png",
+    "conf-escuro-GESTOR-sem.png"
+   ]
+  },
+  "escuro:ADMIN": {
+   "com": {
+    "html": "tema-escuro escuro dark",
+    "rows": [
+     {
+      "id": "config-marca_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(230, 237, 243)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 12.88,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-raca_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(230, 237, 243)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 12.88,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-propriedade_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(230, 237, 243)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 12.88,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-apartacao_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(230, 237, 243)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 12.88,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-exigir_documento_venda",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "Não",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(230, 237, 243)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 12.88,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-arroba_divisor",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "30 — @ de peso vivo (padrão)",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(230, 237, 243)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 12.88,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     }
+    ],
+    "inputs": [
+     {
+      "id": "config-intervalo_pesagem_dias",
+      "value": "30",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(230, 237, 243)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 12.88,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-faixa_peso_min",
+      "value": "20",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(230, 237, 243)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 12.88,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-faixa_peso_max",
+      "value": "1.500",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(230, 237, 243)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 12.88,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-limite_gmd_alerta",
+      "value": "5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(230, 237, 243)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 12.88,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-variacao_max_percent",
+      "value": "35",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(230, 237, 243)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 12.88,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-rendimento_padrao",
+      "value": "",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(230, 237, 243)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 12.88,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-inactivity_lock_minutes",
+      "value": "30",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(230, 237, 243)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 12.88,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-failed_attempt_limit",
+      "value": "5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(230, 237, 243)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 12.88,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-lock_minutes",
+      "value": "0,5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(230, 237, 243)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 12.88,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     }
+    ]
+   },
+   "removed": 1,
+   "sem": {
+    "html": "tema-escuro escuro dark",
+    "rows": [
+     {
+      "id": "config-marca_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 1.17,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-raca_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 1.17,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-propriedade_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 1.17,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-apartacao_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 1.17,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-exigir_documento_venda",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "Não",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 1.17,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-arroba_divisor",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(33, 38, 45)",
+      "span": {
+       "label": "span",
+       "text": "30 — @ de peso vivo (padrão)",
+       "color": "rgb(230, 237, 243)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(33,38,45)",
+       "cFill": 1.17,
+       "cColor": 12.88,
+       "opacity": "1",
+       "visible": true
+      }
+     }
+    ],
+    "inputs": [
+     {
+      "id": "config-intervalo_pesagem_dias",
+      "value": "30",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 1.17,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-faixa_peso_min",
+      "value": "20",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 1.17,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-faixa_peso_max",
+      "value": "1.500",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 1.17,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-limite_gmd_alerta",
+      "value": "5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 1.17,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-variacao_max_percent",
+      "value": "35",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 1.17,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-rendimento_padrao",
+      "value": "",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 1.17,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-inactivity_lock_minutes",
+      "value": "30",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 1.17,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-failed_attempt_limit",
+      "value": "5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 1.17,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-lock_minutes",
+      "value": "0,5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(230, 237, 243)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(33,38,45)",
+      "cFill": 1.17,
+      "cColor": 12.88,
+      "opacity": "1",
+      "visible": true
+     }
+    ]
+   },
+   "shots": [
+    "conf-escuro-ADMIN-com.png",
+    "conf-escuro-ADMIN-sem.png"
+   ]
+  },
+  "claro:GESTOR": {
+   "com": {
+    "html": "tema-claro",
+    "rows": [
+     {
+      "id": "config-arroba_divisor",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "30 — @ de peso vivo (padrão)",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     }
+    ],
+    "inputs": []
+   },
+   "removed": 1,
+   "sem": {
+    "html": "tema-claro",
+    "rows": [
+     {
+      "id": "config-arroba_divisor",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "30 — @ de peso vivo (padrão)",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     }
+    ],
+    "inputs": []
+   },
+   "shots": [
+    "conf-claro-GESTOR-com.png",
+    "conf-claro-GESTOR-sem.png"
+   ]
+  },
+  "claro:ADMIN": {
+   "com": {
+    "html": "tema-claro",
+    "rows": [
+     {
+      "id": "config-marca_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-raca_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-propriedade_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-apartacao_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-exigir_documento_venda",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "Não",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-arroba_divisor",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "30 — @ de peso vivo (padrão)",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     }
+    ],
+    "inputs": [
+     {
+      "id": "config-intervalo_pesagem_dias",
+      "value": "30",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-faixa_peso_min",
+      "value": "20",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-faixa_peso_max",
+      "value": "1.500",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-limite_gmd_alerta",
+      "value": "5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-variacao_max_percent",
+      "value": "35",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-rendimento_padrao",
+      "value": "",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-inactivity_lock_minutes",
+      "value": "30",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-failed_attempt_limit",
+      "value": "5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-lock_minutes",
+      "value": "0,5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     }
+    ]
+   },
+   "removed": 1,
+   "sem": {
+    "html": "tema-claro",
+    "rows": [
+     {
+      "id": "config-marca_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-raca_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-propriedade_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-apartacao_padrao_id",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "Nenhuma",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-exigir_documento_venda",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "Não",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     },
+     {
+      "id": "config-arroba_divisor",
+      "triggerCls": "erp-select-trigger flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 te",
+      "triggerBg": "rgb(255, 255, 255)",
+      "span": {
+       "label": "span",
+       "text": "30 — @ de peso vivo (padrão)",
+       "color": "rgb(17, 24, 39)",
+       "fill": "rgb(17, 24, 39)",
+       "bg": "rgb(255,255,255)",
+       "cFill": 17.74,
+       "cColor": 17.74,
+       "opacity": "1",
+       "visible": true
+      }
+     }
+    ],
+    "inputs": [
+     {
+      "id": "config-intervalo_pesagem_dias",
+      "value": "30",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-faixa_peso_min",
+      "value": "20",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-faixa_peso_max",
+      "value": "1.500",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-limite_gmd_alerta",
+      "value": "5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-variacao_max_percent",
+      "value": "35",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-rendimento_padrao",
+      "value": "",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-inactivity_lock_minutes",
+      "value": "30",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-failed_attempt_limit",
+      "value": "5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     },
+     {
+      "id": "config-lock_minutes",
+      "value": "0,5",
+      "label": "input",
+      "text": "",
+      "color": "rgb(17, 24, 39)",
+      "fill": "rgb(17, 24, 39)",
+      "bg": "rgb(246,248,250)",
+      "cFill": 16.66,
+      "cColor": 16.66,
+      "opacity": "1",
+      "visible": true
+     }
+    ]
+   },
+   "shots": [
+    "conf-claro-ADMIN-com.png",
+    "conf-claro-ADMIN-sem.png"
+   ]
+  }
+ }
+}

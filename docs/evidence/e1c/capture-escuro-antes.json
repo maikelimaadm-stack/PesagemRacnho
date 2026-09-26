@@ -1,0 +1,168 @@
+{
+  "mode": "escuro-antes",
+  "base": "http://127.0.0.1:5173/.tmp/e1-harness/index.html",
+  "files": [
+    {
+      "name": "tema-escuro-antes-propriedade.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    },
+    {
+      "name": "tema-escuro-antes-parceiro.png",
+      "size": {
+        "width": 1422,
+        "height": 827
+      }
+    }
+  ],
+  "steps": [
+    {
+      "propriedades": true
+    },
+    {
+      "ficha": "ficha aberta"
+    },
+    {
+      "parceiros": true
+    },
+    {
+      "parceiro": "Comprador da massa"
+    },
+    {
+      "fichaParceiro": "ficha aberta"
+    }
+  ],
+  "errors": [],
+  "measures": {
+    "propriedade": [
+      {
+        "id": "aux-nome",
+        "value": "FAZENDA BOA VISTA (TESTE)",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-municipio",
+        "value": "MUNICÍPIO DE TESTE",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-codigo_oficial",
+        "value": "",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-titular_nome",
+        "value": "PRODUTOR DE TESTE",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-endereco",
+        "value": "ESTRADA VICINAL KM 12 - ZONA RURAL",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-documento",
+        "value": "11222333000181",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-inscricao_estadual",
+        "value": "ISENTO",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-telefone",
+        "value": "(65) 0000-0000",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      }
+    ],
+    "parceiro": [
+      {
+        "id": "aux-nome",
+        "value": "Comprador da massa",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-documento",
+        "value": "",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-cidade",
+        "value": "",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-registro_sif",
+        "value": "",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-rendimento_padrao",
+        "value": "",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-telefone",
+        "value": "",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      },
+      {
+        "id": "aux-email",
+        "value": "",
+        "color": "rgb(230, 237, 243)",
+        "fill": "rgb(17, 24, 39)",
+        "bg": "rgb(33, 38, 45)"
+      }
+    ]
+  },
+  "dataset": {
+    "pesagens": 300,
+    "animais": 100,
+    "sessoes": 201,
+    "apartacoes": 3,
+    "lotes": 9,
+    "animalLotes": 120,
+    "marcas": 5,
+    "racas": 5,
+    "categorias": 7,
+    "parceiros": 3,
+    "propriedades": 2,
+    "causasMorte": 4
+  },
+  "property": {
+    "ok": true,
+    "id": "631c635a-7795-4609-84eb-907fdff51c05",
+    "logoBytes": 2934
+  }
+}

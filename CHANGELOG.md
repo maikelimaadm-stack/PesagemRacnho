@@ -30,7 +30,8 @@ diagnóstico não assinado em `release-unsigned/`. Notas em `docs/release/1.4.0/
 
 ### Fixed (E1C)
 - **Tema escuro:** o texto digitado nas fichas (e o valor dos seletores, como "Própria", "Sim", "MT") ficava
-  escuro sobre fundo escuro em todas as fichas; agora segue a cor do campo. O tema claro não muda.
+  escuro sobre fundo escuro em todas as fichas; agora segue a cor do campo. Os seletores de Configurações
+  (inclusive o divisor da @) ganharam o fundo de campo escuro (antes, branco). O tema claro não muda.
 - **Configurações:** com o "Rendimento de carcaça padrão (%)" em branco (o padrão), o Salvar de qualquer
   seção era recusado; agora branco é "sem rendimento padrão".
 - Gates antigos do Dexie (`verify-dexie-backup.mjs`, `verify-dexie-import-restore.mjs`) esperavam 7
