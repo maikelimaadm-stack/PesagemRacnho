@@ -13,14 +13,17 @@ diagnóstico não assinado em `release-unsigned/`. Notas em `docs/release/1.4.0/
 ### Added (E1C — ajustes finais pedidos no REPORT da E1B)
 - **CPF/CNPJ com máscara** nas fichas de Parceiros e de Propriedades: 000.000.000-00, 00.000.000/0000-00
   e o CNPJ alfanumérico (em maiúsculas), ao digitar e ao colar (com ou sem pontuação, até com o rótulo
-  "CPF"/"CNPJ" na frente); no máximo 14 posições; o cursor fica onde a pessoa edita. O que é gravado não
-  muda (sem pontuação), e o documento aparece formatado ao abrir a ficha.
+  "CPF"/"CNPJ" na frente, com espaço, dois-pontos ou hífen); no máximo 14 posições; o cursor fica onde a
+  pessoa edita. O que é gravado não muda (sem pontuação), e o documento aparece formatado ao abrir a
+  ficha. CNPJ alfanumérico incompleto ou com dígito verificador errado não é salvo pela ficha (aviso),
+  em vez de virar só números calado.
 - **Excel com o bloco TOTAL POR:** o XLSX do Resumido com 3 níveis (ex.: Pesagens › Por apartação) traz,
   no fim de cada apartação, o mesmo bloco "TOTAL POR LOTE – <apartação>" da folha, com os mesmos números
   (a mesma função calcula os dois). O CSV continua uma linha por grupo + total geral.
 - **Configurações › Relatórios liberada para o GESTOR:** o GESTOR vê Configurações no menu e, na tela, só o
-  cartão Relatórios (divisor da @). O resto de Configurações continua do ADMIN. Permissão nova
-  `settings.reports` (ADMIN e GESTOR).
+  cartão Relatórios (divisor da @). O resto de Configurações continua do ADMIN — também por dentro: o
+  serviço recusa o GESTOR em Geral, Curral e Comercial (`settings.manage`; antes aceitava, embora a tela
+  nunca os mostrasse a ele). Permissão nova `settings.reports` (ADMIN e GESTOR).
 - Título da folha de Pesagens: **"Relatório de Pesagens Individuais (Sintético/Analítico)"**; os outros
   relatórios continuam com o próprio nome.
 - Gates novos: `registry:document-mask`, `reports:sheet-xlsx-parity` e `ui:dark-field-text`.

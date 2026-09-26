@@ -5,7 +5,7 @@
 import { parseBrazilianNumber } from '../../modules/weighing/domain/brazilianValues.js';
 import { coerceRecord } from '../../modules/catalog/domain/registryDefinitions.js';
 import { buildPropertyHeader } from '../../modules/catalog/domain/propertyHeader.js';
-import { documentToForm } from '../../modules/catalog/domain/documentMask.js';
+import { documentProblem, documentToForm } from '../../modules/catalog/domain/documentMask.js';
 
 // Campo CPF/CNPJ (Propriedades e Parceiros, id 'documento'): máscara ao digitar (DocumentInput.jsx) e o
 // valor guardado aparece formatado ao abrir a ficha. Ao salvar segue o texto mascarado, e o serviço grava
@@ -54,6 +54,12 @@ export function fieldToForm(campo, value) {
 }
 export const emptyFor = (definition) => Object.fromEntries(definition.campos.map((campo) => [campo.id, fieldToForm(campo, undefined)]));
 export const formFromRecord = (definition, record) => Object.fromEntries(definition.campos.map((campo) => [campo.id, fieldToForm(campo, record?.[campo.id])]));
+
+// Erros só da ficha, antes da validação da definição (que também vale para importação): CPF/CNPJ com
+// letras que não formam um CNPJ alfanumérico válido não é salvo — as letras sumiriam caladas.
+export function formProblems(definition, form) {
+  return definition.campos.filter(isDocumentField).map((campo) => documentProblem(form?.[campo.id])).filter(Boolean);
+}
 
 // Converte o formulário no registro que o serviço coage/valida. Número inválido
 // vira NaN de propósito: a definição responde "informe um número válido".

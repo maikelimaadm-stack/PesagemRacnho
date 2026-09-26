@@ -38,6 +38,7 @@ import {
   emptyFor,
   formFromRecord,
   formatCellValue,
+  formProblems,
   groupFields,
   hasFieldValue,
   isDocumentField,
@@ -499,7 +500,7 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
     event?.preventDefault?.();
     if (!canWrite || saving) return;
     const payload = payloadFromForm(definition, form);
-    const erros = definition.validar(payload);
+    const erros = [...formProblems(definition, form), ...definition.validar(payload)];
     if (erros.length) return toast.error(erros.join(' '));
     setSaving(true);
     try {

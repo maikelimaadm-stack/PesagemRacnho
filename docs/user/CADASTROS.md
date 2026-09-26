@@ -100,8 +100,12 @@ formata enquanto você digita:
 | 12 a 14 números | CNPJ `00.000.000/0000-00` |
 | letras nas 12 primeiras posições | CNPJ alfanumérico `12.ABC.345/01DE-35` (em maiúsculas) |
 
-- **Colar** também funciona, com ou sem pontuação e até com o rótulo na frente:
-  "123.456.789-01", "12345678901", "CNPJ: 11.222.333/0001-81", "12abc34501de35".
+- **Colar** também funciona, com ou sem pontuação e até com o rótulo na frente
+  (digitado ou colado): "123.456.789-01", "12345678901", "CNPJ: 11.222.333/0001-81",
+  "CNPJ-12.345.678/0001-90", "12abc34501de35".
+- **CNPJ alfanumérico** só é salvo se estiver completo e com os dígitos
+  verificadores certos; se não, o **Salvar** avisa "o CNPJ alfanumérico está
+  incompleto ou com os dígitos verificadores errados" e nada é gravado.
 - Cabem no máximo **14** posições; a tecla a mais é ignorada.
 - Dá para corrigir no meio: o cursor fica onde você está e o Backspace logo
   depois de um ponto apaga o número antes dele.

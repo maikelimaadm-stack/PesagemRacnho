@@ -21,12 +21,13 @@ import {
   DOCUMENT_PLACEHOLDER,
   applyDocumentInput,
   caretAfterSignificant,
+  documentProblem,
   documentSignificant,
   documentToForm,
   formatDocumentMask,
   maskDocument,
 } from '../src/modules/catalog/domain/documentMask.js';
-import { emptyFor, formFromRecord, headerPreviewFromForm, isDocumentField, payloadFromForm } from '../src/components/cadastros/registryFormModel.js';
+import { emptyFor, formFromRecord, formProblems, headerPreviewFromForm, isDocumentField, payloadFromForm } from '../src/components/cadastros/registryFormModel.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => readFileSync(join(root, file), 'utf8');
@@ -193,6 +194,10 @@ const DIGITADOS = [
   ['cpf 699.577.406-01', '699.577.406-01'],
   ['CPF 123.456.789-01', '123.456.789-01'],
   ['CNPJ: 12.345.678/0001-90', '12.345.678/0001-90'],
+  // Revisão final E1C: rótulo com hífen digitado ("CNPJ-…", "CPF-…") = o mesmo que colar.
+  ['CNPJ-12.345.678/0001-90', '12.345.678/0001-90'],
+  ['CPF-699.577.406-01', '699.577.406-01'],
+  ['cnpj-12abc34501de35', '12.ABC.345/01DE-35'],
   ['12.ABC.345/01DE-36', '12.ABC.345/01DE-36'],
   ['12ABC34501DE3', '12.ABC.345/01DE-3'],
   [' 12.345.678/0001-90 ', '12.345.678/0001-90'],
@@ -200,12 +205,16 @@ const DIGITADOS = [
   ['(65) 99999-0000', '659.999.900-00'],
   ['123.4', '123.4'],
 ];
+// Com rótulo e CNPJ alfanumérico, a máscara grava o CNPJ (melhor que antes, quando o texto cru virava só
+// dígitos) — a paridade de persistência vale contra o texto SEM o rótulo.
+const semRotulo = (texto) => texto.replace(/^\s*(?:CPF|CNPJ)\s*[:\s-]\s*/i, '');
 for (const [texto, esperado] of DIGITADOS) {
   const digitado = typeText(field(), texto);
   assert.deepEqual(view(digitado), { value: esperado, caret: esperado.length }, `digitar ${JSON.stringify(texto)}`);
   assert.equal(digitado.value, maskDocument(texto), `digitar dá o mesmo que colar: ${JSON.stringify(texto)}`);
-  assert.equal(normalizeDocument(digitado.value), normalizeDocument(texto), `paridade de persistência digitando: ${JSON.stringify(texto)}`);
+  assert.equal(normalizeDocument(digitado.value), normalizeDocument(semRotulo(texto)), `paridade de persistência digitando: ${JSON.stringify(texto)}`);
 }
+assert.deepEqual(view(typeText(field(), 'ABCD-')), { value: 'AB.CD', caret: 5 }, 'NEGATIVO: hífen depois de outras letras (não CPF/CNPJ) é só ignorado');
 assert.equal(normalizeDocument(typeText(field(), 'CPF 699.577.406-01').value), '69957740601', 'digitado com rótulo e espaço continua CPF');
 assert.equal(normalizeDocument(typeText(field(), 'sem dígitos').value), null, 'texto sem número digitado: nada a gravar (como antes)');
 // Negativos: a regra só vale para espaço/dois-pontos depois de SÓ letras, com o cursor no fim delas.
@@ -377,7 +386,26 @@ assert.match(input, /placeholder=\{focused \? DOCUMENT_PLACEHOLDER : ' '\}/, 'di
 assert.ok(!/maxLength/i.test(input), 'NEGATIVO: sem maxLength (colar "CNPJ: 12.345.678/0001-90" precisa chegar inteiro à máscara)');
 assert.match(model, /return isDocumentField\(campo\) \? documentToForm\(value\) : String\(value\);/, 'valor guardado aparece formatado ao abrir a ficha');
 assert.match(read('src/modules/catalog/domain/propertyHeader.js'), /formatDocumentMask/, 'folha e ficha usam a mesma posição dos separadores');
+// Revisão final E1C: o Salvar da ficha recusa CNPJ alfanumérico inválido (antes da validação da definição).
+assert.match(page, /const erros = \[\.\.\.formProblems\(definition, form\), \.\.\.definition\.validar\(payload\)\];/, 'Salvar da ficha checa o documento antes de gravar');
 ok('estrutura');
+
+// ---------------------------------------------------------------------------
+// Documento com letras só é salvo se for CNPJ alfanumérico VÁLIDO (senão as letras sumiriam caladas).
+// ---------------------------------------------------------------------------
+for (const valido of ['', '123.456.789-01', '12.345.678/0001-90', '12.ABC.345/01DE-35', '123.4', '1234567890', null, undefined]) {
+  assert.equal(documentProblem(valido), null, `sem problema: ${JSON.stringify(valido)}`);
+}
+for (const invalido of ['12.ABC.345/01DE-36', '12.ABC.345', '12.ABC.345/01DE-3', 'AB']) {
+  assert.match(documentProblem(invalido) ?? '', /CNPJ alfanumérico está incompleto ou com os dígitos verificadores errados/, `NEGATIVO: ${invalido} recusado na ficha`);
+  // Controle: sem a checagem, o serviço gravaria só os números (a regra antiga, que não muda).
+  assert.ok(!/[A-Z]/.test(coerceRecord(PARCEIROS, { nome: 'X', documento: invalido }).documento ?? ''), `controle: ${invalido} viraria só números`);
+}
+const fichaInvalida = { ...emptyFor(PARCEIROS), nome: 'Frigorífico X', documento: maskDocument('12abc34501de36') };
+assert.equal(formProblems(PARCEIROS, fichaInvalida).length, 1, 'ficha de Parceiro com CNPJ alfanumérico errado: 1 problema');
+assert.equal(formProblems(PARCEIROS, { ...fichaInvalida, documento: maskDocument('12abc34501de35') }).length, 0, 'com o CNPJ certo, nenhum');
+assert.equal(formProblems(PROPRIEDADES, { ...emptyFor(PROPRIEDADES), nome: 'Faz', documento: '12.ABC' }).length, 1, 'ficha de Propriedade também');
+ok('documento-invalido-na-ficha');
 
 console.log('OK verify-document-mask');
 console.log(JSON.stringify(resumo, null, 2));

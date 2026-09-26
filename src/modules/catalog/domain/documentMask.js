@@ -45,6 +45,20 @@ export function documentSignificant(text) {
   return raw.replace(/\D+/g, '').slice(0, DOCUMENT_MAX_LENGTH);
 }
 
+/**
+ * Problema do documento na ficha, antes de salvar (E1C, revisão final): com letras (CNPJ alfanumérico) o
+ * texto só pode ser salvo se for um CNPJ alfanumérico VÁLIDO — senão o serviço guardaria só os números
+ * (regra antiga, que continua valendo para importação e dados antigos) e as letras sumiriam caladas.
+ * Sem letras (CPF/CNPJ numérico), nada muda. Devolve a mensagem ou null.
+ */
+export function documentProblem(text) {
+  const shown = String(text ?? '').trim().toLocaleUpperCase('pt-BR');
+  if (!/[A-Z]/.test(shown)) return null;
+  const stored = normalizeDocument(shown);
+  if (stored && /[A-Z]/.test(stored)) return null;
+  return 'CPF/CNPJ: o CNPJ alfanumérico está incompleto ou com os dígitos verificadores errados. Confira as 14 posições (ex.: 12.ABC.345/01DE-35).';
+}
+
 /** Máscara progressiva dos caracteres significativos: CPF até 11 dígitos; CNPJ com 12+ ou com letra. */
 export function formatDocumentMask(significant) {
   const text = String(significant ?? '');
@@ -97,6 +111,7 @@ const isForward = (inputType) => /^delete/.test(inputType ?? '') && /Forward$/.t
 // Fim de rótulo ("CPF ", "CNPJ:"): espaço ou dois-pontos. CNPJ alfanumérico não tem nenhum dos dois.
 const LABEL_END = /[\s:]/;
 const ONLY_LETTERS = /^[A-Z]+$/;
+const LABEL_WORD = /^(?:CPF|CNPJ)$/;
 
 /**
  * Uma edição no campo (tecla, colar, apagar): `previous` é o texto mascarado antes, `value`/`caret` o que o
@@ -135,7 +150,10 @@ export function applyDocumentInput({ previous = '', value = '', caret = null, in
     if (isForward(inputType)) after = after.slice(1);
     else if (isBackward(inputType)) before = before.slice(0, -1);
   }
-  if (inserted && LABEL_END.test(inserted) && ONLY_LETTERS.test(before) && !after) {
+  // Hífen também fecha o rótulo, mas só logo depois de exatamente "CPF"/"CNPJ" ("CNPJ-12…"): num CNPJ
+  // alfanumérico o hífen só vem depois de 12 posições, então não há como confundir.
+  const labelEnd = LABEL_END.test(inserted) || (inserted.startsWith('-') && LABEL_WORD.test(before));
+  if (inserted && labelEnd && ONLY_LETTERS.test(before) && !after) {
     const labeled = documentSignificant(inserted) ? documentSignificant(`${before}${inserted}`) : '';
     const masked = formatDocumentMask(labeled);
     return { value: masked, caret: masked.length };
