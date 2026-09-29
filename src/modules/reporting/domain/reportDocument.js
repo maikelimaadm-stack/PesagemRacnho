@@ -3,7 +3,8 @@
 //
 //   Resumido  → seções por nível de agrupamento (APARTAÇÃO: … › DATA: …), tabela do nível folha, linha
 //               de Subtotal por seção, bloco "TOTAL POR <nível folha> – <nível 1>" (3 níveis) e Total geral;
-//   Detalhado → ("Ver como folha") seções por nível com as linhas de dados e o subtotal em linha de totais.
+//   Detalhado → ("Ver como folha") seções por nível com as linhas de dados e o subtotal em linha de totais;
+//   Matriz    → (E1D, Sintético (Matriz)) uma tabela cruzada Linhas × Colunas com TOTAL (domain/matrixLayout).
 //
 // Nenhuma conta nova: os valores são os agregados que o motor da E1 já calculou em cada nó (o pai recalcula
 // sobre a própria população, nunca soma filhos) e o "TOTAL POR" é o MESMO motor (groupRows) sobre a
@@ -14,6 +15,7 @@
 import { aggregateLabel, aggregateValueColumn } from './aggregateLabels.js';
 import { describeFilter } from './filterEngine.js';
 import { compareGroupLabels, groupRows, NONE_GROUP_KEY } from './groupEngine.js';
+import { buildMatrix, isMatrixViewModel, MATRIX_TOTAL_LABEL, matrixCellLines, matrixValues } from './matrixLayout.js';
 import { computeAggregates } from './reportAggregates.js';
 import { REPORT_MODES } from './reportDefinition.js';
 import { formatCell, headerLabel, MISSING_SCREEN } from './reportFormatting.js';
@@ -419,6 +421,63 @@ function buildDetailBody(viewModel, columns, { maxDataRows = Infinity } = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Sintético (Matriz) — E1D: Linhas (eixo Y) × Colunas (eixo X), vários valores por célula
+// ---------------------------------------------------------------------------
+
+export const MATRIX_TOTAL_KEY = '__total__';
+
+/** Colunas da matriz: rótulo do eixo Y, uma por valor do eixo X (na ordem do modelo) e TOTAL. */
+function matrixColumns(matrix) {
+  return [
+    { key: LABEL_COLUMN_KEY, label: matrix.rowAxis.label, kind: 'label', align: 'left' },
+    ...matrix.columns.map((column) => ({ key: `x:${column.key}`, label: column.label, kind: 'matrix', align: 'right', axisKey: column.key })),
+    { key: MATRIX_TOTAL_KEY, label: MATRIX_TOTAL_LABEL, kind: 'matrix', align: 'right', total: true },
+  ];
+}
+
+/**
+ * Corpo da matriz: UMA tabela (flat) com uma linha por valor do eixo Y e a linha TOTAL; a legenda
+ * ("Linhas: … · Colunas: … · Valores: …") é o título da tabela. Cada célula leva os valores empilhados
+ * (`lines`, na ordem de matrix.metrics) e os brutos (`raw`, mesma ordem — base da paridade com o XLSX).
+ * Na tela, o rótulo da linha e cada célula abrem o Detalhado daquele recorte (mesmo detalhe da E1).
+ */
+function buildMatrixBody(matrix, columns) {
+  const stats = { sections: 0, tables: 1, groupRows: 0, subtotalRows: 0, leafTotalRows: 0, totalRows: 0, dataRows: 0, grandRows: 0 };
+  const drillTargets = {};
+  const target = (node) => {
+    if (!node?.path?.length) return null;
+    drillTargets[node.id] = node.path;
+    return node.id;
+  };
+  const position = new Map(matrix.columns.map((column, index) => [column.key, index]));
+  const valueCell = (column, index, source, drill) => {
+    const lines = matrixCellLines(matrix, source, 'print');
+    return { col: index, key: column.key, text: lines.join(' / '), lines, raw: matrixValues(matrix, source), align: 'right', kind: 'num', drill: source ? drill : null };
+  };
+  const line = (type, id, label, drill, { cells, total, totalDrill, cellDrill }) => ({
+    type,
+    id,
+    drill,
+    cells: columns.map((column, index) => {
+      if (column.kind === 'label') return { col: index, key: column.key, text: label, raw: label, align: 'left', kind: 'label' };
+      if (column.total) return valueCell(column, index, total, totalDrill);
+      const cell = cells[position.get(column.axisKey)] ?? null;
+      return valueCell(column, index, cell, cellDrill(cell));
+    }),
+  });
+  const rows = matrix.rows.map((row) => {
+    stats.groupRows += 1;
+    const drill = target(row.node);
+    return line(DOC_ROW_TYPES.GROUP, row.id, row.label, drill, { cells: row.cells, total: row.total, totalDrill: drill, cellDrill: target });
+  });
+  stats.grandRows += 1;
+  // Linha TOTAL: cada coluna abre o Detalhado daquele valor do eixo X (todas as linhas); o canto não abre.
+  rows.push(line(DOC_ROW_TYPES.GRAND_TOTAL, '#grand', matrix.totalRow.label, null, { cells: matrix.totalRow.cells, total: matrix.totalRow.total, totalDrill: null, cellDrill: target }));
+  const flat = { id: 'matrix', kind: 'MATRIX', title: matrix.legend, rows };
+  return { sections: [], flat, grandTotal: null, stats, drillTargets };
+}
+
+// ---------------------------------------------------------------------------
 // Página: orientação, tamanho da fonte e larguras (estimadas pelo conteúdo)
 // ---------------------------------------------------------------------------
 
@@ -436,11 +495,13 @@ function allRows(body) {
 }
 
 const longestWord = (text) => String(text ?? '').split(/\s+/).reduce((max, word) => Math.max(max, word.length), 0);
+// Célula com valores empilhados (matriz, E1D): a largura é a do maior valor, não a do texto emendado.
+const widthText = (cell) => (Array.isArray(cell?.lines) ? cell.lines.reduce((widest, line) => (line.length > widest.length ? line : widest), '') : cell?.text ?? '');
 
 function summaryWidths(columns, rows, factor) {
   const pad = SHEET_PAGE.CELL_PADDING_PX;
   return columns.map((column, index) => {
-    const texts = rows.filter((row) => row.cells).map((row) => row.cells[index]?.text ?? '');
+    const texts = rows.filter((row) => row.cells).map((row) => widthText(row.cells[index]));
     if (column.kind === 'label') {
       // O rótulo do subtotal ("Subtotal 02/06/2026 · Lotes: 3") quebra linha: não alarga a coluna.
       const labels = rows.filter((row) => row.cells && row.type !== 'SUBTOTAL').map((row) => row.cells[index]?.text ?? '');
@@ -498,7 +559,10 @@ export function decideSheetLayout({ layout, columns, rows }, { orientation = 'au
   };
   const tried = candidates.map(evaluate);
   const chosen = tried.find((item) => item.fits) ?? tried.at(-1);
-  const landscapeFits = tried.some((item) => item.orientation === 'landscape' && item.fits) || (chosen.orientation === 'portrait' && evaluate(['landscape', 'm']).fits);
+  // E1D: paisagem com fonte menor também conta (matriz com muitos meses cabe em paisagem 7,6 pt): o botão
+  // "Usar paisagem" do aviso imprime em paisagem, que tenta os 3 tamanhos.
+  const landscapeFits = tried.some((item) => item.orientation === 'landscape' && item.fits)
+    || (chosen.orientation === 'portrait' && SHEET_PAGE.SIZES.some((size) => evaluate(['landscape', size.id]).fits));
   const sum = chosen.widths.reduce((total, width) => total + width, 0) || 1;
   return {
     orientation: chosen.orientation,
@@ -545,10 +609,13 @@ function gmdNote(viewModel, columns) {
 export function buildReportDocument(viewModel, { header = null, orientation = 'auto', showEmptyColumns = false, maxDataRows = Infinity, widths = {} } = {}) {
   const summary = viewModel.mode === REPORT_MODES.RESUMIDO;
   const levels = (viewModel.groups ?? []).map((level) => ({ columnId: level.columnId, label: level.label }));
-  const allColumns = summary ? summaryColumns(viewModel) : detailColumns(viewModel);
+  // E1D: Sintético (Matriz) = o Resumido de 2 níveis desenhado como tabela cruzada (domain/matrixLayout).
+  const matrix = summary && isMatrixViewModel(viewModel) ? buildMatrix(viewModel, { target: 'print' }) : null;
+  const allColumns = matrix ? matrixColumns(matrix) : summary ? summaryColumns(viewModel) : detailColumns(viewModel);
   const hasRows = (viewModel.rowCount ?? 0) > 0;
   const isEmptyColumn = (column) => {
-    if (!hasRows || showEmptyColumns || column.kind === 'label') return false;
+    // Coluna da matriz nunca some: cada valor do eixo X existe porque há pesagem nele.
+    if (!hasRows || showEmptyColumns || column.kind === 'label' || column.kind === 'matrix') return false;
     if (summary) return metricIsEmpty(column, viewModel.totals);
     return (viewModel.rows ?? []).every((row) => formatCell(column.column, dataCellRaw(viewModel, column.column, row), 'print') === MISSING_SCREEN);
   };
@@ -556,11 +623,12 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const hiddenKeys = new Set(hiddenColumns.map((column) => column.key));
   const columns = allColumns.filter((column) => !hiddenKeys.has(column.key)).map((column, index) => ({ ...column, index }));
 
-  const body = summary ? buildSummaryBody(viewModel, columns) : buildDetailBody(viewModel, columns, { maxDataRows });
+  const body = matrix ? buildMatrixBody(matrix, columns) : summary ? buildSummaryBody(viewModel, columns) : buildDetailBody(viewModel, columns, { maxDataRows });
   const print = decideSheetLayout({ layout: summary ? 'summary' : 'detail', columns, rows: allRows(body) }, { orientation, widths });
 
   // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
   const usesArroba = columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
+    || Boolean(matrix?.metrics.some((metric) => metric.column?.unit === '@'))
     || (!summary && hasRows && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@'));
   const divisor = viewModel.arrobaDivisor ?? 30;
   const notes = [...(viewModel.notes ?? [])];
@@ -585,7 +653,7 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     kind: DOCUMENT_KIND,
     version: 1,
     mode: viewModel.mode,
-    layout: summary ? 'summary' : 'detail',
+    layout: matrix ? 'matrix' : summary ? 'summary' : 'detail',
     reportId: viewModel.reportId,
     title: `Relatório de ${viewModel.sheetTitle ?? viewModel.reportName} (${summary ? 'Sintético' : 'Analítico'})`,
     subtitle: `${summary ? 'Resumido' : 'Detalhado'}${levels.length ? ` · ${levels.map((level) => level.label).join(' › ')}` : ''}`,
@@ -606,6 +674,8 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     pageFooter: `${footer.versao} · ${footer.emissao} · ${viewModel.reportName ?? ''}`,
     print,
     stats: body.stats,
+    // E1D: eixos e legenda da matriz (null fora do Sintético (Matriz)); os valores de cada célula estão em cells[].raw.
+    matrix: matrix ? { legend: matrix.legend, rowAxis: matrix.rowAxis, colAxis: matrix.colAxis, values: matrix.metrics.map((metric) => ({ key: metric.key, label: metric.label })) } : null,
   };
 }
 

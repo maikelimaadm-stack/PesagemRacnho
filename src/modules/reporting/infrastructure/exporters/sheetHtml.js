@@ -70,9 +70,12 @@ function renderRow(doc, row, { interactive }) {
     return `<tr ${attrs}><td class="sheet-chips" data-col="0" colspan="${doc.columns.length}"><strong>${escapeHtml(row.chips.title)}</strong> · ${items}</td></tr>`;
   }
   const cells = row.cells.map((cell) => {
-    let text = escapeHtml(cell.text);
+    // Matriz (E1D): a célula leva vários valores (Qtd, Peso médio, GMD), um embaixo do outro.
+    let text = Array.isArray(cell.lines) ? cell.lines.map(escapeHtml).join('<br>') : escapeHtml(cell.text);
     if (interactive && cell.kind === 'label' && row.drill) {
       text = `<button type="button" class="sheet-drill" data-drill="${escapeHtml(row.drill)}" title="Abrir o detalhado de ${escapeHtml(cell.text)}">${text}</button>`;
+    } else if (interactive && cell.drill && text) {
+      text = `<button type="button" class="sheet-drill" data-drill="${escapeHtml(cell.drill)}" title="Abrir o detalhado deste cruzamento">${text}</button>`;
     }
     const cls = cell.partial ? `${cellClass(cell)} sheet-partial` : cellClass(cell);
     const title = cell.partial ? ` title="Calculado com ${cell.partial.nValid} de ${cell.partial.nTotal} valores"` : '';
