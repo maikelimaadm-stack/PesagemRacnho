@@ -7,7 +7,8 @@
 //      tipo sem seletor ou inexistente recusado; estado gravado adulterado é limpo ao ler.
 //   4. Papel sem valores comerciais (OPERADOR, CONSULTA) não recebe nem grava coluna sensível.
 //   5. As 8 ordenações do antigo: rótulos e ordem exatos; em cada tipo a ordem REAL das linhas/seções numa
-//      massa pequena (ausentes por último, "2" antes de "10"); Personalizado; clique no cabeçalho → opção.
+//      massa pequena (ausentes por último, "2" antes de "10"); Personalizado; clique no cabeçalho → opção;
+//      clique numa métrica sem opção (Peso total, Qtd) num tipo resumido não tira as seções da ordem do tipo.
 //   6. Analítico: botões de agrupamento (ordem de clique, clicar de novo tira, 4º não entra) e subtotal por
 //      grupo (animais distintos, peso médio, GMD ponderado) na folha, no CSV e no XLSX.
 // A grade usa os mesmos agregados do view model (reportUi.aggregateChips) — conferida aqui pelo view model.
@@ -16,7 +17,7 @@ import { ADMIN, CONSULTA, GESTOR, OPERADOR, TODAY, resetDb, seedReportFixture } 
 import * as weighingService from '../src/modules/weighing/application/weighingService.js';
 import { readAppSetting, writeAppSetting } from '../src/storage/indexedDb/repositories/index.js';
 import { runReport } from '../src/modules/reporting/application/reportService.js';
-import { getTypeColumnPrefs, saveTypeColumnPrefs, typeColumnsKey } from '../src/modules/reporting/application/reportTemplateService.js';
+import { getReportViewState, getTypeColumnPrefs, saveReportViewState, saveTypeColumnPrefs, typeColumnsKey } from '../src/modules/reporting/application/reportTemplateService.js';
 import { getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
 import {
   ANALITICO_AVAILABLE_COLUMNS, ANALITICO_COLUMNS, EVENT_TOTALS, PESAGENS_SORT_CHOICES, SHEET_COLUMN_KEYS, SHEET_DEFAULT_KEYS,
@@ -303,6 +304,32 @@ for (const [choice, meses] of [['data_desc', ['set/2026', 'ago/2026']], ['data_a
   assert.equal(vm.groups[1].columnId, 'mes_pesagem');
   assert.deepEqual(labels(child(outline(vm.summaryRows), 'Macho')), meses, `Matriz × Mês ${choice}: meses`);
 }
+
+// Clique no cabeçalho de uma métrica SEM opção equivalente (Qtd, Peso total, Média (@)…) dentro de um tipo
+// resumido ("Personalizado"): como nas opções, só as linhas do nível folha (na Matriz, as linhas do eixo Y) —
+// as seções (apartação, data) e as colunas da Matriz ficam na ordem do tipo. A tela grava sortChoice null,
+// summarySort SEM nível e os níveis como estavam; o modelo e o último estado também guardam sem nível.
+const resumoData = viewSelection('por-apartacao-data', definition);
+const dataFolha = (iso) => iso.split('-').reverse().join('/');
+for (const [antes, datas] of [['data_desc', DATAS], ['data_asc', [...DATAS].reverse()]]) {
+  const niveis = applySortChoice(definition, view('por-apartacao-data'), resumoData, antes).groups;
+  const vm = await run({ ...resumoData, groups: niveis, sortChoice: null, summarySort: { key: 'peso_total', direction: 'asc' } });
+  const engorda = child(outline(vm.summaryRows), 'Engorda');
+  assert.deepEqual(labels(engorda), datas, `Resumo por Data, "Peso total" depois de ${antes}: datas na ordem de antes (não pelo peso total)`);
+  assert.deepEqual(labels(child(engorda, '2026-09-10')), ['Lote 03', 'Lote 02', 'Lote 01'], `Resumo por Data, "Peso total" depois de ${antes}: lotes de 10/09 pelo peso total (400; 570; 695)`);
+  assert.deepEqual(plain(vm.summarySort), { key: 'peso_total', direction: 'asc', columnId: 'nome_lote' }, 'métrica sem opção: só no nível Lote');
+  const secoes = buildReportDocument(vm, { showEmptyColumns: true }).sections[0].sections.map((section) => section.title.replace('DATA: ', ''));
+  assert.deepEqual(secoes, datas.map(dataFolha), `folha, "Peso total" depois de ${antes}: seções de data na ordem de antes`);
+}
+await saveReportViewState('pesagens', { ...resumoData, sortChoice: null, summarySort: { key: 'peso_total', direction: 'asc' }, period: P.periodo }, ADMIN);
+const reaberto = await getReportViewState('pesagens', ADMIN);
+assert.deepEqual(plain(reaberto.selection.summarySort), { key: 'peso_total', direction: 'asc' }, 'último estado guarda a métrica sem o nível');
+const vmReaberto = await run(reaberto.selection, ADMIN, reaberto.params);
+assert.deepEqual(labels(child(outline(vmReaberto.summaryRows), 'Engorda')), DATAS, 'último estado reaberto: datas na ordem do tipo');
+const matrizQtd = await run({ ...viewSelection('sintetico-matriz', definition), sortChoice: null, summarySort: { key: 'qtd', direction: 'asc' } });
+assert.deepEqual(labels(outline(matrizQtd.summaryRows)), ['Fêmea', 'Macho'], 'Matriz, "Qtd" crescente: linhas (eixo Y) pela Qtd');
+assert.deepEqual(labels(child(outline(matrizQtd.summaryRows), 'Macho')), ['Lote 01', 'Lote 02', 'Lote 03'], 'Matriz, "Qtd": colunas (Lote) em ordem natural, não pela Qtd');
+assert.deepEqual(plain(matrizQtd.summarySort), { key: 'qtd', direction: 'asc', columnId: 'sexo' }, 'Matriz: métrica sem opção só no eixo Y');
 
 // Personalizado (sem tipo): linhas pela opção; no Resumido a métrica equivalente se estiver nos totais.
 assert.deepEqual(ids(await run({ view: null, mode: 'DETALHADO', groups: [], sortChoice: 'peso_desc' })), ANALITICO_ORDENS.peso_desc, 'Personalizado Detalhado: linhas pela opção');

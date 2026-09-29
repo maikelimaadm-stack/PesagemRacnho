@@ -467,7 +467,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   const onSheetSort = (key) => {
     if (fixedSortChoices) {
       // E1D: peso médio / GMD médio viram "Peso (Maior)" / "GMD (Maior)" (de novo: Menor); outra métrica
-      // ordena as linhas por ela e o seletor mostra "Personalizado".
+      // ordena as linhas por ela e o seletor mostra "Personalizado". Num tipo resumido o serviço a restringe ao
+      // nível folha (sortChoices.scopedToType): as seções continuam na ordem do tipo.
       const shown = viewModel?.summarySort ?? null;
       const direction = shown?.key === key && shown.direction === "desc" ? "asc" : "desc";
       const choice = sortChoiceForMetric(definition, viewModel?.aggregates ?? state.aggregates, key, direction);

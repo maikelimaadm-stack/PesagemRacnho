@@ -67,7 +67,20 @@ function rowSortOf(definition, rule) {
 }
 
 /**
- * Seleção equivalente à opção no tipo. Sem opção (ou relatório sem sortChoices) devolve a seleção como veio.
+ * "Personalizado" dentro de um tipo resumido (clique no cabeçalho de uma métrica sem opção equivalente: Qtd,
+ * Peso total, Média (@)…): a métrica vale só no nível folha (na matriz, nas linhas do eixo Y), como as opções —
+ * senão as seções de data/apartação sairiam da ordem do tipo. O nível não fica gravado no modelo nem no último
+ * estado (normalizeTemplateConfig guarda só key/direction): é aqui que ele volta. Sem tipo, como na E1.
+ */
+function scopedToType(definition, view, summarySort, groups) {
+  if (!summarySort?.key || summarySort.columnId || !view || view.mode === REPORT_MODES.DETALHADO || !definition?.sortChoices?.length) return summarySort;
+  const columnId = (view.layout === VIEW_LAYOUTS.MATRIX ? groups[0] : groups.at(-1))?.columnId;
+  return columnId ? { ...summarySort, columnId } : summarySort;
+}
+
+/**
+ * Seleção equivalente à opção no tipo. Sem opção (ou relatório sem sortChoices) devolve a seleção como veio —
+ * exceto a métrica de um tipo resumido, que fica no nível folha (scopedToType).
  * A ordem dos resumidos vale só no nível folha (summarySort.columnId — "as linhas dentro de cada seção"; na
  * matriz, as linhas do eixo Y): as seções (apartação, data) ficam na ordem natural do tipo.
  * @param definition ReportDefinition
@@ -80,7 +93,7 @@ function rowSortOf(definition, rule) {
 export function applySortChoice(definition, view, selection, choiceId) {
   const base = { sort: selection.sort ?? [], summarySort: selection.summarySort ?? null, groups: selection.groups ?? [] };
   const rule = choiceId ? ruleOf(definition, choiceId) : null;
-  if (!rule) return base;
+  if (!rule) return { ...base, summarySort: scopedToType(definition, view, base.summarySort, base.groups) };
   const sort = rowSortOf(definition, rule);
   const groups = base.groups.map((group) => ({ ...group }));
   const declared = new Map((view?.groups ?? []).map((group) => [group.columnId, group.direction === 'desc' ? 'desc' : 'asc']));
