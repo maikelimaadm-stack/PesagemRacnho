@@ -1,0 +1,232 @@
+import React, { useState } from "react";
+import { ArrowLeft, FileJson, FileSpreadsheet, FileText, MoreHorizontal, RefreshCw, Save, Settings } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { describeFilter, isFilterActive } from "@/modules/reporting/domain/filterEngine";
+import { BarSelect, PREVIOUS_OPTIONS } from "./ReportFilterBar";
+
+// Tela "como o MAKGESTAO" (E1D visual, decisão da responsável: "igual ao MAKGESTAO no visual, com as contas
+// certas"): só no relatório que declara `screen: "makgestao"` (Pesagens — os 5 tipos do antigo). Os outros
+// relatórios continuam com a tela da 1.4.0. Copiado do antigo pelas classes (RelatorioPesagensIndividuais,
+// L509–757): título + "Análise e impressão" com o Imprimir verde; cartão de filtros com a grade de 6 campos
+// (rótulo em cima), os controles do tipo e a linha de botões de contorno; embaixo, sempre a folha. Só
+// SELEÇÃO — contas, filtros e ordem continuam no serviço (a tela manda o mesmo estado da 1.4.0).
+
+export const isMakgestaoScreen = (definition) => definition?.screen === "makgestao";
+
+// Botões da linha de filtros do antigo (L620–729), nesta ordem; sem Categoria e Proprietário (especificação
+// item 7). O primeiro id que o relatório tiver. `narrow`: lista w-48 do antigo (Sexo, Era, Status); as outras w-64.
+export const MAK_FILTER_BUTTONS = Object.freeze([
+  { label: "Lotes", ids: ["nome_lote", "lote", "lote_atual"] },
+  { label: "Apartações", ids: ["nome_apartacao", "apartacao", "apartacao_atual"] },
+  { label: "Sexo", ids: ["sexo"], narrow: true },
+  { label: "Raças", ids: ["raca"] },
+  { label: "Era", ids: ["era"], narrow: true },
+  { label: "Marcas", ids: ["marca"] },
+  { label: "Status", ids: ["situacao_atual", "situacao"], narrow: true },
+]);
+
+// O antigo só tinha Retrato e Paisagem (padrão Paisagem, L141): "Automática" da 1.4.0 aparece como Paisagem.
+export const MAK_ORIENTATION_OPTIONS = Object.freeze([
+  { value: "portrait", label: "Retrato" },
+  { value: "landscape", label: "Paisagem" },
+]);
+export const makOrientation = (orientation) => (orientation === "portrait" ? "portrait" : "landscape");
+
+const NO_OPTIONS = [];
+const ISO_DATE = /^(\d{4})-\d{2}-\d{2}$/;
+const NEGATIVE_LIST = new Set(["not_in", "not_equals", "not_contains"]);
+
+/** Data com o rótulo em cima, como o Input type="date" do antigo (h-8 text-xs). */
+function MakDateField({ id, label, value, onChange }) {
+  return (
+    <div className="rpt-bar-field rpt-mak-field" data-field={id}>
+      <label className="rpt-bar-field__label" htmlFor={`rpt-mak-${id}`}>{label}</label>
+      <input
+        id={`rpt-mak-${id}`}
+        type="date"
+        className="rpt-mak-input"
+        value={value ?? ""}
+        // Ano incompleto enquanto digita (0002-…) não vira período.
+        onChange={(event) => { const match = ISO_DATE.exec(event.target.value); if (match && Number(match[1]) >= 1900) onChange(event.target.value); }}
+      />
+    </div>
+  );
+}
+
+// Lista marcada simples ("em E1, E2"): é o que os botões do antigo gravam. Outra condição (ex.: "contém x" ou
+// "fora de", vinda de um modelo ou da 1.4.0) aparece escrita na lista e continua até a pessoa marcar ou limpar.
+const checkedValues = (value) => (isFilterActive(value) && Array.isArray(value?.values) && value.values.length && !NEGATIVE_LIST.has(value.operator) ? value.values.map(String) : []);
+
+/**
+ * Botão de contorno da linha de filtros ("Lotes (2)") com a lista de marcar do antigo (Popover w-64: título
+ * em negrito e uma caixa por valor; marcar já filtra). O filtro vai pelo MESMO caminho das pílulas
+ * (uiFilters → motor de filtros, lista "em"): só a aparência é do antigo.
+ */
+export function MakgestaoFilterButton({ label, value, filterType = "text", listOptions = NO_OPTIONS, onChange, narrow = false }) {
+  const [open, setOpen] = useState(false);
+  const active = isFilterActive(value);
+  const checked = checkedValues(value);
+  // Quantos marcados; outra condição conta como 1.
+  const count = active ? checked.length || 1 : 0;
+  const otherCondition = active && !checked.length;
+  // Coluna de número/data (só aparece aqui com filtro ativo vindo de modelo): sem lista, só a condição.
+  const listable = filterType === "text";
+  // Só com a lista aberta (as opções vêm da população da execução, em cache por execução). Valor marcado que
+  // não existe mais no período continua visível (e desmarcável).
+  const list = open && listable ? (typeof listOptions === "function" ? listOptions() : listOptions).map(String) : NO_OPTIONS;
+  const options = open && listable ? [...list, ...checked.filter((item) => !list.includes(item))] : NO_OPTIONS;
+  const toggle = (option) => {
+    const next = checked.includes(option) ? checked.filter((item) => item !== option) : [...checked, option];
+    onChange(next.length ? { operator: "in", value: "", valueTo: "", values: next } : null);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className="rpt-mak-btn" aria-label={`Filtrar ${label}`}>
+          {count ? `${label} (${count})` : label}
+        </button>
+      </PopoverTrigger>
+      {/* Classes do antigo (PopoverContent w-64/w-48 max-h-96, space-y-2, h4 font-semibold text-sm, linhas
+          flex items-center space-x-2 com Checkbox e label text-sm). */}
+      <PopoverContent className={`rpt-mak-pop ${narrow ? "w-48" : "w-64"} max-h-96 overflow-auto border-[#e5e5e5] text-[#0a0a0a]`} aria-label={`Filtro ${label}`}>
+        <div className="space-y-2">
+          <h4 className="mb-2 text-sm font-semibold">{label}</h4>
+          {otherCondition ? (
+            <div className="rpt-mak-pop__condition">
+              <span>{describeFilter(value)}</span>
+              <button type="button" onClick={() => onChange(null)}>Limpar</button>
+            </div>
+          ) : null}
+          {options.map((option) => (
+            <label key={option} className="rpt-mak-pop__item flex items-center space-x-2">
+              <Checkbox checked={checked.includes(option)} onCheckedChange={() => toggle(option)} />
+              <span className="cursor-pointer text-sm">{option}</span>
+            </label>
+          ))}
+          {listable && !options.length ? <p className="text-xs text-slate-500">Nenhum valor no período.</p> : null}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * Topo do antigo (L509–518): título grande + "Análise e impressão" à esquerda; à direita o Imprimir verde.
+ * Discretos ao lado dele: Excel, PDF e o menu "⋯" (CSV, JSON, Salvar modelo, Atualizar, colunas vazias).
+ */
+export function MakgestaoTopBar({
+  title, templateName = null, loading = false, backLabel = "Relatórios", onBack,
+  canExport, disabled, onPrint, onExcel, onPdf, onCsv, onJson, menuLabel,
+  onSaveTemplate = null, onRefresh, showEmptyColumns, onToggleEmptyColumns,
+}) {
+  return (
+    <header className="rpt-mak__top">
+      <div className="rpt-mak__heading">
+        <h1 className="rpt-mak__title">{title}</h1>
+        <p className="rpt-mak__subtitle">
+          Análise e impressão
+          {templateName ? <em> · modelo “{templateName}”</em> : null}
+          {loading ? <span className="rpt-mak__busy" aria-live="polite"> · Calculando…</span> : null}
+        </p>
+      </div>
+      <div className="rpt-mak__actions" role="group" aria-label="Imprimir e exportar">
+        <button type="button" className="rpt-mak-link" onClick={onBack} title={`Voltar para ${backLabel}`}>
+          <ArrowLeft aria-hidden="true" />{backLabel}
+        </button>
+        {canExport ? (
+          <>
+            <button type="button" className="rpt-mak-ghost" disabled={disabled} onClick={onExcel} title="Planilha Excel (XLSX) com a mesma tabela da folha">
+              <FileSpreadsheet aria-hidden="true" />Excel
+            </button>
+            <button type="button" className="rpt-mak-ghost" disabled={disabled} onClick={onPdf} title="PDF A4 da folha">
+              <FileText aria-hidden="true" />PDF
+            </button>
+          </>
+        ) : null}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button type="button" className="rpt-mak-ghost rpt-mak-ghost--icon" aria-label="Mais opções" title="Mais opções (CSV, JSON, modelo, atualizar)">
+              <MoreHorizontal aria-hidden="true" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="rpt-mak-menu">
+            {canExport ? (
+              <>
+                <DropdownMenuLabel className="text-xs">{menuLabel}</DropdownMenuLabel>
+                <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onCsv}><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />CSV (Excel pt-BR)</DropdownMenuItem>
+                <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onJson}><FileJson className="h-3.5 w-3.5" aria-hidden="true" />JSON com manifesto</DropdownMenuItem>
+                <DropdownMenuSeparator />
+              </>
+            ) : null}
+            {onSaveTemplate ? <DropdownMenuItem className="text-xs" onClick={onSaveTemplate}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar modelo…</DropdownMenuItem> : null}
+            <DropdownMenuItem className="text-xs" onClick={onRefresh}><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Atualizar (reler os dados)</DropdownMenuItem>
+            <DropdownMenuCheckboxItem className="text-xs" checked={showEmptyColumns} onCheckedChange={onToggleEmptyColumns}>Mostrar colunas vazias</DropdownMenuCheckboxItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        {canExport ? (
+          <button type="button" className="rpt-mak-print text-white" disabled={disabled} onClick={onPrint} title="Imprimir a folha (A4)">Imprimir</button>
+        ) : null}
+      </div>
+    </header>
+  );
+}
+
+/** Botão "Colunas…" do antigo (outline h-8 text-xs gap-1 com a engrenagem w-3.5). */
+export function MakgestaoColumnsButton({ label, title, onClick }) {
+  return (
+    <button type="button" className="rpt-mak-btn rpt-mak-btn--icon" onClick={onClick} title={title ?? label}>
+      <Settings aria-hidden="true" />{label}
+    </button>
+  );
+}
+
+/**
+ * Cartão de filtros do antigo (L519–757). Linha 1: grade de 6 campos (Data Início | Data Fim | Orientação |
+ * Tipo Relatório | [Linhas | Colunas no Sintético] | Ordenar Por | Pesagem Anterior). Depois os controles do
+ * tipo que ficam embaixo (Agrupar Por do Analítico) e a linha de botões (filtros, Colunas, Limpar Filtros).
+ * @param typeControls controles do tipo (ReportView): na grade (eixos da matriz) ou embaixo (Agrupar Por).
+ * @param columnsButton { label, onClick } | null — só o "Colunas" do Analítico fica nesta linha (L733–755);
+ *   os "Colunas Painel/Detalhes" do antigo ficavam na área da folha (L1146–1176, L1445–1466).
+ */
+export function MakgestaoFilterCard({
+  period = null, resolvedPeriod = null, onPeriod,
+  orientation, onOrientation,
+  views, viewId, onView,
+  typeControls = null, typeControlsInGrid = false,
+  sortOptions, sortValue, onSort,
+  previous = null,
+  filterButtons = null, columnsButton = null, onClear, extras = null,
+}) {
+  const from = period?.preset === "personalizado" ? period.from : resolvedPeriod?.from;
+  const to = period?.preset === "personalizado" ? period.to : resolvedPeriod?.to;
+  // Trocar uma data vira período "Personalizado" com as duas datas (como a barra da 1.4.0).
+  const setDate = (edge, value) => onPeriod({ preset: "personalizado", from: from ?? value, to: to ?? value, [edge]: value });
+  const viewOptions = [...views.map((view) => ({ value: view.id, label: view.label })), ...(viewId === "custom" ? [{ value: "custom", label: "Personalizado" }] : [])];
+  const sortChoices = sortValue === "custom" ? [...sortOptions, { value: "custom", label: "Personalizado" }] : sortOptions;
+  return (
+    <section className="rpt-mak__card" aria-label="Filtros do relatório">
+      <div className="rpt-mak__grid" role="group" aria-label="Período, tipo e ordem">
+        {onPeriod ? (
+          <>
+            <MakDateField id="inicio" label="Data Início" value={from} onChange={(value) => setDate("from", value)} />
+            <MakDateField id="fim" label="Data Fim" value={to} onChange={(value) => setDate("to", value)} />
+          </>
+        ) : null}
+        <BarSelect id="orientacao" label="Orientação" value={makOrientation(orientation)} options={MAK_ORIENTATION_OPTIONS} onChange={onOrientation} title="Orientação da folha na impressão e no PDF" />
+        <BarSelect id="tipo" label="Tipo Relatório" value={viewId} options={viewOptions} onChange={(value) => value !== "custom" && onView(value)} />
+        {typeControlsInGrid ? typeControls : null}
+        <BarSelect id="ordenar" label="Ordenar Por" value={sortValue} options={sortChoices} onChange={(value) => value !== "custom" && onSort(value)} />
+        {previous ? <BarSelect id="anterior" label="Pesagem Anterior" value={previous.value} options={PREVIOUS_OPTIONS} onChange={previous.onChange} /> : null}
+      </div>
+      {!typeControlsInGrid && typeControls ? <div className="rpt-mak__type">{typeControls}</div> : null}
+      <div className="rpt-mak__buttons" role="group" aria-label="Filtros">
+        {filterButtons}
+        {columnsButton ? <MakgestaoColumnsButton {...columnsButton} /> : null}
+        <button type="button" className="rpt-mak-btn" onClick={onClear}>Limpar Filtros</button>
+        {extras}
+      </div>
+    </section>
+  );
+}

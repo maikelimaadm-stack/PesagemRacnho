@@ -2,11 +2,12 @@ import React from "react";
 import { MAX_GROUP_LEVELS } from "@/modules/reporting/domain/groupEngine";
 import { activeGroupChoices, toggleGroupChoice } from "@/modules/reporting/domain/groupChoices";
 
-// E1D — botões "Agrupar por" do Analítico (Detalhado), como no MAKGESTAO: Lote, Apartação, Sexo, Raça, vários
+// E1D — botões "Agrupar Por" do Analítico (Detalhado), como no MAKGESTAO: Lote, Apartação, Sexo, Raça, vários
 // ao mesmo tempo, na ORDEM DE CLIQUE (1º clique = 1º nível). Clicar de novo tira o nível. No máximo 3 níveis
 // (limite do motor): com 3 ligados, o 4º não entra — a dica do botão explica. Regra em domain/groupChoices.js.
 // Só troca os grupos: o tipo continua o Analítico (quem chama faz update({ groups, drill: [] }) sem mexer em
-// view). Reusa a pílula dos filtros rápidos (rpt-quick-filter / is-on); o visual final é da E1E.
+// view). Visual do antigo (L602–619): rótulo "Agrupar Por" em cima, botões h-7 de contorno, ligado em
+// verde-esmeralda (reports.css, .rpt-mak-btn--sm / is-on). Só Pesagens tem groupChoices.
 
 /**
  * @param {{ choices: string[], groups: { columnId: string }[], labelOf: (columnId: string) => string,
@@ -27,9 +28,9 @@ export default function AnalyticGroupButtons({ choices, groups, labelOf, onChang
     return active.length ? `Agrupar também por ${label} (${active.length + 1}º nível).` : `Agrupar por ${label}.`;
   };
   return (
-    <div className="rpt-bar-field" data-field="agrupar-tipo">
-      <span className="rpt-bar-field__label" id="rpt-bar-label-agrupar-tipo">Agrupar por</span>
-      <div className="rpt-bar-field__static" role="group" aria-labelledby="rpt-bar-label-agrupar-tipo">
+    <div className="rpt-mak-group" data-field="agrupar-tipo">
+      <span className="rpt-bar-field__label" id="rpt-bar-label-agrupar-tipo">Agrupar Por</span>
+      <div className="rpt-mak-group__buttons" role="group" aria-labelledby="rpt-bar-label-agrupar-tipo">
         {choices.map((columnId) => {
           const label = labelOf(columnId);
           const on = active.includes(columnId);
@@ -38,7 +39,7 @@ export default function AnalyticGroupButtons({ choices, groups, labelOf, onChang
             <button
               key={columnId}
               type="button"
-              className={`rpt-quick-filter${on ? " is-on" : ""}`}
+              className={`rpt-mak-btn rpt-mak-btn--sm${on ? " is-on text-white" : ""}`}
               aria-pressed={on}
               aria-disabled={blocked || undefined}
               title={hint(columnId, label)}

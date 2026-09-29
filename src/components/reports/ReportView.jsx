@@ -33,6 +33,7 @@ import AnalyticGroupButtons from "./AnalyticGroupButtons";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportFilterBar from "./ReportFilterBar";
 import MatrixAxisControls from "./MatrixAxisControls";
+import { MAK_FILTER_BUTTONS, MakgestaoColumnsButton, MakgestaoFilterButton, MakgestaoFilterCard, MakgestaoTopBar, isMakgestaoScreen, makOrientation } from "./MakgestaoScreen";
 import ReportSheetView from "./ReportSheetView";
 import ReportTable from "./ReportTable";
 import { pillFilterType, pillOptions, toDisplayFilters, toServiceFilters, useCan } from "./reportUi";
@@ -118,6 +119,8 @@ function currentSortValue({ summaryMode, state, definition, options }) {
 export default function ReportView({ reportId, presetId = null, template, savedState = null, typeColumnPrefs = null, actor, onBack, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true }) {
   const can = useCan();
   const definition = getReportDefinition(reportId);
+  // E1D (visual): Pesagens abre na tela "como o MAKGESTAO" (MakgestaoScreen); os outros, na da 1.4.0.
+  const makScreen = isMakgestaoScreen(definition);
   const preset = presetId ? getLegacyAlias(presetId) : null;
   // E1D: escolha de colunas por tipo (vale nesta tela ao trocar de tipo; gravada por usuário ao aplicar).
   const [typeColumns, setTypeColumns] = useState(() => (allowPreferences && typeColumnPrefs ? { ...typeColumnPrefs } : {}));
@@ -195,6 +198,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   }, [headerKey]);
 
   const update = (patch) => setState((current) => ({ ...current, ...patch }));
+  // Na tela do MAKGESTAO só há Retrato/Paisagem (padrão Paisagem, como o antigo): "Automática" sai em paisagem.
+  const sheetOrientation = makScreen ? makOrientation(state.orientation) : state.orientation;
   const periodParam = definition.params.find((param) => param.type === "period");
   const period = periodParam ? state.params[periodParam.id] ?? {} : null;
   const setPeriod = (next) => update({ params: { ...state.params, [periodParam.id]: next } });
@@ -421,7 +426,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   // reduzir totais/colunas ou exportar) — nunca corta em silêncio.
   const emitDocument = async (kind, overrides = {}) => {
     if (!viewModel) return;
-    const options = { orientation: overrides.orientation ?? state.orientation, widths: state.widths, header, showEmptyColumns: state.showEmptyColumns, acceptTooWide: overrides.acceptTooWide ?? false };
+    const options = { orientation: overrides.orientation ?? sheetOrientation, widths: state.widths, header, showEmptyColumns: state.showEmptyColumns, acceptTooWide: overrides.acceptTooWide ?? false };
     try {
       const result = kind === "pdf" ? await exportPdf(viewModel, actor, options) : await printReport(viewModel, actor, options);
       if (result.blocked) { setPrintPrompt({ kind, layout: result.layout }); return; }
@@ -452,7 +457,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
 
   // Linha 2: botões padrão (com contador), depois os demais filtros ativos e, no Detalhado, as colunas
   // visíveis — um filtro nunca fica invisível e o caminho é um só (uiFilters → motor de filtros).
-  const buttonColumns = FILTER_BUTTONS.map((button) => {
+  const buttonColumns = (makScreen ? MAK_FILTER_BUTTONS : FILTER_BUTTONS).map((button) => {
     const column = button.ids.map((id) => columnOf(id)).find(Boolean);
     return column ? { button, column } : null;
   }).filter(Boolean);
@@ -469,13 +474,181 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     />
   );
   const extraColumns = [
-    ...(summaryMode ? [] : visibleColumns.filter((column) => !coveredIds.has(column.id))),
-    ...available.filter((column) => !coveredIds.has(column.id) && isFilterActive(state.uiFilters[column.id]) && (summaryMode || !visibleColumns.some((item) => item.id === column.id))),
+    // Na tela do MAKGESTAO não há pílula por coluna visível (só os botões do antigo + filtros ativos).
+    ...(summaryMode || makScreen ? [] : visibleColumns.filter((column) => !coveredIds.has(column.id))),
+    ...available.filter((column) => !coveredIds.has(column.id) && isFilterActive(state.uiFilters[column.id]) && (summaryMode || makScreen || !visibleColumns.some((item) => item.id === column.id))),
   ];
   const hasActiveFilters = Object.values(state.uiFilters).some(isFilterActive) || Boolean(state.search);
   const lockedEntries = Object.entries(viewModel?.lockedFilters ?? {});
   const drillParts = viewModel?.drill ?? [];
-  const showSheet = summaryMode || state.detailSheet;
+  // Tela do MAKGESTAO: sempre a folha (o antigo mostrava o papel também nos tipos detalhados).
+  const showSheet = makScreen || summaryMode || state.detailSheet;
+
+  // Diálogos (as duas telas): colunas do tipo ou de dados, níveis, totais, salvar modelo e a pergunta da impressão.
+  // Na tela do MAKGESTAO o seletor de colunas tem o nome do botão do antigo; na da 1.4.0, o título padrão.
+  const columnsDialogTitle = !makScreen ? undefined
+    : typeColumnsOn ? (currentView.mode === REPORT_MODES.RESUMIDO ? "Colunas Painel" : currentView.groupChoices?.length ? "Colunas Visíveis" : "Colunas Detalhes")
+      : "Colunas";
+  const dialogs = (
+    <>
+      {dialog === "columns" && viewModel && typeColumnsOn ? (
+        <MakColumnConfigDialog
+          open
+          title={columnsDialogTitle}
+          onOpenChange={(open) => !open && setDialog(null)}
+          columns={typeColumnDialog.options.map((option) => ({ id: option.key, label: option.label, default: option.default }))}
+          order={[...typeColumnDialog.current, ...typeColumnDialog.options.map((option) => option.key).filter((key) => !typeColumnDialog.current.includes(key))]}
+          visible={typeColumnDialog.current}
+          onApply={({ order, visible }) => { applyTypeColumns(currentView, order.filter((key) => visible.includes(key))); setDialog(null); }}
+        />
+      ) : dialog === "columns" && viewModel ? (
+        <MakColumnConfigDialog
+          open
+          title={columnsDialogTitle}
+          onOpenChange={(open) => !open && setDialog(null)}
+          columns={available.filter((column) => !column.metricOnly).map((column) => ({ id: column.id, label: column.label, default: definition.defaultColumns.includes(column.id) }))}
+          order={[...state.columns, ...available.filter((column) => !column.metricOnly).map((column) => column.id).filter((id) => !state.columns.includes(id))]}
+          visible={state.columns}
+          onApply={({ order, visible }) => { update({ columns: order.filter((id) => visible.includes(id)) }); setDialog(null); }}
+        />
+      ) : null}
+      <ReportGroupingDialog open={dialog === "groups"} onOpenChange={(open) => !open && setDialog(null)} columns={available} groups={state.groups} onApply={setGroups} />
+      <ReportTotalsDialog open={dialog === "totals"} onOpenChange={(open) => !open && setDialog(null)} columns={available} aggregates={state.aggregates} animalColumnId={definition.animalColumnId} onApply={(aggregates) => update({ aggregates, summarySort: aggregates.some((spec) => spec.id === state.summarySort?.key) ? state.summarySort : null })} />
+      <ReportSaveTemplateDialog open={dialog === "save"} onOpenChange={(open) => !open && setDialog(null)} current={currentTemplate && (currentTemplate.ownerUserId === actor.id || can("reports.templates.share")) ? currentTemplate : null} canShare={can("reports.templates.share")} onSave={saveAsTemplate} busy={savingTemplate} />
+      <Dialog open={Boolean(printPrompt)} onOpenChange={(open) => !open && setPrintPrompt(null)}>
+        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact rpt-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />Este relatório possui muitas colunas para impressão.</DialogTitle>
+            <DialogDescription>{printPrompt ? `${printPrompt.layout.columnCount} colunas não cabem em A4 ${printPrompt.layout.orientation === "landscape" ? "paisagem" : "retrato"}, nem com a letra menor. Nenhuma coluna é escondida automaticamente.` : ""}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="rpt-print-options">
+            {printPrompt?.layout.warning?.options?.includes("paisagem") ? <Button type="button" variant="outline" onClick={() => { update({ orientation: "landscape" }); emitDocument(printPrompt.kind, { orientation: "landscape" }); }}>Usar paisagem</Button> : null}
+            <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); setDialog(summaryMode && !typeColumnsOn ? "totals" : "columns"); }}>{summaryMode && !typeColumnsOn ? "Reduzir totais" : "Reduzir colunas"}</Button>
+            {can("reports.export") ? <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); exportAs("csv"); }}>Exportar CSV</Button> : null}
+            <Button type="button" className="emp-toolbar-btn-save" onClick={() => emitDocument(printPrompt.kind, { acceptTooWide: true })}>Continuar mesmo assim</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+
+  if (makScreen) {
+    // Tela "como o MAKGESTAO" (E1D visual): mesmo estado, mesmos serviços e mesma folha — só a cara muda.
+    // "Colunas" do tipo como o antigo: Analítico "Colunas" na linha de botões do cartão (L733); Apartação
+    // "Colunas Painel" e Vendas "Colunas Detalhes" na área da folha (L1146, L1445); o Sintético não tem. No
+    // detalhe de um grupo, as colunas de dados (também na área da folha).
+    const inTypeMode = currentView && currentView.mode === (viewModel?.mode ?? state.mode);
+    const makColumnsLabel = typeColumnsOn
+      ? (currentView.mode === REPORT_MODES.RESUMIDO ? "Colunas Painel" : currentView.groupChoices?.length ? "Colunas" : "Colunas Detalhes")
+      : inTypeMode && currentView.layout === VIEW_LAYOUTS.MATRIX ? null
+        : summaryMode ? "Colunas Painel" : "Colunas";
+    const makColumns = makColumnsLabel
+      ? { label: makColumnsLabel, title: makColumnsLabel === "Colunas" && typeColumnsOn ? "Colunas Visíveis" : makColumnsLabel, onClick: () => setDialog(summaryMode && !typeColumnsOn ? "totals" : "columns") }
+      : null;
+    const columnsInCard = Boolean(makColumns && typeColumnsOn && currentView.groupChoices?.length);
+    const makNotes = [
+      ...(viewModel?.warnings ?? []).map((warning) => <div key={warning.code} className="rpt-warning" role="status"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />{warning.message}</div>),
+      ...(error ? [<div key="erro" className="rpt-error" role="alert">{error.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode abrir este relatório." : error.message}</div>] : []),
+      ...(summaryMode && viewModel && viewId === "custom" && !(viewModel.groups ?? []).length ? [<div key="dica" className="rpt-sheet-hint" role="note">Sem agrupamento a folha mostra só o Total geral. Escolha um <strong>Tipo Relatório</strong> para ver os grupos.</div>] : []),
+    ];
+    return (
+      <ModeloBase1PageContainer variant="report" className="rpt-mak" data-report={definition.id}>
+        <MakgestaoTopBar
+          title={`Relatório de ${definition.sheetTitle ?? definition.title}`}
+          templateName={currentTemplate?.name ?? (preset ? preset.title : null)}
+          loading={loading}
+          backLabel={backLabel}
+          onBack={onBack}
+          canExport={can("reports.export")}
+          disabled={!viewModel || loading}
+          onPrint={() => emitDocument("print")}
+          onExcel={() => exportAs("xlsx")}
+          onPdf={() => emitDocument("pdf")}
+          onCsv={() => exportAs("csv")}
+          onJson={() => exportAs("json")}
+          menuLabel={summaryMode ? "Mesma tabela resumida da folha" : "Mesma população e totais da folha"}
+          onSaveTemplate={allowPreferences ? () => setDialog("save") : null}
+          onRefresh={() => execute({ reload: true })}
+          showEmptyColumns={state.showEmptyColumns}
+          onToggleEmptyColumns={() => update({ showEmptyColumns: !state.showEmptyColumns })}
+        />
+        <MakgestaoFilterCard
+          period={period}
+          resolvedPeriod={viewModel?.period ?? null}
+          onPeriod={periodParam ? setPeriod : null}
+          orientation={state.orientation}
+          onOrientation={(orientation) => update({ orientation })}
+          views={views}
+          viewId={viewId}
+          onView={applyView}
+          typeControls={typeControls}
+          typeControlsInGrid={currentView?.layout === VIEW_LAYOUTS.MATRIX}
+          sortOptions={sortOptions}
+          sortValue={sortValue}
+          onSort={applySort}
+          previous={previousColumn ? { value: previousValue, onChange: setPrevious } : null}
+          filterButtons={buttonColumns.map(({ button, column }) => (
+            <MakgestaoFilterButton key={column.id} label={button.label} narrow={button.narrow} value={state.uiFilters[column.id] || null} filterType={pillFilterType(column)} listOptions={() => pillOptions(viewModel, column)} onChange={(value) => onFilter(column.id, value)} />
+          ))}
+          columnsButton={columnsInCard ? makColumns : null}
+          onClear={() => update({ uiFilters: {}, search: "" })}
+          extras={(
+            <>
+              {extraColumns.map((column) => (
+                <MakgestaoFilterButton key={column.id} label={column.label} value={state.uiFilters[column.id] || null} filterType={pillFilterType(column)} listOptions={() => pillOptions(viewModel, column)} onChange={(value) => onFilter(column.id, value)} />
+              ))}
+              {state.search ? (
+                <span className="rpt-mak-chip" title="Pesquisa do modelo">
+                  Pesquisa: “{state.search}”
+                  <button type="button" aria-label="Limpar a pesquisa" title="Limpar a pesquisa" onClick={() => update({ search: "" })}><X className="h-3 w-3" aria-hidden="true" /></button>
+                </span>
+              ) : null}
+            </>
+          )}
+        />
+        {/* Entre o cartão e a folha, só quando há o que dizer: detalhe de um grupo (× volta à folha do tipo),
+            condição fixa do tipo (Vendas: Saída por Venda, com cadeado), avisos e erro. */}
+        {drillParts.length || lockedEntries.length || makNotes.length ? (
+          <div className="rpt-mak__notes">
+            {drillParts.length ? (
+              <span className="rpt-drill-pill" title="Detalhe de um grupo da folha">
+                <SearchCheck className="h-3 w-3" aria-hidden="true" />
+                Detalhe: {drillParts.map((part) => `${part.columnLabel}: ${part.label}`).join(" › ")}
+                <button type="button" aria-label="Voltar à folha do tipo" title="Voltar à folha do tipo" onClick={() => update({ drill: [], mode: REPORT_MODES.RESUMIDO })}><X className="h-3 w-3" aria-hidden="true" /></button>
+              </span>
+            ) : null}
+            {lockedEntries.map(([columnId, filter]) => (
+              <span key={`locked-${columnId}`} className="rpt-locked-pill" title="Condição fixa do tipo">
+                <Lock className="h-3 w-3" aria-hidden="true" />{columnOf(columnId)?.label ?? columnId} {describeFilter(filter, columnOf(columnId))}
+              </span>
+            ))}
+            {makNotes}
+          </div>
+        ) : null}
+        <div className="rpt-mak__paper">
+          {/* "Colunas Painel/Detalhes" fora da folha (não sai na impressão), no canto da área do papel — a barra
+              print:hidden do antigo ficava dentro da área de impressão. */}
+          {makColumns && !columnsInCard ? (
+            <div className="rpt-mak__sheet-tools" role="group" aria-label="Colunas da folha">
+              <MakgestaoColumnsButton {...makColumns} />
+            </div>
+          ) : null}
+          {viewModel ? (
+            <ReportSheetView
+              viewModel={viewModel}
+              header={header}
+              orientation={sheetOrientation}
+              showEmptyColumns={state.showEmptyColumns}
+              sort={viewModel.mode === REPORT_MODES.RESUMIDO ? (fixedSortChoices ? viewModel.summarySort : state.summarySort) : null}
+              onDrill={viewModel.mode === REPORT_MODES.RESUMIDO ? onDrill : null}
+              onSort={viewModel.mode === REPORT_MODES.RESUMIDO ? onSheetSort : null}
+            />
+          ) : <div className="rpt-empty">{loading ? "Calculando o relatório…" : "—"}</div>}
+        </div>
+        {dialogs}
+      </ModeloBase1PageContainer>
+    );
+  }
 
   return (
     <ModeloBase1PageContainer variant="table" className="d17b-page d17b-list-page d17b-list-page--mother cadastro-emp-scope mg-empresas-scope rpt-page">
@@ -637,42 +810,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
         </Card>
       </div>
 
-      {dialog === "columns" && viewModel && typeColumnsOn ? (
-        <MakColumnConfigDialog
-          open
-          onOpenChange={(open) => !open && setDialog(null)}
-          columns={typeColumnDialog.options.map((option) => ({ id: option.key, label: option.label, default: option.default }))}
-          order={[...typeColumnDialog.current, ...typeColumnDialog.options.map((option) => option.key).filter((key) => !typeColumnDialog.current.includes(key))]}
-          visible={typeColumnDialog.current}
-          onApply={({ order, visible }) => { applyTypeColumns(currentView, order.filter((key) => visible.includes(key))); setDialog(null); }}
-        />
-      ) : dialog === "columns" && viewModel ? (
-        <MakColumnConfigDialog
-          open
-          onOpenChange={(open) => !open && setDialog(null)}
-          columns={available.filter((column) => !column.metricOnly).map((column) => ({ id: column.id, label: column.label, default: definition.defaultColumns.includes(column.id) }))}
-          order={[...state.columns, ...available.filter((column) => !column.metricOnly).map((column) => column.id).filter((id) => !state.columns.includes(id))]}
-          visible={state.columns}
-          onApply={({ order, visible }) => { update({ columns: order.filter((id) => visible.includes(id)) }); setDialog(null); }}
-        />
-      ) : null}
-      <ReportGroupingDialog open={dialog === "groups"} onOpenChange={(open) => !open && setDialog(null)} columns={available} groups={state.groups} onApply={setGroups} />
-      <ReportTotalsDialog open={dialog === "totals"} onOpenChange={(open) => !open && setDialog(null)} columns={available} aggregates={state.aggregates} animalColumnId={definition.animalColumnId} onApply={(aggregates) => update({ aggregates, summarySort: aggregates.some((spec) => spec.id === state.summarySort?.key) ? state.summarySort : null })} />
-      <ReportSaveTemplateDialog open={dialog === "save"} onOpenChange={(open) => !open && setDialog(null)} current={currentTemplate && (currentTemplate.ownerUserId === actor.id || can("reports.templates.share")) ? currentTemplate : null} canShare={can("reports.templates.share")} onSave={saveAsTemplate} busy={savingTemplate} />
-      <Dialog open={Boolean(printPrompt)} onOpenChange={(open) => !open && setPrintPrompt(null)}>
-        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact rpt-dialog">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-sm"><AlertTriangle className="h-4 w-4 text-amber-600" aria-hidden="true" />Este relatório possui muitas colunas para impressão.</DialogTitle>
-            <DialogDescription>{printPrompt ? `${printPrompt.layout.columnCount} colunas não cabem em A4 ${printPrompt.layout.orientation === "landscape" ? "paisagem" : "retrato"}, nem com a letra menor. Nenhuma coluna é escondida automaticamente.` : ""}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="rpt-print-options">
-            {printPrompt?.layout.warning?.options?.includes("paisagem") ? <Button type="button" variant="outline" onClick={() => { update({ orientation: "landscape" }); emitDocument(printPrompt.kind, { orientation: "landscape" }); }}>Usar paisagem</Button> : null}
-            <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); setDialog(summaryMode && !typeColumnsOn ? "totals" : "columns"); }}>{summaryMode && !typeColumnsOn ? "Reduzir totais" : "Reduzir colunas"}</Button>
-            {can("reports.export") ? <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); exportAs("csv"); }}>Exportar CSV</Button> : null}
-            <Button type="button" className="emp-toolbar-btn-save" onClick={() => emitDocument(printPrompt.kind, { acceptTooWide: true })}>Continuar mesmo assim</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {dialogs}
     </ModeloBase1PageContainer>
   );
 }

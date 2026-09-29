@@ -197,3 +197,123 @@ html body #root .cadastro-emp-scope .rpt-sheet :is(button.sheet-drill, button.sh
 html body #root .cadastro-emp-scope .rpt-sheet :is(button.sheet-drill, button.sheet-sort):not(#rpt-none) span { color: inherit !important; background: none !important; font-weight: inherit !important; }
 html body #root .cadastro-emp-scope .rpt-sheet button.sheet-drill:not(#rpt-none):hover,
 html body #root .cadastro-emp-scope .rpt-sheet button.sheet-drill:not(#rpt-none):focus-visible { color: #0f5132 !important; }
+
+/* ===== E1D (visual): tela "como o MAKGESTAO" — SÓ Pesagens (definition.screen "makgestao", MakgestaoScreen.jsx).
+   Medidas das classes Tailwind do antigo (RelatorioPesagensIndividuais L509–757): página p-6 space-y-2 sobre
+   slate-50; título text-xl bold slate-900; "Análise e impressão" text-xs slate-600; Imprimir h-8 text-xs
+   emerald-600; cartão rounded-xl border shadow p-4 space-y-3; grade de 6 colunas gap-2; rótulo text-xs
+   medium; campos h-8 text-xs rounded-md border shadow-sm; botões de contorno h-8 text-xs; Agrupar Por h-7
+   ligado em emerald-600. Os outros relatórios não têm .rpt-mak (continuam com a tela da 1.4.0).
+   A shell põe cor/tamanho com !important em botões e campos (.cadastro-emp-scope …): aqui a técnica
+   `html body #root … :not(#rpt-none)` do projeto, só dentro de .rpt-mak. */
+.mb1-app-shell .mb1-operational-page.rpt-mak { display: flex; flex-direction: column; gap: 8px; padding: 24px; background: #f8fafc; color: #0f172a; }
+.mb1-app-shell .mb1-operational-page.rpt-mak > * { flex-shrink: 0; }
+.rpt-mak__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.rpt-mak__heading { min-width: 0; }
+.rpt-mak .rpt-mak__title { margin: 0; font-size: 20px; line-height: 28px; font-weight: 700; color: #0f172a; letter-spacing: normal; }
+.rpt-mak .rpt-mak__subtitle { margin: 0; font-size: 12px; line-height: 16px; color: #475569; }
+.rpt-mak__subtitle em { font-style: normal; color: #047857; }
+.rpt-mak__busy { color: #059669; }
+.rpt-mak__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-left: auto; }
+
+html body #root .rpt-mak :is(.rpt-mak-print, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; height: 32px; min-height: 32px; margin: 0;
+  padding: 0 12px; border-radius: 6px !important; font-family: inherit; font-size: 12px !important; font-weight: 500 !important; line-height: 16px; white-space: nowrap;
+  cursor: pointer; transition: background-color .15s ease, color .15s ease, border-color .15s ease;
+}
+html body #root .rpt-mak :is(.rpt-mak-print, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none):disabled { opacity: .5; cursor: default; }
+html body #root .rpt-mak :is(.rpt-mak-print, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none):focus-visible { outline: none; box-shadow: 0 0 0 1px #0a0a0a; }
+html body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none) svg { width: 14px !important; height: 14px !important; flex: 0 0 14px; color: inherit !important; stroke: currentColor !important; }
+/* Imprimir (L514): verde-esmeralda, texto branco, sombra. */
+html body #root .rpt-mak .rpt-mak-print:not(#rpt-none) { margin-left: 4px; border: 0; background: #059669 !important; color: #fff !important; box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); }
+html body #root .rpt-mak .rpt-mak-print:not(#rpt-none):hover:not(:disabled) { background: #047857 !important; }
+/* Excel, PDF e "⋯": discretos (sem contorno), ao lado do Imprimir. */
+html body #root .rpt-mak .rpt-mak-ghost:not(#rpt-none) { padding: 0 8px; border: 0; background: transparent !important; color: #475569 !important; box-shadow: none; }
+html body #root .rpt-mak .rpt-mak-ghost:not(#rpt-none):hover:not(:disabled), html body #root .rpt-mak .rpt-mak-ghost[data-state="open"]:not(#rpt-none) { background: #f1f5f9 !important; color: #0f172a !important; }
+html body #root .rpt-mak .rpt-mak-ghost--icon:not(#rpt-none) { width: 32px; padding: 0; }
+html body #root .rpt-mak .rpt-mak-link:not(#rpt-none) { gap: 4px; padding: 0 8px; border: 0; background: transparent !important; color: #64748b !important; box-shadow: none; }
+html body #root .rpt-mak .rpt-mak-link:not(#rpt-none):hover { color: #0f172a !important; text-decoration: underline; text-underline-offset: 3px; }
+
+/* Cartão de filtros (Card p-4 space-y-3). */
+.rpt-mak__card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid #e5e5e5; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); }
+.rpt-mak__grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+.rpt-mak .rpt-bar-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+/* Rótulo (Label text-xs font-medium): no antigo o <label> é inline dentro do div.space-y-1, então a linha tem a
+   altura do texto do corpo (16px/24px) com o rótulo de 12px na linha de base — 24px de linha, texto embaixo. */
+html body #root .rpt-mak .rpt-bar-field__label:not(#rpt-none) { display: block; box-sizing: border-box; height: 24px; margin: 0; padding: 6px 0 0; overflow: hidden; color: #0a0a0a; font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap; text-overflow: ellipsis; }
+/* Campos (Input/SelectTrigger h-8 text-xs): borda neutra, sombra leve, foco com anel escuro de 1px. */
+html body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none) {
+  box-sizing: border-box; width: 100%; height: 32px !important; min-height: 32px !important; padding: 4px 12px !important; border: 1px solid #e5e5e5 !important; border-radius: 6px !important;
+  background: transparent !important; color: #0a0a0a !important; font-family: inherit; font-size: 12px !important; font-weight: 400; line-height: 16px; box-shadow: 0 1px 2px 0 rgb(0 0 0 / .05) !important; outline: none;
+}
+html body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none):is(:focus, :focus-visible, [data-state="open"]) { border-color: #e5e5e5 !important; background: transparent !important; box-shadow: 0 0 0 1px #0a0a0a !important; }
+html body #root .rpt-mak .rpt-bar-field__control:not(#rpt-none) > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit !important; }
+html body #root .rpt-mak .rpt-bar-field__control:not(#rpt-none) > svg { width: 16px; height: 16px; opacity: .5; color: inherit !important; stroke: currentColor !important; }
+/* Input do antigo é "flex": o ícone do calendário fica logo depois da data (não na ponta do campo). */
+html body #root .rpt-mak input.rpt-mak-input:not(#rpt-none) { display: flex; align-items: center; }
+.rpt-mak input.rpt-mak-input { color-scheme: light; }
+.rpt-mak input.rpt-mak-input::-webkit-calendar-picker-indicator { cursor: pointer; }
+
+/* Controles do tipo que ficam embaixo da grade: Agrupar Por do Analítico (L602–619). */
+.rpt-mak-group { display: flex; flex-direction: column; gap: 4px; }
+.rpt-mak-group__buttons { display: flex; flex-wrap: wrap; gap: 4px; }
+
+/* Linha de botões (L620–756): contorno h-8 text-xs, "(n)" quando há seleção. */
+.rpt-mak__buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rpt-mak-filter { position: relative; display: inline-flex; }
+html body #root .rpt-mak .rpt-mak-btn:not(#rpt-none) { border: 1px solid #e5e5e5; background: #fff !important; color: #0a0a0a !important; box-shadow: 0 1px 2px 0 rgb(0 0 0 / .05); }
+html body #root .rpt-mak .rpt-mak-btn:not(#rpt-none):hover:not(:disabled), html body #root .rpt-mak .rpt-mak-filter.is-open .rpt-mak-btn:not(#rpt-none) { background: #f5f5f5 !important; color: #171717 !important; }
+html body #root .rpt-mak .rpt-mak-btn--sm:not(#rpt-none) { height: 28px; min-height: 28px; }
+html body #root .rpt-mak .rpt-mak-btn--icon:not(#rpt-none) { gap: 4px; }
+html body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none) { border-color: #059669; background: #059669 !important; color: #fafafa !important; box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); }
+html body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none):hover { background: #047857 !important; color: #fafafa !important; }
+html body #root .rpt-mak .rpt-mak-btn[aria-disabled="true"]:not(#rpt-none) { opacity: .5; }
+.rpt-mak .rpt-locked-pill { height: 28px; margin: 0; padding: 0 10px; border-radius: 6px; font-size: 12px; }
+.rpt-mak-chip { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 4px 0 10px; border: 1px dashed #b7c2cf; border-radius: 6px; background: #f8fafc; color: #475569; font-size: 12px; white-space: nowrap; }
+html body #root .rpt-mak .rpt-mak-chip button:not(#rpt-none) { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 999px; background: transparent !important; color: inherit !important; cursor: pointer; }
+
+/* Detalhe de um grupo, avisos e erro: faixa curta entre o cartão e a folha (só quando há o que dizer). */
+.rpt-mak__notes { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rpt-mak__notes .rpt-warning, .rpt-mak__notes .rpt-error, .rpt-mak__notes .rpt-sheet-hint { margin: 0; }
+.rpt-mak .rpt-drill-pill { height: 28px; margin: 0; font-size: 12px; }
+
+/* A folha (área de impressão do antigo: bg-white): sempre o papel, a página inteira rola (sem rolagem própria). */
+.rpt-mak__paper { position: relative; min-width: 0; min-height: 240px; background: #fff; }
+.rpt-mak .rpt-sheet-host { overflow-x: auto; overflow-y: visible; max-height: none; padding: 24px 0 8px; background: transparent; }
+/* "Colunas Painel/Detalhes" fora da folha, no canto de cima da área do papel (a barra print:hidden do antigo).
+   O canto direito do cabeçalho da folha é vazio (logo à esquerda, nome no meio). */
+.rpt-mak__sheet-tools { position: absolute; top: 12px; right: 16px; z-index: 1; display: flex; align-items: center; gap: 8px; }
+/* Lista de marcar dos botões de filtro (portal: fora da página). Caixa como o Checkbox do antigo. */
+.rpt-mak-pop .rpt-mak-pop__item { cursor: pointer; }
+.rpt-mak-pop .rpt-mak-pop__item > button[role="checkbox"] { width: 16px; height: 16px; flex: 0 0 16px; padding: 0; border: 1px solid #171717; border-radius: 2px; background: #fff; color: #fafafa; box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1); }
+.rpt-mak-pop .rpt-mak-pop__item > button[role="checkbox"][data-state="checked"] { background: #171717; }
+.rpt-mak-pop .rpt-mak-pop__item > button[role="checkbox"]:focus-visible { outline: none; box-shadow: 0 0 0 1px #0a0a0a; }
+.rpt-mak-pop .rpt-mak-pop__condition { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px dashed #cbd5e1; border-radius: 6px; background: #f8fafc; color: #475569; font-size: 12px; }
+.rpt-mak-pop .rpt-mak-pop__condition button { padding: 0; border: 0; background: none; color: #047857; font-size: 12px; font-weight: 600; cursor: pointer; }
+
+@media (max-width: 767px) {
+  .mb1-app-shell .mb1-operational-page.rpt-mak { padding: 16px; }
+  .rpt-mak__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Tema escuro (o antigo não tinha): mesmas formas, cores da shell; a folha continua papel branco. */
+html:is(.dark, .tema-escuro, .escuro) .mb1-app-shell .mb1-operational-page.rpt-mak { background: #0d1117; color: #e6edf3; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak .rpt-mak__title { color: #e6edf3; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak .rpt-mak__subtitle { color: #8b949e; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak__subtitle em { color: #7ee2a8; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak__card { border-color: #30363d; background: #161b22; box-shadow: none; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-bar-field__label:not(#rpt-none) { color: #e6edf3; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none) { border-color: #30363d !important; background: #0d1117 !important; color: #e6edf3 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none):is(:focus, :focus-visible, [data-state="open"]) { box-shadow: 0 0 0 1px #8b949e !important; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak input.rpt-mak-input { color-scheme: dark; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-btn:not(#rpt-none) { border-color: #30363d; background: #161b22 !important; color: #e6edf3 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-btn:not(#rpt-none):hover:not(:disabled), html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-filter.is-open .rpt-mak-btn:not(#rpt-none) { background: #21262d !important; color: #e6edf3 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none) { border-color: #059669; background: #059669 !important; color: #fafafa !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-link):not(#rpt-none) { color: #adbac7 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-link):not(#rpt-none):hover:not(:disabled) { background: #21262d !important; color: #e6edf3 !important; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak__paper { background: #0d1117; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak-chip { border-color: #444c56; background: #161b22; color: #adbac7; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop { border-color: #30363d; background: #161b22; color: #e6edf3; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__item > button[role="checkbox"] { border-color: #adbac7; background: transparent; color: #0d1117; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__item > button[role="checkbox"][data-state="checked"] { background: #e6edf3; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__condition { border-color: #444c56; background: #0d1117; color: #adbac7; }

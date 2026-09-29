@@ -188,6 +188,8 @@ export const PESAGENS_VIEWS = Object.freeze([
 export const PESAGENS = defineReport({
   id: 'pesagens',
   family: 'pesagens',
+  // E1D (visual): tela "como o MAKGESTAO" (components/reports/MakgestaoScreen) — só Pesagens; só a tela.
+  screen: 'makgestao',
   grain: GRAINS.EVENT,
   version: 1,
   source: 'events.byPeriod',
