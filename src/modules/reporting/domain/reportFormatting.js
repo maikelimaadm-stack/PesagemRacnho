@@ -96,7 +96,11 @@ export function formatCell(column, value, target = 'screen') {
   return String(value);
 }
 
-/** Rótulo do cabeçalho com unidade: "Peso (kg)". */
+/**
+ * Rótulo do cabeçalho com unidade: "Peso (kg)". Rótulo que já termina na unidade (E1D, cabeçalho do antigo
+ * "Qtd @" na @ viva) não a repete — "Qtd @ (@)" seria ruído.
+ */
 export function headerLabel(column) {
-  return column.unit ? `${column.label} (${column.unit})` : column.label;
+  if (!column.unit || String(column.label ?? '').endsWith(` ${column.unit}`)) return column.label;
+  return `${column.label} (${column.unit})`;
 }

@@ -372,6 +372,13 @@ export async function runReport(definitionOrId, request = {}, actor) {
   const afterAggregate = now();
 
   const period = Object.values(params).find((value) => value && value.preset && value.from) || null;
+  // E1D: cabeçalho próprio do tipo (columnLabels, ex.: Vendas "Qtd @") — o mesmo nas colunas visíveis e nas
+  // disponíveis (seletor "Colunas", pílulas de filtro, rodapé "Filtros:"), para a coluna não mudar de nome.
+  const typedColumn = (id) => {
+    const column = publicColumn(selection.resolve(id));
+    const label = selection.view?.columnLabels?.[id];
+    return label ? { ...column, label } : column;
+  };
   // Resumido: lista em profundidade de nós (nível, caminho, rótulo, linhas, agregados) — SEM linhas de dados.
   const summaryRows = selection.mode === REPORT_MODES.RESUMIDO ? buildSummaryRows(tree.nodes, { summarySort: selection.summarySort }) : null;
   const drill = selection.drill.map((part) => {
@@ -416,12 +423,8 @@ export async function runReport(definitionOrId, request = {}, actor) {
     period,
     periodDescription: period ? describePeriod(period) : null,
     // E1D: cabeçalho próprio do tipo (columnLabels, ex.: Vendas "Qtd @") vale na tela, na folha e nas exportações.
-    columns: selection.columns.map((id) => {
-      const column = publicColumn(selection.resolve(id));
-      const label = selection.view?.columnLabels?.[id];
-      return label ? { ...column, label } : column;
-    }),
-    availableColumns: definition.columns.filter((column) => canSeeColumn(column, role)).map((column) => publicColumn(selection.resolve(column.id))),
+    columns: selection.columns.map(typedColumn),
+    availableColumns: definition.columns.filter((column) => canSeeColumn(column, role)).map((column) => typedColumn(column.id)),
     hiddenByPermission: selection.hiddenByPermission,
     search: selection.search,
     filters: selection.filters,

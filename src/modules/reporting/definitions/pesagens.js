@@ -109,20 +109,35 @@ export const MATRIX_TOTALS = Object.freeze([
 ]);
 
 // Vendas (Detalhado): só saídas por venda (condição FIXA do tipo, pelo código — a mesma população de
-// "Vendas do período"), agrupadas por comprador (texto do lançamento; na E5 vira o parceiro).
+// "Vendas do período": Saída + motivo Venda), agrupadas por comprador (texto do lançamento; na E5 vira o
+// parceiro). Comprador em branco cai no grupo "Não informado", sempre por último (motor de agrupamento).
 export const VENDAS_POPULATION = Object.freeze({
   tipo_manejo: { operator: 'in', values: ['Saída'], match: 'code' },
   motivo_saida: { operator: 'in', values: ['Venda'], match: 'code' },
 });
 export const VENDAS_COLUMNS = Object.freeze(['comprador', 'data_pesagem', 'numero_animal', 'peso', 'peso_arroba', 'valor_arroba', 'valor_venda_total']);
 export const VENDAS_AVAILABLE_COLUMNS = Object.freeze([...VENDAS_COLUMNS, 'destino_venda', 'nome_lote', 'nome_apartacao', 'sexo', 'raca', 'era', 'marca', 'observacao']);
+// Cabeçalhos do antigo (grade, folha, CSV, XLSX e seletor "Colunas"). "Qtd @" = @ de PESO VIVO (peso ÷
+// divisor de Configurações › Relatórios, 30 como o antigo) — não é a @ de carcaça do Comercial; "Valor @" =
+// preço da @ digitado no lançamento; "Valor total" = o valor digitado no lançamento. Sem valor digitado a
+// célula fica "—" e fora da soma: o antigo inventava peso ÷ 30 × valor @, e o Lançamento de hoje não grava
+// conta nenhuma no valor total (a estimativa dele é pela @ de carcaça, com rendimento).
+export const VENDAS_COLUMN_LABELS = Object.freeze({ peso_arroba: 'Qtd @', valor_arroba: 'Valor @', valor_venda_total: 'Valor total' });
+// Subtotal por comprador e total geral (item 3): animais, peso total, peso médio, @ e valor total — a @ em
+// total e média (o antigo mostrava a "Média (@)"). Animais DISTINTOS (o antigo contava linhas); @ = soma/
+// média da @ viva de cada linha; valor = soma só do que foi digitado (o chip diz "n de m" quando falta).
+// Ids próprios para animais/valor: o rótulo de curral deles (metricLabels) não muda os outros tipos.
 export const VENDAS_TOTALS = Object.freeze([
-  { id: 'animais', columnId: 'numero_animal', op: 'countDistinct' },
+  { id: 'animais_vendidos', columnId: 'numero_animal', op: 'countDistinct' },
   { id: 'peso_total', columnId: 'peso', op: 'sum' },
   { id: 'peso_medio', columnId: 'peso', op: 'avg' },
-  { id: 'arrobas', columnId: 'peso_arroba', op: 'sum' },
+  { id: 'total_arroba', columnId: 'peso_arroba', op: 'sum' },
+  { id: 'media_arroba', columnId: 'peso_arroba', op: 'avg' },
   { id: 'valor_total', columnId: 'valor_venda_total', op: 'sum' },
 ]);
+// Rótulos dos totais que só Vendas usa (Peso total/médio e Total/Média (@) são os da folha). Grade, folha,
+// CSV e XLSX leem o mesmo rótulo pelo id (metricLabels da definição).
+export const VENDAS_METRIC_LABELS = Object.freeze({ animais_vendidos: 'Animais', valor_total: 'Valor total' });
 
 // "Ordenar por": exatamente as 8 opções do antigo (item 6), com os rótulos dele. A tradução de cada uma
 // para a seleção de cada tipo fica em domain/sortChoices.js.
@@ -162,7 +177,7 @@ export const PESAGENS_VIEWS = Object.freeze([
   {
     id: 'vendas', label: 'Vendas (Detalhado)', mode: 'DETALHADO', titleKind: 'Sintético',
     groups: [{ columnId: 'comprador' }], population: VENDAS_POPULATION, columns: [...VENDAS_COLUMNS], aggregates: VENDAS_TOTALS,
-    columnChoices: { available: [...VENDAS_AVAILABLE_COLUMNS], defaults: [...VENDAS_COLUMNS] },
+    columnChoices: { available: [...VENDAS_AVAILABLE_COLUMNS], defaults: [...VENDAS_COLUMNS] }, columnLabels: VENDAS_COLUMN_LABELS,
   },
 ]);
 
@@ -197,7 +212,7 @@ export const PESAGENS = defineReport({
   matrixAxes: MATRIX_AXES,
   sortChoices: PESAGENS_SORT_CHOICES,
   defaultSortChoice: 'data_desc',
-  metricLabels: SHEET_METRIC_LABELS,
+  metricLabels: { ...SHEET_METRIC_LABELS, ...VENDAS_METRIC_LABELS },
   // A faixa exigida é do LOTE: só aparece quando o último nível de agrupamento é o lote (e no "TOTAL POR
   // LOTE"); em qualquer outro agrupamento as duas métricas saem da folha e das exportações.
   metricPairs: [{ id: 'faixa', label: 'Faixa exigida (kg)', from: 'faixa_min', to: 'faixa_max', leafOnly: true, leafColumnId: 'nome_lote', unit: 'kg' }],

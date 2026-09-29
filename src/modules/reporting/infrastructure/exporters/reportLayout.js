@@ -63,13 +63,16 @@ export function buildReportLines(viewModel, target) {
     row,
     cells: columns.map((column) => formatCell(column, cellRawValue(viewModel, column, row), target)),
   });
+  // Rótulo do total: o de curral da definição pelo id (metricLabels — o mesmo da grade e da folha, ex.:
+  // Vendas "Animais", "Média (@)", "Valor total"); sem ele, o técnico ("Média simples — Peso (kg)").
+  const metricLabels = viewModel.metricLabels ?? {};
   const totalLines = (type, aggregatesMap, level, group) => specsAt(level).map((spec) => {
     const result = aggregatesMap[spec.id];
     return {
       type,
       level,
       group,
-      metric: aggregateLabel(spec, valueColumns),
+      metric: (typeof metricLabels[spec.id] === 'string' && metricLabels[spec.id]) || aggregateLabel(spec, valueColumns),
       spec,
       value: formatCell(aggregateValueColumn(spec, valueColumns), result?.value ?? null, target),
       rawValue: result?.value ?? null,
