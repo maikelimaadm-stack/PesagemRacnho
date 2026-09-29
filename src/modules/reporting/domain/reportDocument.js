@@ -10,11 +10,16 @@
 // população da seção de nível 1 (buildLeafTotalBlock — o XLSX grava o mesmo bloco). Colunas: cada linha é gerada por columns.map — uma célula por coluna, na
 // ordem do cabeçalho (o erro de colunas desalinhadas do modelo antigo fica impossível por construção).
 // Coluna sem nenhum valor no relatório inteiro some (opção showEmptyColumns desliga); GMD sem pesagem
-// anterior fica "—" (o motor exclui) e a nota diz com quantos animais foi calculado.
+// anterior fica "—" (o motor exclui).
+//
+// E1D item 8 ("menos informação na folha" — vale para TODOS os relatórios: a folha é uma só): título
+// "(Analítico)"/"(Sintético)" pelo tipo do relatório; abaixo dele só "Período: dd/mm/aaaa a dd/mm/aaaa";
+// cabeçalho sem "Emitido em"; nenhuma nota longa. O rodapé leva só os filtros (numa linha), "@ = peso vivo
+// ÷ N" quando houver @, as colunas omitidas pelo perfil (quando houver) e quem emitiu e quando; "Página X
+// de Y" fica na margem da página.
 import { aggregateLabel, aggregateValueColumn } from './aggregateLabels.js';
 import { describeFilter } from './filterEngine.js';
 import { compareGroupLabels, groupRows, NONE_GROUP_KEY } from './groupEngine.js';
-import { computeAggregates } from './reportAggregates.js';
 import { REPORT_MODES } from './reportDefinition.js';
 import { formatCell, headerLabel, MISSING_SCREEN } from './reportFormatting.js';
 import { formatGroupLabel, summaryMetrics, SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC } from './summaryLayout.js';
@@ -520,21 +525,14 @@ export function decideSheetLayout({ layout, columns, rows }, { orientation = 'au
 // Documento
 // ---------------------------------------------------------------------------
 
-function gmdNote(viewModel, columns) {
-  const gmdVisible = columns.some((column) => column.kind === 'metric' && column.op === 'weightedGmd');
-  if (!gmdVisible || !viewModel.resolve) return null;
-  const withPrevious = viewModel.resolve('animais_com_anterior');
-  const animalColumnId = viewModel.animalColumnId ?? 'numero_animal';
-  if (!withPrevious || !viewModel.resolve(animalColumnId)) return null;
-  const totals = computeAggregates(viewModel.rows ?? [], [
-    { id: 'n', op: 'countDistinct', columnId: 'animais_com_anterior' },
-    { id: 'm', op: 'countDistinct', columnId: animalColumnId },
-  ], viewModel.resolve);
-  const n = totals.n?.value ?? 0;
-  const m = totals.m?.value ?? 0;
-  if (!m) return null;
-  // Um animal entra na conta se tem ao menos uma pesagem com anterior; a pesagem sem anterior fica fora.
-  return `GMD calculado com ${n} de ${m} animais: onde não há pesagem anterior aparece "—" (nunca 0,000), fora da média.`;
+/**
+ * Título da folha. E1D: pelo tipo do relatório (view.titleKind) — "Analítico" só no Analítico; os outros
+ * quatro, inclusive Vendas (que é Detalhado), "Sintético", como no MAKGESTAO. Sem tipo (Personalizado e os
+ * demais relatórios), pelo modo, como na E1B.
+ */
+export function sheetTitleOf(viewModel) {
+  const kind = viewModel.view?.titleKind ?? (viewModel.mode === REPORT_MODES.RESUMIDO ? 'Sintético' : 'Analítico');
+  return `Relatório de ${viewModel.sheetTitle ?? viewModel.reportName} (${kind})`;
 }
 
 /**
@@ -560,26 +558,22 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const print = decideSheetLayout({ layout: summary ? 'summary' : 'detail', columns, rows: allRows(body) }, { orientation, widths });
 
   // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
-  const usesArroba = columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
-    || (!summary && hasRows && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@'));
+  // Sem linhas a folha é só "Nenhum registro…" (nenhuma coluna aparece): nada em @ para explicar.
+  const usesArroba = hasRows && (columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
+    || (!summary && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@')));
   const divisor = viewModel.arrobaDivisor ?? 30;
-  const notes = [...(viewModel.notes ?? [])];
-  const gmd = summary ? gmdNote(viewModel, columns) : null;
-  if (gmd) notes.push(gmd);
-  if (hiddenColumns.length) notes.push(`Sem nenhum valor no relatório (colunas ocultas): ${hiddenColumns.map((column) => column.label).join(', ')}.`);
-  if (viewModel.hiddenByPermission?.length) notes.push(`${viewModel.hiddenByPermission.length} coluna(s) omitida(s) pelo perfil de quem emitiu.`);
-  if (body.truncated) notes.push(`Na tela aparecem ${body.truncated.shown.toLocaleString('pt-BR')} de ${body.truncated.total.toLocaleString('pt-BR')} linhas; a impressão e o PDF levam todas.`);
-  notes.push('Ausentes aparecem como “—” e não entram em médias e somas. Totais recalculados sobre a população de cada grupo.');
+  const omitted = viewModel.hiddenByPermission?.length ?? 0;
 
   const emitted = formatEmittedAt(viewModel.generatedAt);
   const emitter = viewModel.emittedBy?.nome ?? viewModel.emittedBy?.id ?? '—';
   const periodText = viewModel.period ? `Período: ${brDate(viewModel.period.from)} a ${brDate(viewModel.period.to)}` : 'Estado atual (hoje)';
+  // E1D item 8: só isto no rodapé. As colunas omitidas pelo perfil ficam (curto e só quando acontece): quem
+  // lê o papel precisa saber que faltou coluna por permissão, e não porque não havia valor.
   const footer = {
     filtros: `Filtros: ${describeReportFilters(viewModel)}`,
     arroba: usesArroba ? `@ = peso vivo ÷ ${divisor}` : null,
+    omitidas: omitted ? `${omitted} coluna(s) omitida(s) pelo perfil de quem emitiu` : null,
     emitidoPor: `Emitido por ${emitter} em ${emitted}`,
-    versao: `Pesagens Individuais v${viewModel.appVersion ?? ''}`,
-    emissao: `Emissão ${String(viewModel.emissionId ?? '').slice(0, 8)}`,
   };
   return {
     kind: DOCUMENT_KIND,
@@ -587,11 +581,10 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     mode: viewModel.mode,
     layout: summary ? 'summary' : 'detail',
     reportId: viewModel.reportId,
-    title: `Relatório de ${viewModel.sheetTitle ?? viewModel.reportName} (${summary ? 'Sintético' : 'Analítico'})`,
-    subtitle: `${summary ? 'Resumido' : 'Detalhado'}${levels.length ? ` · ${levels.map((level) => level.label).join(' › ')}` : ''}`,
+    title: sheetTitleOf(viewModel),
     header: header ?? null,
+    // Abaixo do título (no lugar do antigo "Resumido · Apartação › Data › Lote"): só o período.
     periodText,
-    emittedText: `Emitido em ${emitted}`,
     levels,
     columns,
     hiddenColumns,
@@ -599,11 +592,11 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     flat: body.flat,
     grandTotal: body.grandTotal,
     drillTargets: body.drillTargets,
+    // Só a tela limita as linhas do Detalhado; o aviso é da tela (a impressão leva todas).
     truncated: body.truncated ?? null,
+    screenNotice: body.truncated ? `Na tela aparecem ${body.truncated.shown.toLocaleString('pt-BR')} de ${body.truncated.total.toLocaleString('pt-BR')} linhas; a impressão e o PDF levam todas.` : null,
     empty: !hasRows,
-    notes,
     footer,
-    pageFooter: `${footer.versao} · ${footer.emissao} · ${viewModel.reportName ?? ''}`,
     print,
     stats: body.stats,
   };

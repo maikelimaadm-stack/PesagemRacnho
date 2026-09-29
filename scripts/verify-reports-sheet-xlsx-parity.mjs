@@ -6,8 +6,9 @@
 //      linhas da planilha; o bloco fecha o nó de nível 1 (antes do próximo nível 1 ou do Total geral);
 //   b) a faixa exigida (par leafOnly, colunas mínima/máxima) só nas linhas do lote do bloco — nunca no
 //      "Total <nível 1>"; o Total é o nó de nível 1 (população inteira), nunca soma das linhas;
-//   c) casos: Pesagens › Por apartação (resumo por data), com ordem por métrica e divisor 15, folha por
-//      data (faixa fora), sem totais (contagem de linhas) e Desempenho apartação › lote › sexo;
+//   c) casos: Pesagens › Por apartação (resumo por data) — E1D: o tipo com as colunas padrão e com todas —,
+//      com ordem por métrica e divisor 15, folha por data (faixa fora), sem totais (contagem de linhas) e
+//      Desempenho apartação › lote › sexo;
 //   d) NEGATIVOS: com 1 ou 2 níveis e no Detalhado não há bloco; o CSV e o JSON não têm o bloco; XLSX
 //      adulterado (valor, rótulo, faixa no Total, Total somado, título removido) é detectado.
 import assert from 'node:assert/strict';
@@ -15,8 +16,8 @@ import { ADMIN, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.m
 import { runReport } from '../src/modules/reporting/application/reportService.js';
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
 import { getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
-import { SHEET_TOTALS } from '../src/modules/reporting/definitions/pesagens.js';
-import { viewSelection } from '../src/modules/reporting/domain/reportViews.js';
+import { SHEET_COLUMN_KEYS, SHEET_TOTALS } from '../src/modules/reporting/definitions/pesagens.js';
+import { applyColumnKeys, listReportViews, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
 import { buildReportDocument, buildLeafTotalBlock, DOC_ROW_TYPES } from '../src/modules/reporting/domain/reportDocument.js';
 import { buildSummaryLayout } from '../src/modules/reporting/domain/summaryLayout.js';
 import { DEFAULT_DECIMALS, roundTo } from '../src/modules/reporting/domain/reportFormatting.js';
@@ -166,9 +167,13 @@ function checkBlocks(name, vm, rows) {
 }
 
 // ---- a/b/c) casos com 3 níveis ----
-const PAD = viewSelection('por-apartacao-data', PESAGENS);
+// E1D: o tipo "Por Apartação (Resumo por Data)" (colunas padrão do tipo: Qtd, Faixa, Menor, Maior, Peso médio,
+// Média @, Peso total, GMD médio, Machos, Fêmeas) e, num caso, com TODAS as colunas do seletor.
+const PAD_VIEW = listReportViews(PESAGENS).find((view) => view.id === 'por-apartacao-data');
+const PAD = viewSelection(PAD_VIEW, PESAGENS);
 const cases = [
   { name: 'Pesagens › Por apartação (resumo por data)', id: 'pesagens', selection: PAD },
+  { name: 'Por apartação com todas as colunas', id: 'pesagens', selection: { ...PAD, ...applyColumnKeys(PAD_VIEW, PESAGENS, SHEET_COLUMN_KEYS) } },
   { name: 'Por apartação, ordem Peso médio crescente', id: 'pesagens', selection: { ...PAD, summarySort: { key: 'peso_medio', direction: 'asc' } } },
   { name: 'Por apartação, divisor 15', id: 'pesagens', selection: PAD, extra: { arrobaDivisor: 15 } },
   { name: 'Apartação › Lote › Data (faixa fora)', id: 'pesagens', selection: { mode: 'RESUMIDO', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'nome_lote' }, { columnId: 'data_pesagem', direction: 'desc' }], aggregates: SHEET_TOTALS } },
@@ -266,11 +271,14 @@ for (const testCase of cases) {
 
 // ---- d) NEGATIVOS ----
 // 1 e 2 níveis: nenhum bloco (nem na planilha nem nas linhas montadas).
+// E1D: "Por lote" (E1B) escrito à mão; o tipo "Por Apartação/Lote" (2 níveis) também não tem bloco; o
+// Detalhado é "Personalizado" (view null: o tipo é Resumido).
 const noBlock = [
-  ['Pesagens › Por lote (1 nível)', 'pesagens', viewSelection('por-lote', PESAGENS)],
+  ['Pesagens › Por lote (1 nível)', 'pesagens', { mode: 'RESUMIDO', groups: [{ columnId: 'nome_lote' }], aggregates: SHEET_TOTALS }],
   ['Pesagens apartação › lote (2 níveis)', 'pesagens', { mode: 'RESUMIDO', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'nome_lote' }], aggregates: SHEET_TOTALS }],
+  ['Pesagens › tipo Por Apartação/Lote (2 níveis)', 'pesagens', viewSelection('por-apartacao-lote', PESAGENS)],
   ['Desempenho apartação › lote (2 níveis)', 'desempenho', { mode: 'RESUMIDO', groups: [{ columnId: 'apartacao' }, { columnId: 'lote' }] }],
-  ['Por apartação no Detalhado', 'pesagens', { ...PAD, mode: 'DETALHADO' }],
+  ['Por apartação no Detalhado', 'pesagens', { ...PAD, view: null, mode: 'DETALHADO' }],
 ];
 for (const [name, id, selection] of noBlock) {
   const vm = await run(id, selection);

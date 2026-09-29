@@ -6,11 +6,37 @@ import { parseBrazilianNumber } from '../../modules/weighing/domain/brazilianVal
 import { coerceRecord } from '../../modules/catalog/domain/registryDefinitions.js';
 import { buildPropertyHeader } from '../../modules/catalog/domain/propertyHeader.js';
 import { documentProblem, documentToForm } from '../../modules/catalog/domain/documentMask.js';
+import { matchesFilter } from '../../modules/reporting/domain/filterEngine.js';
 
 // Campo CPF/CNPJ (Propriedades e Parceiros, id 'documento'): máscara ao digitar (DocumentInput.jsx) e o
 // valor guardado aparece formatado ao abrir a ficha. Ao salvar segue o texto mascarado, e o serviço grava
 // normalizeDocument como antes.
 export const isDocumentField = (campo) => campo?.id === 'documento' && (campo.tipo ?? 'texto') === 'texto';
+
+// Resposta 2 ao REPORT da E1C: na grade o CPF/CNPJ aparece com a máscara, e a pesquisa e o filtro da coluna
+// aceitam o documento com ou sem pontuação ("11.222.333/0001-81" acha o mesmo que "11222333000181"; o CNPJ
+// alfanumérico também). A comparação usa só letras e números; o valor guardado não muda.
+export const documentSearchKey = (text) => String(text ?? '').toLocaleUpperCase('pt-BR').replace(/[^0-9A-Z]/g, '');
+
+/** Pesquisa geral da grade: termo com algum dígito acha o documento com ou sem pontuação (trecho também). */
+export function matchesDocumentSearch(value, term) {
+  if (!/\d/.test(String(term ?? ''))) return false;
+  const key = documentSearchKey(term);
+  return key.length > 0 && documentSearchKey(value).includes(key);
+}
+
+/** Filtro da coluna CPF/CNPJ (pílula ou menu da coluna): texto da célula e do filtro sem pontuação. */
+export function matchesDocumentColumnFilter(cellText, filter) {
+  const compact = filter && typeof filter === 'object'
+    ? {
+      ...filter,
+      ...(typeof filter.value === 'string' || typeof filter.value === 'number' ? { value: documentSearchKey(filter.value) } : {}),
+      ...(typeof filter.valueTo === 'string' ? { valueTo: documentSearchKey(filter.valueTo) } : {}),
+      ...(Array.isArray(filter.values) ? { values: filter.values.map(documentSearchKey) } : {}),
+    }
+    : documentSearchKey(filter);
+  return matchesFilter(documentSearchKey(cellText), compact, 'text');
+}
 
 // Valor sentinela do item "Nenhum" (Radix não aceita item com valor vazio).
 export const NONE_OPTION = '__nenhum__';

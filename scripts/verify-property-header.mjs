@@ -93,7 +93,9 @@ assert.ok(campos.documento.compacto && campos.inscricao_estadual.compacto && cam
 assert.equal(campos.inscricao_estadual.tipo, 'texto', 'IE é texto próprio (não passa pela limpeza de dígitos)');
 assert.equal(campos.mostrar_documento_no_cabecalho.tipo, 'booleano');
 assert.equal(campos.mostrar_documento_no_cabecalho.defaultValue, false, 'opção de mostrar documento nasce desligada');
-assert.equal(campos.mostrar_documento_no_cabecalho.label, 'Mostrar CPF/CNPJ e IE no cabeçalho');
+// E1D item 8: a mesma opção vale para CPF/CNPJ, IE e telefone.
+assert.equal(campos.mostrar_documento_no_cabecalho.label, 'Mostrar CPF/CNPJ, IE e telefone no cabeçalho');
+assert.equal(emptyFor(PROPRIEDADES).mostrar_documento_no_cabecalho, false, 'ficha nova: "Mostrar no cabeçalho" desmarcado');
 assert.ok(!PROPRIEDADES.colunas.some((coluna) => coluna.id === 'logo'), 'NEGATIVO: logo não vira coluna da lista');
 assert.deepEqual(PROPRIEDADES.unicidade, ['nome_normalizado'], 'NEGATIVO: documento fora da unicidade (a store não tem índice de documento)');
 for (const def of REGISTRY_DEFINITIONS.filter((item) => item !== PROPRIEDADES)) {
@@ -271,6 +273,15 @@ assert.equal(SYSTEM_NAME, 'Pesagens Individuais');
 assert.equal(buildPropertyHeader({ ...completa, mostrar_documento_no_cabecalho: null }).documentos, null, 'NEGATIVO: documentos só com a opção ligada (desligada = null)');
 assert.equal(buildPropertyHeader({ ...completa, mostrar_documento_no_cabecalho: false }).documentos, null, 'NEGATIVO: opção false também esconde');
 assert.equal(buildPropertyHeader({ ...completa, mostrar_documento_no_cabecalho: undefined }).documentos, null, 'NEGATIVO: registro antigo (sem o campo) esconde');
+// E1D item 8: telefone também só com a opção ligada (cabeçalho padrão: logo, produtor, fazenda, endereço).
+for (const desligada of [null, false, undefined, 'true']) {
+  const semOpcao = buildPropertyHeader({ ...completa, mostrar_documento_no_cabecalho: desligada });
+  assert.equal(semOpcao.telefone, null, `NEGATIVO: telefone escondido com a opção ${String(desligada)}`);
+  const html = renderSheetHeaderHtml(semOpcao);
+  assert.ok(!html.includes('99999-0000') && !html.includes('123.456.789-01') && !html.includes('ISENTO'), `NEGATIVO: folha sem CPF, IE e telefone com a opção ${String(desligada)}`);
+  assert.ok(html.includes('ZIGOMAR FERREIRA FRANCO FILHO') && html.includes('FAZENDA KAIMAN') && html.includes('GLEBA RICARDO FRANCO SN - ZONA RURAL, VILA BELA DA SST. TRINDADE-MT'), 'cabeçalho padrão: produtor, fazenda, endereço, município-UF');
+}
+assert.equal(headerPreviewFromForm(PROPRIEDADES, { ...formFromRecord(PROPRIEDADES, completa), mostrar_documento_no_cabecalho: false }).telefone, null, 'pré-visualização: desligar a opção tira o telefone');
 assert.equal(buildPropertyHeader({ ...completa, documento: '12345678000190', inscricao_estadual: null }).documentos, 'CNPJ 12.345.678/0001-90', 'CNPJ formatado');
 assert.deepEqual(formatDocumento('123'), { tipo: 'CPF/CNPJ', texto: '123' }, 'documento fora do tamanho sai como está');
 for (const logo of [recusados.svg, recusados.http, grande, 'lixo']) {
@@ -278,7 +289,9 @@ for (const logo of [recusados.svg, recusados.http, grande, 'lixo']) {
 }
 const html = renderSheetHeaderHtml(buildPropertyHeader(completa), { periodText: 'Período: 02/06/2026 – 02/06/2026' });
 assert.ok(html.includes(`<img class="sheet-logo" src="${PNG_1X1}"`), 'folha desenha o logo');
-assert.ok(html.includes('ZIGOMAR FERREIRA FRANCO FILHO') && html.includes('FAZENDA KAIMAN') && html.includes('CPF 123.456.789-01 · IE ISENTO'), 'folha com produtor, fazenda e documentos');
+assert.ok(html.includes('ZIGOMAR FERREIRA FRANCO FILHO') && html.includes('FAZENDA KAIMAN') && html.includes('CPF 123.456.789-01 · IE ISENTO') && html.includes('Tel. (65) 99999-0000'), 'folha com produtor, fazenda, documentos e telefone (opção ligada)');
+// E1D item 8: o cabeçalho não leva período nem "Emitido em" (o período vai abaixo do título; a emissão, no rodapé).
+assert.ok(!html.includes('Período') && !html.includes('Emitido') && html.includes('<div class="sheet-header__meta"></div>'), 'NEGATIVO: canto direito do cabeçalho vazio');
 assert.ok(!renderSheetHeaderHtml(buildPropertyHeader({ ...completa, logo: recusados.svg })).includes('<img'), 'NEGATIVO: logo inválido não vira <img>');
 assert.ok(!renderSheetHeaderHtml({ ...buildPropertyHeader(completa), logo: recusados.script }).includes('<img'), 'NEGATIVO: a folha revalida o logo mesmo se o modelo vier adulterado');
 const escapado = renderSheetHeaderHtml(buildPropertyHeader({ ...completa, titular_nome: '<b>A & "B"</b>' }));
@@ -463,6 +476,7 @@ assert.match(preview, /import \{ renderSheetHeaderHtml \} from '@\/modules\/repo
 assert.match(preview, /import \{ SHEET_CSS \} from '@\/modules\/reporting\/infrastructure\/exporters\/sheetStyles'/, 'pré-visualização usa o CSS da folha');
 assert.match(preview, /<style>\{SHEET_CSS\}<\/style>\s*<div className="rpt-sheet rpt-sheet--preview" dangerouslySetInnerHTML=\{\{ __html: html \}\}/, 'folha dentro de .rpt-sheet--preview');
 assert.ok(preview.includes('Assim vai sair nos relatórios') && preview.includes('headerPreviewFromForm(definition, form'), 'cartão "Assim vai sair nos relatórios" ao vivo com o formulário');
+assert.ok(!/periodText|emittedText|Emitido em/.test(preview), 'NEGATIVO (E1D): a pré-visualização não inventa período nem emissão no cabeçalho');
 for (const trecho of ['createImageBitmap', 'URL.createObjectURL', "toDataURL('image/png')", "'image/jpeg'", 'fitWithin(', 'LOGO_MAX_WIDTH_PX']) assert.ok(logoImage.includes(trecho), `logoImage: ${trecho}`);
 assert.match(css, /E1B[\s\S]{0,400}\.aux-logo-field/, 'bloco E1B no CSS dos cadastros');
 ok('tela');

@@ -1,8 +1,9 @@
 // Documento de impressão/PDF (docs/reporting/EXPORT-CONTRACT.md §impressão). E1B (1.4.0): é a FOLHA do
 // relatório — o mesmo documento (domain/reportDocument) e o mesmo renderizador (sheetHtml) da tela, em
 // HTML autossuficiente, sem script: cabeçalho da propriedade (com logo) e rodapé que se repetem em todas
-// as páginas, seções por nível, subtotais, "TOTAL POR", total geral, notas e "Página X de Y" (margem do
-// @page — o mesmo mecanismo na impressão, no PDF e no iframe de desenvolvimento).
+// as páginas, seções por nível, subtotais, "TOTAL POR", total geral e "Página X de Y" (margem do
+// @page — o mesmo mecanismo na impressão, no PDF e no iframe de desenvolvimento). E1D item 8: sem notas e
+// sem versão/código da emissão na margem (a emissão continua no manifesto do arquivo).
 import { buildReportDocument, describeReportFilters, SHEET_PAGE } from '../../domain/reportDocument.js';
 import { SYSTEM_NAME } from '../../../catalog/domain/propertyHeader.js';
 import { SHEET_CSS, pageCss } from './sheetStyles.js';
@@ -54,7 +55,7 @@ export function buildPrintDocument(viewModel, options = {}) {
 <title>${escapeHtml(doc.title)}</title>
 <style>
 ${SHEET_CSS}
-${pageCss({ orientation: doc.print.orientation, pageFooter: doc.pageFooter })}
+${pageCss({ orientation: doc.print.orientation })}
 </style>
 </head>
 <body>

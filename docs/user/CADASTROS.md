@@ -128,7 +128,7 @@ terceiro ligada a eles.
 
 Na ficha da propriedade, o cartão **Cabeçalho dos relatórios** define o que sai
 no alto de cada relatório impresso: **Produtor / razão social**, **Endereço**,
-**CPF/CNPJ**, **Inscrição estadual**, **Mostrar CPF/CNPJ e IE no cabeçalho**,
+**CPF/CNPJ**, **Inscrição estadual**, **Mostrar CPF/CNPJ, IE e telefone no cabeçalho**,
 **Telefone** e **Logo** (PNG ou JPG; o programa reduz sozinho para até 400
 pixels de largura e 300 KB). Ao lado, a **pré-visualização** mostra como vai
 sair. Vale para a propriedade **Padrão** e para o relatório filtrado por aquela

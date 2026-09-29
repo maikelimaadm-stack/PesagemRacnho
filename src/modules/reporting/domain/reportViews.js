@@ -3,7 +3,7 @@
 // caminho de filtro. As visões declaradas na definição (`views`, validadas em defineReport) valem; sem
 // nenhuma, o relatório ganha "Resumo por <agrupamento padrão>" (se tiver) e "Analítico".
 // Visões NÃO são aliases antigos (LEGACY_REPORT_ALIASES) e não viram presetId no manifesto.
-import { REPORT_MODES, metricKeysOf } from './reportDefinition.js';
+import { REPORT_MODES, VIEW_LAYOUTS, metricKeysOf } from './reportDefinition.js';
 import { aggregateSpecId } from './reportAggregates.js';
 
 export const DEFAULT_VIEW_ID = 'padrao';
@@ -166,6 +166,14 @@ export function filtersForDisplay(filters, columns = []) {
 
 const aggregatesKey = (list) => JSON.stringify((list ?? []).map((spec) => `${spec.id}|${spec.op}|${spec.columnId ?? ''}`).sort());
 
+// E1D: a matriz declara groups vazio (os níveis vêm dos eixos); pela estrutura ela é Linhas › Colunas nos
+// eixos padrão. Sem isto um Resumido sem agrupamento (só o Total geral) passaria por "Sintético (Matriz)".
+function structuralGroups(definition, view) {
+  if (view.layout !== VIEW_LAYOUTS.MATRIX) return view.groups ?? [];
+  const axes = definition?.matrixAxes ?? [];
+  return [view.matrix?.eixoY, view.matrix?.eixoX].map((id) => axes.find((axis) => axis.id === id)).filter(Boolean).map((axis) => ({ columnId: axis.columnId }));
+}
+
 /**
  * Qual visão bate com o estado da tela: mesmas colunas de agrupamento (na mesma ordem e direção) e mesmo
  * modo; quando o estado informa `aggregates`, os mesmos totais; no Detalhado, quando informa `columns`,
@@ -177,7 +185,7 @@ export function matchView(definition, state = {}) {
   const groups = (state.groups ?? definition?.defaultGroups ?? []).filter((group) => group?.columnId);
   const mode = state.mode ?? definition?.defaultMode ?? REPORT_MODES.DETALHADO;
   const found = listReportViews(definition).find((view) => {
-    if (view.mode !== mode || !sameGroups(view.groups, groups)) return false;
+    if (view.mode !== mode || !sameGroups(structuralGroups(definition, view), groups)) return false;
     if (Array.isArray(state.aggregates) && aggregatesKey(state.aggregates) !== aggregatesKey(view.aggregates ?? definition.defaultAggregates)) return false;
     if (mode === REPORT_MODES.DETALHADO && Array.isArray(state.columns)) {
       const expected = view.columns ?? definition.defaultColumns ?? [];

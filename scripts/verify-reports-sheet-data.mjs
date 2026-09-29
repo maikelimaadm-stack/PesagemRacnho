@@ -6,7 +6,9 @@
 //   3. vm.arrobaDivisor e manifesto; reuse com divisor diferente não reaproveita linhas.
 //   4. Machos/Fêmeas (0 onde não há), animais com pesagem anterior, filtro "Pesagem anterior" sim/não.
 //   5. "Tipo de relatório": cada visão de Pesagens = a seleção equivalente; padrão + analítico gerados
-//      para relatório sem visões; defineReport recusa visão incoerente.
+//      para relatório sem visões; defineReport recusa visão incoerente. E1D: os tipos de Pesagens são os
+//      5 do MAKGESTAO; onde este gate usava um tipo da E1B que saiu ("Por lote", "Por data", "Analítico
+//      por animal") para exercitar a folha, usa a MESMA seleção escrita à mão (agora "Personalizado").
 //   6. Rótulos de curral no cabeçalho do Resumido; kg agregado com 1 casa, @ com 2, GMD com 3.
 //   7. Colunas novas não sensíveis e nenhum valor comercial vaza para quem não vê.
 import assert from 'node:assert/strict';
@@ -15,11 +17,11 @@ import { runReport } from '../src/modules/reporting/application/reportService.js
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
 import { getReportDefinition, listAllReportDefinitions, LEGACY_REPORT_ALIASES } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { EVENT_COLUMNS } from '../src/modules/reporting/definitions/columns/eventColumns.js';
-import { SHEET_TOTALS } from '../src/modules/reporting/definitions/pesagens.js';
+import { ANALYTIC_EVENT_COLUMNS, SHEET_COLUMN_KEYS, SHEET_TOTALS, SHEET_TOTALS_SEM_FAIXA, VENDAS_COLUMNS, VENDAS_POPULATION, VENDAS_TOTALS } from '../src/modules/reporting/definitions/pesagens.js';
 import { defineReport, createColumnResolver } from '../src/modules/reporting/domain/reportDefinition.js';
 import { defineColumn } from '../src/modules/reporting/domain/columnDefinition.js';
 import { GRAINS } from '../src/modules/reporting/domain/reportGrain.js';
-import { filtersForDisplay, listReportViews, matchView, parseSortChoice, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
+import { applyColumnKeys, filtersForDisplay, listReportViews, matchView, parseSortChoice, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
 import { buildSummaryLayout, summaryMetrics, SUMMARY_LABEL_SORT } from '../src/modules/reporting/domain/summaryLayout.js';
 import { groupRows } from '../src/modules/reporting/domain/groupEngine.js';
 import { buildReportDocument, orderNodes } from '../src/modules/reporting/domain/reportDocument.js';
@@ -42,6 +44,11 @@ const byLabel = (vm) => Object.fromEntries(vm.summaryRows.map((row) => [row.labe
 const value = (node, id) => node.aggregates[id]?.value ?? null;
 const NEW_COLUMNS = ['lote_peso_minimo', 'lote_peso_maximo', 'peso_arroba', 'ganho_arroba', 'animais_machos', 'animais_femeas', 'animais_com_anterior', 'tem_pesagem_anterior'];
 const FOLHA_IDS = ['qtd', 'faixa_min', 'faixa_max', 'menor', 'maior', 'peso_medio', 'media_arroba', 'peso_total', 'total_arroba', 'ganho_medio', 'ganho_medio_arroba', 'ganho_total', 'ganho_total_arroba', 'dias_medios', 'gmd_medio', 'machos', 'femeas'];
+// Seleções da folha escritas à mão (as dos tipos "Por lote" e "Por data" da E1B, que saíram na E1D):
+// continuam válidas como "Personalizado" e exercitam todas as métricas da folha.
+const POR_LOTE = { mode: 'RESUMIDO', groups: [{ columnId: 'nome_lote' }], aggregates: SHEET_TOTALS };
+const POR_DATA = { mode: 'RESUMIDO', groups: [{ columnId: 'data_pesagem', direction: 'desc' }], aggregates: SHEET_TOTALS_SEM_FAIXA };
+const APDATA_GROUPS = [{ columnId: 'nome_apartacao' }, { columnId: 'data_pesagem', direction: 'desc' }, { columnId: 'nome_lote' }];
 
 // ---- 0. Colunas novas: existem, não sensíveis, derivadas/atuais, fora da Relação ----
 for (const id of NEW_COLUMNS) {
@@ -76,7 +83,7 @@ assert.deepEqual([comId.lote_peso_minimo, comId.lote_peso_maximo, comId.arroba_d
 assert.deepEqual([soNome.lote_peso_minimo, soNome.lote_peso_maximo], [null, null], 'NEGATIVO: sem lote_id não busca faixa pelo nome');
 
 // Sessão agrupa em ordem de DATA: o rótulo "dd/mm/aaaa · status" ordenado como texto punha
-// 01/01/2026 antes de 01/10/2025 (Tipo "Resumo por Sessão", o que Pesagens abre).
+// 01/01/2026 antes de 01/10/2025 (Sessão continua no "Agrupar por"; até a E1C era o tipo que Pesagens abria).
 const sessionRows = enrichEventRows(['S1', 'S2', 'S3'].map((sessao_id, index) => ({ id: `s${index}`, sessao_id, numero_animal: String(index), peso: 300 })), buildEventLookups({
   sessoes: [{ id: 'S1', data: '2026-01-01', status: 'ABERTA' }, { id: 'S2', data: '2025-10-01', status: 'FECHADA' }, { id: 'S3', data: '2025-12-02', status: 'ABERTA' }],
 }));
@@ -96,7 +103,7 @@ assert.deepEqual([rowById.e4.lote_peso_minimo, rowById.e4.lote_peso_maximo], [20
 assert.deepEqual([rowById.e9.lote_peso_minimo, rowById.e9.lote_peso_maximo], [null, null], 'e9 sem lote: faixa vazia');
 assert.ok(detalhe.rows.every((row) => row.arroba_divisor === 30), 'divisor 30 em toda linha');
 
-const porLote30 = await run(viewSelection('por-lote', PESAGENS), { arrobaDivisor: 30 });
+const porLote30 = await run(POR_LOTE, { arrobaDivisor: 30 });
 const lotes30 = byLabel(porLote30);
 assert.deepEqual(Object.keys(lotes30), ['Lote 01', 'Lote 02', 'Não informado'], 'Por lote: Lote 01, Lote 02, Não informado');
 assert.deepEqual([value(lotes30['Lote 01'], 'faixa_min'), value(lotes30['Lote 01'], 'faixa_max')], [300, 400], 'Lote 01: faixa exigida 300–400');
@@ -118,17 +125,17 @@ const checkArroba = (vm, divisor, context) => {
 checkArroba(porLote30, 30, 'divisor 30');
 close(porLote30.totals.peso_total.value, 2375, 'peso total da massa');
 close(porLote30.totals.total_arroba.value, 2375 / 30, 'Total (@) geral = 2375 ÷ 30');
-const porLote15 = await run(viewSelection('por-lote', PESAGENS), { arrobaDivisor: 15 });
+const porLote15 = await run(POR_LOTE, { arrobaDivisor: 15 });
 checkArroba(porLote15, 15, 'divisor 15');
 close(porLote15.totals.total_arroba.value, 2375 / 15, 'Total (@) geral = 2375 ÷ 15');
 await assert.rejects(() => run({}, { arrobaDivisor: 20 }), /divisor da arroba/, 'NEGATIVO: divisor fora de 30/15 é recusado');
 
 // Pelas Configurações (sem arrobaDivisor na chamada): padrão 30, gravado 15, gravado inválido → 30.
 assert.equal((await getReportSettings()).arroba_divisor, 30, 'Configurações: padrão 30');
-const semDivisor = await run(viewSelection('por-lote', PESAGENS));
+const semDivisor = await run(POR_LOTE);
 assert.equal(semDivisor.arrobaDivisor, 30, 'sem configuração: divisor 30');
 await updateAppConfig(ADMIN, { arroba_divisor: 15 });
-const configurado = await run(viewSelection('por-lote', PESAGENS));
+const configurado = await run(POR_LOTE);
 checkArroba(configurado, 15, 'Configurações 15');
 assert.equal(configurado.rows.every((row) => row.arroba_divisor === 15), true, 'linhas com o divisor configurado');
 await storage.settings.set('report-settings:local', { versao: 1, arroba_divisor: 20 });
@@ -140,12 +147,12 @@ for (const format of ['csv', 'json', 'xlsx']) {
   const { manifest } = await prepareEmission(porLote15, format, ADMIN);
   assert.equal(manifest.arrobaDivisor, 15, `manifesto ${format}: divisor usado`);
 }
-const base = await run(viewSelection('por-lote', PESAGENS), { arrobaDivisor: 30 });
-const trocado = await run(viewSelection('por-lote', PESAGENS), { arrobaDivisor: 15, reuse: base });
+const base = await run(POR_LOTE, { arrobaDivisor: 30 });
+const trocado = await run(POR_LOTE, { arrobaDivisor: 15, reuse: base });
 assert.notEqual(trocado.sourceKey, base.sourceKey, 'divisor entra no sourceKey');
 assert.ok(!trocado.stats.strategy.includes('+reuse'), 'NEGATIVO: divisor diferente não reaproveita as linhas');
 checkArroba(trocado, 15, 'depois de trocar o divisor');
-const mesmo = await run(viewSelection('por-data', PESAGENS), { arrobaDivisor: 15, reuse: trocado });
+const mesmo = await run(POR_DATA, { arrobaDivisor: 15, reuse: trocado });
 assert.ok(mesmo.stats.strategy.endsWith('+reuse'), 'mesmo divisor: reaproveita (só mudou o agrupamento)');
 checkArroba(mesmo, 15, 'reuse com o mesmo divisor');
 
@@ -173,54 +180,72 @@ const porAnterior = await run({ mode: 'RESUMIDO', groups: [{ columnId: 'tem_pesa
 assert.deepEqual(buildSummaryLayout(porAnterior, 'screen').rows.map((row) => row.label), ['Não', 'Sim', 'Total geral'], 'agrupa por Pesagem anterior (Sim/Não)');
 
 // ---- 5. Visões ("Tipo de relatório") ----
+// E1D: os 5 tipos do MAKGESTAO, com os nomes e a ordem do antigo; abre em "Por Apartação (Resumo por Data)".
 const views = listReportViews(PESAGENS);
-// "Resumo por Sessão" = como Pesagens abre (agrupamento padrão): o Tipo nunca abre em "Personalizado".
 assert.deepEqual(views.map((view) => [view.id, view.label]), [
-  ['padrao', 'Resumo por Sessão'],
-  ['por-apartacao-data', 'Por apartação (resumo por data)'],
-  ['por-lote', 'Por lote'],
-  ['por-data', 'Por data'],
-  ['analitico', 'Analítico por animal'],
-], 'visões de Pesagens, nesta ordem');
+  ['analitico', 'Analítico (Detalhado)'],
+  ['sintetico-matriz', 'Sintético (Matriz)'],
+  ['por-apartacao-lote', 'Por Apartação/Lote'],
+  ['por-apartacao-data', 'Por Apartação (Resumo por Data)'],
+  ['vendas', 'Vendas (Detalhado)'],
+], 'tipos de Pesagens, nesta ordem');
+assert.equal(PESAGENS.defaultView, 'por-apartacao-data', 'tipo padrão');
+assert.ok(!views.some((view) => ['padrao', 'por-lote', 'por-data'].includes(view.id)), 'NEGATIVO: "Resumo por Sessão", "Por lote" e "Por data" (E1B) não são mais tipos');
 assert.ok(views.every((view) => !LEGACY_REPORT_ALIASES[view.id] && !LEGACY_REPORT_ALIASES[`pesagens.${view.id}`]), 'visões fora dos aliases antigos');
 assert.deepEqual(PESAGENS.defaultGroups, [{ columnId: 'sessao' }], 'defaultGroups de Pesagens inalterado');
 assert.deepEqual(PESAGENS.defaultAggregates.map((spec) => spec.id), ['registros', 'animais', 'peso_medio', 'peso_min', 'peso_max', 'gmd_ponderado'], 'defaultAggregates de Pesagens inalterado');
-const ANALITICO_COLUMNS = ['data_pesagem', 'numero_animal', 'marca', 'sexo', 'raca', 'era', 'nome_lote', 'nome_apartacao', 'peso', 'peso_arroba', 'peso_anterior', 'dias', 'ganho', 'gmd'];
-// Seleção equivalente escrita à mão (contrato da E1B), comparada com a visão.
+// Colunas padrão do Analítico = as do antigo (item 4).
+const ANALITICO_COLUMNS = ['data_pesagem', 'numero_animal', 'sexo', 'raca', 'peso', 'nome_lote', 'nome_apartacao', 'dias', 'ganho', 'gmd'];
+// Métricas visíveis por padrão nas tabelas por lote (item 5): Qtd, Faixa, Menor, Maior, Peso médio, Média (@),
+// Peso total, GMD médio, Machos, Fêmeas (a coluna Lote é o rótulo).
+const SHEET_DEFAULT_IDS = ['qtd', 'faixa_min', 'faixa_max', 'menor', 'maior', 'peso_medio', 'media_arroba', 'peso_total', 'gmd_medio', 'machos', 'femeas'];
+const SHEET_DEFAULT = SHEET_TOTALS.filter((spec) => SHEET_DEFAULT_IDS.includes(spec.id));
+// Seleção equivalente escrita à mão (contrato da E1D), comparada com o tipo: nenhum tipo faz conta nova.
 const EQUIVALENT = {
-  padrao: { mode: 'RESUMIDO', groups: [{ columnId: 'sessao' }] },
-  'por-apartacao-data': { mode: 'RESUMIDO', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'data_pesagem', direction: 'desc' }, { columnId: 'nome_lote' }], aggregates: SHEET_TOTALS },
-  'por-lote': { mode: 'RESUMIDO', groups: [{ columnId: 'nome_lote' }], aggregates: SHEET_TOTALS },
-  // "Por data" sem a faixa exigida (é do lote): min/max de lotes diferentes inventaria uma faixa.
-  'por-data': { mode: 'RESUMIDO', groups: [{ columnId: 'data_pesagem', direction: 'desc' }], aggregates: SHEET_TOTALS.filter((spec) => !['faixa_min', 'faixa_max'].includes(spec.id)) },
-  analitico: { mode: 'DETALHADO', groups: [], columns: ANALITICO_COLUMNS },
+  analitico: { mode: 'DETALHADO', groups: [], columns: ANALITICO_COLUMNS, aggregates: [{ id: 'animais', columnId: 'numero_animal', op: 'countDistinct' }, { id: 'peso_medio', columnId: 'peso', op: 'avg' }, { id: 'gmd_medio', columnId: 'gmd', op: 'weightedGmd' }] },
+  // Matriz: Linhas (Sexo) › Colunas (Lote), célula = Qtd distinta, Peso médio, GMD ponderado.
+  'sintetico-matriz': { mode: 'RESUMIDO', groups: [{ columnId: 'sexo' }, { columnId: 'nome_lote' }], aggregates: [{ id: 'qtd', columnId: 'numero_animal', op: 'countDistinct' }, { id: 'peso_medio', columnId: 'peso', op: 'avg' }, { id: 'gmd_medio', columnId: 'gmd', op: 'weightedGmd' }] },
+  'por-apartacao-lote': { mode: 'RESUMIDO', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'nome_lote' }], aggregates: SHEET_DEFAULT },
+  'por-apartacao-data': { mode: 'RESUMIDO', groups: APDATA_GROUPS, aggregates: SHEET_DEFAULT },
+  // Vendas: população fixa = Saída por Venda (condição fixa, como "Vendas do período").
+  vendas: { mode: 'DETALHADO', groups: [{ columnId: 'comprador' }], columns: [...VENDAS_COLUMNS], aggregates: VENDAS_TOTALS, fixedFilters: VENDAS_POPULATION },
 };
 const plain = (item) => JSON.parse(JSON.stringify(item));
 let viewsChecked = 0;
 for (const view of views) {
   const selection = viewSelection(view, PESAGENS);
+  assert.equal(selection.view, view.id, `${view.id}: o tipo vai explícito na seleção`);
   assert.deepEqual(plain(viewSelection(view.id, PESAGENS)), plain(selection), `${view.id}: por id = por objeto`);
   const viaView = await run(selection, { arrobaDivisor: 30 });
   const viaMao = await run(EQUIVALENT[view.id], { arrobaDivisor: 30 });
+  assert.equal(viaView.view?.id, view.id, `${view.id}: view model com o tipo`);
+  assert.equal(viaMao.view, null, `${view.id}: seleção à mão é "Personalizado"`);
   assert.equal(viaView.mode, EQUIVALENT[view.id].mode, `${view.id}: modo`);
   assert.deepEqual(viaView.groups.map((group) => [group.columnId, group.direction ?? 'asc']), EQUIVALENT[view.id].groups.map((group) => [group.columnId, group.direction ?? 'asc']), `${view.id}: agrupamento e direção`);
   assert.deepEqual(viaView.aggregates, viaMao.aggregates, `${view.id}: totais`);
   assert.deepEqual(viaView.columns.map((column) => column.id), viaMao.columns.map((column) => column.id), `${view.id}: colunas`);
   assert.deepEqual(plain(viaView.totals), plain(viaMao.totals), `${view.id}: total geral = seleção equivalente`);
   assert.deepEqual((viaView.summaryRows ?? []).map((row) => [row.id, plain(row.aggregates)]), (viaMao.summaryRows ?? []).map((row) => [row.id, plain(row.aggregates)]), `${view.id}: linhas do Resumido = seleção equivalente`);
-  assert.equal(viaView.rowCount, detalhe.rowCount, `${view.id}: mesma população`);
-  assert.equal(matchView(PESAGENS, { groups: selection.groups, mode: selection.mode }), view.id, `${view.id}: matchView reconhece a visão`);
+  assert.deepEqual(viaView.rows.map((row) => row.id), viaMao.rows.map((row) => row.id), `${view.id}: mesma população da seleção equivalente`);
+  // Só Vendas recorta a população (Saída por Venda); os outros 4 usam todas as pesagens do período.
+  if (view.id === 'vendas') assert.ok(viaView.rowCount > 0 && viaView.rowCount < detalhe.rowCount, 'Vendas: só as saídas por venda');
+  else assert.equal(viaView.rowCount, detalhe.rowCount, `${view.id}: mesma população`);
+  assert.equal(matchView(PESAGENS, { groups: EQUIVALENT[view.id].groups, mode: EQUIVALENT[view.id].mode }), view.id, `${view.id}: matchView reconhece o tipo pela estrutura`);
   viewsChecked += 1;
 }
-assert.equal(matchView(PESAGENS, { groups: [{ columnId: 'data_pesagem' }], mode: 'RESUMIDO' }), null, 'NEGATIVO: direção diferente não é "Por data"');
+assert.equal(matchView(PESAGENS, { groups: [{ columnId: 'data_pesagem', direction: 'desc' }], mode: 'RESUMIDO' }), null, 'NEGATIVO: "Por data" da E1B → Personalizado');
+assert.equal(matchView(PESAGENS, { groups: [{ columnId: 'nome_lote' }], mode: 'RESUMIDO' }), null, 'NEGATIVO: "Por lote" da E1B → Personalizado');
+assert.equal(matchView(PESAGENS, { groups: [{ columnId: 'nome_apartacao' }, { columnId: 'data_pesagem' }, { columnId: 'nome_lote' }], mode: 'RESUMIDO' }), null, 'NEGATIVO: direção diferente não é o tipo (o "Ordenar por" do tipo é que inverte)');
 assert.equal(matchView(PESAGENS, { groups: [{ columnId: 'nome_lote' }], mode: 'DETALHADO' }), null, 'NEGATIVO: modo diferente → Personalizado');
 assert.equal(matchView(PESAGENS, { groups: [{ columnId: 'marca' }], mode: 'RESUMIDO' }), null, 'agrupamento sem visão → Personalizado');
+// A matriz declara groups vazio (os níveis vêm dos eixos): um Resumido sem agrupamento NÃO é a matriz.
+assert.equal(matchView(PESAGENS, { groups: [], mode: 'RESUMIDO' }), null, 'NEGATIVO: Resumido sem agrupamento não passa por "Sintético (Matriz)"');
 // Revisão final: o tipo só aparece quando está aplicado de fato (totais; colunas no Detalhado) — senão
 // "Personalizado", e escolher o tipo de novo o reaplica.
-const porLoteSel = viewSelection('por-lote', PESAGENS);
-assert.equal(matchView(PESAGENS, { groups: porLoteSel.groups, mode: porLoteSel.mode, aggregates: porLoteSel.aggregates, columns: porLoteSel.columns }), 'por-lote', 'mesmos totais → Por lote');
+const porLoteSel = viewSelection('por-apartacao-lote', PESAGENS);
+assert.equal(matchView(PESAGENS, { groups: porLoteSel.groups, mode: porLoteSel.mode, aggregates: SHEET_TOTALS, columns: porLoteSel.columns }), 'por-apartacao-lote', 'mesmos totais do tipo → Por Apartação/Lote');
 assert.equal(matchView(PESAGENS, { groups: porLoteSel.groups, mode: porLoteSel.mode, aggregates: [] }), null, 'NEGATIVO: sem os totais da visão → Personalizado');
-assert.equal(matchView(PESAGENS, { groups: porLoteSel.groups, mode: porLoteSel.mode, aggregates: [...porLoteSel.aggregates].reverse() }), 'por-lote', 'ordem dos totais não importa');
+assert.equal(matchView(PESAGENS, { groups: porLoteSel.groups, mode: porLoteSel.mode, aggregates: [...SHEET_TOTALS].reverse() }), 'por-apartacao-lote', 'ordem dos totais não importa');
 const analiticoSel = viewSelection('analitico', PESAGENS);
 assert.equal(matchView(PESAGENS, { groups: [], mode: 'DETALHADO', aggregates: analiticoSel.aggregates, columns: analiticoSel.columns }), 'analitico');
 assert.equal(matchView(PESAGENS, { groups: [], mode: 'DETALHADO', aggregates: analiticoSel.aggregates, columns: analiticoSel.columns.slice(1) }), null, 'NEGATIVO: Detalhado com outras colunas → Personalizado');
@@ -258,7 +283,8 @@ for (const row of csvLayout.rows) {
 assert.ok(csvLayout.rows.some((row) => row.level === 3 && faixaCols.every((index) => row.cells[index] !== '')), 'CSV: há lote com faixa');
 const xlsxLayout = buildSummaryLayout(apData, 'xlsx');
 assert.ok(xlsxLayout.rows.filter((row) => row.level !== 3).every((row) => faixaCols.every((index) => row.cells[index] === null)), 'XLSX: faixa vazia fora do nível do lote');
-const apDetalhe = await run({ ...viewSelection('por-apartacao-data', PESAGENS), mode: 'DETALHADO' }, { arrobaDivisor: 30 });
+// Detalhado com o mesmo agrupamento e todas as métricas da folha ("Personalizado": o tipo é Resumido).
+const apDetalhe = await run({ mode: 'DETALHADO', groups: APDATA_GROUPS, aggregates: SHEET_TOTALS }, { arrobaDivisor: 30 });
 const subtotalFaixa = buildReportLines(apDetalhe, 'csv').lines.filter((line) => (line.type === 'SUBTOTAL' || line.type === 'GRAND_TOTAL') && faixaKeys.includes(line.spec?.id));
 assert.ok(subtotalFaixa.length > 0 && subtotalFaixa.every((line) => line.level === 3), 'Detalhado: faixa só no subtotal do lote');
 const detailDoc = buildReportDocument(apDetalhe, { orientation: 'landscape' });
@@ -293,8 +319,13 @@ for (const view of rebanhoViews) {
   assert.equal(matchView(rebanho, { groups: view.groups, mode: view.mode }), view.id);
 }
 // E1C (resposta 11): título da folha de Pesagens = "Pesagens Individuais"; os demais com o próprio nome.
-assert.equal(buildReportDocument(apData).title, 'Relatório de Pesagens Individuais (Sintético)', 'título da folha de Pesagens (Resumido)');
-assert.equal(buildReportDocument(apDetalhe).title, 'Relatório de Pesagens Individuais (Analítico)', 'título da folha de Pesagens (Detalhado)');
+// E1D: com tipo, "(Analítico)" só no Analítico (Vendas, Detalhado, é "Sintético"); sem tipo, pelo modo.
+assert.equal(buildReportDocument(apData).title, 'Relatório de Pesagens Individuais (Sintético)', 'título da folha de Pesagens (tipo resumido)');
+assert.equal(buildReportDocument(apDetalhe).title, 'Relatório de Pesagens Individuais (Analítico)', 'título da folha de Pesagens (Personalizado Detalhado: pelo modo)');
+const vendasFolha = await run(viewSelection('vendas', PESAGENS), { arrobaDivisor: 30 });
+assert.equal(vendasFolha.mode, 'DETALHADO', 'Vendas é Detalhado');
+assert.equal(buildReportDocument(vendasFolha).title, 'Relatório de Pesagens Individuais (Sintético)', 'Vendas (Detalhado): título "(Sintético)", como no MAKGESTAO');
+assert.equal(buildReportDocument(await run(viewSelection('analitico', PESAGENS), { arrobaDivisor: 30 })).title, 'Relatório de Pesagens Individuais (Analítico)', 'Analítico: título "(Analítico)"');
 assert.equal(apData.reportName, 'Pesagens', 'o nome do relatório (cartão, arquivo, manifesto) continua "Pesagens"');
 const rebanhoFolha = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: viewSelection('padrao', REBANHO) }, ADMIN);
 assert.equal(buildReportDocument(rebanhoFolha).title, 'Relatório de Rebanho atual (Sintético)', 'outros relatórios com o próprio nome');
@@ -361,8 +392,9 @@ assert.equal(metrics.peso_medio.decimals, 1, 'kg agregado: 1 casa');
 assert.equal(metrics.media_arroba.decimals, 2, '@: 2 casas');
 assert.equal(metrics.media_arroba.unit, '@', '@: unidade na métrica (rodapé "@ = peso vivo ÷ N")');
 assert.equal(metrics.gmd_medio.type, 'gmd', 'GMD: 3 casas');
-// Detalhado: o valor de cada linha continua com as casas da coluna (kg 2); subtotal agregado com 1.
-const analitico = await run(viewSelection('analitico', PESAGENS), { arrobaDivisor: 30 });
+// Detalhado: o valor de cada linha continua com as casas da coluna (kg 2); subtotal agregado com 1. (As
+// colunas do antigo "Analítico por animal" da E1B, com a de @, escritas à mão: "Personalizado".)
+const analitico = await run({ mode: 'DETALHADO', groups: [], columns: [...ANALYTIC_EVENT_COLUMNS] }, { arrobaDivisor: 30 });
 const lines = buildReportLines(analitico, 'screen');
 const pesoIndex = analitico.columns.findIndex((column) => column.id === 'peso');
 const arrobaIndex = analitico.columns.findIndex((column) => column.id === 'peso_arroba');
@@ -381,7 +413,9 @@ assert.match(sheet, /s="7"><v>1\.125<\/v>/, 'XLSX: GMD 1,125 com 3 casas');
 
 // ---- 7. Ninguém ganha acesso a valor comercial ----
 for (const actor of [OPERADOR, CONSULTA]) {
-  const vm = await run(viewSelection('por-apartacao-data', PESAGENS), { arrobaDivisor: 30 }, actor);
+  // E1D: o tipo com TODAS as colunas do seletor "Colunas" (o padrão mostra 11 das 17 métricas).
+  const apView = listReportViews(PESAGENS).find((view) => view.id === 'por-apartacao-data');
+  const vm = await run({ ...viewSelection(apView, PESAGENS), ...applyColumnKeys(apView, PESAGENS, SHEET_COLUMN_KEYS) }, { arrobaDivisor: 30 }, actor);
   assert.deepEqual(vm.aggregates.map((spec) => spec.id), FOLHA_IDS, `${actor.role}: todas as métricas da folha (nenhuma é comercial)`);
   assert.ok(!vm.availableColumns.some((column) => column.sensitive), `${actor.role}: nenhuma coluna sensível oferecida`);
   // OPERADOR não exporta (reports.export): confere a própria folha (layout); CONSULTA, os arquivos.

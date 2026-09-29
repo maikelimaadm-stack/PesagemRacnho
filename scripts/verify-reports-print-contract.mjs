@@ -1,7 +1,8 @@
 // Gate reports:print-contract:verify (R4, refeito na E1B 1.4.0) — o documento de impressão É a folha do
 // relatório, derivada do MESMO view model e do MESMO documento da tela (domain/reportDocument +
 // sheetHtml): cabeçalho da propriedade (com logo) e título que se repetem em todas as páginas, rodapé
-// (filtros, @, emitido por, versão) que se repete, "Página X de Y" na margem do @page, A4 retrato/paisagem
+// (filtros, @, emitido por — E1D item 8: sem versão, sem notas) que se repete, "Página X de Y" (e só ele)
+// na margem do @page, A4 retrato/paisagem
 // com margens de 10 mm, seções que não deixam o título sozinho no fim da página, escape de HTML e de CSS,
 // logo só em data URL PNG/JPEG, aviso quando não cabe (nunca esconde coluna), imprimir = exportar.
 import assert from 'node:assert/strict';
@@ -33,18 +34,26 @@ const vm = await runReport('pesagens.periodo', {
 }, ADMIN);
 const { html, layout, stats, manifest, document: doc } = preparePrint(vm, ADMIN, { header });
 
-// Cabeçalho da propriedade (com logo) + título + período + emissão
-for (const text of ['ZIGOMAR FERREIRA FRANCO FILHO', 'FAZENDA KAIMAN', 'GLEBA RICARDO FRANCO SN - ZONA RURAL, VILA BELA DA SST. TRINDADE-MT', 'Relatório de Pesagens Individuais (Analítico)', 'Detalhado · Apartação › Lote', 'Período: 01/08/2026 a 15/09/2026', 'Emitido em']) {
+// Cabeçalho da propriedade (com logo) + título + período. E1D item 8: abaixo do título só o período; o
+// "Emitido em" saiu do cabeçalho (quem emitiu e quando fica no rodapé) e o subtítulo "Detalhado · …" também.
+for (const text of ['ZIGOMAR FERREIRA FRANCO FILHO', 'FAZENDA KAIMAN', 'GLEBA RICARDO FRANCO SN - ZONA RURAL, VILA BELA DA SST. TRINDADE-MT', 'Relatório de Pesagens Individuais (Analítico)', 'Período: 01/08/2026 a 15/09/2026']) {
   assert.ok(decode(html).includes(text), `cabeçalho contém: ${text}`);
 }
+assert.ok(decode(html).includes('<span class="sheet-title-side">Período: 01/08/2026 a 15/09/2026</span>'), 'período ao lado do título (no lugar do subtítulo)');
+for (const text of ['Detalhado · Apartação › Lote', 'Emitido em']) assert.ok(!decode(html).includes(text), `NEGATIVO (E1D): folha sem "${text}"`);
 assert.ok(html.includes(`<img class="sheet-logo" src="${LOGO}"`), 'logo embutido no cabeçalho');
 assert.equal((html.match(/<img /g) || []).length, 1, 'logo uma vez só (o thead da folha repete)');
-// Rodapé que se repete (tfoot) e margem da página
-for (const text of ['Filtros: Marca contém alfa', 'Emitido por Ana Admin em', `Pesagens Individuais v${vm.appVersion}`]) assert.ok(decode(html).includes(text), `rodapé contém: ${text}`);
+// Rodapé que se repete (tfoot) e margem da página. E1D item 8: só filtros, @ (quando houver), quem emitiu e
+// quando, e "Página X de Y" — sem versão do programa nem código da emissão (esse fica no manifesto).
+for (const text of ['Filtros: Marca contém alfa', 'Emitido por Ana Admin em']) assert.ok(decode(html).includes(text), `rodapé contém: ${text}`);
+assert.match(decode(html), /<span>Emitido por Ana Admin em \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}<\/span>/, 'emitido por + data/hora');
+assert.ok(!decode(html).includes(`Pesagens Individuais v${vm.appVersion}`), 'NEGATIVO (E1D): sem a versão do programa no rodapé');
 assert.ok(html.includes('<thead><tr><td><div class="sheet-header">') && html.includes('<tfoot><tr><td><div class="sheet-footer">'), 'cabeçalho e rodapé da folha em thead/tfoot (repetem em todas as páginas)');
 assert.match(html, /@page \{ size: A4 (portrait|landscape); margin: 10mm 10mm 12mm 10mm;/, 'A4 com margens de 10 mm');
 assert.match(html, /@bottom-right \{ content: "Página " counter\(page\) " de " counter\(pages\)/, 'Página X de Y');
-assert.ok(html.includes(`Emissão ${vm.emissionId.slice(0, 8)}`), 'emissão na margem da página');
+assert.ok(!html.includes(`Emissão ${vm.emissionId.slice(0, 8)}`) && !html.includes('@bottom-left'), 'NEGATIVO (E1D): margem só com "Página X de Y" (sem emissão/versão)');
+assert.equal(manifest.emissionId, vm.emissionId, 'a emissão continua rastreável pelo manifesto');
+assert.ok(!html.includes('<ul class="sheet-notes">'), 'NEGATIVO (E1D): sem notas na folha');
 assert.match(html, /\.sheet-page > thead \{ display: table-header-group; \}/, 'cabeçalho da folha repete');
 assert.match(html, /\.sheet-table > thead \{ display: table-header-group; \}/, 'cabeçalho da tabela repete');
 assert.match(html, /\.sheet-table tr \{ break-inside: avoid; page-break-inside: avoid; \}/, 'linha não quebra no meio');
@@ -89,7 +98,7 @@ assert.ok(!/<\/style>[^]*<\/style>/.test(html.replace(/<\/style>\s*<\/head>/, ''
 const wideVm = await runReport('pesagens.periodo', { today: TODAY, params: period, selection: { columns: ['data_pesagem', 'tipo_manejo', 'motivo_saida', 'numero_animal', 'marca', 'sexo', 'raca', 'era', 'peso', 'nome_lote', 'nome_apartacao'] } }, ADMIN);
 const wide = buildPrintDocument(wideVm);
 assert.match(wide.html, /size: A4 landscape/, '11 colunas de dados → paisagem');
-assert.equal(wide.document.columns.length + wide.document.hiddenColumns.length, 11, 'NEGATIVO: nenhuma coluna perdida (vazias só saem com aviso nas notas)');
+assert.equal(wide.document.columns.length + wide.document.hiddenColumns.length, 11, 'NEGATIVO: nenhuma coluna perdida (só as vazias saem, listadas em hiddenColumns; "Mostrar colunas vazias" traz de volta)');
 assert.equal((wide.html.match(/<th /g) || []).length, wide.document.columns.length, 'um <th> por coluna visível');
 const mockDetail = (count, width = 120) => ({ layout: 'detail', rows: [], columns: Array.from({ length: count }, (_, i) => ({ key: `c${i}`, column: { defaultWidth: width } })) });
 assert.equal(decideSheetLayout(mockDetail(8)).orientation, 'portrait', 'até ~1000 px de colunas → retrato');
@@ -106,6 +115,9 @@ assert.equal(code(() => preparePrint(vm, OPERADOR)), 'AUTH_FORBIDDEN', 'OPERADOR
 const vmConsulta = await runReport('pesagens.periodo', { today: TODAY, params: period, selection: { columns: ['data_pesagem', 'numero_animal', 'valor_venda_total'] } }, CONSULTA);
 const consultaDoc = preparePrint(vmConsulta, CONSULTA);
 assert.ok(!consultaDoc.html.includes('Valor venda') && consultaDoc.html.includes('1 coluna(s) omitida(s) pelo perfil'), 'CONSULTA imprime sem valores, com aviso de omissão');
+// E1D item 8: o aviso de omissão é uma parte curta do rodapé (não uma nota), e só quando há omissão.
+assert.match(consultaDoc.html, /<div class="sheet-footer">[\s\S]*<span>1 coluna\(s\) omitida\(s\) pelo perfil de quem emitiu<\/span>/, 'aviso de omissão no rodapé');
+assert.ok(!html.includes('omitida(s) pelo perfil'), 'NEGATIVO: sem omissão, sem aviso');
 
 // 4. Resumido (folha resumida): seções, subtotais e Total geral = árvore; cabe em A4 retrato; mesmas células da tela
 const vmResumo = await runReport('desempenho.lote', { today: TODAY, params: period }, ADMIN);
@@ -118,9 +130,11 @@ const leafCount = vmResumo.tree.reduce((total, node) => total + node.children.le
 assert.equal(resumoDoc.stats.groupRows, leafCount, 'uma linha por grupo do nível folha');
 assert.equal(resumoDoc.stats.subtotalRows, vmResumo.tree.length, 'um subtotal por seção');
 assert.equal(resumoDoc.stats.grandRows, 1, 'um Total geral');
-for (const text of ['Relatório de Desempenho (Sintético)', 'Resumido · Apartação (última pesagem no período) › Lote (última pesagem no período)', 'Total geral']) {
+for (const text of ['Relatório de Desempenho (Sintético)', 'Período: 01/08/2026 a 15/09/2026', 'Total geral']) {
   assert.ok(decode(resumoDoc.html).includes(text), `Resumido contém ${text}`);
 }
+// E1D item 8 vale para todos os relatórios (a folha é uma só): sem o subtítulo "Resumido · níveis".
+assert.ok(!decode(resumoDoc.html).includes('Resumido · Apartação'), 'NEGATIVO (E1D): Desempenho sem o subtítulo "Resumido · …"');
 for (const row of documentRows(resumoDoc.document)) {
   for (const cell of row.cells ?? []) if (cell.text) assert.ok(resumoDoc.html.includes(escapeHtml(cell.text)), `célula do Resumido igual à folha da tela: ${cell.text}`);
 }

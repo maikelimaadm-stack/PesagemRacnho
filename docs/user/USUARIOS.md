@@ -1,13 +1,14 @@
 # Usuários e perfis
 
 Cada pessoa que usa o programa tem o seu próprio **usuário** (login + senha) e
-um **perfil**, que define o que ela pode fazer. Existem três perfis fixos:
+um **perfil**, que define o que ela pode fazer. Existem quatro perfis fixos:
 
 | Perfil | Para quem | Resumo |
 |---|---|---|
 | **ADMIN** | Responsável pelo sistema | Faz tudo, inclusive gerenciar usuários, restaurar backup, limpar dados e alterar configurações. |
-| **GESTOR** | Escritório / gerência | Lança e consulta pesagens, mantém os cadastros, fecha sessões, consulta relatórios e cria backups. Não gerencia usuários nem restaura/limpa dados. |
+| **GESTOR** | Escritório / gerência | Lança e consulta pesagens, mantém os cadastros, fecha sessões, vê os valores comerciais, consulta, imprime e exporta relatórios e cria backups. Não gerencia usuários nem restaura/limpa dados. |
 | **OPERADOR** | Curral / campo | Lança pesagens e faz o cadastro rápido de animais. Consulta os cadastros, mas não os altera. Abre os relatórios de curral (sem valores), mas não imprime nem exporta. Não acessa backup nem configurações. |
+| **CONSULTA** | Quem só acompanha (sócio, contador, veterinário) | Só consulta: vê pesagens, cadastros e os relatórios de curral, **sem valores comerciais**, e pode imprimir e exportar o que vê. Não lança, não edita nem cadastra nada, e não acessa backup nem configurações. |
 
 Não é possível criar outros perfis nem editar permissões: o programa esconde
 o que o perfil não pode fazer e também recusa a ação por dentro, mesmo que
@@ -15,27 +16,36 @@ alguém tente pelo caminho errado.
 
 ## O que cada perfil pode fazer
 
-| Ação | ADMIN | GESTOR | OPERADOR |
-|---|---|---|---|
-| Lançar pesagens e manejos | sim | sim | sim |
-| Consultar e editar pesagens | sim | sim | sim |
-| Cadastrar animal (cadastro rápido no lançamento) | sim | sim | sim |
-| Consultar cadastros (marcas, raças, parceiros etc.) | sim | sim | sim |
-| Criar, alterar e inativar cadastros | sim | sim | não |
-| Operações comerciais e embarques (versões seguintes) | sim | sim | não |
-| Fechar e reabrir sessão de pesagem | sim | sim | não |
-| Abrir relatórios (OPERADOR: os de curral, sem valores e sem Comercial) | sim | sim | sim |
-| Imprimir e exportar relatórios | sim | sim | não |
-| Criar backup completo | sim | sim | não |
-| Restaurar backup | sim | não | não |
-| Limpar dados operacionais / Reset completo | sim | não | não |
-| Continuar migração manualmente (Manutenção) | sim | não | não |
-| Gerenciar usuários | sim | não | não |
-| Configurações › Relatórios (divisor da @ de peso vivo) | sim | sim | não |
-| Demais Configurações (Geral, Curral, Comercial, Segurança) | sim | não | não |
+| Ação | ADMIN | GESTOR | OPERADOR | CONSULTA |
+|---|---|---|---|---|
+| Lançar pesagens e manejos | sim | sim | sim | não |
+| Consultar pesagens | sim | sim | sim | sim |
+| Editar pesagens | sim | sim | sim | não |
+| Cadastrar animal (cadastro rápido no lançamento) | sim | sim | sim | não |
+| Consultar cadastros (marcas, raças, parceiros etc.) | sim | sim | sim | sim |
+| Criar, alterar e inativar cadastros | sim | sim | não | não |
+| Ver valores comerciais (preço, valor de venda) | sim | sim | não | não |
+| Operações comerciais e embarques (versões seguintes) | sim | sim | não | não |
+| Fechar e reabrir sessão de pesagem | sim | sim | não | não |
+| Abrir relatórios (OPERADOR e CONSULTA: os de curral, sem valores, sem Comercial e sem o Fechamento do dia) | sim | sim | sim | sim |
+| Imprimir e exportar relatórios (CONSULTA: só o que vê, sem valores) | sim | sim | não | sim |
+| Compartilhar modelo de relatório com a empresa | sim | sim | não | não |
+| Criar backup completo | sim | sim | não | não |
+| Restaurar backup | sim | não | não | não |
+| Limpar dados operacionais / Reset completo | sim | não | não | não |
+| Continuar migração manualmente (Manutenção) | sim | não | não | não |
+| Gerenciar usuários | sim | não | não | não |
+| Configurações › Relatórios (divisor da @ de peso vivo) | sim | sim | não | não |
+| Demais Configurações (Geral, Curral, Comercial, Segurança) | sim | não | não | não |
 
 O GESTOR vê **Sistema › Configurações** no menu, mas a tela mostra para ele só
-o cartão **Relatórios**.
+o cartão **Relatórios**. OPERADOR e CONSULTA não veem Configurações.
+
+Nos relatórios, quem não vê valores comerciais (OPERADOR e CONSULTA) recebe as
+mesmas linhas, só sem as colunas de valor; na folha impressa, o rodapé avisa
+quantas colunas foram omitidas pelo perfil. O **Fechamento do dia**, o
+**Histórico de backups** e a **Trilha de auditoria** abrem só para ADMIN e
+GESTOR. Veja a tabela "O que cada perfil pode fazer" em `RELATORIOS.md`.
 
 ## Tela Usuários (somente ADMIN)
 
@@ -96,4 +106,6 @@ Ela **nunca** mostra senhas nem o código derivado da senha.
 - Tenha pelo menos **dois** usuários ADMIN, para nunca ficar trancado fora.
 - Use OPERADOR para quem só pesa no curral: menos opções na tela e menos
   risco de alteração acidental de cadastros.
+- Use CONSULTA para quem só precisa ver e imprimir relatórios, sem lançar nada
+  e sem ver preços.
 - Cada pessoa com o próprio usuário: assim o histórico mostra quem fez o quê.

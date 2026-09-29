@@ -14,11 +14,13 @@ export function escapeHtml(value) {
 }
 
 /**
- * Cabeçalho da propriedade na folha (e na pré-visualização da ficha da Propriedade).
+ * Cabeçalho da propriedade na folha (e na pré-visualização da ficha da Propriedade): logo, produtor,
+ * fazenda, endereço – município-UF e, só com "Mostrar no cabeçalho" ligado, CPF/CNPJ, IE e telefone
+ * (buildPropertyHeader decide). E1D item 8: o canto direito fica vazio — o período vai abaixo do título e
+ * "Emitido por … em …" só no rodapé (a coluna continua, para o nome ficar centralizado).
  * @param header modelo de buildPropertyHeader (catalog/domain/propertyHeader.js)
- * @param {{ periodText?: string|null, emittedText?: string|null }} meta textos pequenos à direita
  */
-export function renderSheetHeaderHtml(header, { periodText = null, emittedText = null } = {}) {
+export function renderSheetHeaderHtml(header) {
   const model = header ?? { empty: true, titular: 'Pesagens Individuais' };
   const logo = model.logo && isAcceptedLogo(model.logo) ? `<img class="sheet-logo" src="${escapeHtml(model.logo)}" alt="Logo">` : '';
   const lines = [
@@ -28,11 +30,7 @@ export function renderSheetHeaderHtml(header, { periodText = null, emittedText =
     model.documentos ? `<div class="sheet-docs">${escapeHtml(model.documentos)}</div>` : '',
     model.telefone ? `<div class="sheet-docs">${escapeHtml(model.telefone)}</div>` : '',
   ].join('');
-  const meta = [
-    periodText ? `<div>${escapeHtml(periodText)}</div>` : '',
-    emittedText ? `<div>${escapeHtml(emittedText)}</div>` : '',
-  ].join('');
-  return `<div class="sheet-header${model.empty ? ' sheet-header--system' : ''}"><div class="sheet-header__logo">${logo}</div><div class="sheet-header__id">${lines}</div><div class="sheet-header__meta">${meta}</div></div>`;
+  return `<div class="sheet-header${model.empty ? ' sheet-header--system' : ''}"><div class="sheet-header__logo">${logo}</div><div class="sheet-header__id">${lines}</div><div class="sheet-header__meta"></div></div>`;
 }
 
 const ROW_CLASS = Object.freeze({
@@ -107,21 +105,23 @@ function renderSection(doc, section, options) {
   return `<section class="sheet-sec sheet-sec--${section.level}${keep}" data-node-id="${escapeHtml(section.id)}">\n${inner}\n</section>`;
 }
 
+// E1D item 8: filtros, @ (quando houver), colunas omitidas pelo perfil (quando houver) e quem emitiu/quando.
 function renderFooter(doc) {
-  const parts = [doc.footer.filtros, doc.footer.arroba, doc.footer.emitidoPor, doc.footer.versao].filter(Boolean);
+  const parts = [doc.footer.filtros, doc.footer.arroba, doc.footer.omitidas, doc.footer.emitidoPor].filter(Boolean);
   return `<div class="sheet-footer">${parts.map((part) => `<span>${escapeHtml(part)}</span>`).join('')}<span class="sheet-footer__pages">Página X de Y na impressão</span></div>`;
 }
 
 /**
- * Marcação da folha inteira (cabeçalho que se repete, título, seções, total geral, notas e rodapé).
+ * Marcação da folha inteira (cabeçalho que se repete, título e período, seções, total geral e rodapé).
  * @param doc documento de buildReportDocument
  * @param {{ mode?: 'fragment'|'print', interactive?: boolean, sort?: {key, direction}|null }} options
  *   fragment = dentro do app (tela); print = corpo do documento impresso/PDF.
  */
 export function renderSheetBody(doc, { mode = 'fragment', interactive = false, sort = null } = {}) {
   const options = { interactive, sort };
-  const header = renderSheetHeaderHtml(doc.header, { periodText: doc.periodText, emittedText: doc.emittedText });
-  const titleRow = `<div class="sheet-title-row"><h1 class="sheet-title">${escapeHtml(doc.title)}</h1><span class="sheet-title-side">${escapeHtml(doc.subtitle)}</span></div>`;
+  const header = renderSheetHeaderHtml(doc.header);
+  // Abaixo do título só o período (E1D item 8), no lugar do antigo subtítulo — mesma marcação e estilo.
+  const titleRow = `<div class="sheet-title-row"><h1 class="sheet-title">${escapeHtml(doc.title)}</h1><span class="sheet-title-side">${escapeHtml(doc.periodText)}</span></div>`;
   const content = doc.empty
     ? '<p class="sheet-empty">Nenhum registro para os filtros informados.</p>'
     : [
@@ -129,7 +129,8 @@ export function renderSheetBody(doc, { mode = 'fragment', interactive = false, s
       renderTable(doc, doc.flat, options),
       doc.grandTotal ? `<div class="sheet-grand-block">${renderTable(doc, doc.grandTotal, options)}</div>` : '',
     ].join('\n');
-  const notes = doc.notes.length ? `<ul class="sheet-notes">${doc.notes.map((note) => `<li>${escapeHtml(note)}</li>`).join('')}</ul>` : '';
+  // Nenhuma nota na folha; só na tela, o aviso de linhas limitadas (a impressão leva todas).
+  const notes = mode !== 'print' && doc.screenNotice ? `<ul class="sheet-notes"><li>${escapeHtml(doc.screenNotice)}</li></ul>` : '';
   const rootClass = `rpt-sheet rpt-sheet--${mode === 'print' ? 'print' : 'screen'} sheet--${doc.print.orientation} sheet-size-${doc.print.sizeClass}`;
   return `<div class="${rootClass}" data-orientation="${doc.print.orientation}" data-layout="${doc.layout}">
 <table class="sheet-page">

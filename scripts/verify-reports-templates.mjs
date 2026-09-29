@@ -158,6 +158,8 @@ assert.equal(reaberto.selection.mode, 'RESUMIDO');
 assert.equal(reaberto.orientation, 'landscape');
 assert.equal(reaberto.showEmptyColumns, true);
 assert.equal(reaberto.selection.fixedFilters, undefined, 'reaberto sem condição fixa');
+// E1D: estado de Pesagens sem tipo que não era um tipo da E1B abre "Personalizado" (explícito), com a seleção dele.
+assert.equal(reaberto.selection.view, null, 'E1D: sem tipo da E1B → Personalizado');
 assert.equal(await getReportViewState('pesagens', GESTOR), null, 'último estado é por usuário');
 // Estado gravado com condição fixa (versão de desenvolvimento anterior) → a condição é descartada ao ler.
 const chaveEstado = 'report-view-state:local:' + OPERADOR.id;
