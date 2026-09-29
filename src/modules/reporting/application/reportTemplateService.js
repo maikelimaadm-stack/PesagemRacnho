@@ -15,11 +15,17 @@
 // config tem o MESMO formato validado de um modelo (período, filtros, agrupamento, modo, ordem,
 // orientação…) + showEmptyColumns; nunca dados. Ao ler, passa pela mesma revalidação do modelo
 // (templateToRequest): estado antigo com coluna que sumiu ou que o papel não vê é filtrado, sem erro.
+//
+// E1D (1.4.0): os tipos da E1B que saíram de Pesagens ("Resumo por Sessão", "Por lote", "Por data",
+// "Analítico por animal"…) — modelos e último estado sem `view` que usavam um deles abrem no tipo novo mais
+// próximo (definitions/legacyViews.js): em memória ao abrir e gravado uma vez, com auditoria própria
+// ("relatorios-tipos-e1d"), no mesmo passo idempotente da consolidação da E1.
 import { readAppSetting, writeAppSetting } from '../../../storage/indexedDb/repositories/index.js';
 import { ensureStorageReady } from '../../../storage/indexedDb/db.js';
 import { can, forbiddenError } from '../../auth/domain/permissionService.js';
 import { getReportDefinition, resolveReportId } from '../definitions/reportCatalog.js';
 import { aliasSelection, getLegacyAlias } from '../definitions/legacyAliases.js';
+import { convertLegacyViewConfig } from '../definitions/legacyViews.js';
 import { REPORT_MODES, normalizeReportMode } from '../domain/reportDefinition.js';
 import { canRunReport, canSeeColumn } from '../domain/reportPermissions.js';
 import { MAX_GROUP_LEVELS } from '../domain/groupEngine.js';
@@ -31,6 +37,7 @@ import { isKnownSortChoice } from '../domain/sortChoices.js';
 export const TEMPLATE_VERSION = 1;
 export const TEMPLATE_SCOPES = Object.freeze({ PERSONAL: 'PERSONAL', SHARED: 'SHARED' });
 export const PREFERENCES_MIGRATION_ORIGIN = 'relatorios-consolidacao-1.4.0';
+export const VIEW_TYPES_MIGRATION_ORIGIN = 'relatorios-tipos-e1d';
 const MAX_RECENTS = 12;
 
 const templatesKey = (empresaId) => `report-templates:${empresaId}`;
@@ -178,7 +185,11 @@ function migrateRecentList(list) {
   return { list: out, changes };
 }
 
-async function auditConsolidation(key, changes, actor, kind) {
+// Consolidação da E1 (padrão) ou conversão de tipo da E1D (origem, título e campos próprios).
+const CONSOLIDATION_AUDIT = Object.freeze({ origin: PREFERENCES_MIGRATION_ORIGIN, title: 'Relatório consolidado', fields: ['reportId'] });
+const VIEW_TYPES_AUDIT = Object.freeze({ origin: VIEW_TYPES_MIGRATION_ORIGIN, title: 'Tipo de relatório convertido', fields: ['view', 'groups', 'mode', 'columns', 'aggregates', 'sort', 'sortChoice'] });
+
+async function auditConsolidation(key, changes, actor, kind, { origin, title, fields } = CONSOLIDATION_AUDIT) {
   if (!changes.length) return;
   const db = await ensureStorageReady();
   const ts = new Date().toISOString();
@@ -188,9 +199,9 @@ async function auditConsolidation(key, changes, actor, kind) {
       entidade: 'appSettings',
       entidade_id: key,
       acao: 'ATUALIZAR',
-      origem: PREFERENCES_MIGRATION_ORIGIN,
-      resumo: `Relatório consolidado: ${change.from} → ${change.to} (${kind}${change.detail ? ` ${change.detail}` : ''}).`,
-      campos_alterados: ['reportId'],
+      origem: origin,
+      resumo: `${title}: ${change.from} → ${change.to} (${kind}${change.detail ? ` ${change.detail}` : ''}).`,
+      campos_alterados: [...fields],
       usuario_id: actor?.id ?? null,
       usuario_nome_snapshot: actor?.nome ?? null,
       created_at: ts,
@@ -198,13 +209,36 @@ async function auditConsolidation(key, changes, actor, kind) {
   }
 }
 
+/** E1D: tipo da E1B que saiu → tipo novo, num modelo (null = nada a converter). */
+function convertTemplateType(template) {
+  const definition = getReportDefinition(template?.baseReportId);
+  return definition ? convertLegacyViewConfig(definition, template) : null;
+}
+
+/** E1D: último estado do ator com tipo da E1B → tipo novo (por relatório). */
+function convertViewStateTypes(stored) {
+  const reports = stored && typeof stored === 'object' && stored.reports && typeof stored.reports === 'object' ? stored.reports : null;
+  if (!reports) return { value: stored, changes: [] };
+  const changes = [];
+  const next = { ...reports };
+  for (const [reportId, state] of Object.entries(reports)) {
+    const definition = getReportDefinition(reportId);
+    const converted = definition && state && typeof state === 'object' ? convertLegacyViewConfig(definition, state) : null;
+    if (!converted) continue;
+    next[reportId] = converted.config;
+    changes.push({ from: `${definition.title} › ${converted.from.label}`, to: converted.to.label, detail: '' });
+  }
+  return { value: changes.length ? { ...stored, reports: next } : stored, changes };
+}
+
 // Uma conversão por empresa+usuário de cada vez: as telas leem favoritos, recentes e modelos em
 // paralelo, e cada leitura converte — sem isto, cada item ganhava 2–3 auditorias iguais.
 const inFlightMigrations = new Map();
 
 /**
- * Reescreve favoritos/recentes do ator e os modelos da empresa que ainda citam relatórios antigos.
- * Idempotente (sem id antigo → nada grava). Chamadas simultâneas compartilham a mesma execução.
+ * Reescreve favoritos/recentes do ator e os modelos da empresa que ainda citam relatórios antigos (E1) e
+ * converte o tipo da E1B que saiu (E1D) nos modelos da empresa e no último estado do ator.
+ * Idempotente (sem id antigo nem tipo antigo → nada grava). Chamadas simultâneas compartilham a mesma execução.
  * Falha de gravação (ex.: banco em somente leitura) não impede a leitura: quem chama recebe as
  * listas já convertidas em memória.
  * @returns {Promise<{ favorites: string[], recents: object[], templates: object[], migrated: number }>}
@@ -220,10 +254,11 @@ export function migrateReportPreferences(actor, { empresaId = 'local' } = {}) {
 }
 
 async function migrateReportPreferencesOnce(actor, empresaId) {
-  const [storedTemplates, favorites, recents] = await Promise.all([
+  const [storedTemplates, favorites, recents, storedViewState] = await Promise.all([
     readAppSetting(templatesKey(empresaId)),
     readAppSetting(favoritesKey(empresaId, actor.id)),
     readAppSetting(recentsKey(empresaId, actor.id)),
+    readAppSetting(viewStateKey(empresaId, actor.id)),
   ]);
   const templateStore = storedTemplates && typeof storedTemplates === 'object' && Array.isArray(storedTemplates.templates)
     ? storedTemplates : { version: TEMPLATE_VERSION, templates: [] };
@@ -234,20 +269,35 @@ async function migrateReportPreferencesOnce(actor, empresaId) {
     migratedIds.add(template.id);
     return migrated;
   });
-  const templates = renameCollisions(converted, migratedIds);
-  const templateChanges = templates.filter((template) => migratedIds.has(template.id)).map((template) => ({
+  const consolidated = renameCollisions(converted, migratedIds);
+  const templateChanges = consolidated.filter((template) => migratedIds.has(template.id)).map((template) => ({
     from: template.migratedFrom,
     to: template.baseReportId,
     detail: `“${template.renamedFrom ?? template.name}”${template.renamedFrom ? `, agora “${template.name}”` : ''}`,
   }));
+  // E1D: tipo da E1B que saiu → tipo novo mais próximo (modelos da empresa e último estado do ator). Modelo
+  // recém-consolidado da E1 (migratedFrom) não entra: abre a seleção do relatório antigo, como os links.
+  const typeChanges = [];
+  const templates = consolidated.map((template) => {
+    const typed = convertTemplateType(template);
+    if (!typed) return template;
+    typeChanges.push({ from: `${getReportDefinition(template.baseReportId).title} › ${typed.from.label}`, to: typed.to.label, detail: `“${template.name}”` });
+    return typed.config;
+  });
+  const viewState = convertViewStateTypes(storedViewState);
   const fav = migrateFavoriteList(favorites);
   const rec = migrateRecentList(recents);
-  const migrated = templateChanges.length + fav.changes.length + rec.changes.length;
+  const migrated = templateChanges.length + typeChanges.length + viewState.changes.length + fav.changes.length + rec.changes.length;
   if (migrated) {
     try {
-      if (templateChanges.length) {
+      if (templateChanges.length || typeChanges.length) {
         await writeAppSetting(templatesKey(empresaId), { ...templateStore, templates });
         await auditConsolidation(templatesKey(empresaId), templateChanges, actor, 'modelo salvo');
+        await auditConsolidation(templatesKey(empresaId), typeChanges, actor, 'modelo salvo', VIEW_TYPES_AUDIT);
+      }
+      if (viewState.changes.length) {
+        await writeAppSetting(viewStateKey(empresaId, actor.id), viewState.value);
+        await auditConsolidation(viewStateKey(empresaId, actor.id), viewState.changes, actor, 'último estado', VIEW_TYPES_AUDIT);
       }
       if (fav.changes.length) {
         await writeAppSetting(favoritesKey(empresaId, actor.id), fav.list);
@@ -448,9 +498,14 @@ export async function deleteTemplate(templateId, actor, { empresaId = 'local' } 
  * (E1 §7 ajustada pela responsável em 25/09/2026).
  */
 export function templateToRequest(source, role) {
-  const template = migrateLegacyTemplate(source) ?? source;
-  const definition = getReportDefinition(template.baseReportId);
+  const consolidated = migrateLegacyTemplate(source) ?? source;
+  const definition = getReportDefinition(consolidated.baseReportId);
   if (!definition) throw templateError('Relatório base do modelo não existe mais');
+  // E1D: tipo da E1B que saiu → tipo novo mais próximo (em memória; gravar e auditar é com
+  // migrateReportPreferences). Relatório de tipos fixos sem tipo e sem conversão → "Personalizado"
+  // explícito: nunca vira um tipo só porque a estrutura coincide.
+  const conversion = convertLegacyViewConfig(definition, consolidated);
+  const template = conversion ? conversion.config : (definition.defaultView && consolidated.view === undefined ? { ...consolidated, view: null } : consolidated);
   const warnings = [];
   const known = new Map(definition.columns.map((column) => [column.id, column]));
   const visible = (id) => known.has(id) && canSeeColumn(known.get(id), role);
@@ -572,6 +627,10 @@ export async function getReportViewState(reportId, actor, { empresaId = 'local' 
   requireActor(actor);
   const definition = getReportDefinition(reportId);
   if (!definition || !canRunReport(definition, actor.role)) return null;
+  // E1D: converte (e audita) o tipo da E1B do último estado antes de ler — a tela abre já no tipo novo e
+  // a auditoria não depende de qual tela chegou primeiro. Falha aqui não impede a leitura (templateToRequest
+  // converte em memória do mesmo jeito).
+  await migrateReportPreferences(actor, { empresaId }).catch(() => null);
   const stored = await readAppSetting(viewStateKey(empresaId, actor.id));
   const state = stored?.reports?.[definition.id];
   if (!state || typeof state !== 'object') return null;
