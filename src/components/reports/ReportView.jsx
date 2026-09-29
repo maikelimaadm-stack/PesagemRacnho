@@ -16,7 +16,7 @@ import { REPORT_FAMILIES, REPORT_MODES, VIEW_LAYOUTS } from "@/modules/reporting
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
-import { getReportView, listReportViews, parseSortChoice, resolveViewId, viewSelection } from "@/modules/reporting/domain/reportViews";
+import { getReportView, listReportViews, modeChangePatch, parseSortChoice, resolveViewId, viewSelection } from "@/modules/reporting/domain/reportViews";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { aliasSelection, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
 import { runReport } from "@/modules/reporting/application/reportService";
@@ -322,7 +322,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   // E1D: agrupar ou trocar o modo pelos controles genéricos sai do tipo ("Personalizado", view null) — os
   // controles próprios de um tipo (botões do Analítico, eixos da matriz) mantêm o tipo.
   const setGroups = (groups) => update({ groups, drill: [], view: null, matrix: null });
-  const setMode = (mode) => update({ mode, drill: mode === REPORT_MODES.RESUMIDO ? [] : state.drill, ...(mode === state.mode ? {} : { view: null, matrix: null }) });
+  // Voltar do detalhe de um grupo para o modo do tipo mantém o tipo (a matriz não some) — modeChangePatch.
+  const setMode = (mode) => update(modeChangePatch(definition, state, mode));
 
   // Tipo de relatório: atalho para agrupamento + modo (+ totais/colunas/ordem da visão) — nada de conta nova.
   // E1D: o tipo é explícito (state.view); estado de antes da E1D cai no que bate pela estrutura.

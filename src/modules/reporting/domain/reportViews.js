@@ -187,3 +187,18 @@ export function matchView(definition, state = {}) {
   });
   return found?.id ?? null;
 }
+
+/**
+ * Abas Resumido/Detalhado → mudança do estado da tela. Trocar o modo sai do tipo ("Personalizado", view
+ * null — contrato E1D §3), EXCETO no detalhe de um grupo (clique na folha): voltar ao modo do tipo é só
+ * sair do detalhe, como o X da pílula, e o tipo fica. Sem isso a matriz — que não guarda grupos no estado
+ * (os eixos viram grupos no serviço) — virava Personalizado sem agrupamento e só sobrava o Total geral.
+ * @param {{ view?: string|null, mode?: string, drill?: object[] }} state estado da tela
+ * @returns {object} o que muda no estado (update)
+ */
+export function modeChangePatch(definition, state, mode) {
+  const drill = state?.drill ?? [];
+  const typeMode = state?.view ? getReportView(definition, state.view)?.mode ?? null : null;
+  if (drill.length && typeMode && mode === typeMode) return { mode, drill: [] };
+  return { mode, drill: mode === REPORT_MODES.RESUMIDO ? [] : drill, ...(mode === state?.mode ? {} : { view: null, matrix: null }) };
+}
