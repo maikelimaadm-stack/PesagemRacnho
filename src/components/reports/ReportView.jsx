@@ -60,8 +60,17 @@ function withTypedState(definition, state) {
     ...state,
     view: view ?? null,
     matrix: state.matrix ?? (view ? getReportView(definition, view)?.matrix ?? null : null),
-    sortChoice: state.sortChoice !== undefined ? state.sortChoice : (definition.defaultSortChoice ?? null),
+    sortChoice: state.sortChoice !== undefined ? state.sortChoice : legacySortChoice(definition, state),
   };
+}
+
+// "Ordenar por" de um modelo/estado/visão antiga sem sortChoice (antes da E1D): com ordem própria (não a padrão
+// do relatório) abre em "Personalizado" com a ordem dele — a opção padrão passaria por cima dela; sem ordem
+// própria, na opção padrão (Data (Mais Recente)).
+function legacySortChoice(definition, state) {
+  if (!definition.defaultSortChoice) return null;
+  const ownSort = Array.isArray(state.sort) && state.sort.length > 0 && JSON.stringify(state.sort) !== JSON.stringify(definition.defaultSort);
+  return ownSort || state.summarySort?.key ? null : definition.defaultSortChoice;
 }
 
 // E1D (item 5): seleção de um tipo com a escolha do seletor "Colunas" que a pessoa salvou para ELE
