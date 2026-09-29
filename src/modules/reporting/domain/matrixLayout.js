@@ -150,14 +150,19 @@ export function matrixValues(matrix, source) {
  * Textos de uma célula (um por valor, empilhados na folha). kg leva a unidade ("346,3 kg") como no antigo;
  * ausente = "—" (GMD sem pesagem anterior); contagem 0 de coluna zeroAsEmpty = "—" (como no Resumido).
  * Cruzamento sem pesagem = lista vazia (célula vazia).
+ * E1D visual: `style: 'makgestao'` (folha dos tipos de Pesagens) = como a célula do antigo — kg inteiro
+ * ("347 kg", pesoMed.toFixed(0)) e ausente "-" (hífen). Só apresentação: os valores (matrixValues) não mudam.
  */
-export function matrixCellLines(matrix, source, target = 'print') {
+export function matrixCellLines(matrix, source, target = 'print', { style = null } = {}) {
   const raw = matrixValues(matrix, source);
   if (!raw) return [];
+  const mak = style === 'makgestao';
   return matrix.metrics.map((metric, index) => {
     const value = metric.column?.zeroAsEmpty && raw[index] === 0 ? null : raw[index];
-    const text = formatCell(metric.column, value, target);
-    const unit = metric.column?.type === 'weight' ? metric.column.unit : null;
+    const weight = metric.column?.type === 'weight';
+    const text = formatCell(mak && weight ? { ...metric.column, decimals: 0 } : metric.column, value, target);
+    if (mak && (text === MISSING_SCREEN || text === '')) return '-';
+    const unit = weight ? metric.column.unit : null;
     return unit && text !== MISSING_SCREEN && text !== '' ? `${text} ${unit}` : text;
   });
 }

@@ -158,6 +158,64 @@ export const PESAGENS_SORT_CHOICES = Object.freeze([
 
 // Os 5 tipos, nesta ordem (item 1). Ids estáveis: vão para o último estado, os modelos e o manifesto.
 export const PESAGENS_VIEW_IDS = Object.freeze(['analitico', 'sintetico-matriz', 'por-apartacao-lote', 'por-apartacao-data', 'vendas']);
+
+// ---------------------------------------------------------------------------------------------------
+// E1D visual — a FOLHA dos 5 tipos (tela, impressão e PDF) "igual ao MAKGESTAO no visual, com as contas
+// certas" (decisão da responsável). Só a folha: metricLabels/columnLabels continuam na grade e nas
+// exportações (CSV, XLSX e JSON não mudam). Quem desenha é domain/reportDocument (estilo "makgestao").
+// ---------------------------------------------------------------------------------------------------
+
+// Cabeçalhos do antigo (Title Case, sem unidade entre parênteses — o "kg" vai em cada número).
+export const PESAGENS_SHEET_HEADERS = Object.freeze({
+  // Tabelas por lote (COLUNAS_PAINEL_APARTACAO do antigo), por id de total; "faixa" = o par Faixa exigida.
+  metrics: Object.freeze({
+    qtd: 'Qtd', faixa: 'Faixa Exigida', menor: 'Menor', maior: 'Maior', peso_medio: 'Peso Médio', media_arroba: 'Média (@)',
+    peso_total: 'Peso Total', total_arroba: 'Total (@)', ganho_medio: 'Ganho Médio', ganho_medio_arroba: 'Ganho Médio (@)',
+    ganho_total: 'Ganho Total', ganho_total_arroba: 'Ganho Total (@)', dias_medios: 'Dias Médios', gmd_medio: 'GMD Médio',
+    machos: 'Machos', femeas: 'Fêmeas',
+  }),
+  // Colunas de dados do Analítico do antigo (também no detalhe de um grupo).
+  columns: Object.freeze({
+    data_pesagem: 'Data', numero_animal: 'Animal', sexo: 'Sexo', raca: 'Raça', peso: 'Peso', nome_lote: 'Lote',
+    nome_apartacao: 'Apartação', data_anterior: 'Dt.Ant.', peso_anterior: 'Peso Ant.', dias: 'Dias', ganho: 'Ganho',
+    gmd: 'GMD', observacao: 'Obs', era: 'Era', marca: 'Marca', tipo_manejo: 'Tipo', motivo_saida: 'Motivo',
+  }),
+  // Vendas (COLUNAS_DETALHES_VENDAS do antigo): "Peso (kg)" com a unidade no cabeçalho, como lá.
+  vendas: Object.freeze({
+    comprador: 'Comprador', data_pesagem: 'Data', numero_animal: 'Animal', peso: 'Peso (kg)', peso_arroba: 'Qtd @',
+    valor_arroba: 'Valor @', valor_venda_total: 'Valor Total', destino_venda: 'Destino', nome_lote: 'Lote',
+    nome_apartacao: 'Apartação', sexo: 'Sexo', raca: 'Raça', era: 'Era', marca: 'Marca', observacao: 'Obs',
+  }),
+  // Sintético (Matriz): "Valores: Qtd / Peso Médio / GMD Médio".
+  matrix: Object.freeze({ qtd: 'Qtd', peso_medio: 'Peso Médio', gmd_medio: 'GMD Médio' }),
+});
+
+// Linhas de total EM TEXTO do antigo ("Subtotal 02/06/2026: 103 animais   Peso Médio: 258,7 kg …"), itens na
+// ordem dele. Cada número é um agregado do motor (spec = o total da folha): a folha lê o do view model quando
+// o tipo já o calcula (mesmo número da grade e do XLSX) e, se a pessoa tirou a coluna em "Colunas", o motor
+// calcula sobre a MESMA população do grupo (nunca coluna que o perfil não vê — Valor total da CONSULTA).
+// unit: 'animais' | 'kg' | 'kg/dia' | '@' | null; lotes = quantos lotes a seção tem (Lotes: N).
+const specById = (list, id) => list.find((spec) => spec.id === id);
+const lineItem = (label, spec, unit) => Object.freeze({ key: spec.id, label, spec: Object.freeze({ ...spec }), unit });
+const ANIMAIS = lineItem(null, specById(SHEET_TOTALS, 'qtd'), 'animais');
+const PESO_MEDIO = lineItem('Peso Médio', specById(SHEET_TOTALS, 'peso_medio'), 'kg');
+const PESO_TOTAL = lineItem('Peso Total', specById(SHEET_TOTALS, 'peso_total'), 'kg');
+const GMD_MEDIO = lineItem('GMD Médio', specById(SHEET_TOTALS, 'gmd_medio'), 'kg/dia');
+const LOTES = Object.freeze({ key: 'lotes', label: 'Lotes', lotes: true });
+export const PESAGENS_SHEET_LINES = Object.freeze({
+  'por-apartacao-data': Object.freeze([ANIMAIS, PESO_MEDIO, PESO_TOTAL, GMD_MEDIO, LOTES]),
+  'por-apartacao-lote': Object.freeze([ANIMAIS, PESO_MEDIO, lineItem('Média (@)', specById(SHEET_TOTALS, 'media_arroba'), '@'), PESO_TOTAL, lineItem('Total (@)', specById(SHEET_TOTALS, 'total_arroba'), '@'), LOTES]),
+  // Analítico (e detalhe de um grupo): subtotal e TOTAL GERAL (o antigo somava também o ganho no TOTAL GERAL).
+  analitico: Object.freeze({
+    subtotal: Object.freeze([ANIMAIS, PESO_MEDIO, GMD_MEDIO]),
+    total: Object.freeze([ANIMAIS, PESO_MEDIO, GMD_MEDIO, lineItem('Ganho Total', specById(SHEET_TOTALS, 'ganho_total'), 'kg')]),
+  }),
+  // Vendas: por comprador (acima da tabela) e TOTAL GERAL; a Média (@) sem unidade, como no antigo.
+  vendas: Object.freeze({
+    subtotal: Object.freeze([lineItem(null, specById(VENDAS_TOTALS, 'animais_vendidos'), 'animais'), PESO_MEDIO, PESO_TOTAL, lineItem('Média (@)', specById(VENDAS_TOTALS, 'media_arroba'), null), lineItem('Valor Total', specById(VENDAS_TOTALS, 'valor_total'), null)]),
+    total: Object.freeze([lineItem(null, specById(VENDAS_TOTALS, 'animais_vendidos'), 'animais'), PESO_TOTAL, PESO_MEDIO, lineItem('Média (@)', specById(VENDAS_TOTALS, 'media_arroba'), null), lineItem('Valor Total', specById(VENDAS_TOTALS, 'valor_total'), null)]),
+  }),
+});
 export const PESAGENS_DEFAULT_VIEW = 'por-apartacao-data';
 const SHEET_CHOICES = { available: [...SHEET_COLUMN_KEYS], defaults: [...SHEET_DEFAULT_KEYS] };
 export const PESAGENS_VIEWS = Object.freeze([
