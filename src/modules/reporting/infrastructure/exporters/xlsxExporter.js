@@ -13,6 +13,8 @@ import { buildLeafTotalBlock, DOC_ROW_TYPES } from '../../domain/reportDocument.
 import { buildMatrix, isMatrixViewModel, MATRIX_TOTAL_LABEL, matrixValues } from '../../domain/matrixLayout.js';
 import { leafOnlyMetricKeys, summaryMetricValue } from '../../domain/summaryLayout.js';
 import { aggregateValueColumn, buildReportLines } from './reportLayout.js';
+import { isVendasViewModel } from '../../domain/vendasLayout.js';
+import { buildVendasSheetRows } from './vendasXlsx.js';
 
 const encoder = new TextEncoder();
 
@@ -186,6 +188,8 @@ function buildMatrixSheetRows(viewModel) {
 /** Linhas da planilha principal: [{ cells: [[valor, estilo], ...], kind }]. */
 export function buildSheetRows(viewModel) {
   if (isMatrixViewModel(viewModel)) return buildMatrixSheetRows(viewModel);
+  // E1D: Vendas (Detalhado) sai com os blocos da folha (exporters/vendasXlsx.js), com os estilos daqui.
+  if (isVendasViewModel(viewModel)) return buildVendasSheetRows(viewModel, { STYLE, numberStyle, metaRows });
   const layout = buildReportLines(viewModel, 'xlsx');
   if (layout.mode === 'RESUMIDO') return buildSummarySheetRows(viewModel, layout);
   const { headers, lines } = layout;
@@ -256,7 +260,7 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 function workbookFiles(viewModel, manifest) {
   const { rows, width, merges = [], freeze = null } = buildSheetRows(viewModel);
   // O título do bloco "TOTAL POR" transborda para as células vazias ao lado: não alarga a coluna A.
-  const measured = rows.slice(6).filter((row) => row.kind !== XLSX_BLOCK_KINDS.TITLE);
+  const measured = rows.slice(6).filter((row) => row.kind !== XLSX_BLOCK_KINDS.TITLE && !row.overflow);
   const widths = Array.from({ length: width }, (_, index) => Math.min(48, Math.max(10, measured.reduce((max, row) => Math.max(max, String(row.cells[index]?.[0] ?? '').length), 0) + 2)));
   const manifestRows = Object.entries(manifest || {}).map(([key, value]) => ({ cells: [[key, STYLE.meta], [typeof value === 'object' ? JSON.stringify(value) : value, STYLE.text]] }));
   return {

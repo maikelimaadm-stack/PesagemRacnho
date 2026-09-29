@@ -119,7 +119,7 @@ for (const id of ['por-apartacao-lote', 'por-apartacao-data']) {
   assert.deepEqual(options.filter((option) => option.default).map((option) => PESAGENS_SHEET_HEADERS.metrics[option.key]), SHEET_DOC_HEADERS.slice(1), `${id}: as visíveis do seletor = as colunas da folha, na mesma ordem`);
 }
 
-assert.deepEqual(VENDAS_COLUMNS, ['comprador', 'data_pesagem', 'numero_animal', 'peso', 'peso_arroba', 'valor_arroba', 'valor_venda_total'], 'Vendas: colunas do contrato');
+assert.deepEqual(VENDAS_COLUMNS, ['comprador', 'data_pesagem', 'numero_animal', 'peso', 'peso_arroba', 'valor_arroba', 'valor_venda_calc'], 'Vendas: colunas do contrato (Valor Total = valor_venda_calc: digitado, senão @ viva × Valor @)');
 assert.deepEqual((await run({ view: 'vendas' })).columns.map((column) => column.id), VENDAS_COLUMNS, 'Vendas: padrão do tipo (ADMIN)');
 assert.deepEqual(typeColumnOptions(definition, view('vendas'), 'ADMIN').map((option) => option.key), VENDAS_AVAILABLE_COLUMNS, 'Vendas: seletor = as disponíveis do tipo');
 
@@ -182,17 +182,17 @@ await writeAppSetting(typeColumnsKey('local', GESTOR.id), 'lixo');
 assert.deepEqual(await getTypeColumnPrefs('pesagens', GESTOR), {}, 'NEGATIVO: estado ilegível = sem escolha');
 
 // ---- 4. Papel sem valores comerciais não recebe nem grava coluna sensível ----
-const SENSIVEIS = ['valor_arroba', 'valor_venda_total'];
+const SENSIVEIS = ['valor_arroba', 'valor_venda_calc'];
 for (const actor of [OPERADOR, CONSULTA]) {
   const offered = typeColumnOptions(definition, view('vendas'), actor.role).map((option) => option.key);
   assert.ok(SENSIVEIS.every((key) => !offered.includes(key)), `${actor.role}: seletor sem valores comerciais`);
   assert.deepEqual(typeColumnDefaults(definition, view('vendas'), actor.role), VENDAS_COLUMNS.filter((key) => !SENSIVEIS.includes(key)), `${actor.role}: padrão que o papel vê`);
-  assert.deepEqual(await saveTypeColumnPrefs('pesagens', 'vendas', ['comprador', 'valor_venda_total', 'peso', 'valor_arroba'], actor), ['comprador', 'peso'], `NEGATIVO ${actor.role}: coluna sensível não é gravada`);
+  assert.deepEqual(await saveTypeColumnPrefs('pesagens', 'vendas', ['comprador', 'valor_venda_calc', 'peso', 'valor_arroba'], actor), ['comprador', 'peso'], `NEGATIVO ${actor.role}: coluna sensível não é gravada`);
   assert.ok(!JSON.stringify(await readAppSetting(typeColumnsKey('local', actor.id))).includes('valor_'), `${actor.role}: nada de valor no banco`);
 }
 assert.ok(SENSIVEIS.every((key) => typeColumnOptions(definition, view('vendas'), 'ADMIN').some((option) => option.key === key)), 'ADMIN vê as colunas de valor');
 // Escolha gravada com valor (papel rebaixado depois, ou banco mexido): ao ler, o papel sem valores não recebe.
-await writeAppSetting(typeColumnsKey('local', CONSULTA.id), { version: 1, reports: { pesagens: { vendas: ['valor_venda_total', 'comprador', 'valor_arroba', 'peso'] } } });
+await writeAppSetting(typeColumnsKey('local', CONSULTA.id), { version: 1, reports: { pesagens: { vendas: ['valor_venda_calc', 'comprador', 'valor_arroba', 'peso'] } } });
 assert.deepEqual(await getTypeColumnPrefs('pesagens', CONSULTA), { vendas: ['comprador', 'peso'] }, 'NEGATIVO: a leitura nunca amplia permissão');
 
 // ---- 5. As 8 ordenações ----

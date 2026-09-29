@@ -5,6 +5,7 @@
 import { defineReport, DATA_CLASSIFICATION } from '../domain/reportDefinition.js';
 import { GRAINS } from '../domain/reportGrain.js';
 import { EVENT_COLUMNS, RELATION_SEARCH_COLUMN_IDS } from './columns/eventColumns.js';
+import { VENDAS_BLOCK_TOTALS } from '../domain/vendasLayout.js';
 
 export const EVENT_PERIOD_PARAM = Object.freeze({ id: 'periodo', type: 'period', label: 'Período', required: true, default: { preset: 'ultimos_30_dias' } });
 
@@ -115,33 +116,26 @@ export const VENDAS_POPULATION = Object.freeze({
   tipo_manejo: { operator: 'in', values: ['Saída'], match: 'code' },
   motivo_saida: { operator: 'in', values: ['Venda'], match: 'code' },
 });
-export const VENDAS_COLUMNS = Object.freeze(['comprador', 'data_pesagem', 'numero_animal', 'peso', 'peso_arroba', 'valor_arroba', 'valor_venda_total']);
+// Colunas da tabela "Mostrar Detalhes" do antigo (COLUNAS_DETALHES_VENDAS), na ordem dele; as opcionais ficam
+// no seletor "Colunas". "Qtd @" = @ de PESO VIVO (peso ÷ divisor de Configurações › Relatórios, 30 como o
+// antigo) — não é a @ de carcaça do Comercial; "Valor @" = preço da @ digitado no lançamento; "Valor Total" =
+// valor_venda_calc: o valor digitado quando > 0, senão Qtd @ × Valor @ (regra do antigo — conta no PDF da
+// responsável: 40.968 kg ÷ 30 × R$ 383 = R$ 523.024,80); sem Valor @ nem valor digitado, "-" e fora da soma.
+// ATENÇÃO (pergunta à responsável, REPORT da E1D): a "Estimativa comercial"/"Resumo de Vendas" do Lançamento
+// usa a @ de CARCAÇA (peso × rendimento ÷ 15 × Valor @) e pode dar outro valor para a mesma venda sem valor
+// digitado.
+export const VENDAS_COLUMNS = Object.freeze(['comprador', 'data_pesagem', 'numero_animal', 'peso', 'peso_arroba', 'valor_arroba', 'valor_venda_calc']);
 export const VENDAS_AVAILABLE_COLUMNS = Object.freeze([...VENDAS_COLUMNS, 'destino_venda', 'nome_lote', 'nome_apartacao', 'sexo', 'raca', 'era', 'marca', 'observacao']);
-// Cabeçalhos do antigo (grade, folha, CSV, XLSX e seletor "Colunas"). "Qtd @" = @ de PESO VIVO (peso ÷
-// divisor de Configurações › Relatórios, 30 como o antigo) — não é a @ de carcaça do Comercial; "Valor @" =
-// preço da @ digitado no lançamento; "Valor total" = o valor digitado no lançamento. Sem valor digitado a
-// célula fica "—" e fora da soma: o antigo inventava peso ÷ 30 × valor @, e o Lançamento de hoje não grava
-// conta nenhuma no valor total. ATENÇÃO (pergunta à responsável, REPORT da E1D): o painel "Resumo de Vendas"
-// do Lançamento MOSTRA um "Valor total (R$)" que, sem valor digitado (ou com 0), soma a estimativa pela @ de
-// carcaça (peso × rendimento ÷ 15 × Valor @) — nesse caso o relatório e o Resumo do dia dão valores
-// diferentes. Um 0 digitado é gravado e aqui conta como R$ 0,00 digitado (o Resumo trata 0 como não
-// informado). O "(n de m)" de valor digitado sai na tela e na folha; no CSV/XLSX vai só a soma do digitado.
-export const VENDAS_COLUMN_LABELS = Object.freeze({ peso_arroba: 'Qtd @', valor_arroba: 'Valor @', valor_venda_total: 'Valor total' });
-// Subtotal por comprador e total geral (item 3): animais, peso total, peso médio, @ e valor total — a @ em
-// total e média (o antigo mostrava a "Média (@)"). Animais DISTINTOS (o antigo contava linhas); @ = soma/
-// média da @ viva de cada linha; valor = soma só do que foi digitado (o chip diz "n de m" quando falta).
-// Ids próprios para animais/valor: o rótulo de curral deles (metricLabels) não muda os outros tipos.
-export const VENDAS_TOTALS = Object.freeze([
-  { id: 'animais_vendidos', columnId: 'numero_animal', op: 'countDistinct' },
-  { id: 'peso_total', columnId: 'peso', op: 'sum' },
-  { id: 'peso_medio', columnId: 'peso', op: 'avg' },
-  { id: 'total_arroba', columnId: 'peso_arroba', op: 'sum' },
-  { id: 'media_arroba', columnId: 'peso_arroba', op: 'avg' },
-  { id: 'valor_total', columnId: 'valor_venda_total', op: 'sum' },
-]);
-// Rótulos dos totais que só Vendas usa (Peso total/médio e Total/Média (@) são os da folha). Grade, folha,
-// CSV e XLSX leem o mesmo rótulo pelo id (metricLabels da definição).
-export const VENDAS_METRIC_LABELS = Object.freeze({ animais_vendidos: 'Animais', valor_total: 'Valor total' });
+// Cabeçalhos do antigo (grade, folha, CSV, XLSX e seletor "Colunas").
+export const VENDAS_COLUMN_LABELS = Object.freeze({ peso_arroba: 'Qtd @', valor_arroba: 'Valor @', valor_venda_calc: 'Valor Total' });
+// Totais do tipo = os dos blocos do relatório de venda (domain/vendasLayout.js — Métrica/Valor, Totais por
+// marca, por comprador, cartão do comprador e TOTAL GERAL leem estes ids): animais DISTINTOS (o antigo contava
+// linhas), peso total, peso médio, Média (@) viva, Média valor da arroba (Valor @ ponderado pela Qtd @) e
+// Valor total (soma de valor_venda_calc). Na grade/CSV/JSON são os subtotais por comprador e o total geral.
+export const VENDAS_TOTALS = VENDAS_BLOCK_TOTALS;
+// Rótulos de curral dos totais que só Vendas usa (Peso total/médio e Média (@) são os da folha). Grade, CSV e
+// XLSX leem o mesmo rótulo pelo id (metricLabels da definição).
+export const VENDAS_METRIC_LABELS = Object.freeze({ animais_vendidos: 'Animais vendidos', media_valor_arroba: 'Média valor da arroba', valor_total: 'Valor total' });
 
 // "Ordenar por": exatamente as 8 opções do antigo (item 6), com os rótulos dele. A tradução de cada uma
 // para a seleção de cada tipo fica em domain/sortChoices.js.

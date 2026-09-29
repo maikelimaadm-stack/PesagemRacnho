@@ -203,6 +203,44 @@ export const SHEET_CSS = `
 
 /* Pré-visualização do cabeçalho na ficha da Propriedade ("Assim vai sair nos relatórios"). */
 .rpt-sheet.rpt-sheet--preview { padding: 5mm 6mm; border: 1px dashed #cbd5e1; border-radius: 6px; }
+
+/* E1D — Vendas (Detalhado): o relatório de venda do MAKGESTAO (exporters/vendasHtml.js), com as medidas das
+   classes Tailwind do antigo em em (base text-xs = 12px): tabela shadcn (cabeçalho h-10 px-2 font-bold cinza,
+   células py-2 px-2, linha border-b, a última sem linha), números em fonte mono, título de bloco text-sm negrito
+   com border-b slate-200 pb-2 mb-2, cartão bg-slate-50 border rounded-md p-3 com grade de 2 colunas gap-4,
+   espaço de 16px entre blocos (space-y-4) e TOTAL GERAL text-xs semibold à direita. */
+.rpt-sheet .sheet-vendas { --sv-text: #020817; --sv-muted: #64748b; --sv-line: #e2e8f0; --sv-strong: #1e293b; --sv-card-text: #475569; --sv-card-bg: #f8fafc;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 12px; line-height: 1.3333; color: var(--sv-text); }
+.rpt-sheet.sheet-size-s .sheet-vendas { font-size: 10.7px; }
+.rpt-sheet.sheet-size-xs .sheet-vendas { font-size: 9.6px; }
+.rpt-sheet .sheet-vendas > * + * { margin-top: 1.3333em; }
+.rpt-sheet .sheet-vendas > .sv-table--resumo:first-child { margin-top: .5em; }
+.rpt-sheet .sheet-vendas .sv-table { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 1em; }
+.rpt-sheet .sheet-vendas .sv-table > thead { display: table-header-group; }
+.rpt-sheet .sheet-vendas .sv-table tr { break-inside: avoid; page-break-inside: avoid; }
+.rpt-sheet .sheet-vendas .sv-table th { height: 3.3333em; padding: .6667em; vertical-align: middle; font-weight: 700; color: var(--sv-muted); background: none; border-bottom: 1px solid var(--sv-line); white-space: nowrap; }
+.rpt-sheet .sheet-vendas .sv-table td { padding: .6667em; vertical-align: middle; border-bottom: 1px solid var(--sv-line); }
+.rpt-sheet .sheet-vendas .sv-table > tbody > tr:last-child > td { border-bottom: 0; }
+.rpt-sheet .sheet-vendas .sv-l { text-align: left; }
+.rpt-sheet .sheet-vendas .sv-r { text-align: right; }
+.rpt-sheet .sheet-vendas .sv-c { text-align: center; }
+.rpt-sheet .sheet-vendas .sv-num { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; white-space: nowrap; }
+.rpt-sheet .sheet-vendas .sv-semibold { font-weight: 600; }
+.rpt-sheet .sheet-vendas .sv-medium { font-weight: 500; }
+.rpt-sheet .sheet-vendas .sv-strong > td { font-weight: 700; color: var(--sv-strong); }
+.rpt-sheet .sheet-vendas .sv-title { border-bottom: 1px solid var(--sv-line); padding-bottom: .5714em; margin-bottom: .5714em; font-size: 1.1667em; line-height: 1.7143; font-weight: 700; color: var(--sv-strong); text-transform: uppercase; break-after: avoid; page-break-after: avoid; }
+.rpt-sheet .sheet-vendas .sv-block--compradores > .sv-title { margin-bottom: 1.1429em; }
+.rpt-sheet .sheet-vendas .sv-comprador { margin-bottom: 2em; }
+.rpt-sheet .sheet-vendas .sv-card { background: var(--sv-card-bg); border: 1px solid var(--sv-line); border-radius: .5em; padding: 1em; margin-bottom: .6667em; break-inside: avoid; page-break-inside: avoid; }
+.rpt-sheet .sheet-vendas .sv-comprador--detalhes .sv-card { break-after: avoid; page-break-after: avoid; }
+.rpt-sheet .sheet-vendas .sv-card__title { margin: 0 0 .5714em; font-size: 1.1667em; line-height: 1.4286; font-weight: 700; color: var(--sv-strong); text-transform: uppercase; }
+.rpt-sheet .sheet-vendas .sv-card__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.3333em; color: var(--sv-card-text); }
+.rpt-sheet .sheet-vendas .sv-card__grid strong { font-weight: 700; }
+.rpt-sheet .sheet-vendas .sv-total-geral { text-align: right; font-weight: 600; break-inside: avoid; page-break-inside: avoid; break-before: avoid; page-break-before: avoid; }
+/* O TOTAL GERAL nunca sai sozinho numa página. Depois do cartão o break-before: avoid basta; depois da tabela
+   de detalhe o Chromium não volta para dentro dela, então a última linha reserva o lugar do TOTAL (3,5em =
+   espaço + linha; a margem negativa não muda a altura): se os dois não cabem, a linha desce junto. */
+.rpt-sheet .sheet-vendas .sv-comprador:last-child .sv-table--detail > tbody > tr:last-child > td::after { content: ""; display: block; height: 3.5em; margin-bottom: -3.5em; }
 ${MAKGESTAO_CSS}`;
 
 /**

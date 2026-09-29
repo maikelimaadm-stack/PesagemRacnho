@@ -5,6 +5,7 @@
 // E1D visual: documento com style 'makgestao' (os 5 tipos de Pesagens) sai com o desenho da folha do antigo
 // (seção abaixo); os demais continuam com o desenho da E1B.
 import { isAcceptedLogo } from '../../../catalog/domain/propertyHeader.js';
+import { renderVendasBody } from './vendasHtml.js';
 
 export function escapeHtml(value) {
   return String(value ?? '')
@@ -245,6 +246,8 @@ export function renderSheetBody(doc, { mode = 'fragment', interactive = false, s
   const mak = doc.style === 'makgestao';
   let content;
   if (doc.empty) content = `<p class="sheet-empty">${escapeHtml(doc.emptyText ?? 'Nenhum registro para os filtros informados.')}</p>`;
+  // E1D: "Vendas (Detalhado)" tem miolo próprio (o relatório de venda do MAKGESTAO — vendasHtml.js).
+  else if (doc.layout === 'vendas') content = renderVendasBody(doc);
   else if (mak) content = renderMakContent(doc, options);
   else {
     content = [
