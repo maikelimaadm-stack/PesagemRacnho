@@ -267,6 +267,9 @@ html body #root .rpt-mak .rpt-mak-btn--sm:not(#rpt-none) { height: 28px; min-hei
 html body #root .rpt-mak .rpt-mak-btn--icon:not(#rpt-none) { gap: 4px; }
 html body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none) { border-color: #059669; background: #059669 !important; color: #fafafa !important; box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); }
 html body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none):hover { background: #047857 !important; color: #fafafa !important; }
+/* "Ocultar Detalhes" de Vendas ligado: o variant "default" (escuro) do botão do antigo (L1447). */
+html body #root .rpt-mak .rpt-mak-btn.is-pressed:not(#rpt-none) { border-color: #171717; background: #171717 !important; color: #fafafa !important; }
+html body #root .rpt-mak .rpt-mak-btn.is-pressed:not(#rpt-none):hover { background: #262626 !important; color: #fafafa !important; }
 html body #root .rpt-mak .rpt-mak-btn[aria-disabled="true"]:not(#rpt-none) { opacity: .5; }
 .rpt-mak .rpt-locked-pill { height: 28px; margin: 0; padding: 0 10px; border-radius: 6px; font-size: 12px; }
 .rpt-mak-chip { display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 4px 0 10px; border: 1px dashed #b7c2cf; border-radius: 6px; background: #f8fafc; color: #475569; font-size: 12px; white-space: nowrap; }

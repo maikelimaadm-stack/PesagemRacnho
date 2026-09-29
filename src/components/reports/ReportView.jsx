@@ -426,7 +426,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   // reduzir totais/colunas ou exportar) — nunca corta em silêncio.
   const emitDocument = async (kind, overrides = {}) => {
     if (!viewModel) return;
-    const options = { orientation: overrides.orientation ?? sheetOrientation, widths: state.widths, header, showEmptyColumns: state.showEmptyColumns, acceptTooWide: overrides.acceptTooWide ?? false };
+    // showDetails: "Mostrar Detalhes" de Vendas — a impressão e o PDF saem como a folha da tela.
+    const options = { orientation: overrides.orientation ?? sheetOrientation, widths: state.widths, header, showEmptyColumns: state.showEmptyColumns, showDetails: state.showDetails === true, acceptTooWide: overrides.acceptTooWide ?? false };
     try {
       const result = kind === "pdf" ? await exportPdf(viewModel, actor, options) : await printReport(viewModel, actor, options);
       if (result.blocked) { setPrintPrompt({ kind, layout: result.layout }); return; }
@@ -546,6 +547,10 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       ? { label: makColumnsLabel, title: makColumnsLabel === "Colunas" && typeColumnsOn ? "Colunas Visíveis" : makColumnsLabel, onClick: () => setDialog(summaryMode && !typeColumnsOn ? "totals" : "columns") }
       : null;
     const columnsInCard = Boolean(makColumns && typeColumnsOn && currentView.groupChoices?.length);
+    // Vendas (L1445–1466 do antigo): "Mostrar/Ocultar Detalhes" abre a lista de cada comprador; "Colunas
+    // Detalhes" só aparece com ela aberta. Começa desligado, como no antigo.
+    const vendasTools = Boolean(currentView?.id === "vendas" && inTypeMode && !drillParts.length);
+    const hideColumnsButton = vendasTools && !state.showDetails;
     const makNotes = [
       ...(viewModel?.warnings ?? []).map((warning) => <div key={warning.code} className="rpt-warning" role="status"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />{warning.message}</div>),
       ...(error ? [<div key="erro" className="rpt-error" role="alert">{error.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode abrir este relatório." : error.message}</div>] : []),
@@ -628,9 +633,15 @@ export default function ReportView({ reportId, presetId = null, template, savedS
         <div className="rpt-mak__paper">
           {/* "Colunas Painel/Detalhes" fora da folha (não sai na impressão), no canto da área do papel — a barra
               print:hidden do antigo ficava dentro da área de impressão. */}
-          {makColumns && !columnsInCard ? (
+          {vendasTools || (makColumns && !columnsInCard) ? (
             <div className="rpt-mak__sheet-tools" role="group" aria-label="Colunas da folha">
-              <MakgestaoColumnsButton {...makColumns} />
+              {vendasTools ? (
+                <button type="button" className={`rpt-mak-btn rpt-mak-btn--icon${state.showDetails ? " is-pressed" : ""}`} aria-pressed={state.showDetails === true} onClick={() => update({ showDetails: !state.showDetails })}>
+                  {state.showDetails ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                  {state.showDetails ? "Ocultar Detalhes" : "Mostrar Detalhes"}
+                </button>
+              ) : null}
+              {makColumns && !columnsInCard && !hideColumnsButton ? <MakgestaoColumnsButton {...makColumns} /> : null}
             </div>
           ) : null}
           {viewModel ? (
@@ -639,6 +650,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
               header={header}
               orientation={sheetOrientation}
               showEmptyColumns={state.showEmptyColumns}
+              showDetails={state.showDetails === true}
               sort={viewModel.mode === REPORT_MODES.RESUMIDO ? (fixedSortChoices ? viewModel.summarySort : state.summarySort) : null}
               onDrill={viewModel.mode === REPORT_MODES.RESUMIDO ? onDrill : null}
               onSort={viewModel.mode === REPORT_MODES.RESUMIDO ? onSheetSort : null}

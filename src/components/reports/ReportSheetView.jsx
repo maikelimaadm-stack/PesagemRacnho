@@ -10,10 +10,10 @@ import { SHEET_CSS } from "@/modules/reporting/infrastructure/exporters/sheetSty
 // Detalhado como folha ("Ver como folha") limita as linhas na tela; a impressão leva todas.
 export const SCREEN_MAX_DATA_ROWS = 2000;
 
-export default function ReportSheetView({ viewModel, header = null, orientation = "auto", showEmptyColumns = false, sort = null, onDrill, onSort }) {
+export default function ReportSheetView({ viewModel, header = null, orientation = "auto", showEmptyColumns = false, showDetails = false, sort = null, onDrill, onSort }) {
   const doc = useMemo(
-    () => buildReportDocument(viewModel, { header, orientation, showEmptyColumns, maxDataRows: SCREEN_MAX_DATA_ROWS }),
-    [viewModel, header, orientation, showEmptyColumns],
+    () => buildReportDocument(viewModel, { header, orientation, showEmptyColumns, showDetails, maxDataRows: SCREEN_MAX_DATA_ROWS }),
+    [viewModel, header, orientation, showEmptyColumns, showDetails],
   );
   // Sem clique no grupo nem ordenação (Detalhado como folha): nenhum botão na folha.
   const interactive = Boolean(onDrill || onSort);
