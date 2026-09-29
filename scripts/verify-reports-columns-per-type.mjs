@@ -31,6 +31,7 @@ import { toggleGroupChoice } from '../src/modules/reporting/domain/groupChoices.
 import { MAX_GROUP_LEVELS } from '../src/modules/reporting/domain/groupEngine.js';
 import { headerLabel } from '../src/modules/reporting/domain/reportFormatting.js';
 import { buildReportDocument, documentRows } from '../src/modules/reporting/domain/reportDocument.js';
+import { PESAGENS_SHEET_HEADERS } from '../src/modules/reporting/definitions/pesagens.js';
 import { buildReportLines } from '../src/modules/reporting/infrastructure/exporters/reportLayout.js';
 import { buildSheetRows } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
 
@@ -102,16 +103,20 @@ assert.deepEqual(typeColumnOptions(definition, view('analitico'), 'ADMIN').map((
 
 const SHEET_HEADERS = ['Lote', 'Qtd', 'Faixa exigida (kg)', 'Menor (kg)', 'Maior (kg)', 'Peso médio (kg)', 'Média (@)', 'Peso total (kg)', 'GMD médio (kg/dia)', 'Machos', 'Fêmeas'];
 const SHEET_EXTRA_LABELS = ['Total (@)', 'Ganho médio (kg)', 'Ganho médio (@)', 'Ganho total (kg)', 'Ganho total (@)', 'Dias médios'];
+// E1D visual: a FOLHA dos tipos tem os cabeçalhos do antigo (Title Case, sem unidade — o "kg" vai em cada
+// número); o seletor "Colunas", a grade e as exportações continuam com os rótulos de curral (metricLabels).
+const SHEET_DOC_HEADERS = ['Lote', 'Qtd', 'Faixa Exigida', 'Menor', 'Maior', 'Peso Médio', 'Média (@)', 'Peso Total', 'GMD Médio', 'Machos', 'Fêmeas'];
 for (const id of ['por-apartacao-lote', 'por-apartacao-data']) {
   const typed = view(id);
   assert.deepEqual(typed.columnChoices.available, [...SHEET_COLUMN_KEYS], `${id}: as 16 chaves do painel`);
   assert.deepEqual(columnKeysOf(typed, definition, viewSelection(typed, definition)), [...SHEET_DEFAULT_KEYS], `${id}: padrão do tipo`);
   const vm = await run({ view: id });
   const doc = buildReportDocument(vm, { showEmptyColumns: true });
-  assert.deepEqual(doc.columns.map((column) => column.label), SHEET_HEADERS, `${id}: folha com Lote + as 10 visíveis por padrão`);
+  assert.deepEqual(doc.columns.map((column) => column.label), SHEET_DOC_HEADERS, `${id}: folha com Lote + as 10 visíveis por padrão (cabeçalhos do antigo)`);
   const options = typeColumnOptions(definition, typed, 'ADMIN');
   assert.deepEqual(options.filter((option) => !option.default).map((option) => option.label), SHEET_EXTRA_LABELS, `${id}: as outras 6 no seletor`);
-  assert.deepEqual(options.filter((option) => option.default).map((option) => option.label), SHEET_HEADERS.slice(1), `${id}: rótulos das visíveis = os da folha`);
+  assert.deepEqual(options.filter((option) => option.default).map((option) => option.label), SHEET_HEADERS.slice(1), `${id}: rótulos das visíveis no seletor (os da grade e das exportações)`);
+  assert.deepEqual(options.filter((option) => option.default).map((option) => PESAGENS_SHEET_HEADERS.metrics[option.key]), SHEET_DOC_HEADERS.slice(1), `${id}: as visíveis do seletor = as colunas da folha, na mesma ordem`);
 }
 
 assert.deepEqual(VENDAS_COLUMNS, ['comprador', 'data_pesagem', 'numero_animal', 'peso', 'peso_arroba', 'valor_arroba', 'valor_venda_total'], 'Vendas: colunas do contrato');
@@ -141,7 +146,7 @@ assert.deepEqual((await getTypeColumnPrefs('pesagens', ADMIN))['por-apartacao-lo
 const prefs = await getTypeColumnPrefs('pesagens', ADMIN);
 const typedSelection = (id) => ({ ...viewSelection(view(id), definition), ...(prefs[id] ? applyColumnKeys(view(id), definition, prefs[id]) : {}) });
 const loteEscolhido = await run(typedSelection('por-apartacao-lote'));
-assert.deepEqual(buildReportDocument(loteEscolhido, { showEmptyColumns: true }).columns.map((column) => column.label), ['Lote', 'Peso médio (kg)', 'Qtd', 'Ganho total (kg)', 'Faixa exigida (kg)'], 'Por Apartação/Lote: folha com a escolha, na ordem');
+assert.deepEqual(buildReportDocument(loteEscolhido, { showEmptyColumns: true }).columns.map((column) => column.label), ['Lote', 'Peso Médio', 'Qtd', 'Ganho Total', 'Faixa Exigida'], 'Por Apartação/Lote: folha com a escolha, na ordem');
 assert.deepEqual(columnKeysOf(view('por-apartacao-lote'), definition, typedSelection('por-apartacao-lote')), escolhaLote, 'ida e volta chave → totais → chave');
 assert.deepEqual((await run(typedSelection('analitico'))).columns.map((column) => column.id), escolhaAnalitico, 'Analítico: colunas da escolha, na ordem');
 assert.equal(prefs['sintetico-matriz'], undefined, 'Matriz: nada salvo (sem seletor)');
@@ -418,10 +423,18 @@ assert.equal(lote01.aggregates.animais.value, 3, 'Lote 01: 3 animais distintos e
 close(lote01.aggregates.peso_medio.value, 2400 / 7, 'Lote 01: peso médio');
 close(lote01.aggregates.gmd_medio.value, 85 / 60, 'Lote 01: GMD ponderado (nunca média simples dos GMD)');
 assert.equal(porLote.totals.animais.value, 8, 'Total geral: 8 animais (recalculado, não soma)');
-const chips = documentRows(buildReportDocument(porLote, { showEmptyColumns: true })).filter((row) => row.chips);
-assert.deepEqual(chips.map((row) => row.chips.title), ['Subtotal Lote 01', 'Subtotal Lote 02', 'Subtotal Lote 03', 'Subtotal Não informado', 'Total geral'], 'folha: subtotal por grupo + total geral');
-assert.deepEqual(chips[0].chips.items.map((item) => item.text), ['3', '342,9 (7 de 8)', '1,417 (3 de 8)'], 'folha: Lote 01');
-assert.deepEqual(chips[2].chips.items.map((item) => item.text), ['1', '400,0', '—'], 'folha: Lote 03 sem GMD = "—"');
+// E1D visual: na folha (cara do MAKGESTAO) o grupo é o próprio valor ("LOTE 01") e o subtotal é a linha de
+// texto do antigo — "Subtotal: 3 animais | Peso Médio: 342,9 kg | GMD Médio: 1,417 kg/dia" — com os números do
+// motor (animais distintos, GMD ponderado); o TOTAL GERAL leva também o Ganho Total, como o antigo.
+const folhaPorLote = buildReportDocument(porLote, { showEmptyColumns: true });
+assert.deepEqual(folhaPorLote.sections.map((section) => section.title), ['LOTE 01', 'LOTE 02', 'LOTE 03', 'NÃO INFORMADO'], 'folha: título do grupo = o valor, como no antigo');
+const linhas = documentRows(folhaPorLote).filter((row) => row.line);
+assert.deepEqual(linhas.map((row) => row.line.items[0].label), ['Subtotal', 'Subtotal', 'Subtotal', 'Subtotal', 'TOTAL GERAL'], 'folha: subtotal por grupo + TOTAL GERAL');
+assert.deepEqual(linhas[0].line.items.map((item) => item.text), ['3 animais', '342,9 kg', '1,417 kg/dia'], 'folha: Lote 01');
+assert.deepEqual(linhas[0].line.items.map((item) => item.raw), [lote01.aggregates.animais.value, lote01.aggregates.peso_medio.value, lote01.aggregates.gmd_medio.value], 'folha: Lote 01 = motor (animais distintos, GMD ponderado)');
+assert.deepEqual(linhas[2].line.items.map((item) => item.text), ['1 animal', '400,0 kg', '-'], 'folha: Lote 03 sem GMD = "-"');
+assert.equal(linhas.at(-1).line.items[0].raw, porLote.totals.animais.value, 'folha: TOTAL GERAL = animais distintos da população (8), não soma');
+assert.equal(linhas.at(-1).line.items.at(-1).label, 'Ganho Total', 'folha: TOTAL GERAL com o Ganho Total do antigo');
 const csvSub = buildReportLines(porLote, 'csv').lines.filter((line) => line.type === 'SUBTOTAL' && line.group === 'Lote 01');
 assert.deepEqual(csvSub.map((line) => line.value), ['3', '342,9', '1,417'], 'CSV: subtotal do Lote 01');
 const xlsxSub = buildSheetRows(porLote).rows.filter((row) => row.kind === 'SUBTOTAL' && row.cells[1][0] === 'Lote 01').map((row) => row.cells[3][0]);

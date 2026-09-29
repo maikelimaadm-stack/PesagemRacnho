@@ -367,7 +367,10 @@ for (const view of views) {
   assert.equal(docVazio.empty, true, `controle ${view.label}: período sem pesagens`);
   assert.equal(docVazio.footer.arroba, null, `NEGATIVO ${view.label} vazio: sem "@ = peso vivo ÷ N" no rodapé`);
   const htmlVazio = decode(renderSheetBody(docVazio, { mode: 'print' }));
-  assert.ok(htmlVazio.includes('Nenhum registro para os filtros informados.') && !htmlVazio.includes('peso vivo'), `NEGATIVO ${view.label} vazio: folha e rodapé sem @`);
+  // E1D visual: a folha vazia diz o que o antigo dizia ("Nenhuma pesagem/venda encontrada com os filtros aplicados.").
+  const vazio = `Nenhuma ${view.id === 'vendas' ? 'venda' : 'pesagem'} encontrada com os filtros aplicados.`;
+  assert.equal(docVazio.emptyText, vazio, `${view.label} vazio: texto do antigo`);
+  assert.ok(htmlVazio.includes(vazio) && !htmlVazio.includes('peso vivo'), `NEGATIVO ${view.label} vazio: folha e rodapé sem @`);
 }
 assert.ok(buildReportDocument(await run(viewSelection('por-apartacao-data', PESAGENS), ADMIN, SEM_PESAGENS)).columns.some((column) => column.metric?.column?.unit === '@' || column.unit === '@'), 'controle: o tipo padrão vazio ainda lista Média (@) entre as colunas (por isso o rodapé precisa olhar as linhas)');
 assert.equal(docFolha.footer.omitidas, null, 'NEGATIVO: sem coluna omitida, sem aviso');
