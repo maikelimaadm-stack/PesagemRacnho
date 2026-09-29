@@ -16,15 +16,16 @@ import { REPORT_FAMILIES, REPORT_MODES } from "@/modules/reporting/domain/report
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
-import { getReportView, listReportViews, parseSortChoice, resolveViewId, viewSelection } from "@/modules/reporting/domain/reportViews";
+import { listReportViews, parseSortChoice, resolveViewId, viewSelection } from "@/modules/reporting/domain/reportViews";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
-import { aliasSelection, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
+import { getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
+import { buildInitialReportState } from "@/modules/reporting/application/reportInitialState";
 import { runReport } from "@/modules/reporting/application/reportService";
 import { emitReport } from "@/modules/reporting/application/reportExportService";
 import { exportPdf, printReport } from "@/modules/reporting/application/reportPrintService";
 import { loadReportHeader } from "@/modules/catalog/application/propertyHeaderService";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { favoriteKey, getFavorites, recordRecent, saveReportViewState, saveTemplate, templateToRequest, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
+import { favoriteKey, getFavorites, recordRecent, saveReportViewState, saveTemplate, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportFilterBar from "./ReportFilterBar";
 import ReportSheetView from "./ReportSheetView";
@@ -49,91 +50,12 @@ const FILTER_BUTTONS = Object.freeze([
   { label: "Status", ids: ["situacao_atual", "situacao"] },
 ]);
 
-// E1D (contrato §3): tipo explícito no estado da tela. Estado/modelo de antes da E1D (sem `view`) ganha o
-// tipo que bate pela estrutura (resolveViewId); nenhum → null ("Personalizado").
-function withTypedState(definition, state) {
-  const view = state.view !== undefined ? state.view : resolveViewId(definition, state);
-  return {
-    ...state,
-    view: view ?? null,
-    matrix: state.matrix ?? (view ? getReportView(definition, view)?.matrix ?? null : null),
-    sortChoice: state.sortChoice !== undefined ? state.sortChoice : (definition.defaultSortChoice ?? null),
-  };
-}
-
-function stateFromRequest(definition, request, extra = {}) {
-  return withTypedState(definition, {
-    view: request.selection.view,
-    matrix: request.selection.matrix,
-    sortChoice: request.selection.sortChoice,
-    params: request.params,
-    uiFilters: toDisplayFilters(request.selection.filters, definition.columns),
-    fixedFilters: request.selection.fixedFilters ?? {},
-    columns: request.selection.columns.length ? request.selection.columns : definition.defaultColumns,
-    groups: request.selection.groups,
-    aggregates: request.selection.aggregates,
-    sort: request.selection.sort,
-    search: request.selection.search,
-    widths: request.widths,
-    mode: request.selection.mode,
-    summarySort: request.selection.summarySort,
-    drill: [],
-    orientation: request.orientation ?? "auto",
-    showEmptyColumns: false,
-    detailSheet: false,
-    ...extra,
-  });
-}
-
+// Estado inicial (E1D): application/reportInitialState — o mesmo código que o gate reports:pesagens-tipos
+// confere em Node (modelo > visão antiga > último estado > tipo padrão do relatório).
 function initialState(definition, template, preset, role, savedState) {
-  if (template) {
-    const request = templateToRequest(template, role);
-    request.warnings.forEach((warning) => toast.warning(warning.message));
-    return stateFromRequest(definition, request);
-  }
-  if (!preset && savedState) {
-    // Último estado do usuário (já revalidado pelo serviço contra a definição e o papel).
-    return stateFromRequest(definition, savedState, { showEmptyColumns: savedState.showEmptyColumns === true });
-  }
-  const params = {};
-  for (const param of definition.params) if (param.default != null) params[param.id] = param.default;
-  // E1D: relatório com tipo padrão (Pesagens → "Por Apartação (Resumo por Data)") abre nele.
-  if (!preset && definition.defaultView) {
-    const selection = viewSelection(definition.defaultView, definition);
-    return withTypedState(definition, {
-      view: selection.view, matrix: selection.matrix, sortChoice: definition.defaultSortChoice ?? null,
-      params,
-      uiFilters: toDisplayFilters(definition.defaultFilters ?? {}, definition.columns),
-      fixedFilters: {},
-      columns: selection.columns, groups: selection.groups, aggregates: selection.aggregates, sort: selection.sort,
-      search: "", widths: {}, mode: selection.mode, summarySort: selection.summarySort, drill: [],
-      orientation: "auto", showEmptyColumns: false, detailSheet: false,
-    });
-  }
-  // Visão de um relatório antigo (favorito, recente ou link de antes da 1.4.0): mesma seleção.
-  const legacy = preset ? aliasSelection(preset) : null;
-  // Condições que eram fixas no relatório antigo comparavam o código (motivo = Morte, tipo
-  // Cadastro/Saída): continuam por código, não pelo rótulo exibido — mesma população do relatório antigo.
-  const legacyFilters = legacy
-    ? Object.fromEntries(Object.entries(legacy.filters).map(([columnId, filter]) => [columnId, preset.fixed.includes(columnId) ? { ...filter, match: "code" } : filter]))
-    : null;
-  return withTypedState(definition, {
-    params,
-    uiFilters: toDisplayFilters(legacyFilters ?? definition.defaultFilters ?? {}, definition.columns),
-    fixedFilters: {},
-    columns: legacy?.columns ?? definition.defaultColumns,
-    groups: legacy?.groups ?? definition.defaultGroups,
-    aggregates: legacy?.aggregates ?? definition.defaultAggregates,
-    sort: legacy?.sort ?? definition.defaultSort,
-    search: "",
-    widths: {},
-    mode: legacy?.mode ?? definition.defaultMode,
-    summarySort: null,
-    drill: [],
-    orientation: "auto",
-    showEmptyColumns: false,
-    detailSheet: false,
-  });
+  const { state, warnings } = buildInitialReportState(definition, { template, preset, role, savedState });
+  warnings.forEach((warning) => toast.warning(warning.message));
+  return state;
 }
 
 // Filtro rápido "ligado": compara a forma normalizada (modelo salvo e pílula guardam valueTo/values
@@ -604,7 +526,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
               {summaryMode && viewModel && !(viewModel.groups ?? []).length ? (
                 <div className="rpt-sheet-hint" role="note">Sem agrupamento a folha mostra só o Total geral. Escolha <strong>Agrupar por</strong> (ou um <strong>Tipo de relatório</strong>) para ver os grupos.</div>
               ) : null}
-              {/* Na folha as notas vão no próprio documento; na grade, aqui. */}
+              {/* E1D: a folha não leva notas (só o essencial no rodapé); na grade, as da definição ficam aqui. */}
               {!showSheet && (definition.notes ?? []).length ? <ul className="rpt-notes">{definition.notes.map((note) => <li key={note}>{note}</li>)}</ul> : null}
               {error ?<div className="rpt-error" role="alert">{error.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode abrir este relatório." : error.message}</div> : null}
             </div>
