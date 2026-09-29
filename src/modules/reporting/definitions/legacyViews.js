@@ -19,21 +19,63 @@
 import { REPORT_MODES } from '../domain/reportDefinition.js';
 import { aggregateSpecId } from '../domain/reportAggregates.js';
 import { getReportView, viewSelection } from '../domain/reportViews.js';
-import { ANALYTIC_EVENT_COLUMNS, EVENT_TOTALS, SHEET_TOTALS, SHEET_TOTALS_SEM_FAIXA } from './pesagens.js';
 
 const { RESUMIDO, DETALHADO } = REPORT_MODES;
-const freeze = (value) => JSON.parse(JSON.stringify(value));
+const deepFreeze = (value) => {
+  if (value && typeof value === 'object') Object.values(value).forEach(deepFreeze);
+  return Object.freeze(value);
+};
 
-// Os tipos da E1B como estavam declarados (e o padrão que listReportViews gerava). As constantes de
-// pesagens.js são as mesmas da E1B/E1C: não mudar sem rever esta tabela.
-export const LEGACY_REPORT_VIEWS = Object.freeze({
-  pesagens: Object.freeze([
-    { id: 'padrao', label: 'Resumo por Sessão', groups: [{ columnId: 'sessao' }], mode: RESUMIDO, aggregates: freeze(EVENT_TOTALS), to: 'por-apartacao-data' },
-    { id: 'por-apartacao-data', label: 'Por apartação (resumo por data)', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'data_pesagem', direction: 'desc' }, { columnId: 'nome_lote' }], mode: RESUMIDO, aggregates: freeze(SHEET_TOTALS), to: 'por-apartacao-data' },
-    { id: 'por-lote', label: 'Por lote', groups: [{ columnId: 'nome_lote' }], mode: RESUMIDO, aggregates: freeze(SHEET_TOTALS), to: 'por-apartacao-lote' },
-    { id: 'por-data', label: 'Por data', groups: [{ columnId: 'data_pesagem', direction: 'desc' }], mode: RESUMIDO, aggregates: freeze(SHEET_TOTALS_SEM_FAIXA), to: 'por-apartacao-data' },
-    { id: 'analitico', label: 'Analítico por animal', groups: [], mode: DETALHADO, aggregates: freeze(EVENT_TOTALS), columns: [...ANALYTIC_EVENT_COLUMNS], to: 'analitico' },
-  ].map((view) => Object.freeze(view))),
+// Seleções da E1B CONGELADAS: cópia literal de definitions/pesagens.js no commit 2d51951 (1.4.0 da E1C).
+// Não importar as constantes vivas (SHEET_TOTALS, EVENT_TOTALS…): elas são dos tipos novos e podem mudar;
+// se mudassem, o modelo gravado na E1B/E1C deixaria de ser reconhecido e abriria "Personalizado" sem
+// conversão nem auditoria. O que está gravado no banco é isto aqui, e isto não muda mais.
+const E1B_EVENT_TOTALS = [
+  { id: 'registros', op: 'count' },
+  { id: 'animais', columnId: 'numero_animal', op: 'countDistinct' },
+  { id: 'peso_medio', columnId: 'peso', op: 'avg' },
+  { id: 'peso_min', columnId: 'peso', op: 'min' },
+  { id: 'peso_max', columnId: 'peso', op: 'max' },
+  { id: 'gmd_ponderado', columnId: 'gmd', op: 'weightedGmd' },
+];
+const E1B_SHEET_TOTALS = [
+  { id: 'qtd', columnId: 'numero_animal', op: 'countDistinct' },
+  { id: 'faixa_min', columnId: 'lote_peso_minimo', op: 'min' },
+  { id: 'faixa_max', columnId: 'lote_peso_maximo', op: 'max' },
+  { id: 'menor', columnId: 'peso', op: 'min' },
+  { id: 'maior', columnId: 'peso', op: 'max' },
+  { id: 'peso_medio', columnId: 'peso', op: 'avg' },
+  { id: 'media_arroba', columnId: 'peso_arroba', op: 'avg' },
+  { id: 'peso_total', columnId: 'peso', op: 'sum' },
+  { id: 'total_arroba', columnId: 'peso_arroba', op: 'sum' },
+  { id: 'ganho_medio', columnId: 'ganho', op: 'avg' },
+  { id: 'ganho_medio_arroba', columnId: 'ganho_arroba', op: 'avg' },
+  { id: 'ganho_total', columnId: 'ganho', op: 'sum' },
+  { id: 'ganho_total_arroba', columnId: 'ganho_arroba', op: 'sum' },
+  { id: 'dias_medios', columnId: 'dias', op: 'avg' },
+  { id: 'gmd_medio', columnId: 'gmd', op: 'weightedGmd' },
+  { id: 'machos', columnId: 'animais_machos', op: 'countDistinct' },
+  { id: 'femeas', columnId: 'animais_femeas', op: 'countDistinct' },
+];
+// "Por data" da E1B: as mesmas, sem a faixa exigida (que é do lote).
+const E1B_SHEET_TOTALS_SEM_FAIXA = E1B_SHEET_TOTALS.filter((spec) => spec.id !== 'faixa_min' && spec.id !== 'faixa_max');
+const E1B_ANALYTIC_COLUMNS = ['data_pesagem', 'numero_animal', 'marca', 'sexo', 'raca', 'era', 'nome_lote', 'nome_apartacao', 'peso', 'peso_arroba', 'peso_anterior', 'dias', 'ganho', 'gmd'];
+
+// Colunas com que a tela da E1B abria quando o modelo não gravava colunas (defaultColumns de então).
+export const LEGACY_DEFAULT_COLUMNS = deepFreeze({
+  pesagens: ['data_pesagem', 'tipo_manejo', 'numero_animal', 'marca', 'sexo', 'raca', 'categoria', 'peso', 'nome_lote', 'nome_apartacao', 'dias', 'ganho', 'gmd'],
+});
+
+// Os tipos da E1B como estavam declarados (e o padrão que listReportViews gerava; sem totais próprios, a
+// E1B usava os defaultAggregates = EVENT_TOTALS de então).
+export const LEGACY_REPORT_VIEWS = deepFreeze({
+  pesagens: [
+    { id: 'padrao', label: 'Resumo por Sessão', groups: [{ columnId: 'sessao' }], mode: RESUMIDO, aggregates: E1B_EVENT_TOTALS, to: 'por-apartacao-data' },
+    { id: 'por-apartacao-data', label: 'Por apartação (resumo por data)', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'data_pesagem', direction: 'desc' }, { columnId: 'nome_lote' }], mode: RESUMIDO, aggregates: E1B_SHEET_TOTALS, to: 'por-apartacao-data' },
+    { id: 'por-lote', label: 'Por lote', groups: [{ columnId: 'nome_lote' }], mode: RESUMIDO, aggregates: E1B_SHEET_TOTALS, to: 'por-apartacao-lote' },
+    { id: 'por-data', label: 'Por data', groups: [{ columnId: 'data_pesagem', direction: 'desc' }], mode: RESUMIDO, aggregates: E1B_SHEET_TOTALS_SEM_FAIXA, to: 'por-apartacao-data' },
+    { id: 'analitico', label: 'Analítico por animal', groups: [], mode: DETALHADO, aggregates: E1B_EVENT_TOTALS, columns: E1B_ANALYTIC_COLUMNS, to: 'analitico' },
+  ],
 });
 
 const directionOf = (group) => (group?.direction === 'desc' ? 'desc' : 'asc');
@@ -52,8 +94,8 @@ export function matchLegacyView(definition, config = {}) {
   const groups = (Array.isArray(config.groups) ? config.groups : []).filter((group) => group?.columnId);
   // Sem modo gravado (modelo anterior à 1.4.0): Resumido só com agrupamento (como templateToRequest abre).
   const mode = config.mode === RESUMIDO || config.mode === DETALHADO ? config.mode : (groups.length ? RESUMIDO : DETALHADO);
-  // Sem colunas gravadas a tela abria com as padrão da definição.
-  const columns = Array.isArray(config.columns) && config.columns.length ? config.columns : definition.defaultColumns ?? [];
+  // Sem colunas gravadas a tela da E1B abria com as padrão da definição DE ENTÃO (congeladas).
+  const columns = Array.isArray(config.columns) && config.columns.length ? config.columns : LEGACY_DEFAULT_COLUMNS[definition.id] ?? [];
   return legacy.find((view) => {
     if (view.mode !== mode || !sameGroups(view.groups, groups)) return false;
     if (Array.isArray(config.aggregates) && aggregatesKey(config.aggregates) !== aggregatesKey(view.aggregates)) return false;

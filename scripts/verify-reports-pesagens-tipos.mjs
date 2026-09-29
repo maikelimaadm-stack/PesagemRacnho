@@ -31,8 +31,8 @@ import {
 } from '../src/modules/reporting/application/reportTemplateService.js';
 import { getReportDefinition, listReportDefinitions } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { getLegacyAlias } from '../src/modules/reporting/definitions/legacyAliases.js';
-import { EVENT_TOTALS, PERIOD_EVENT_COLUMNS, SHEET_TOTALS, SHEET_TOTALS_SEM_FAIXA, ANALYTIC_EVENT_COLUMNS } from '../src/modules/reporting/definitions/pesagens.js';
-import { LEGACY_REPORT_VIEWS, convertLegacyViewConfig, matchLegacyView } from '../src/modules/reporting/definitions/legacyViews.js';
+import { SHEET_TOTALS } from '../src/modules/reporting/definitions/pesagens.js';
+import { LEGACY_DEFAULT_COLUMNS, LEGACY_REPORT_VIEWS, convertLegacyViewConfig, matchLegacyView } from '../src/modules/reporting/definitions/legacyViews.js';
 import { listReportViews, resolveViewId, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
 import { buildReportDocument, sheetTitleOf } from '../src/modules/reporting/domain/reportDocument.js';
 import { renderSheetBody } from '../src/modules/reporting/infrastructure/exporters/sheetHtml.js';
@@ -129,19 +129,42 @@ ok('estado-inicial');
 // ---------------------------------------------------------------------------
 // 3. Conversão dos tipos da E1B (modelos e último estado sem `view`)
 // ---------------------------------------------------------------------------
-// As seleções que a E1B aplicava (escritas à mão, como o seletor da E1B as reconhecia).
+// As seleções que a E1B aplicava, ESCRITAS À MÃO (cópia de definitions/pesagens.js em 2d51951, a 1.4.0 da
+// E1C) — nunca as constantes vivas de pesagens.js: se SHEET_TOTALS & cia. mudarem para os tipos novos, o
+// que está gravado no banco continua sendo isto, e o gate tem de acusar se a conversão deixar de reconhecer.
+const E1B_EVENT_TOTALS = [
+  { id: 'registros', op: 'count' }, { id: 'animais', columnId: 'numero_animal', op: 'countDistinct' }, { id: 'peso_medio', columnId: 'peso', op: 'avg' },
+  { id: 'peso_min', columnId: 'peso', op: 'min' }, { id: 'peso_max', columnId: 'peso', op: 'max' }, { id: 'gmd_ponderado', columnId: 'gmd', op: 'weightedGmd' },
+];
+const E1B_SHEET_TOTALS = [
+  { id: 'qtd', columnId: 'numero_animal', op: 'countDistinct' }, { id: 'faixa_min', columnId: 'lote_peso_minimo', op: 'min' }, { id: 'faixa_max', columnId: 'lote_peso_maximo', op: 'max' },
+  { id: 'menor', columnId: 'peso', op: 'min' }, { id: 'maior', columnId: 'peso', op: 'max' }, { id: 'peso_medio', columnId: 'peso', op: 'avg' },
+  { id: 'media_arroba', columnId: 'peso_arroba', op: 'avg' }, { id: 'peso_total', columnId: 'peso', op: 'sum' }, { id: 'total_arroba', columnId: 'peso_arroba', op: 'sum' },
+  { id: 'ganho_medio', columnId: 'ganho', op: 'avg' }, { id: 'ganho_medio_arroba', columnId: 'ganho_arroba', op: 'avg' }, { id: 'ganho_total', columnId: 'ganho', op: 'sum' },
+  { id: 'ganho_total_arroba', columnId: 'ganho_arroba', op: 'sum' }, { id: 'dias_medios', columnId: 'dias', op: 'avg' }, { id: 'gmd_medio', columnId: 'gmd', op: 'weightedGmd' },
+  { id: 'machos', columnId: 'animais_machos', op: 'countDistinct' }, { id: 'femeas', columnId: 'animais_femeas', op: 'countDistinct' },
+];
+const E1B_SHEET_TOTALS_SEM_FAIXA = E1B_SHEET_TOTALS.filter((spec) => !['faixa_min', 'faixa_max'].includes(spec.id));
+const E1B_ANALYTIC_COLUMNS = ['data_pesagem', 'numero_animal', 'marca', 'sexo', 'raca', 'era', 'nome_lote', 'nome_apartacao', 'peso', 'peso_arroba', 'peso_anterior', 'dias', 'ganho', 'gmd'];
+const E1B_DEFAULT_COLUMNS = ['data_pesagem', 'tipo_manejo', 'numero_animal', 'marca', 'sexo', 'raca', 'categoria', 'peso', 'nome_lote', 'nome_apartacao', 'dias', 'ganho', 'gmd'];
 const E1B = {
-  sessao: { label: 'Resumo por Sessão', groups: [{ columnId: 'sessao' }], mode: 'RESUMIDO', aggregates: EVENT_TOTALS, to: 'por-apartacao-data' },
-  apdata: { label: 'Por apartação (resumo por data)', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'data_pesagem', direction: 'desc' }, { columnId: 'nome_lote' }], mode: 'RESUMIDO', aggregates: SHEET_TOTALS, to: 'por-apartacao-data' },
-  lote: { label: 'Por lote', groups: [{ columnId: 'nome_lote' }], mode: 'RESUMIDO', aggregates: SHEET_TOTALS, to: 'por-apartacao-lote' },
-  data: { label: 'Por data', groups: [{ columnId: 'data_pesagem', direction: 'desc' }], mode: 'RESUMIDO', aggregates: SHEET_TOTALS_SEM_FAIXA, to: 'por-apartacao-data' },
-  analitico: { label: 'Analítico por animal', groups: [], mode: 'DETALHADO', aggregates: EVENT_TOTALS, columns: ANALYTIC_EVENT_COLUMNS, to: 'analitico' },
+  sessao: { id: 'padrao', label: 'Resumo por Sessão', groups: [{ columnId: 'sessao' }], mode: 'RESUMIDO', aggregates: E1B_EVENT_TOTALS, to: 'por-apartacao-data' },
+  apdata: { id: 'por-apartacao-data', label: 'Por apartação (resumo por data)', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'data_pesagem', direction: 'desc' }, { columnId: 'nome_lote' }], mode: 'RESUMIDO', aggregates: E1B_SHEET_TOTALS, to: 'por-apartacao-data' },
+  lote: { id: 'por-lote', label: 'Por lote', groups: [{ columnId: 'nome_lote' }], mode: 'RESUMIDO', aggregates: E1B_SHEET_TOTALS, to: 'por-apartacao-lote' },
+  data: { id: 'por-data', label: 'Por data', groups: [{ columnId: 'data_pesagem', direction: 'desc' }], mode: 'RESUMIDO', aggregates: E1B_SHEET_TOTALS_SEM_FAIXA, to: 'por-apartacao-data' },
+  analitico: { id: 'analitico', label: 'Analítico por animal', groups: [], mode: 'DETALHADO', aggregates: E1B_EVENT_TOTALS, columns: E1B_ANALYTIC_COLUMNS, to: 'analitico' },
 };
 assert.deepEqual(LEGACY_REPORT_VIEWS.pesagens.map((item) => [item.label, item.to]), Object.values(E1B).map((item) => [item.label, item.to]), 'mapa tipo antigo → tipo novo (documentado em legacyViews.js)');
+// A tabela da conversão é a foto da E1B (não segue as constantes vivas): igual, campo a campo, ao escrito à mão.
+assert.deepEqual(plain(LEGACY_REPORT_VIEWS.pesagens), plain(Object.values(E1B)), 'seleções da E1B congeladas em legacyViews.js = as da 1.4.0 da E1C');
+assert.deepEqual(plain(LEGACY_DEFAULT_COLUMNS.pesagens), E1B_DEFAULT_COLUMNS, 'colunas padrão da E1B congeladas (modelo sem colunas gravadas)');
+const legacyViewsSource = readFileSync(join(root, 'src/modules/reporting/definitions/legacyViews.js'), 'utf8');
+assert.ok(!/from '\.\/pesagens\.js'/.test(legacyViewsSource), 'NEGATIVO: legacyViews.js não lê as constantes vivas de pesagens.js (mudança nelas não pode desligar a conversão)');
+assert.ok(Object.isFrozen(LEGACY_REPORT_VIEWS.pesagens[2].aggregates[0]), 'tabela congelada até o fundo');
 // O que a pessoa escolheu e tem de sobrar depois da conversão.
 const PESSOA = { filters: { sexo: { operator: 'in', values: ['Macho'], match: 'label' } }, period: PERIOD, orientation: 'landscape', search: '101', widths: { peso: 150 } };
 const e1bConfig = (key, extra = {}) => normalizeTemplateConfig(PESAGENS, {
-  columns: E1B[key].columns ?? PERIOD_EVENT_COLUMNS, groups: E1B[key].groups, mode: E1B[key].mode, aggregates: E1B[key].aggregates, sort: PESAGENS.defaultSort, ...PESSOA, ...extra,
+  columns: E1B[key].columns ?? E1B_DEFAULT_COLUMNS, groups: E1B[key].groups, mode: E1B[key].mode, aggregates: E1B[key].aggregates, sort: PESAGENS.defaultSort, ...PESSOA, ...extra,
 });
 for (const [key, spec] of Object.entries(E1B)) {
   const config = e1bConfig(key);
@@ -165,10 +188,10 @@ for (const [key, spec] of Object.entries(E1B)) {
 }
 // NEGATIVOS: o que não era tipo da E1B fica "Personalizado" e com a seleção da pessoa.
 const personalizados = {
-  'totais mudados': e1bConfig('lote', { aggregates: SHEET_TOTALS.filter((spec) => spec.id !== 'machos') }),
-  'agrupamento sem tipo': normalizeTemplateConfig(PESAGENS, { groups: [{ columnId: 'marca' }], mode: 'RESUMIDO', aggregates: SHEET_TOTALS }),
+  'totais mudados': e1bConfig('lote', { aggregates: E1B_SHEET_TOTALS.filter((spec) => spec.id !== 'machos') }),
+  'agrupamento sem tipo': normalizeTemplateConfig(PESAGENS, { groups: [{ columnId: 'marca' }], mode: 'RESUMIDO', aggregates: E1B_SHEET_TOTALS }),
   'data em ordem crescente': e1bConfig('data', { groups: [{ columnId: 'data_pesagem', direction: 'asc' }] }),
-  'Detalhado com outras colunas': e1bConfig('analitico', { columns: ANALYTIC_EVENT_COLUMNS.slice(1) }),
+  'Detalhado com outras colunas': e1bConfig('analitico', { columns: E1B_ANALYTIC_COLUMNS.slice(1) }),
   'modo trocado': e1bConfig('lote', { mode: 'DETALHADO' }),
 };
 for (const [label, config] of Object.entries(personalizados)) {
@@ -188,7 +211,7 @@ assert.equal(convertLegacyViewConfig(PESAGENS, jaTipado), null, 'NEGATIVO: view 
 assert.equal(convertLegacyViewConfig(PESAGENS, { ...e1bConfig('analitico'), view: 'analitico' }), null, 'NEGATIVO: com view não converte');
 // Modelo de relatório antigo da E1 (1.3.x "Pesagens por sessão"): a consolidação da E1 leva para Pesagens
 // com a seleção do antigo, e a E1D NÃO converte (abre como o link antigo: Personalizado).
-const modeloSessao13 = { id: 't-13', name: 'Sessões 1.3', baseReportId: 'pesagens.sessao', scope: 'PERSONAL', ownerUserId: GESTOR.id, columns: [], groups: [{ columnId: 'sessao' }], aggregates: EVENT_TOTALS, filters: {}, sort: [] };
+const modeloSessao13 = { id: 't-13', name: 'Sessões 1.3', baseReportId: 'pesagens.sessao', scope: 'PERSONAL', ownerUserId: GESTOR.id, columns: [], groups: [{ columnId: 'sessao' }], aggregates: E1B_EVENT_TOTALS, filters: {}, sort: [] };
 const req13 = templateToRequest(modeloSessao13, 'GESTOR');
 assert.equal(req13.selection.view, null, 'NEGATIVO: modelo da 1.3 (relatório antigo) não vira tipo');
 assert.deepEqual(req13.selection.groups.map((group) => group.columnId), ['sessao'], 'modelo da 1.3 abre agrupado por Sessão, como antes');
