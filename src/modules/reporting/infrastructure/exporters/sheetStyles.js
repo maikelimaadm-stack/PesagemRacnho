@@ -82,11 +82,14 @@ export const SHEET_CSS = `
 .rpt-sheet.rpt-sheet--preview { padding: 5mm 6mm; border: 1px dashed #cbd5e1; border-radius: 6px; }
 `;
 
-/** Estilo de impressão (só no documento impresso/PDF): página A4, margens de 10 mm e "Página X de Y". */
+/**
+ * Estilo de impressão (só no documento impresso/PDF): página A4, margens de 10 mm e "Página X de Y".
+ * E1D item 8: a margem leva só "Página X de Y"; texto à esquerda só se alguém pedir (pageFooter).
+ */
 export function pageCss({ orientation = 'portrait', pageFooter = '' } = {}) {
+  const left = pageFooter ? `\n  @bottom-left { content: "${cssString(pageFooter)}"; font: 7pt Arial, sans-serif; color: #555; }` : '';
   return `@page { size: A4 ${orientation === 'landscape' ? 'landscape' : 'portrait'}; margin: 10mm 10mm 12mm 10mm;
-  @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 7pt Arial, sans-serif; color: #555; }
-  @bottom-left { content: "${cssString(pageFooter)}"; font: 7pt Arial, sans-serif; color: #555; } }
+  @bottom-right { content: "Página " counter(page) " de " counter(pages); font: 7pt Arial, sans-serif; color: #555; }${left} }
 html, body { margin: 0; padding: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }`;
 }
 

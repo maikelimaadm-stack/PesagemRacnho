@@ -199,9 +199,13 @@ o mesmo HTML em modo `fragment` interativo; `printDocument.buildPrintDocument` e
 - `header` = `buildPropertyHeader(...)` (`catalog/domain/propertyHeader.js`, resolvido por
   `catalog/application/propertyHeaderService.loadReportHeader`): logo (data URL PNG/JPEG validado por
   assinatura e tamanho, ≤ 300 KB), titular, fazenda, endereço + município-UF, documentos (só com
-  `mostrar_documento_no_cabecalho`), telefone. Sem propriedade: só o nome do sistema. Propriedade do
-  cabeçalho: a de filtro/condição fixa/detalhe na coluna `propriedade` com um único valor; senão a padrão.
-- `title` "Relatório de <nome> (Sintético|Analítico)", `subtitle` modo · níveis, `periodText`, `emittedText`.
+  `mostrar_documento_no_cabecalho`), telefone (E1D: também só com essa opção). Sem propriedade: só o nome
+  do sistema. Propriedade do cabeçalho: a de filtro/condição fixa/detalhe na coluna `propriedade` com um
+  único valor; senão a padrão. E1D item 8: o cabeçalho não leva período nem "Emitido em".
+- `title` = `sheetTitleOf(viewModel)`: "Relatório de <nome> (Sintético|Analítico)" pelo `view.titleKind` do
+  tipo (E1D: "Analítico" só no Analítico de Pesagens; Vendas, que é Detalhado, é "Sintético"); sem tipo,
+  pelo modo. `periodText` ("Período: dd/mm/aaaa a dd/mm/aaaa") fica ao lado do título, no lugar do antigo
+  subtítulo "modo · níveis".
 - Resumido (`layout: 'summary'`): colunas = rótulo do nível folha + métricas (`summaryMetrics`, rótulos
   `metricLabels`); par `metricPairs` vira **uma** coluna "de–até" (`rangeText`: `150–350`, `≥ 150`,
   `≤ 350`, `—`) e, com `leafOnly`, só é preenchido nas linhas do nível folha. Seções: 1 nível = tabela
@@ -210,26 +214,26 @@ o mesmo HTML em modo `fragment` interativo; `printDocument.buildPrintDocument` e
   população da seção de nível 1 pelo nível folha, com linha TOTAL; por fim `GRAND_TOTAL`.
 - Detalhado (`layout: 'detail'`, botão "Ver como folha"): seções por nível com as linhas de dados e o
   subtotal em texto (`chips`); o par vira um item "Faixa exigida (kg): 150–350", só no subtotal do nível
-  folha. Na tela, até 2.000 linhas de dados (`maxDataRows`; nota avisa); impressão/PDF levam todas.
+  folha. Na tela, até 2.000 linhas de dados (`maxDataRows`; `screenNotice` avisa, só na tela);
+  impressão/PDF levam todas.
 - Cada linha é `columns.map(...)`: **uma célula por coluna, na ordem do cabeçalho** (`data-col` =
   índice). Gate `reports:document-layout:verify` confere célula × coluna em todas as linhas.
 - **Colunas vazias somem**: métrica com total geral ausente (ou 0 com `zeroAsEmpty`) sai de `columns` e
-  vai para `hiddenColumns` + nota; `showEmptyColumns` desliga a regra (tela e impressão).
-- Notas: as da definição; "GMD calculado com N de M animais…" (N = `countDistinct` de
-  `animais_com_anterior`, M = de `numero_animal`); colunas ocultas; colunas omitidas pelo perfil;
-  "Ausentes aparecem como “—”…".
-- Rodapé (`footer`): Filtros (`describeReportFilters`), "@ = peso vivo ÷ 30|15" (quando há coluna em @),
-  "Emitido por <nome> em dd/mm/aaaa HH:MM", versão; `pageFooter` = "Pesagens Individuais v<versão> ·
-  Emissão <8> · <relatório>".
+  vai para `hiddenColumns`; `showEmptyColumns` desliga a regra (tela e impressão).
+- Notas: **nenhuma** na folha desde a E1D (item 8, "menos informação na folha" — vale para todos os
+  relatórios, a folha é uma só). As notas da definição continuam na tela, fora da folha (grade).
+- Rodapé (`footer`): Filtros (`describeReportFilters`, uma linha), "@ = peso vivo ÷ 30|15" (quando há coluna
+  em @), "<n> coluna(s) omitida(s) pelo perfil de quem emitiu" (só quando há) e "Emitido por <nome> em
+  dd/mm/aaaa HH:MM". A margem da página leva só "Página X de Y" (versão e código da emissão ficam no manifesto).
 - Ordem dos irmãos: `orderNodes` (mesma de `buildSummaryRows`); rótulo compara `compareGroupLabels`
   (chave `groupOrder` da coluna quando existe — Sessão pela data — senão o rótulo).
 - Formato na folha: kg com **1 casa**, @ com 2, GMD com 3 (`aggregateLabels`; no Detalhado como folha, as
   colunas de peso das linhas também com 1 casa); XLSX usa `#,##0.0` para os totais em kg.
-- As notas e o rodapé existem **só na folha** (tela, impressão, PDF). O bloco `TOTAL POR` existe na folha e,
+- O rodapé existe **só na folha** (tela, impressão, PDF). O bloco `TOTAL POR` existe na folha e,
   desde a E1C, no XLSX (§5; mesma função `buildLeafTotalBlock`); CSV e JSON do Resumido têm uma linha por nó
   do agrupamento + Total geral (§2.1) — os mesmos números por nó.
 - Título: `Relatório de <vm.sheetTitle> (Sintético|Analítico)` — `sheetTitle` da definição (Pesagens =
-  "Pesagens Individuais", E1C) ou o nome do relatório.
+  "Pesagens Individuais", E1C) ou o nome do relatório; o tipo entre parênteses como em `title` (E1D).
 
 **Página** (`decideSheetLayout`): largura útil A4 com margens de 10 mm = **718 px** (retrato) e **1047 px**
 (paisagem) a 96 dpi; fonte 8,5 / 7,6 / 6,8 pt (`m`, `s`, `xs`). `auto` tenta retrato m → paisagem m → s → xs;

@@ -324,7 +324,8 @@ export const PROPRIEDADES = definicao({
     campo('endereco', 'Endereço', { largo: true, secao: 'cabecalho' }),
     campo('documento', 'CPF/CNPJ', { compacto: true, secao: 'cabecalho', ajuda: 'Digite ou cole com ou sem pontuação: a máscara se ajusta. Guardado sem pontuação (o CNPJ alfanumérico com as letras).' }),
     campo('inscricao_estadual', 'Inscrição estadual', { compacto: true, secao: 'cabecalho', ajuda: 'Texto livre (ex.: ISENTO).' }),
-    campo('mostrar_documento_no_cabecalho', 'Mostrar CPF/CNPJ e IE no cabeçalho', { tipo: 'booleano', defaultValue: false, desligadoComoNulo: true, widthType: 'CAMPO_PRINCIPAL', secao: 'cabecalho' }),
+    // E1D item 8: a mesma opção vale para o telefone (o cabeçalho padrão não mostra nenhum dos três).
+    campo('mostrar_documento_no_cabecalho', 'Mostrar CPF/CNPJ, IE e telefone no cabeçalho', { tipo: 'booleano', defaultValue: false, desligadoComoNulo: true, widthType: 'CAMPO_PRINCIPAL', secao: 'cabecalho' }),
     campo('telefone', 'Telefone', { compacto: true, secao: 'cabecalho' }),
     campo('logo', 'Logo', { tipo: 'imagem', largo: true, secao: 'cabecalho', ajuda: 'PNG ou JPG. Ajustamos o tamanho automaticamente.' }),
     PADRAO,

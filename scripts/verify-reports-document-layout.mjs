@@ -5,16 +5,19 @@
 //      métricas somáveis (contagem e soma) — média, mínimo, máximo, Qtd distinta e GMD nunca são somados;
 //   c) "TOTAL POR <nível folha> – <nível 1>" = o mesmo motor (groupRows) sobre a população da seção;
 //   d) coluna sem nenhum valor no relatório some (e volta com "mostrar colunas vazias"); contagem só com
-//      zeros (Fêmeas num lote só de machos) também; o GMD sem pesagem anterior é "—", nunca "0,000", com a
-//      nota "GMD calculado com N de M animais";
+//      zeros (Fêmeas num lote só de machos) também; o GMD sem pesagem anterior é "—", nunca "0,000" (E1D
+//      item 8: sem as notas longas na folha — colunas ocultas e "GMD calculado com N de M" saíram);
 //   e) kg com 1 casa, @ com 2, GMD com 3; Média (@) = Peso médio ÷ divisor; rodapé "@ = peso vivo ÷ 30/15";
 //   f) na tela, o clique no grupo (detalhe) e a ordenação por métrica apontam para nós reais da árvore;
 //   g) estruturas com 0, 1, 2 e 3 níveis e o Detalhado como folha (linhas por animal).
+// E1D: o caso principal é o tipo "Por Apartação (Resumo por Data)" com TODAS as colunas do seletor
+// "Colunas" (as 16 chaves; o padrão do tipo mostra 11) — assim as regras valem para cada métrica da folha.
 import assert from 'node:assert/strict';
 import { ADMIN, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
 import { runReport } from '../src/modules/reporting/application/reportService.js';
 import { getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
-import { listReportViews, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
+import { SHEET_COLUMN_KEYS } from '../src/modules/reporting/definitions/pesagens.js';
+import { applyColumnKeys, listReportViews, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
 import { DOC_ROW_TYPES, buildReportDocument, documentRows } from '../src/modules/reporting/domain/reportDocument.js';
 import { computeAggregates } from '../src/modules/reporting/domain/reportAggregates.js';
 import { groupRows } from '../src/modules/reporting/domain/groupEngine.js';
@@ -24,12 +27,15 @@ await seedReportFixture();
 const P = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
 const ADDITIVE = new Set(['count', 'countValid', 'sum']);
 const close = (a, b) => (a === null || b === null ? a === b : Math.abs(a - b) < 1e-6);
-const views = listReportViews(getReportDefinition('pesagens'));
+const PESAGENS = getReportDefinition('pesagens');
+const views = listReportViews(PESAGENS);
 const view = views.find((item) => item.id === 'por-apartacao-data');
-assert.ok(view, 'visão "Por apartação (resumo por data)" existe');
-assert.equal(view.label, 'Por apartação (resumo por data)');
+assert.ok(view, 'tipo "Por Apartação (Resumo por Data)" existe');
+assert.equal(view.label, 'Por Apartação (Resumo por Data)');
+const FULL = { ...viewSelection(view, PESAGENS), ...applyColumnKeys(view, PESAGENS, SHEET_COLUMN_KEYS) };
+assert.equal(FULL.aggregates.length, 17, 'todas as métricas da folha (16 chaves, a faixa são duas)');
 const run = (selection, extra = {}) => runReport('pesagens', { today: TODAY, params: P, selection, ...extra }, ADMIN);
-const vm = await run(viewSelection(view, getReportDefinition('pesagens')));
+const vm = await run(FULL);
 assert.deepEqual(vm.groups.map((level) => level.columnId), ['nome_apartacao', 'data_pesagem', 'nome_lote'], 'Apartação › Data › Lote');
 assert.equal(vm.mode, 'RESUMIDO');
 const doc = buildReportDocument(vm, { orientation: 'landscape' });
@@ -145,24 +151,28 @@ for (const column of metricColumns) {
 }
 
 // ---- d) colunas vazias, zeros e GMD "—" ----
-const cadastros = await run({ ...viewSelection(view, getReportDefinition('pesagens')), filters: { tipo_manejo: { operator: 'in', values: ['Cadastro'] } } });
+const cadastros = await run({ ...FULL, filters: { tipo_manejo: { operator: 'in', values: ['Cadastro'] } } });
 const cadDoc = buildReportDocument(cadastros);
 const hiddenKeys = cadDoc.hiddenColumns.map((column) => column.key);
 for (const key of ['ganho_medio', 'ganho_total', 'dias_medios', 'gmd_medio']) assert.ok(hiddenKeys.includes(key), `só Cadastros (sem pesagem anterior): coluna ${key} oculta`);
-assert.ok(cadDoc.notes.some((note) => note.startsWith('Sem nenhum valor no relatório (colunas ocultas): ')), 'nota lista as colunas ocultas');
+// E1D item 8: a lista de colunas ocultas continua no documento (hiddenColumns), mas não vira nota na folha.
+const cadHtml = renderSheetBody(cadDoc, { mode: 'print' });
+assert.ok(cadDoc.notes === undefined && !cadHtml.includes('sheet-notes') && !cadHtml.includes('Sem nenhum valor'), 'NEGATIVO: sem nota de colunas ocultas na folha');
 const cadAll = buildReportDocument(cadastros, { showEmptyColumns: true });
 assert.ok(cadAll.columns.some((column) => column.key === 'gmd_medio') && cadAll.hiddenColumns.length === 0, '"mostrar colunas vazias" traz as colunas de volta');
 for (const row of documentRows(cadAll)) {
   const gmd = row.cells.find((cell) => cell.key === 'gmd_medio');
   assert.equal(gmd.text, '—', `sem pesagem anterior: GMD "—" (nunca 0,000) em ${row.id}`);
 }
-const machos = await run({ ...viewSelection(view, getReportDefinition('pesagens')), filters: { sexo: { operator: 'in', values: ['M'] } } });
+const machos = await run({ ...FULL, filters: { sexo: { operator: 'in', values: ['M'] } } });
 const machosDoc = buildReportDocument(machos);
 assert.ok(machosDoc.hiddenColumns.some((column) => column.key === 'femeas'), 'só machos: coluna Fêmeas (toda zero) oculta');
 assert.ok(machosDoc.columns.some((column) => column.key === 'machos'), 'Machos continua');
-const gmdNote = doc.notes.find((note) => note.startsWith('GMD calculado com '));
+// E1D item 8: a nota longa "GMD calculado com N de M animais" saiu da folha (a regra do "—" continua abaixo).
+// A massa tem animal sem pesagem anterior (a nota apareceria): N < M.
 const counts = computeAggregates(vm.rows, [{ id: 'n', op: 'countDistinct', columnId: 'animais_com_anterior' }, { id: 'm', op: 'countDistinct', columnId: 'numero_animal' }], vm.resolve);
-assert.ok(gmdNote && gmdNote.includes(`${counts.n.value} de ${counts.m.value} animais`), `nota do GMD com N de M animais: ${gmdNote}`);
+assert.ok(counts.n.value < counts.m.value, `controle: há animal sem pesagem anterior (${counts.n.value} de ${counts.m.value})`);
+assert.ok(!html.includes('GMD calculado com') && !html.includes('Ausentes aparecem'), 'NEGATIVO: sem as notas longas do GMD e dos ausentes');
 for (const row of rows) {
   const gmd = row.cells.find((cell) => cell.key === 'gmd_medio');
   if (gmd) assert.notEqual(gmd.text, '0,000', `${row.id}: GMD nunca "0,000" por falta de pesagem anterior`);
@@ -184,7 +194,7 @@ for (const row of rows) {
 }
 assert.equal(vm.arrobaDivisor, 30, 'divisor padrão 30');
 assert.equal(doc.footer.arroba, '@ = peso vivo ÷ 30', 'rodapé com o divisor');
-const vm15 = await run(viewSelection(view, getReportDefinition('pesagens')), { arrobaDivisor: 15 });
+const vm15 = await run(FULL, { arrobaDivisor: 15 });
 const doc15 = buildReportDocument(vm15);
 assert.equal(doc15.footer.arroba, '@ = peso vivo ÷ 15', 'rodapé com o divisor 15');
 const grand15 = documentRows(doc15).find((row) => row.type === DOC_ROW_TYPES.GRAND_TOTAL);
@@ -219,14 +229,19 @@ assert.ok(twoLevels.sections.every((section) => section.table && section.table.r
 const zeroLevels = buildReportDocument(await run({ mode: 'RESUMIDO', groups: [] }));
 assert.ok(zeroLevels.grandTotal && zeroLevels.sections.length === 0 && !zeroLevels.flat, '0 nível: só o Total geral');
 const analitico = views.find((item) => item.id === 'analitico');
-const detailVm = await run({ ...viewSelection(analitico, getReportDefinition('pesagens')), groups: [{ columnId: 'nome_apartacao' }] });
+// E1D: Analítico (Detalhado) com o botão Apartação (groupChoices).
+const detailVm = await run({ ...viewSelection(analitico, PESAGENS), groups: [{ columnId: 'nome_apartacao' }] });
 const detailDoc = buildReportDocument(detailVm);
 assert.equal(detailDoc.layout, 'detail');
 assert.equal(detailDoc.stats.dataRows, detailVm.rowCount, 'Detalhado como folha: uma linha por pesagem');
 assertTablesAligned(renderSheetBody(detailDoc, { mode: 'print' }));
 const limited = buildReportDocument(detailVm, { maxDataRows: 3 });
 assert.equal(limited.stats.dataRows, 3, 'tela limita as linhas do Detalhado');
-assert.ok(limited.notes.some((note) => note.includes('a impressão e o PDF levam todas')), 'aviso de linhas limitadas na tela');
+// O aviso de linhas limitadas é só da tela (fragmento); a impressão leva todas e não tem aviso.
+assert.ok(limited.screenNotice.includes('a impressão e o PDF levam todas'), 'aviso de linhas limitadas na tela');
+assert.ok(renderSheetBody(limited, { mode: 'fragment' }).includes('a impressão e o PDF levam todas'), 'aviso aparece na folha da tela');
+assert.ok(!renderSheetBody(limited, { mode: 'print' }).includes('levam todas'), 'NEGATIVO: aviso da tela não vai para o papel');
+assert.equal(detailDoc.screenNotice, null, 'NEGATIVO: sem limite, sem aviso');
 
 // ---- layout: paisagem cabe; retrato reduz a fonte ou avisa ----
 assert.equal(doc.print.orientation, 'landscape');

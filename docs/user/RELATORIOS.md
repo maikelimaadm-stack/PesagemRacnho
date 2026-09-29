@@ -144,20 +144,22 @@ filtro pode ser tirado.
 
 A folha é a mesma na tela, na impressão e no PDF (A4):
 
-1. **Cabeçalho**: logo da fazenda à esquerda; no centro o produtor, a fazenda, o endereço e, se você
-   quiser, CPF/CNPJ, inscrição estadual e telefone (item 8); à direita o período e a data/hora de emissão.
+1. **Cabeçalho**: logo da fazenda à esquerda; no centro o produtor, a fazenda e o endereço com o
+   município-UF e, só se você ligar a opção na propriedade, CPF/CNPJ, inscrição estadual e telefone (item 8).
    Na impressão ele se repete em todas as páginas.
-2. **Título**: "Relatório de <nome do relatório> (Sintético)" no Resumido, "(Analítico)" no Detalhado — em
-   Pesagens, "**Relatório de Pesagens Individuais (Sintético)**" —, e à direita o modo e os níveis (ex.:
-   Resumido · Apartação › Data › Lote).
+2. **Título**: em Pesagens, "**Relatório de Pesagens Individuais (Analítico)**" só no tipo **Analítico**; nos
+   outros quatro tipos (inclusive **Vendas**) "**(Sintético)**", como no MAKGESTAO. Nos demais relatórios (e
+   em Pesagens com **Personalizado**), "(Sintético)" no Resumido e "(Analítico)" no Detalhado. Junto do título,
+   só o **Período: dd/mm/aaaa a dd/mm/aaaa**.
 3. **Seções** por nível de agrupamento: **APARTAÇÃO: ENGORDA** › **DATA: 28/02/2026** › tabela com uma
    linha por lote.
 4. **Subtotal** no fim de cada tabela, na mesma coluna de cada valor (ex.: "Subtotal 28/02/2026 · Lotes: 3").
 5. Com três níveis, no fim de cada seção de primeiro nível vem o **TOTAL POR LOTE – ENGORDA**: os lotes
    daquela apartação somados em todas as datas, e a linha **Total Engorda**.
 6. **TOTAL GERAL** no fim, calculado sobre todas as linhas filtradas.
-7. **Notas** (como ler os números) e o **rodapé**: filtros usados, "@ = peso vivo ÷ 30" (ou ÷ 15), quem
-   emitiu e quando, versão do programa e **Página X de Y**.
+7. **Rodapé**, só com o essencial: filtros usados (numa linha), "@ = peso vivo ÷ 30" (ou ÷ 15) quando a
+   folha tem arroba, quem emitiu e quando, e **Página X de Y**. Se o seu perfil não vê alguma coluna (valores
+   comerciais), o rodapé avisa quantas foram omitidas. A folha não leva mais notas explicativas.
 
 Colunas de Pesagens na folha: **Qtd** (cabeças), **Faixa exigida (kg)** do lote, **Menor**, **Maior**,
 **Peso médio**, **Média (@)**, **Peso total**, **Total (@)**, **Ganho médio** (kg e @), **Ganho total**
@@ -167,11 +169,10 @@ com 2 e GMD com 3.
 Regras da folha:
 
 - **Cada número fica sob o título da sua coluna** — sempre (o programa confere isso a cada versão).
-- **Coluna sem nenhum valor no relatório inteiro some** (ex.: Fêmeas num relatório só de machos). As
-  colunas escondidas aparecem numa nota. Para vê-las mesmo assim, use o botão **Mostrar colunas vazias**
-  (olho riscado) no alto; ele vale também para a impressão.
-- **GMD sem pesagem anterior aparece "—", nunca "0,000"**, e fica fora da média. A nota diz com quantos
-  animais o GMD foi calculado, por exemplo "GMD calculado com 48 de 50 animais".
+- **Coluna sem nenhum valor no relatório inteiro some** (ex.: Fêmeas num relatório só de machos). Para
+  vê-las mesmo assim, use o botão **Mostrar colunas vazias** (olho riscado) no alto; ele vale também para a
+  impressão.
+- **GMD sem pesagem anterior aparece "—", nunca "0,000"**, e fica fora da média.
 - **Faixa exigida** é a faixa de peso do **cadastro atual do lote** e só aparece na linha do lote (nunca
   no subtotal da data, da apartação ou no total geral, onde juntaria lotes diferentes).
 - Contagem zero em Machos/Fêmeas aparece "—".
@@ -191,8 +192,7 @@ no cartão **Cabeçalho dos relatórios**:
 |---|---|
 | **Produtor / razão social** | Linha grande do cabeçalho (sem ele, vai o nome da propriedade) |
 | **Endereço** | Linha do endereço, seguida do município e da UF da propriedade |
-| **CPF/CNPJ** e **Inscrição estadual** | Só se **Mostrar CPF/CNPJ e IE no cabeçalho** = Sim |
-| **Telefone** | Abaixo do endereço |
+| **CPF/CNPJ**, **Inscrição estadual** e **Telefone** | Só se **Mostrar CPF/CNPJ, IE e telefone no cabeçalho** = Sim (nasce desmarcado) |
 | **Logo** | À esquerda do cabeçalho |
 
 **Logo:** clique em **Escolher logo**, escolha um arquivo **PNG ou JPG**. O programa reduz sozinho para no

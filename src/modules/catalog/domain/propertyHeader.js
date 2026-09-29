@@ -89,13 +89,16 @@ export function buildPropertyHeader(propriedade) {
   const titular = titularNome || nome || SYSTEM_NAME;
   const fazenda = titularNome && nome && normalizeName(nome) !== normalizeName(titularNome) ? nome : null;
   const endereco = [cleanText(propriedade.endereco), localidade(propriedade)].filter(Boolean).join(', ') || null;
+  // E1D item 8: CPF/CNPJ, IE e telefone só com "Mostrar no cabeçalho" ligado (nasce desligado); o
+  // cabeçalho padrão é o do MAKGESTAO: logo, produtor, fazenda e endereço, município-UF.
+  const mostrar = propriedade.mostrar_documento_no_cabecalho === true;
   let documentos = null;
-  if (propriedade.mostrar_documento_no_cabecalho === true) {
+  if (mostrar) {
     const documento = formatDocumento(propriedade.documento);
     const inscricao = cleanText(propriedade.inscricao_estadual);
     documentos = [documento ? `${documento.tipo} ${documento.texto}` : null, inscricao ? `IE ${inscricao}` : null].filter(Boolean).join(' · ') || null;
   }
-  const telefone = cleanText(propriedade.telefone);
+  const telefone = mostrar ? cleanText(propriedade.telefone) : null;
   return {
     empty: false,
     propriedadeId: propriedade.id ?? null,

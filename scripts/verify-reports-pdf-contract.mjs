@@ -101,7 +101,9 @@ assert.equal(win.pdfOptions.displayHeaderFooter, false, 'sem rodapé nativo (o d
 assert.equal(win.pdfOptions.preferCSSPageSize, true, 'tamanho e orientação do @page do documento');
 assert.equal(win.pdfOptions.footerTemplate, undefined);
 assert.ok(win.htmlAtPrint.includes('content: "Página " counter(page) " de " counter(pages)'), 'PDF com Página X de Y do documento');
-assert.ok(win.htmlAtPrint.includes(vm.emissionId.slice(0, 8)), 'rodapé da página com a emissão');
+// E1D item 8: a margem da página só com "Página X de Y"; a emissão fica rastreável pelo manifesto do PDF
+// (conferido acima: manifest.emissionId e sha256), não no papel.
+assert.ok(!win.htmlAtPrint.includes(vm.emissionId.slice(0, 8)) && !win.htmlAtPrint.includes('@bottom-left'), 'NEGATIVO (E1D): sem código da emissão na margem do PDF');
 assert.ok(/@page \{ size: A4 (portrait|landscape); margin: 10mm/.test(win.htmlAtPrint), 'A4 com margens de 10 mm');
 assert.ok(win.htmlAtPrint.includes('<table class="sheet-page">') && win.htmlAtPrint.includes('Total geral'), 'PDF renderiza a folha do mesmo view model');
 assert.ok(win.htmlAtPrint.includes("img-src data:"), 'CSP permite só o logo embutido');
