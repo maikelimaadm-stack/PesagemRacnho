@@ -4,10 +4,13 @@
 // (Tipo | Grupo | Métrica | Valor | colunas) e uma segunda aba com o manifesto.
 // E1C: o Resumido com 3 níveis leva também o bloco "TOTAL POR <nível folha> – <nível 1>" da folha, no fim
 // de cada nó de nível 1 (o CSV continua uma linha por grupo + total geral).
+// E1D: o Sintético (Matriz) sai como a matriz da folha (cabeçalho em 2 linhas, uma linha por valor do eixo Y
+// e a linha TOTAL — domain/matrixLayout); o CSV e o JSON dele continuam o Resumido de 2 níveis.
 import { describeFilters } from './printDocument.js';
 import { describePeriod } from '../../domain/reportPeriod.js';
 import { DEFAULT_DECIMALS, formatCell } from '../../domain/reportFormatting.js';
 import { buildLeafTotalBlock, DOC_ROW_TYPES } from '../../domain/reportDocument.js';
+import { buildMatrix, isMatrixViewModel, MATRIX_TOTAL_LABEL, matrixValues } from '../../domain/matrixLayout.js';
 import { leafOnlyMetricKeys, summaryMetricValue } from '../../domain/summaryLayout.js';
 import { aggregateValueColumn, buildReportLines } from './reportLayout.js';
 
@@ -69,14 +72,14 @@ function aggregateColumn(spec, viewModel) {
   return aggregateValueColumn(spec, viewModel.availableColumns ?? viewModel.columns ?? []);
 }
 
-function metaRows(viewModel) {
+function metaRows(viewModel, { grouping: groupingText = null } = {}) {
   const grouping = viewModel.groups.length ? viewModel.groups.map((group) => group.label).join(' › ') : 'Sem agrupamento';
   const mode = viewModel.mode === 'RESUMIDO' ? ' · Resumido (uma linha por grupo)' : ' · Detalhado';
   return [
     { kind: 'TITLE', cells: [[viewModel.reportName, STYLE.title]] },
     { kind: 'META', cells: [['Período', STYLE.meta], [viewModel.period ? describePeriod(viewModel.period) : 'Estado atual', null]] },
     { kind: 'META', cells: [['Filtros', STYLE.meta], [describeFilters(viewModel), null]] },
-    { kind: 'META', cells: [['Agrupado por', STYLE.meta], [`${grouping}${mode}`, null]] },
+    { kind: 'META', cells: [['Agrupado por', STYLE.meta], [groupingText ?? `${grouping}${mode}`, null]] },
     { kind: 'META', cells: [['Emissão', STYLE.meta], [`${viewModel.emissionId} · ${viewModel.generatedAt} · ${viewModel.emittedBy.nome ?? viewModel.emittedBy.id} (${viewModel.emittedBy.role}) · versão ${viewModel.appVersion}`, null]] },
     { kind: 'BLANK', cells: [] },
   ];
@@ -142,8 +145,47 @@ function buildSummarySheetRows(viewModel, layout) {
   return { rows, width, dataHeaders: headers };
 }
 
+// Tipos de linha da matriz na planilha (E1D).
+export const XLSX_MATRIX_KINDS = Object.freeze({ HEADER_X: 'MATRIX_HEADER_X', HEADER_VALUES: 'MATRIX_HEADER_VALUES', ROW: 'MATRIX_ROW', TOTAL: 'MATRIX_TOTAL' });
+
+/**
+ * Sintético (Matriz) numa planilha (E1D): cabeçalho em 2 linhas — cada valor do eixo X (e o TOTAL, no fim)
+ * ocupa uma coluna por valor da célula (Qtd, Peso médio (kg), GMD médio (kg/dia)), título mesclado em cima —,
+ * uma linha por valor do eixo Y e a linha TOTAL. O MESMO modelo da folha (buildMatrix): mesmos rótulos, mesma
+ * ordem, mesmos agregados; números como números no formato da coluna; cruzamento sem pesagem = vazio.
+ * @returns {{ rows, width, dataHeaders, merges: string[], freeze: { rows: number, cols: number } }}
+ */
+function buildMatrixSheetRows(viewModel) {
+  const matrix = buildMatrix(viewModel, { target: 'xlsx' });
+  const per = matrix.metrics.length;
+  const groups = [...matrix.columns.map((column) => column.label), MATRIX_TOTAL_LABEL];
+  const width = 1 + groups.length * per;
+  const rows = metaRows(viewModel, { grouping: `${matrix.legend} · Sintético (Matriz)` });
+  const headerRow = rows.length + 1; // número (1..n) da 1ª linha de cabeçalho na planilha
+  rows.push({ kind: XLSX_MATRIX_KINDS.HEADER_X, cells: [[matrix.rowAxis.label, STYLE.header], ...groups.flatMap((label) => matrix.metrics.map((_, index) => [index === 0 ? label : null, STYLE.header]))] });
+  rows.push({ kind: XLSX_MATRIX_KINDS.HEADER_VALUES, cells: [[null, STYLE.header], ...groups.flatMap(() => matrix.metrics.map((metric) => [metric.label, STYLE.header]))] });
+  const cellsOf = (source, style) => {
+    const raw = matrixValues(matrix, source);
+    return matrix.metrics.map((metric, index) => {
+      const value = raw ? formatCell(metric.column, raw[index], 'xlsx') : null;
+      return [value, typeof value === 'number' ? numberStyle(metric.column) : style];
+    });
+  };
+  for (const row of matrix.rows) {
+    rows.push({ kind: XLSX_MATRIX_KINDS.ROW, cells: [[row.label, STYLE.text], ...row.cells.flatMap((node) => cellsOf(node, STYLE.text)), ...cellsOf(row.total, STYLE.text)] });
+  }
+  const total = matrix.totalRow;
+  rows.push({ kind: XLSX_MATRIX_KINDS.TOTAL, cells: [[total.label, STYLE.total], ...total.cells.flatMap((node) => cellsOf(node, STYLE.total)), ...cellsOf(total.total, STYLE.total)] });
+  // Título de cada valor do eixo X mesclado sobre as suas colunas; o rótulo do eixo Y nas duas linhas.
+  const merges = [`A${headerRow}:A${headerRow + 1}`];
+  if (per > 1) groups.forEach((_, index) => merges.push(`${columnLetter(1 + index * per)}${headerRow}:${columnLetter(index * per + per)}${headerRow}`));
+  const dataHeaders = [matrix.rowAxis.label, ...groups.flatMap((label) => matrix.metrics.map((metric) => `${label} — ${metric.label}`))];
+  return { rows, width, dataHeaders, merges, freeze: { rows: headerRow + 1, cols: 1 } };
+}
+
 /** Linhas da planilha principal: [{ cells: [[valor, estilo], ...], kind }]. */
 export function buildSheetRows(viewModel) {
+  if (isMatrixViewModel(viewModel)) return buildMatrixSheetRows(viewModel);
   const layout = buildReportLines(viewModel, 'xlsx');
   if (layout.mode === 'RESUMIDO') return buildSummarySheetRows(viewModel, layout);
   const { headers, lines } = layout;
@@ -165,13 +207,25 @@ export function buildSheetRows(viewModel) {
   return { rows, width, dataHeaders: headers };
 }
 
-function worksheetXml(rows, width, widths) {
+// Painel congelado: as 7 linhas do topo (título, metadados, cabeçalho); a matriz (E1D) congela também as
+// 2 linhas de cabeçalho e a coluna do eixo Y. Células mescladas só na matriz (valor do eixo X sobre as 3 colunas).
+function paneXml(freeze) {
+  const rows = freeze?.rows ?? 7;
+  const cols = freeze?.cols ?? 0;
+  const topLeft = `${columnLetter(cols)}${rows + 1}`;
+  return cols
+    ? `<pane xSplit="${cols}" ySplit="${rows}" topLeftCell="${topLeft}" activePane="bottomRight" state="frozen"/>`
+    : `<pane ySplit="${rows}" topLeftCell="${topLeft}" activePane="bottomLeft" state="frozen"/>`;
+}
+
+function worksheetXml(rows, width, widths, { merges = [], freeze = null } = {}) {
+  const mergeCells = merges.length ? `\n<mergeCells count="${merges.length}">${merges.map((ref) => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>` : '';
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<sheetViews><sheetView workbookViewId="0"><pane ySplit="7" topLeftCell="A8" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetViews><sheetView workbookViewId="0">${paneXml(freeze)}</sheetView></sheetViews>
 <sheetFormatPr defaultRowHeight="15"/>
 <cols>${Array.from({ length: width }, (_, index) => `<col min="${index + 1}" max="${index + 1}" width="${widths[index] ?? 14}" customWidth="1"/>`).join('')}</cols>
-<sheetData>${rows.map((row, index) => rowXml(index + 1, row.cells)).join('')}</sheetData>
+<sheetData>${rows.map((row, index) => rowXml(index + 1, row.cells)).join('')}</sheetData>${mergeCells}
 </worksheet>`;
 }
 
@@ -200,7 +254,7 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </styleSheet>`;
 
 function workbookFiles(viewModel, manifest) {
-  const { rows, width } = buildSheetRows(viewModel);
+  const { rows, width, merges = [], freeze = null } = buildSheetRows(viewModel);
   // O título do bloco "TOTAL POR" transborda para as células vazias ao lado: não alarga a coluna A.
   const measured = rows.slice(6).filter((row) => row.kind !== XLSX_BLOCK_KINDS.TITLE);
   const widths = Array.from({ length: width }, (_, index) => Math.min(48, Math.max(10, measured.reduce((max, row) => Math.max(max, String(row.cells[index]?.[0] ?? '').length), 0) + 2)));
@@ -215,7 +269,7 @@ function workbookFiles(viewModel, manifest) {
     'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
     'xl/styles.xml': STYLES_XML,
-    'xl/worksheets/sheet1.xml': worksheetXml(rows, width, widths),
+    'xl/worksheets/sheet1.xml': worksheetXml(rows, width, widths, { merges, freeze }),
     'xl/worksheets/sheet2.xml': worksheetXml([{ cells: [['Manifesto da emissão', STYLE.title]] }, ...manifestRows], 2, [28, 90]),
   };
 }
