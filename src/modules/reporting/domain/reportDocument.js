@@ -558,8 +558,9 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const print = decideSheetLayout({ layout: summary ? 'summary' : 'detail', columns, rows: allRows(body) }, { orientation, widths });
 
   // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
-  const usesArroba = columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
-    || (!summary && hasRows && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@'));
+  // Sem linhas a folha é só "Nenhum registro…" (nenhuma coluna aparece): nada em @ para explicar.
+  const usesArroba = hasRows && (columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
+    || (!summary && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@')));
   const divisor = viewModel.arrobaDivisor ?? 30;
   const omitted = viewModel.hiddenByPermission?.length ?? 0;
 

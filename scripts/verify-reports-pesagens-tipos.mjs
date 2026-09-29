@@ -15,7 +15,8 @@
 //   4. título da folha pelo tipo: "(Analítico)" só no Analítico; Vendas (Detalhado) "(Sintético)"; sem tipo,
 //      pelo modo — na tela, na impressão e no PDF (mesmo documento);
 //   5. folha enxuta (item 8): período ao lado do título (sem "Resumido · …"), cabeçalho sem "Emitido em",
-//      sem notas, rodapé só com filtros, "@ = peso vivo ÷ N" (quando há @), quem emitiu e quando, e
+//      sem notas, rodapé só com filtros, "@ = peso vivo ÷ N" (quando há @ na folha — no período sem
+//      pesagens, não), quem emitiu e quando, e
 //      "Página X de Y"; CPF/CNPJ, IE e telefone só com "Mostrar no cabeçalho" (nasce desmarcado).
 // Cada regra tem caso negativo.
 import assert from 'node:assert/strict';
@@ -357,6 +358,18 @@ assert.match(printFolha, /@bottom-right \{ content: "Página " counter\(page\) "
 assert.ok(!printFolha.includes('@bottom-left'), 'NEGATIVO: margem só com a página');
 // Sem @ na folha (Analítico: nenhuma coluna nem total em @) → o rodapé não fala da @.
 assert.equal(buildReportDocument(folhas.analitico).footer.arroba, null, 'Analítico sem @ → sem "@ = peso vivo ÷ N"');
+// Período sem pesagens: a folha é só "Nenhum registro…" (nenhuma coluna em @ aparece) → o rodapé não fala da @,
+// em nenhum tipo — nem nos que têm Média (@) entre as colunas padrão.
+const SEM_PESAGENS = { periodo: { preset: 'personalizado', from: '2020-01-01', to: '2020-01-02' } };
+for (const view of views) {
+  const vmVazio = await run(viewSelection(view, PESAGENS), ADMIN, SEM_PESAGENS);
+  const docVazio = buildReportDocument(vmVazio);
+  assert.equal(docVazio.empty, true, `controle ${view.label}: período sem pesagens`);
+  assert.equal(docVazio.footer.arroba, null, `NEGATIVO ${view.label} vazio: sem "@ = peso vivo ÷ N" no rodapé`);
+  const htmlVazio = decode(renderSheetBody(docVazio, { mode: 'print' }));
+  assert.ok(htmlVazio.includes('Nenhum registro para os filtros informados.') && !htmlVazio.includes('peso vivo'), `NEGATIVO ${view.label} vazio: folha e rodapé sem @`);
+}
+assert.ok(buildReportDocument(await run(viewSelection('por-apartacao-data', PESAGENS), ADMIN, SEM_PESAGENS)).columns.some((column) => column.metric?.column?.unit === '@' || column.unit === '@'), 'controle: o tipo padrão vazio ainda lista Média (@) entre as colunas (por isso o rodapé precisa olhar as linhas)');
 assert.equal(docFolha.footer.omitidas, null, 'NEGATIVO: sem coluna omitida, sem aviso');
 // Cabeçalho: logo, produtor, fazenda, endereço – município-UF; CPF/CNPJ, IE e telefone só com a opção.
 const cabecalho = decode(renderSheetBody(docFolha, { mode: 'print' }));
