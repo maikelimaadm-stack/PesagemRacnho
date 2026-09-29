@@ -32,15 +32,17 @@ export function summaryMetricValue(node, key) {
 /**
  * Nós da árvore em profundidade (sem linhas de dados).
  * @param tree viewModel.tree
- * @param {{ summarySort?: { key: string, direction: 'asc'|'desc' } | null }} options
+ * @param {{ summarySort?: { key: string, direction: 'asc'|'desc', columnId?: string } | null }} options
  *   key = id da agregação, SUMMARY_LABEL_SORT (rótulo) ou SUMMARY_ROWS_METRIC. Ordena irmãos dentro
- *   do MESMO nível (a hierarquia nunca se mistura); ausente fica sempre por último.
+ *   do MESMO nível (a hierarquia nunca se mistura); ausente fica sempre por último. E1D: com `columnId`,
+ *   só o nível dessa coluna é reordenado (as seções acima ficam na ordem natural).
  */
 export function buildSummaryRows(tree, { summarySort = null } = {}) {
   const out = [];
   const direction = summarySort?.direction === 'desc' ? -1 : 1;
   const order = (nodes) => {
     if (!summarySort?.key) return nodes;
+    if (summarySort.columnId && nodes[0]?.columnId !== summarySort.columnId) return nodes;
     return [...nodes].sort((left, right) => {
       if (left.missing !== right.missing) return left.missing ? 1 : -1;
       if (summarySort.key === SUMMARY_LABEL_SORT) return direction * compareGroupLabels(left, right);
