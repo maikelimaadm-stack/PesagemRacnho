@@ -16,7 +16,9 @@ import { REPORT_FAMILIES, REPORT_MODES } from "@/modules/reporting/domain/report
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
-import { getReportView, listReportViews, parseSortChoice, resolveViewId, viewSelection } from "@/modules/reporting/domain/reportViews";
+import { applyColumnKeys, columnKeysOf, getReportView, listReportViews, parseSortChoice, resolveViewId, viewSelection } from "@/modules/reporting/domain/reportViews";
+import { applySortChoice, sortChoiceForColumn, sortChoiceForMetric } from "@/modules/reporting/domain/sortChoices";
+import { hasTypeColumns, typeColumnOptions } from "@/modules/reporting/domain/typeColumns";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { aliasSelection, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
 import { runReport } from "@/modules/reporting/application/reportService";
@@ -24,7 +26,8 @@ import { emitReport } from "@/modules/reporting/application/reportExportService"
 import { exportPdf, printReport } from "@/modules/reporting/application/reportPrintService";
 import { loadReportHeader } from "@/modules/catalog/application/propertyHeaderService";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { favoriteKey, getFavorites, recordRecent, saveReportViewState, saveTemplate, templateToRequest, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
+import { favoriteKey, getFavorites, recordRecent, saveReportViewState, saveTemplate, saveTypeColumnPrefs, templateToRequest, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
+import AnalyticGroupButtons from "./AnalyticGroupButtons";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportFilterBar from "./ReportFilterBar";
 import ReportSheetView from "./ReportSheetView";
@@ -61,6 +64,14 @@ function withTypedState(definition, state) {
   };
 }
 
+// E1D (item 5): seleção de um tipo com a escolha do seletor "Colunas" que a pessoa salvou para ELE
+// (report-type-columns); sem escolha, as colunas/totais padrão do tipo.
+function typedViewSelection(definition, view, typeColumns) {
+  const selection = viewSelection(view, definition);
+  const keys = typeColumns?.[view.id];
+  return keys?.length && view.columnChoices ? { ...selection, ...applyColumnKeys(view, definition, keys) } : selection;
+}
+
 function stateFromRequest(definition, request, extra = {}) {
   return withTypedState(definition, {
     view: request.selection.view,
@@ -85,7 +96,7 @@ function stateFromRequest(definition, request, extra = {}) {
   });
 }
 
-function initialState(definition, template, preset, role, savedState) {
+function initialState(definition, template, preset, role, savedState, typeColumns = null) {
   if (template) {
     const request = templateToRequest(template, role);
     request.warnings.forEach((warning) => toast.warning(warning.message));
@@ -97,9 +108,10 @@ function initialState(definition, template, preset, role, savedState) {
   }
   const params = {};
   for (const param of definition.params) if (param.default != null) params[param.id] = param.default;
-  // E1D: relatório com tipo padrão (Pesagens → "Por Apartação (Resumo por Data)") abre nele.
+  // E1D: relatório com tipo padrão (Pesagens → "Por Apartação (Resumo por Data)") abre nele, com as colunas
+  // que a pessoa escolheu para esse tipo (lidas antes de montar: sem piscar).
   if (!preset && definition.defaultView) {
-    const selection = viewSelection(definition.defaultView, definition);
+    const selection = typedViewSelection(definition, getReportView(definition, definition.defaultView), typeColumns);
     return withTypedState(definition, {
       view: selection.view, matrix: selection.matrix, sortChoice: definition.defaultSortChoice ?? null,
       params,
@@ -184,13 +196,17 @@ function currentSortValue({ summaryMode, state, definition, options }) {
  * @param allowPreferences false quando aberto fora de Relatórios (aba Controle da Manutenção): sem
  *   estrela, sem "Salvar modelo", sem recente e sem último estado — só Relatórios guarda preferências.
  * @param savedState último estado do usuário (Relatorios.jsx lê antes de montar) ou null.
+ * @param typeColumnPrefs E1D: escolha de "Colunas" de cada tipo para o usuário ({ [viewId]: [chave] }, de
+ *   getTypeColumnPrefs — Relatorios.jsx lê antes de montar) ou null.
  */
-export default function ReportView({ reportId, presetId = null, template, savedState = null, actor, onBack, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true }) {
+export default function ReportView({ reportId, presetId = null, template, savedState = null, typeColumnPrefs = null, actor, onBack, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true }) {
   const can = useCan();
   const definition = getReportDefinition(reportId);
   const preset = presetId ? getLegacyAlias(presetId) : null;
+  // E1D: escolha de colunas por tipo (vale nesta tela ao trocar de tipo; gravada por usuário ao aplicar).
+  const [typeColumns, setTypeColumns] = useState(() => (allowPreferences && typeColumnPrefs ? { ...typeColumnPrefs } : {}));
   const [state, setState] = useState(() => {
-    const initial = initialState(definition, template, preset, actor.role, allowPreferences ? savedState : null);
+    const initial = initialState(definition, template, preset, actor.role, allowPreferences ? savedState : null, typeColumns);
     const periodParam = definition.params.find((param) => param.type === "period");
     return initialPeriod && periodParam ? { ...initial, params: { ...initial.params, [periodParam.id]: initialPeriod } } : initial;
   });
@@ -326,10 +342,12 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   // Tipo de relatório: atalho para agrupamento + modo (+ totais/colunas/ordem da visão) — nada de conta nova.
   // E1D: o tipo é explícito (state.view); estado de antes da E1D cai no que bate pela estrutura.
   const viewId = resolveViewId(definition, { view: state.view, groups: state.groups, mode: state.mode, aggregates: state.aggregates, columns: state.columns }) ?? "custom";
+  const currentView = views.find((item) => item.id === viewId) ?? null;
   const applyView = (id) => {
     const view = views.find((item) => item.id === id);
     if (!view) return;
-    const selection = viewSelection(view, definition);
+    // E1D: com as colunas que a pessoa escolheu para ESTE tipo (senão as padrão dele).
+    const selection = typedViewSelection(definition, view, typeColumns);
     update({
       view: selection.view,
       matrix: selection.matrix,
@@ -339,16 +357,67 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       columns: selection.columns?.length ? selection.columns : state.columns,
       sort: selection.sort ?? state.sort,
       summarySort: selection.summarySort ?? null,
+      // "Personalizado" do Ordenar por (clique num cabeçalho) era daquele tipo: o novo volta ao padrão.
+      ...(definition.sortChoices?.length && !state.sortChoice ? { sortChoice: definition.defaultSortChoice ?? null } : {}),
       // Só a visão que declara filtros mexe nos filtros; os da pessoa ficam.
       ...(view.filters ? { uiFilters: { ...state.uiFilters, ...toDisplayFilters(JSON.parse(JSON.stringify(view.filters)), definition.columns) } } : {}),
       drill: [],
     });
   };
 
+  // E1D (item 5): seletor "Colunas" do TIPO (columnChoices) — no Resumido escolhe as métricas por chave, no
+  // Detalhado só as colunas disponíveis do tipo. Vale quando o tipo está no próprio modo (no detalhe de um
+  // grupo do Resumido o seletor volta a ser o das colunas de dados). Aplicar grava a escolha do tipo para o
+  // usuário (nunca amplia permissão: o serviço valida contra o tipo e o papel).
+  const typeColumnsOn = hasTypeColumns(currentView) && currentView.mode === (viewModel?.mode ?? state.mode);
+  const applyTypeColumns = (view, keys) => {
+    const chosen = applyColumnKeys(view, definition, keys);
+    if (view.mode === REPORT_MODES.DETALHADO) update({ columns: chosen.columns });
+    else update({ aggregates: chosen.aggregates, summarySort: chosen.aggregates.some((spec) => spec.id === state.summarySort?.key) ? state.summarySort : null });
+    setTypeColumns((current) => {
+      const next = { ...current };
+      if (keys.length) next[view.id] = [...keys];
+      else delete next[view.id];
+      return next;
+    });
+    if (allowPreferences) saveTypeColumnPrefs(definition.id, view.id, keys, actor).catch(() => {});
+  };
+  // Opções do seletor do tipo (só as chaves de columnChoices.available que o papel vê) e a escolha atual.
+  const typeColumnDialog = typeColumnsOn
+    ? { options: typeColumnOptions(definition, currentView, actor.role), current: columnKeysOf(currentView, definition, { columns: state.columns, aggregates: state.aggregates }) }
+    : null;
+  const hideColumn = (columnId) => {
+    const next = state.columns.filter((id) => id !== columnId);
+    if (typeColumnsOn && currentView.mode === REPORT_MODES.DETALHADO) applyTypeColumns(currentView, columnKeysOf(currentView, definition, { columns: next }));
+    else update({ columns: next });
+  };
+
+  // E1D: controles próprios do tipo atual, no encaixe typeControls da barra (C: botões do Analítico).
+  // Trocam só os grupos — o tipo continua (update sem mexer em view); o detalhe de grupo sai.
+  const typeControls = currentView?.groupChoices?.length ? (
+    <AnalyticGroupButtons choices={currentView.groupChoices} groups={state.groups} labelOf={(columnId) => columnLabel(columnId)} onChange={(groups) => update({ groups, drill: [] })} />
+  ) : null;
+
+  // E1D (item 6): relatório com "Ordenar por" fixo (Pesagens: as 8 do MAKGESTAO) mostra exatamente essas
+  // opções, em qualquer tipo. Escolher grava só sortChoice: o serviço traduz para a ordem do tipo atual
+  // (domain/sortChoices.js). "Personalizado" só aparece depois de um clique em cabeçalho sem opção equivalente.
+  const fixedSortChoices = definition.sortChoices?.length ? definition.sortChoices : null;
   const metricsForSort = useMemo(() => (viewModel && summaryMode ? summaryMetrics(viewModel) : []), [viewModel, summaryMode]);
-  const sortOptions = useMemo(() => buildSortOptions({ summaryMode, groups: state.groups, columnOf, metrics: metricsForSort, visibleColumns }), [summaryMode, state.groups, columnOf, metricsForSort, visibleColumns]);
-  const sortValue = currentSortValue({ summaryMode, state, definition, options: sortOptions });
+  const sortOptions = useMemo(
+    () => (fixedSortChoices ? fixedSortChoices.map((choice) => ({ value: choice.id, label: choice.label })) : buildSortOptions({ summaryMode, groups: state.groups, columnOf, metrics: metricsForSort, visibleColumns })),
+    [fixedSortChoices, summaryMode, state.groups, columnOf, metricsForSort, visibleColumns],
+  );
+  const sortValue = fixedSortChoices ? (state.sortChoice ?? "custom") : currentSortValue({ summaryMode, state, definition, options: sortOptions });
+  // Níveis como a opção atual os mostra (ex.: "Data (Mais Antiga)" inverte a data): o "Personalizado" de um
+  // clique em cabeçalho parte do que a pessoa está vendo. Mesma função pura que o serviço usa.
+  const shownGroups = () => (state.sortChoice
+    ? applySortChoice(definition, state.view ? getReportView(definition, state.view) : null, { sort: state.sort, summarySort: state.summarySort, groups: state.groups, aggregates: state.aggregates }, state.sortChoice).groups
+    : state.groups);
   const applySort = (value) => {
+    if (fixedSortChoices) {
+      update({ sortChoice: value });
+      return;
+    }
     if (value === "padrao") {
       if (summaryMode) update({ summarySort: null, groups: state.groups.map((group) => ({ columnId: group.columnId })) });
       else update({ sort: definition.defaultSort });
@@ -372,12 +441,30 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   };
 
   const onSort = (columnId) => {
+    if (fixedSortChoices) {
+      // E1D: clique no cabeçalho da grade vira a opção equivalente (Peso → "Peso (Menor)"; de novo → "Peso
+      // (Maior)"); coluna sem opção (Sexo, Raça…) ordena por ela e o seletor mostra "Personalizado".
+      const first = (viewModel?.sort ?? state.sort)[0];
+      const direction = first?.columnId === columnId && first.direction === "asc" ? "desc" : "asc";
+      const choice = sortChoiceForColumn(definition, columnId, direction);
+      update(choice ? { sortChoice: choice } : { sortChoice: null, sort: [{ columnId, direction }], groups: shownGroups() });
+      return;
+    }
     const currentSort = state.sort.find((item) => item.columnId === columnId);
     const direction = currentSort?.direction === "asc" ? "desc" : "asc";
     update({ sort: [{ columnId, direction }] });
   };
   // Clique no cabeçalho de uma métrica da folha: maior primeiro; de novo inverte.
   const onSheetSort = (key) => {
+    if (fixedSortChoices) {
+      // E1D: peso médio / GMD médio viram "Peso (Maior)" / "GMD (Maior)" (de novo: Menor); outra métrica
+      // ordena as linhas por ela e o seletor mostra "Personalizado".
+      const shown = viewModel?.summarySort ?? null;
+      const direction = shown?.key === key && shown.direction === "desc" ? "asc" : "desc";
+      const choice = sortChoiceForMetric(definition, viewModel?.aggregates ?? state.aggregates, key, direction);
+      update(choice ? { sortChoice: choice } : { sortChoice: null, summarySort: { key, direction }, groups: shownGroups() });
+      return;
+    }
     const direction = state.summarySort?.key === key && state.summarySort.direction === "desc" ? "asc" : "desc";
     update({ summarySort: { key, direction } });
   };
@@ -515,7 +602,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
             ) : null}
             <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("groups")} title="Níveis de agrupamento (até 3)" aria-label="Níveis de agrupamento"><Layers className="h-3.5 w-3.5" aria-hidden="true" /></button>
             <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("totals")} title="Totais (colunas da folha e dos subtotais)" aria-label="Totais"><Sigma className="h-3.5 w-3.5" aria-hidden="true" /></button>
-            {!summaryMode ? <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("columns")} title="Colunas" aria-label="Colunas"><Columns3 className="h-3.5 w-3.5" aria-hidden="true" /></button> : null}
+            {!summaryMode || typeColumnsOn ? <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("columns")} title="Colunas" aria-label="Colunas"><Columns3 className="h-3.5 w-3.5" aria-hidden="true" /></button> : null}
             <button type="button" className={`ios-btn tb-btn tb-btn-ghost tb-btn-icon${state.showEmptyColumns ? " is-active" : ""}`} aria-pressed={state.showEmptyColumns} onClick={() => update({ showEmptyColumns: !state.showEmptyColumns })} title={state.showEmptyColumns ? "Esconder colunas sem nenhum valor" : "Mostrar colunas vazias (sem nenhum valor no relatório)"} aria-label="Mostrar colunas vazias">
               {state.showEmptyColumns ? <Eye className="h-3.5 w-3.5" aria-hidden="true" /> : <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />}
             </button>
@@ -559,10 +646,11 @@ export default function ReportView({ reportId, presetId = null, template, savedS
         sortValue={sortValue}
         onSort={applySort}
         previous={previousColumn ? { value: previousValue, onChange: setPrevious } : null}
+        typeControls={typeControls}
       />
 
       <div className="mak-mother-page__panel-strip" data-mak-region="panel-strip">
-        <MgTablePanelStrip onConfigColumns={() => setDialog(summaryMode ? "totals" : "columns")}>
+        <MgTablePanelStrip onConfigColumns={() => setDialog(summaryMode && !typeColumnsOn ? "totals" : "columns")}>
           <MakFilterRail hasActiveFilters={hasActiveFilters} onClear={() => update({ uiFilters: {}, search: "" })}>
             <Input type="search" className="rpt-search" aria-label="Pesquisar no relatório" placeholder="Pesquisar…" value={state.search} onChange={(event) => update({ search: event.target.value })} />
             {drillParts.length ? (
@@ -614,19 +702,19 @@ export default function ReportView({ reportId, presetId = null, template, savedS
                 header={header}
                 orientation={state.orientation}
                 showEmptyColumns={state.showEmptyColumns}
-                sort={viewModel.mode === REPORT_MODES.RESUMIDO ? state.summarySort : null}
+                sort={viewModel.mode === REPORT_MODES.RESUMIDO ? (fixedSortChoices ? viewModel.summarySort : state.summarySort) : null}
                 onDrill={viewModel.mode === REPORT_MODES.RESUMIDO ? onDrill : null}
                 onSort={viewModel.mode === REPORT_MODES.RESUMIDO ? onSheetSort : null}
               />
             ) : (
               <ReportTable
                 viewModel={viewModel}
-                sort={state.sort}
+                sort={fixedSortChoices ? viewModel.sort.slice(0, 1) : state.sort}
                 onSort={onSort}
                 widths={state.widths}
                 filters={state.uiFilters}
                 onFilter={onFilter}
-                onHide={(columnId) => update({ columns: state.columns.filter((id) => id !== columnId) })}
+                onHide={hideColumn}
                 optionsFor={(column) => pillOptions(viewModel, column)}
                 filterTypeFor={pillFilterType}
               />
@@ -635,7 +723,16 @@ export default function ReportView({ reportId, presetId = null, template, savedS
         </Card>
       </div>
 
-      {dialog === "columns" && viewModel ? (
+      {dialog === "columns" && viewModel && typeColumnsOn ? (
+        <MakColumnConfigDialog
+          open
+          onOpenChange={(open) => !open && setDialog(null)}
+          columns={typeColumnDialog.options.map((option) => ({ id: option.key, label: option.label, default: option.default }))}
+          order={[...typeColumnDialog.current, ...typeColumnDialog.options.map((option) => option.key).filter((key) => !typeColumnDialog.current.includes(key))]}
+          visible={typeColumnDialog.current}
+          onApply={({ order, visible }) => { applyTypeColumns(currentView, order.filter((key) => visible.includes(key))); setDialog(null); }}
+        />
+      ) : dialog === "columns" && viewModel ? (
         <MakColumnConfigDialog
           open
           onOpenChange={(open) => !open && setDialog(null)}
@@ -656,7 +753,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           </DialogHeader>
           <DialogFooter className="rpt-print-options">
             {printPrompt?.layout.warning?.options?.includes("paisagem") ? <Button type="button" variant="outline" onClick={() => { update({ orientation: "landscape" }); emitDocument(printPrompt.kind, { orientation: "landscape" }); }}>Usar paisagem</Button> : null}
-            <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); setDialog(summaryMode ? "totals" : "columns"); }}>{summaryMode ? "Reduzir totais" : "Reduzir colunas"}</Button>
+            <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); setDialog(summaryMode && !typeColumnsOn ? "totals" : "columns"); }}>{summaryMode && !typeColumnsOn ? "Reduzir totais" : "Reduzir colunas"}</Button>
             {can("reports.export") ? <Button type="button" variant="outline" onClick={() => { setPrintPrompt(null); exportAs("csv"); }}>Exportar CSV</Button> : null}
             <Button type="button" className="emp-toolbar-btn-save" onClick={() => emitDocument(printPrompt.kind, { acceptTooWide: true })}>Continuar mesmo assim</Button>
           </DialogFooter>
