@@ -279,7 +279,13 @@ html body #root .rpt-mak .rpt-mak-chip button:not(#rpt-none) { display: inline-f
 
 /* A folha (área de impressão do antigo: bg-white): sempre o papel, a página inteira rola (sem rolagem própria). */
 .rpt-mak__paper { position: relative; min-width: 0; min-height: 240px; background: #fff; }
-.rpt-mak .rpt-sheet-host { overflow-x: auto; overflow-y: visible; max-height: none; padding: 24px 0 8px; background: transparent; }
+.rpt-mak .rpt-sheet-host { overflow-x: auto; overflow-y: visible; max-height: none; padding: 0; background: transparent; }
+/* Como a área de impressão do antigo (bg-white + print-area p-8): a folha ocupa a largura da área, sem moldura
+   nem sombra, e nunca fica mais estreita que a página escolhida (rola na horizontal). Só na tela: a impressão e
+   o PDF montam o próprio documento (A4, margens de 10 mm). */
+.rpt-mak .rpt-sheet-host .rpt-sheet.rpt-sheet--screen { width: 100%; margin: 0; padding: 32px; border: 0; border-radius: 0; box-shadow: none; }
+.rpt-mak .rpt-sheet-host .rpt-sheet.rpt-sheet--screen.sheet--landscape { width: 100%; min-width: 297mm; }
+.rpt-mak .rpt-sheet-host .rpt-sheet.rpt-sheet--screen.sheet--portrait { width: 100%; min-width: 210mm; }
 /* "Colunas Painel/Detalhes" fora da folha, no canto de cima da área do papel (a barra print:hidden do antigo).
    O canto direito do cabeçalho da folha é vazio (logo à esquerda, nome no meio). */
 .rpt-mak__sheet-tools { position: absolute; top: 12px; right: 16px; z-index: 1; display: flex; align-items: center; gap: 8px; }
@@ -312,6 +318,7 @@ html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-btn.is-on:not
 html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-link):not(#rpt-none) { color: #adbac7 !important; }
 html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-link):not(#rpt-none):hover:not(:disabled) { background: #21262d !important; color: #e6edf3 !important; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak__paper { background: #0d1117; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak .rpt-sheet-host .rpt-sheet.rpt-sheet--screen { border: 1px solid #30363d; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak-chip { border-color: #444c56; background: #161b22; color: #adbac7; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop { border-color: #30363d; background: #161b22; color: #e6edf3; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__item > button[role="checkbox"] { border-color: #adbac7; background: transparent; color: #0d1117; }
