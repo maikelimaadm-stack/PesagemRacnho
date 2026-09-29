@@ -36,7 +36,8 @@ function organizationHeader(organization) {
 /**
  * @param viewModel resultado de runReport
  * @param {{ orientation?: 'auto'|'portrait'|'landscape', header?: object|null, organization?: string,
- *   showEmptyColumns?: boolean, widths?: object }} options header = buildPropertyHeader(...) já resolvido
+ *   showEmptyColumns?: boolean, widths?: object, showDetails?: boolean }} options header = buildPropertyHeader(...)
+ *   já resolvido; showDetails = "Mostrar Detalhes" do relatório de Vendas (E1D)
  * @returns {{ html: string, layout: object, stats: object, document: object }}
  */
 export function buildPrintDocument(viewModel, options = {}) {
@@ -46,6 +47,7 @@ export function buildPrintDocument(viewModel, options = {}) {
     orientation: options.orientation ?? 'auto',
     showEmptyColumns: Boolean(options.showEmptyColumns),
     widths: options.widths ?? {},
+    showDetails: Boolean(options.showDetails),
   });
   const html = `<!doctype html>
 <html lang="pt-BR">

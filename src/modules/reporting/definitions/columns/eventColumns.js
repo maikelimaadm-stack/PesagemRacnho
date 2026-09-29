@@ -10,6 +10,7 @@
 import { GRAINS } from '../../domain/reportGrain.js';
 import { SENSITIVITY, defineColumn } from '../../domain/columnDefinition.js';
 import { normalizeText } from '../../domain/filterEngine.js';
+import { toFiniteNumber } from '../../domain/aggregateEngine.js';
 
 const EVENT_GRAINS = [GRAINS.EVENT, GRAINS.EXIT, GRAINS.SHIPMENT_DOCUMENT];
 
@@ -65,6 +66,25 @@ const liveArrobaOf = (field) => (row) => {
   if (!Number.isFinite(number) || !Number.isFinite(divisor) || divisor <= 0) return null;
   return number / divisor;
 };
+
+// Vendas (E1D, igual ao MAKGESTAO): Valor @ só conta com preço > 0 (o antigo também descartava 0/vazio).
+const salePriceOf = (row) => {
+  const price = toFiniteNumber(row?.valor_arroba);
+  return price !== null && price > 0 ? price : null;
+};
+
+// Valor total de UMA venda (E1D): o valor digitado quando > 0; senão Qtd @ × Valor @, com Qtd @ = @ de PESO
+// VIVO (peso ÷ divisor de Configurações › Relatórios, 30 no PDF da responsável: 40.968 kg ÷ 30 × R$ 383 =
+// R$ 523.024,80) — é assim que o MAKGESTAO fechava a venda sem valor digitado. Sem Valor @ nem valor digitado
+// → null ("-", fora da soma), nunca 0. ATENÇÃO: a "Estimativa comercial" do Lançamento usa a @ de CARCAÇA
+// (peso × rendimento ÷ 15 × Valor @) e pode dar outro número para a mesma venda (pergunta no REPORT da E1D).
+export function saleValueOf(row) {
+  const typed = toFiniteNumber(row?.valor_venda_total);
+  if (typed !== null && typed > 0) return typed;
+  const price = salePriceOf(row);
+  const arrobas = liveArrobaOf('peso')(row);
+  return price !== null && arrobas !== null ? arrobas * price : null;
+}
 
 // Pesagem com anterior válida (entra no GMD ponderado): dias > 0 e ganho preenchido.
 const hasPreviousGain = (row) => Number(row?.dias) > 0 && !isBlank(row?.ganho) && Number.isFinite(Number(row.ganho));
@@ -175,6 +195,20 @@ export const EVENT_COLUMNS = [
     weightedBy: 'quantidade_arrobas', aggregations: ['countValid', 'avg', 'min', 'max', 'weightedAvg'],
   }),
   defineColumn({ id: 'quantidade_arrobas', label: '@ carcaça estimada', type: 'number', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
+  // E1D Vendas: valor total da venda (digitado > 0, senão @ viva × Valor @ — saleValueOf). Coluna derivada: a
+  // conta mora aqui, nunca na folha/planilha.
+  defineColumn({
+    id: 'valor_venda_calc', label: 'Valor total', type: 'money', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, source: 'derivado',
+    accessor: saleValueOf, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'],
+    description: 'Valor digitado da venda; sem ele, @ de peso vivo × Valor @ (como o MAKGESTAO). Sem os dois, vazio.',
+  }),
+  // E1D Vendas, "Média valor da arroba": Valor @ (> 0) ponderado pela @ de peso vivo da venda. Só de cálculo.
+  defineColumn({
+    id: 'valor_arroba_venda', label: 'Valor @ (venda)', type: 'money', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, source: 'derivado',
+    accessor: salePriceOf, weightedBy: liveArrobaOf('peso'), aggregations: ['weightedAvg'],
+    metricOnly: true, filterable: false, sortable: false, exportable: false,
+    description: 'Preço da @ digitado (> 0), ponderado pela @ de peso vivo — base da "Média valor da arroba" de Vendas.',
+  }),
   // Rendimento também é sensível: peso × rendimento ÷ 100 ÷ 15 recalcula as arrobas.
   defineColumn({ id: 'rendimento_carcaca', label: 'Rendimento', unit: '%', type: 'percentage', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, weightedBy: 'peso', aggregations: ['countValid', 'avg', 'min', 'max', 'weightedAvg'] }),
   // Carcaça estimada é sensível: arrobas = carcaça ÷ 15 (seria canal lateral para o valor).

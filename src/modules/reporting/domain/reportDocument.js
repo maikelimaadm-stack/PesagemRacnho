@@ -25,6 +25,7 @@ import { buildMatrix, isMatrixViewModel, MATRIX_TOTAL_LABEL, matrixCellLines, ma
 import { REPORT_MODES } from './reportDefinition.js';
 import { formatCell, headerLabel, MISSING_SCREEN } from './reportFormatting.js';
 import { formatGroupLabel, summaryMetrics, SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC } from './summaryLayout.js';
+import { buildVendasBlocks, isVendasViewModel, vendasDocumentBody } from './vendasLayout.js';
 
 export const DOCUMENT_KIND = 'pesagens.report-document';
 export const DOC_ROW_TYPES = Object.freeze({
@@ -606,9 +607,10 @@ export function sheetTitleOf(viewModel) {
 /**
  * @param viewModel resultado de runReport (Resumido → folha resumida; Detalhado → folha com linhas)
  * @param {{ header?: object|null, orientation?: 'auto'|'portrait'|'landscape', showEmptyColumns?: boolean,
- *   maxDataRows?: number }} options header = buildPropertyHeader(...) (ou null → só o nome do sistema)
+ *   maxDataRows?: number, showDetails?: boolean }} options header = buildPropertyHeader(...) (ou null → só o
+ *   nome do sistema); showDetails = "Mostrar Detalhes" do relatório de Vendas (E1D, layout "vendas")
  */
-export function buildReportDocument(viewModel, { header = null, orientation = 'auto', showEmptyColumns = false, maxDataRows = Infinity, widths = {} } = {}) {
+export function buildReportDocument(viewModel, { header = null, orientation = 'auto', showEmptyColumns = false, maxDataRows = Infinity, widths = {}, showDetails = false } = {}) {
   const summary = viewModel.mode === REPORT_MODES.RESUMIDO;
   const levels = (viewModel.groups ?? []).map((level) => ({ columnId: level.columnId, label: level.label }));
   // E1D: Sintético (Matriz) = o Resumido de 2 níveis desenhado como tabela cruzada (domain/matrixLayout).
@@ -625,13 +627,15 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const hiddenKeys = new Set(hiddenColumns.map((column) => column.key));
   const columns = allColumns.filter((column) => !hiddenKeys.has(column.key)).map((column, index) => ({ ...column, index }));
 
-  const body = matrix ? buildMatrixBody(matrix, columns) : summary ? buildSummaryBody(viewModel, columns) : buildDetailBody(viewModel, columns, { maxDataRows });
+  // E1D Vendas (Detalhado): o relatório de venda do MAKGESTAO — blocos próprios (domain/vendasLayout) em doc.vendas.
+  const vendas = isVendasViewModel(viewModel) ? buildVendasBlocks(viewModel, { showDetails, columns }) : null;
+  const body = vendas ? vendasDocumentBody(vendas) : matrix ? buildMatrixBody(matrix, columns) : summary ? buildSummaryBody(viewModel, columns) : buildDetailBody(viewModel, columns, { maxDataRows });
   const print = decideSheetLayout({ layout: summary ? 'summary' : 'detail', columns, rows: allRows(body) }, { orientation, widths });
 
   // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
   // Sem linhas a folha é só "Nenhum registro…" (nenhuma coluna aparece): nada em @ para explicar.
   const usesArroba = hasRows && (columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
-    || Boolean(matrix?.metrics.some((metric) => metric.column?.unit === '@'))
+    || Boolean(matrix?.metrics.some((metric) => metric.column?.unit === '@')) || Boolean(vendas)
     || (!summary && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@')));
   const divisor = viewModel.arrobaDivisor ?? 30;
   const omitted = viewModel.hiddenByPermission?.length ?? 0;
@@ -651,7 +655,7 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     kind: DOCUMENT_KIND,
     version: 1,
     mode: viewModel.mode,
-    layout: matrix ? 'matrix' : summary ? 'summary' : 'detail',
+    layout: vendas ? 'vendas' : matrix ? 'matrix' : summary ? 'summary' : 'detail',
     reportId: viewModel.reportId,
     title: sheetTitleOf(viewModel),
     header: header ?? null,
@@ -673,6 +677,8 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     stats: body.stats,
     // E1D: eixos e legenda da matriz (null fora do Sintético (Matriz)); os valores de cada célula estão em cells[].raw.
     matrix: matrix ? { legend: matrix.legend, rowAxis: matrix.rowAxis, colAxis: matrix.colAxis, values: matrix.metrics.map((metric) => ({ key: metric.key, label: metric.label })) } : null,
+    // E1D: blocos do relatório de venda (null fora de "Vendas (Detalhado)") — exporters/vendasHtml desenha.
+    vendas,
   };
 }
 

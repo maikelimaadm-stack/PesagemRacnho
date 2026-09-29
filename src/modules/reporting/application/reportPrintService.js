@@ -24,11 +24,17 @@ function authorize(viewModel, actor) {
   assertCanExport(definition, actor.role, viewModel.columns.map((column) => column.id));
 }
 
-/** Documento pronto (sem imprimir): layout, aviso de largura e manifesto. */
+/**
+ * Documento pronto (sem imprimir): layout, aviso de largura e manifesto. As opções vão inteiras para a folha
+ * (buildPrintDocument): orientation, header, showEmptyColumns, widths e, no relatório de Vendas (E1D),
+ * showDetails ("Mostrar Detalhes": as vendas de cada comprador abaixo do cartão) — printReport e exportPdf
+ * repassam as mesmas opções.
+ */
 export function preparePrint(viewModel, actor, options = {}) {
   authorize(viewModel, actor);
   const document = buildPrintDocument(viewModel, options);
   const manifest = { ...buildManifest(viewModel, options.format ?? 'print'), orientation: document.layout.orientation, fileName: exportFileName(viewModel, 'pdf') };
+  if (document.document.layout === 'vendas') manifest.showDetails = Boolean(options.showDetails);
   return { ...document, manifest };
 }
 
