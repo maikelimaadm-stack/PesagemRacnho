@@ -1,6 +1,8 @@
 // Gate reports:vendas-por-comprador:verify (E1D item 3) — tipo "Vendas (Detalhado)" do relatório Pesagens:
 //   - população = "Vendas do período" (comercial.vendas): as MESMAS linhas, no mesmo período e filtros; cadastro,
 //     manejo (mesmo com motivo "Venda"), abate, morte e venda fora do período ficam fora; filtro da pessoa só restringe;
+//   - tela: "Resumido", "Agrupar por" e "Níveis" saem do tipo (Personalizado) levando a condição fixa, com cadeado
+//     (tela, modelo e último estado) — nenhum controle amplia; escolher outro tipo a solta;
 //   - agrupado por comprador (texto do lançamento), "Não informado" (comprador em branco) por último;
 //   - subtotal por comprador e total geral conferidos à mão: animais distintos, peso total, peso médio, @ viva
 //     (÷ 30 e ÷ 15, total e média) e valor total — total geral recalculado, nunca soma/média de subtotais;
@@ -20,7 +22,7 @@ import { preparePrint } from '../src/modules/reporting/application/reportPrintSe
 import { getReportViewState, listTemplates, saveReportViewState, saveTemplate, templateToRequest } from '../src/modules/reporting/application/reportTemplateService.js';
 import { can } from '../src/modules/auth/domain/permissionService.js';
 import { withoutHiddenColumns } from '../src/modules/reporting/domain/reportPermissions.js';
-import { templatePayload, viewStatePayload } from '../src/modules/reporting/domain/reportScreenState.js';
+import { leaveViewPatch, screenFixedFilters, templatePayload, viewStatePayload } from '../src/modules/reporting/domain/reportScreenState.js';
 import { buildReportDocument, describeReportFilters, documentRows } from '../src/modules/reporting/domain/reportDocument.js';
 import { headerLabel, roundTo } from '../src/modules/reporting/domain/reportFormatting.js';
 import { createColumnResolver } from '../src/modules/reporting/domain/reportDefinition.js';
@@ -148,8 +150,10 @@ const vmPesado = await vendas(ADMIN, { filters: pesadoPessoa });
 const comercialPesado = await runReport('comercial.vendas', { today: TODAY, params: period, selection: { filters: pesadoPessoa } }, ADMIN);
 assert.deepEqual(idsOf(vmPesado), ['v12', 'v5', 'v7'], 'filtro da pessoa (peso > 400) restringe');
 assert.deepEqual(idsOf(vmPesado), idsOf(comercialPesado), 'mesmas linhas com o mesmo filtro');
+// Serviço: sem tipo e sem condição fixa, as outras pesagens voltam (a condição é do tipo). A TELA nunca manda
+// isso ao sair de Vendas por um controle genérico: leva a condição junto (seção 4b).
 const semTipo = await runReport('pesagens', { today: TODAY, params: period, selection: { view: null } }, ADMIN);
-assert.ok(semTipo.rowCount > vm.rowCount && semTipo.rows.some((row) => row.id === 'v11m'), 'sem o tipo (Personalizado) as outras pesagens voltam — a condição é do tipo');
+assert.ok(semTipo.rowCount > vm.rowCount && semTipo.rows.some((row) => row.id === 'v11m'), 'serviço sem tipo e sem condição: as outras pesagens voltam');
 // A condição aparece como fixa (cadeado) na tela, na folha e nas exportações.
 assert.deepEqual(Object.keys(vm.lockedFilters).sort(), ['motivo_saida', 'tipo_manejo'], 'condição fixa do tipo');
 assert.ok(Object.values(vm.lockedFilters).every((filter) => filter.match === 'code'), 'fixa pelo código');
@@ -163,7 +167,7 @@ assert.deepEqual(idsOf(fixoAlheio), idsOf(vm), 'NEGATIVO: condição fixa de mod
 assert.deepEqual(fixoAlheio.lockedFilters.motivo_saida.values, ['Venda']);
 assert.deepEqual(idsOf(await vendas(ADMIN, { search: 'Lote 02' })), ['e6', 'v6', 'v8'], 'pesquisa só restringe');
 assert.equal((await vendas(ADMIN, { mode: 'RESUMIDO' })).mode, 'DETALHADO', 'o modo é o do tipo');
-assert.match(await code(() => vendas(ADMIN, { groups: [{ columnId: 'marca' }] })), /agrupa por comprador/, 'NEGATIVO: outro agrupamento não é o tipo Vendas (a tela passa a Personalizado)');
+assert.match(await code(() => vendas(ADMIN, { groups: [{ columnId: 'marca' }] })), /agrupa por comprador/, 'NEGATIVO: outro agrupamento não é o tipo Vendas (a tela passa a Personalizado levando a condição — 4b)');
 
 // ---------------------------------------------------------------------------------------------------
 // 4. Por comprador, "Não informado" por último; subtotais e total geral à mão (÷ 30 e ÷ 15)
@@ -215,6 +219,91 @@ assert.notEqual(vm.totals.valor_total.value, 29100 + (330 / 30) * 290, 'NEGATIVO
   assert.deepEqual([agregados.total_arroba.n_validos, agregados.total_arroba.n_total], [2, 3]);
   near(agregados.valor_total.value, 10450, 'valor total = soma do digitado');
 }
+
+// ---------------------------------------------------------------------------------------------------
+// 4b. Tela: "Resumido", "Agrupar por" e "Níveis" tiram do tipo (Personalizado, contrato §3), mas a população de
+//     Vendas continua fixa, com cadeado — nenhum controle a amplia. leaveViewPatch/screenFixedFilters são o MESMO
+//     código da ReportView; rodaTela manda ao serviço o que o execute da tela manda.
+// ---------------------------------------------------------------------------------------------------
+const tipo = viewSelection('vendas', definition);
+const telaVendas = (extra = {}) => ({
+  view: 'vendas', matrix: null, sortChoice: definition.defaultSortChoice ?? null, params: { ...period }, uiFilters: {}, fixedFilters: {},
+  columns: [...tipo.columns], groups: tipo.groups, aggregates: tipo.aggregates, sort: tipo.sort, search: '', widths: {}, mode: tipo.mode,
+  summarySort: null, drill: [], orientation: 'auto', showEmptyColumns: false, ...extra,
+});
+const rodaTela = (estado, actor = ADMIN) => runReport('pesagens', {
+  today: TODAY, params: estado.params,
+  selection: {
+    columns: estado.columns, filters: estado.uiFilters, fixedFilters: screenFixedFilters(estado), groups: estado.groups, aggregates: estado.aggregates,
+    sort: estado.sort, search: estado.search, mode: estado.mode, summarySort: estado.summarySort, drill: estado.drill,
+    view: estado.view, matrix: estado.matrix, sortChoice: estado.sortChoice,
+  },
+}, actor);
+const travado = (viewModel, where) => {
+  assert.deepEqual(Object.keys(viewModel.lockedFilters).sort(), ['motivo_saida', 'tipo_manejo'], `${where}: condição fixa (cadeado) continua`);
+  assert.ok(Object.values(viewModel.lockedFilters).every((filter) => filter.match === 'code'), `${where}: pelo código`);
+};
+// Mesmo estado de tela, tela antiga (view null sem levar a condição): 9 linhas de cadastros/manejos/saídas.
+const antes = await rodaTela({ ...telaVendas(), mode: 'RESUMIDO', view: null });
+assert.ok(antes.rowCount > vm.rowCount && antes.rows.some((row) => row.tipo_manejo === 'Cadastro'), 'NEGATIVO (o defeito): sair do tipo sem a condição soma cadastros debaixo dos totais de Vendas');
+// "Resumido" (setMode): Personalizado, mas as MESMAS vendas — os "TOTAIS POR COMPRADOR" do antigo.
+const vendasTela = telaVendas();
+const resumido = { ...vendasTela, mode: 'RESUMIDO', drill: [], ...leaveViewPatch(definition, vendasTela) };
+assert.equal(resumido.view, null, 'Resumido sai do tipo (Personalizado)');
+assert.deepEqual(resumido.typePopulation, JSON.parse(JSON.stringify({ tipo_manejo: { operator: 'in', value: '', valueTo: '', values: ['Saída'], match: 'code' }, motivo_saida: { operator: 'in', value: '', valueTo: '', values: ['Venda'], match: 'code' } })), 'a população do tipo vai junto');
+const vmResumido = await rodaTela(resumido);
+assert.deepEqual([vmResumido.view, vmResumido.mode], [null, 'RESUMIDO']);
+assert.deepEqual(idsOf(vmResumido), idsOf(vm), 'Resumido: as MESMAS vendas (nenhum cadastro/manejo)');
+travado(vmResumido, 'Resumido');
+assert.deepEqual(vmResumido.tree.map((node) => node.label), ORDEM, 'Resumido: por comprador, "Não informado" por último');
+confere(vmResumido, 30);
+// "Agrupar por Marca" (setGroups) — direto de Vendas e depois do Resumido (já fora do tipo): a condição continua.
+const porMarca = { ...vendasTela, groups: [{ columnId: 'marca' }], drill: [], ...leaveViewPatch(definition, vendasTela) };
+const resumidoMarca = { ...resumido, groups: [{ columnId: 'marca' }], drill: [], ...leaveViewPatch(definition, resumido) };
+assert.deepEqual(resumidoMarca.typePopulation, resumido.typePopulation, 'fora do tipo, a condição herdada continua');
+for (const [estado, where] of [[porMarca, 'Agrupar por Marca'], [resumidoMarca, 'Resumido › Agrupar por Marca']]) {
+  const visto = await rodaTela(estado);
+  assert.deepEqual(idsOf(visto), idsOf(vm), `${where}: as MESMAS vendas`);
+  travado(visto, where);
+  near(visto.totals.peso_total.value, 2350, `${where}: peso total só das vendas`);
+  assert.equal(visto.totals.valor_total.value, 29100, `${where}: valor total só das vendas`);
+}
+// Níveis (diálogo, 2 níveis) também passa por setGroups.
+const niveis = { ...vendasTela, groups: [{ columnId: 'comprador' }, { columnId: 'nome_lote' }], drill: [], ...leaveViewPatch(definition, vendasTela) };
+assert.deepEqual(idsOf(await rodaTela(niveis)), idsOf(vm), 'Níveis: as MESMAS vendas');
+// Filtro/pesquisa da pessoa, já no Personalizado, só restringem.
+assert.equal((await rodaTela({ ...resumido, uiFilters: { motivo_saida: { operator: 'in', values: ['Abate'], match: 'label' } } })).rowCount, 0, 'NEGATIVO: filtro "Abate" não traz abates — só esvazia');
+assert.deepEqual(idsOf(await rodaTela({ ...resumido, uiFilters: { tipo_manejo: { operator: 'in', values: ['Cadastro', 'Manejo', 'Saída'], match: 'label' } } })), idsOf(vm), 'NEGATIVO: filtro com mais tipos não amplia');
+assert.deepEqual(idsOf(await rodaTela({ ...resumido, uiFilters: pesadoPessoa })), ['v12', 'v5', 'v7'], 'filtro da pessoa restringe');
+// Detalhe de um grupo do Resumido (clique na folha): só as vendas daquele comprador.
+const frigo = vmResumido.tree.find((node) => node.label === 'Frigo Sul');
+assert.deepEqual(idsOf(await rodaTela({ ...resumido, mode: 'DETALHADO', drill: [{ columnId: 'comprador', key: frigo.key }] })), ['e6', 'v8'], 'detalhe: só as vendas da Frigo Sul');
+// Escolher um tipo solta a condição herdada (com tipo, vale só a população dele); sair desse tipo não a ressuscita.
+const analitico = { ...resumido, ...viewSelection('analitico', definition) };
+assert.deepEqual(screenFixedFilters(analitico), {}, 'Analítico: sem a condição de Vendas');
+const vmAnalitico = await rodaTela(analitico);
+assert.ok(vmAnalitico.rowCount > vm.rowCount && !Object.keys(vmAnalitico.lockedFilters).length, 'Analítico: todas as pesagens do período, sem cadeado');
+assert.equal(leaveViewPatch(definition, analitico).typePopulation, null, 'sair do Analítico não traz de volta a condição de Vendas');
+assert.deepEqual(idsOf(await rodaTela({ ...resumido, ...viewSelection('vendas', definition) })), idsOf(vm), 'voltar a Vendas: a população do próprio tipo');
+// Condição fixa de modelo convertido continua junto da herdada (na mesma coluna, a do tipo prevalece).
+assert.deepEqual(Object.keys(screenFixedFilters({ ...resumido, fixedFilters: { sexo: { operator: 'in', values: ['M'] }, motivo_saida: { operator: 'in', values: ['Abate', 'Venda'] } } })).sort(), ['motivo_saida', 'sexo', 'tipo_manejo']);
+assert.deepEqual(screenFixedFilters({ ...resumido, fixedFilters: { motivo_saida: { operator: 'in', values: ['Abate', 'Venda'] } } }).motivo_saida.values, ['Venda'], 'NEGATIVO: condição de modelo na mesma coluna não amplia');
+// Modelo salvo no Personalizado que saiu de Vendas: reabre com o mesmo cadeado.
+const modeloResumido = await saveTemplate({ name: 'Totais por comprador', ...templatePayload(definition, resumido, 'ADMIN') }, ADMIN);
+assert.deepEqual(Object.keys(modeloResumido.fixedFilters ?? {}).sort(), ['motivo_saida', 'tipo_manejo'], 'modelo: a condição vai como fixa');
+const pedidoResumido = templateToRequest(modeloResumido, 'ADMIN');
+const vmModeloResumido = await runReport('pesagens', { today: TODAY, params: pedidoResumido.params, selection: pedidoResumido.selection }, ADMIN);
+assert.deepEqual(idsOf(vmModeloResumido), idsOf(vm), 'modelo reaberto: as MESMAS vendas');
+travado(vmModeloResumido, 'modelo reaberto');
+// Último estado (nunca guarda condição fixa — regra do serviço): a herdada vai como filtro comum pelo código.
+const ultimoResumido = viewStatePayload(definition, resumido, 'ADMIN');
+assert.deepEqual(Object.keys(ultimoResumido.filters).sort(), ['motivo_saida', 'tipo_manejo'], 'último estado: a condição vai como filtro');
+assert.ok(Object.values(ultimoResumido.filters).every((filter) => filter.match === 'code'));
+assert.deepEqual(viewStatePayload(definition, analitico, 'ADMIN').filters, {}, 'último estado com tipo: sem a condição herdada');
+await saveReportViewState('pesagens', ultimoResumido, ADMIN);
+const reabertoResumido = await getReportViewState('pesagens', ADMIN);
+assert.deepEqual([reabertoResumido.selection.view, reabertoResumido.selection.fixedFilters], [null, undefined]);
+assert.deepEqual(idsOf(await runReport('pesagens', { today: TODAY, params: reabertoResumido.params, selection: reabertoResumido.selection }, ADMIN)), idsOf(vm), 'último estado reaberto: as MESMAS vendas (não amplia em silêncio)');
 
 // ---------------------------------------------------------------------------------------------------
 // 5. Cabeçalhos do antigo e rótulos dos totais: grade, folha, CSV, XLSX (e JSON/manifesto)
@@ -364,7 +453,6 @@ assert.equal(await code(() => preparePrint(operador, OPERADOR)), 'AUTH_FORBIDDEN
 assert.equal(await code(() => prepareEmission({ ...vm, emittedBy: CONSULTA }, 'csv', CONSULTA)), 'AUTH_FORBIDDEN', 'NEGATIVO: coluna de valor injetada no view model');
 
 // Modelo salvo por ADMIN (compartilhado) com Vendas aberto por CONSULTA: sem valores, sem erro.
-const tipo = viewSelection('vendas', definition);
 const modelo = await saveTemplate({
   baseReportId: 'pesagens', name: 'Vendas por comprador', scope: 'SHARED', view: 'vendas', period: period.periodo,
   columns: tipo.columns, groups: tipo.groups, aggregates: tipo.aggregates, sort: tipo.sort, mode: tipo.mode,
@@ -386,12 +474,7 @@ const limpo = withoutHiddenColumns(definition, 'CONSULTA', tipo);
 assert.deepEqual(limpo.columns, SEM_VALOR);
 assert.ok(!limpo.aggregates.some((spec) => spec.columnId === 'valor_venda_total'));
 assert.deepEqual(withoutHiddenColumns(definition, 'ADMIN', tipo).columns, [...VENDAS_COLUMNS], 'quem vê valores não perde nada');
-// O que a tela grava vem de reportScreenState (o MESMO código da ReportView): estado da tela em Vendas.
-const telaVendas = (extra = {}) => ({
-  view: 'vendas', matrix: null, sortChoice: definition.defaultSortChoice ?? null, params: { ...period }, uiFilters: {}, fixedFilters: {},
-  columns: [...tipo.columns], groups: tipo.groups, aggregates: tipo.aggregates, sort: tipo.sort, search: '', widths: {}, mode: tipo.mode,
-  summarySort: null, drill: [], orientation: 'auto', showEmptyColumns: false, ...extra,
-});
+// O que a tela grava vem de reportScreenState (o MESMO código da ReportView), a partir do estado da tela em Vendas.
 const semValorGravado = (payload, where) => {
   assert.deepEqual(payload.columns, SEM_VALOR, `${where}: sem Valor @ e Valor total`);
   assert.ok(!payload.aggregates.some((spec) => spec.id === 'valor_total' || spec.columnId === 'valor_venda_total' || spec.columnId === 'valor_arroba'), `${where}: sem total de valor`);
@@ -421,6 +504,11 @@ const tela = readFileSync(new URL('../src/components/reports/ReportView.jsx', im
 assert.match(tela, /saveTemplate\(\{ id, name, scope, \.\.\.templatePayload\(definition, state, actor\.role\) \}, actor\)/, 'tela: "Salvar modelo" grava o templatePayload');
 assert.match(tela, /const payload = viewStatePayload\(definition, state, actor\.role\);/, 'tela: último estado grava o viewStatePayload');
 assert.ok(!/columns: state\.columns, filters: state\.uiFilters/.test(tela), 'NEGATIVO: a tela não monta outro payload com as colunas cruas');
+// Controles genéricos saem do tipo pelo leaveViewPatch (a condição vai junto) e o execute manda a herdada (4b).
+assert.match(tela, /const setGroups = \(groups\) => update\(\{ groups, drill: \[\], \.\.\.leaveViewPatch\(definition, state\) \}\);/, 'tela: Agrupar por/Níveis levam a condição do tipo');
+assert.match(tela, /const setMode = [^\n]*: leaveViewPatch\(definition, state\)\) \}\);/, 'tela: Resumido/Detalhado levam a condição do tipo');
+assert.match(tela, /fixedFilters: screenFixedFilters\(state\)/, 'tela: o execute manda a condição herdada');
+assert.ok(!/view: null, matrix: null/.test(tela), 'NEGATIVO: a tela não sai do tipo largando a condição');
 
 await resetDb();
 console.log(JSON.stringify({

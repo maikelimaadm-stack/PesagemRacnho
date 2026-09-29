@@ -16,7 +16,7 @@ import { REPORT_FAMILIES, REPORT_MODES } from "@/modules/reporting/domain/report
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
-import { templatePayload, viewStatePayload } from "@/modules/reporting/domain/reportScreenState";
+import { leaveViewPatch, screenFixedFilters, templatePayload, viewStatePayload } from "@/modules/reporting/domain/reportScreenState";
 import { getReportView, listReportViews, parseSortChoice, resolveViewId, viewSelection } from "@/modules/reporting/domain/reportViews";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { aliasSelection, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
@@ -227,7 +227,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       const result = await runReport(definition.id, {
         params: state.params,
         selection: {
-          columns: state.columns, filters: serviceFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort, search: state.search,
+          columns: state.columns, filters: serviceFilters, fixedFilters: screenFixedFilters(state), groups: state.groups, aggregates: state.aggregates, sort: state.sort, search: state.search,
           mode: state.mode, summarySort: state.summarySort, drill: state.drill,
           // E1D: tipo explícito, eixos da matriz e opção fixa de "Ordenar por" (o serviço aplica).
           view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
@@ -245,7 +245,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     } finally {
       if (seq === runSeq.current) setLoading(false);
     }
-  }, [definition.id, state.params, state.columns, serviceFilters, state.fixedFilters, state.groups, state.aggregates, state.sort, state.search, state.mode, state.summarySort, state.drill, state.view, state.matrix, state.sortChoice, actor, preset, presetId, template]);
+  }, [definition.id, state.params, state.columns, serviceFilters, state.fixedFilters, state.typePopulation, state.groups, state.aggregates, state.sort, state.search, state.mode, state.summarySort, state.drill, state.view, state.matrix, state.sortChoice, actor, preset, presetId, template]);
 
   useEffect(() => {
     const timer = setTimeout(() => execute(), 200);
@@ -315,9 +315,10 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     { value: CUSTOM_GROUP, label: quickGroupValue === CUSTOM_GROUP ? state.groups.map((group) => columnLabel(group.columnId)).join(" › ") : "Mais níveis…" },
   ];
   // E1D: agrupar ou trocar o modo pelos controles genéricos sai do tipo ("Personalizado", view null) — os
-  // controles próprios de um tipo (botões do Analítico, eixos da matriz) mantêm o tipo.
-  const setGroups = (groups) => update({ groups, drill: [], view: null, matrix: null });
-  const setMode = (mode) => update({ mode, drill: mode === REPORT_MODES.RESUMIDO ? [] : state.drill, ...(mode === state.mode ? {} : { view: null, matrix: null }) });
+  // controles próprios de um tipo (botões do Analítico, eixos da matriz) mantêm o tipo. A população do tipo
+  // (Vendas = Saída por Venda) continua fixa, com cadeado: nenhum controle a amplia (leaveViewPatch).
+  const setGroups = (groups) => update({ groups, drill: [], ...leaveViewPatch(definition, state) });
+  const setMode = (mode) => update({ mode, drill: mode === REPORT_MODES.RESUMIDO ? [] : state.drill, ...(mode === state.mode ? {} : leaveViewPatch(definition, state)) });
 
   // Tipo de relatório: atalho para agrupamento + modo (+ totais/colunas/ordem da visão) — nada de conta nova.
   // E1D: o tipo é explícito (state.view); estado de antes da E1D cai no que bate pela estrutura.
