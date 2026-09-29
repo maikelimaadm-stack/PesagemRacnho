@@ -27,7 +27,7 @@ alguém tente pelo caminho errado.
 | Ver valores comerciais (preço, valor de venda) | sim | sim | não | não |
 | Operações comerciais e embarques (versões seguintes) | sim | sim | não | não |
 | Fechar e reabrir sessão de pesagem | sim | sim | não | não |
-| Abrir relatórios (OPERADOR e CONSULTA: os de curral, sem valores e sem Comercial) | sim | sim | sim | sim |
+| Abrir relatórios (OPERADOR e CONSULTA: os de curral, sem valores, sem Comercial e sem o Fechamento do dia) | sim | sim | sim | sim |
 | Imprimir e exportar relatórios (CONSULTA: só o que vê, sem valores) | sim | sim | não | sim |
 | Compartilhar modelo de relatório com a empresa | sim | sim | não | não |
 | Criar backup completo | sim | sim | não | não |
@@ -43,7 +43,9 @@ o cartão **Relatórios**. OPERADOR e CONSULTA não veem Configurações.
 
 Nos relatórios, quem não vê valores comerciais (OPERADOR e CONSULTA) recebe as
 mesmas linhas, só sem as colunas de valor; na folha impressa, o rodapé avisa
-quantas colunas foram omitidas pelo perfil. Veja `RELATORIOS.md`.
+quantas colunas foram omitidas pelo perfil. O **Fechamento do dia**, o
+**Histórico de backups** e a **Trilha de auditoria** abrem só para ADMIN e
+GESTOR. Veja a tabela "O que cada perfil pode fazer" em `RELATORIOS.md`.
 
 ## Tela Usuários (somente ADMIN)
 
