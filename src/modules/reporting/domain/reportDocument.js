@@ -630,7 +630,8 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   // E1D Vendas (Detalhado): o relatório de venda do MAKGESTAO — blocos próprios (domain/vendasLayout) em doc.vendas.
   const vendas = isVendasViewModel(viewModel) ? buildVendasBlocks(viewModel, { showDetails, columns }) : null;
   const body = vendas ? vendasDocumentBody(vendas) : matrix ? buildMatrixBody(matrix, columns) : summary ? buildSummaryBody(viewModel, columns) : buildDetailBody(viewModel, columns, { maxDataRows });
-  const print = decideSheetLayout({ layout: summary ? 'summary' : 'detail', columns, rows: allRows(body) }, { orientation, widths });
+  // Vendas sem "Mostrar Detalhes" não tem tabela de colunas: os blocos cabem no retrato (como o PDF).
+  const print = decideSheetLayout({ layout: summary ? 'summary' : 'detail', columns: vendas && !showDetails ? [] : columns, rows: allRows(body) }, { orientation, widths });
 
   // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
   // Sem linhas a folha é só "Nenhum registro…" (nenhuma coluna aparece): nada em @ para explicar.

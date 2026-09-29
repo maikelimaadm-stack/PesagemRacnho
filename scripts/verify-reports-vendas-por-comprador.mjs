@@ -456,6 +456,10 @@ const impressoCom = preparePrint(vm, ADMIN, { showDetails: true });
 assert.ok(!impressoSem.html.includes('sv-table--detail') && impressoCom.html.includes('sv-table--detail'), 'impressão/PDF: "Mostrar Detalhes" liga e desliga a tabela');
 assert.deepEqual([impressoSem.manifest.showDetails, impressoCom.manifest.showDetails], [false, true], 'manifesto registra se saiu com detalhes');
 assert.equal(impressoSem.layout.orientation, 'portrait', 'retrato, como o PDF');
+// Muitas colunas no seletor: só a tabela de detalhe precisa de largura — sem "Mostrar Detalhes" continua retrato.
+const todasColunas = await vendas(ADMIN, { columns: [...view.columnChoices.available] });
+assert.equal(buildReportDocument(todasColunas).print.orientation, 'portrait', 'sem detalhes: retrato, mesmo com todas as colunas escolhidas');
+assert.equal(buildReportDocument(todasColunas, { showDetails: true }).print.orientation, 'landscape', 'com detalhes e todas as colunas: paisagem (a tabela não cabe no retrato)');
 const servicoImpressao = readFileSync(new URL('../src/modules/reporting/application/reportPrintService.js', import.meta.url), 'utf8');
 assert.match(servicoImpressao, /preparePrint\(viewModel, actor, \{ \.\.\.options, format: 'print' \}\)/, 'printReport repassa as opções (showDetails)');
 assert.match(servicoImpressao, /preparePrint\(viewModel, actor, \{ \.\.\.options, format: 'pdf' \}\)/, 'exportPdf repassa as opções (showDetails)');
