@@ -16,7 +16,8 @@ import { REPORT_FAMILIES, REPORT_MODES, VIEW_LAYOUTS } from "@/modules/reporting
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
-import { applyColumnKeys, columnKeysOf, getReportView, listReportViews, modeChangePatch, parseSortChoice, resolveViewId } from "@/modules/reporting/domain/reportViews";
+import { leaveViewPatch, screenFixedFilters, screenModePatch, templatePayload, viewStatePayload } from "@/modules/reporting/domain/reportScreenState";
+import { applyColumnKeys, columnKeysOf, getReportView, listReportViews, parseSortChoice, resolveViewId } from "@/modules/reporting/domain/reportViews";
 import { applySortChoice, sortChoiceForColumn, sortChoiceForMetric } from "@/modules/reporting/domain/sortChoices";
 import { hasTypeColumns, typeColumnOptions } from "@/modules/reporting/domain/typeColumns";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
@@ -157,7 +158,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       const result = await runReport(definition.id, {
         params: state.params,
         selection: {
-          columns: state.columns, filters: serviceFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort, search: state.search,
+          columns: state.columns, filters: serviceFilters, fixedFilters: screenFixedFilters(state), groups: state.groups, aggregates: state.aggregates, sort: state.sort, search: state.search,
           mode: state.mode, summarySort: state.summarySort, drill: state.drill,
           // E1D: tipo explícito, eixos da matriz e opção fixa de "Ordenar por" (o serviço aplica).
           view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
@@ -175,7 +176,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     } finally {
       if (seq === runSeq.current) setLoading(false);
     }
-  }, [definition.id, state.params, state.columns, serviceFilters, state.fixedFilters, state.groups, state.aggregates, state.sort, state.search, state.mode, state.summarySort, state.drill, state.view, state.matrix, state.sortChoice, actor, preset, presetId, template]);
+  }, [definition.id, state.params, state.columns, serviceFilters, state.fixedFilters, state.typePopulation, state.groups, state.aggregates, state.sort, state.search, state.mode, state.summarySort, state.drill, state.view, state.matrix, state.sortChoice, actor, preset, presetId, template]);
 
   useEffect(() => {
     const timer = setTimeout(() => execute(), 200);
@@ -213,20 +214,15 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   const pendingViewState = useRef(null);
   useEffect(() => {
     if (!tracksViewState) return undefined;
-    const payload = {
-      columns: state.columns, filters: state.uiFilters, groups: state.groups, aggregates: state.aggregates,
-      sort: state.sort, search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)),
-      widths: state.widths, orientation: state.orientation, mode: state.drill.length ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
-      showEmptyColumns: state.showEmptyColumns,
-      view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
-    };
+    // E1D (Vendas): sem as colunas/totais de valor que o perfil não vê (senão o serviço recusa o estado inteiro).
+    const payload = viewStatePayload(definition, state, actor.role);
     pendingViewState.current = payload;
     const timer = setTimeout(() => {
       pendingViewState.current = null;
       saveReportViewState(definition.id, payload, actor).catch(() => {});
     }, 600);
     return () => clearTimeout(timer);
-  }, [tracksViewState, definition.id, state, period, periodParam, actor]);
+  }, [tracksViewState, definition, state, actor]);
   useEffect(() => () => {
     const pending = pendingViewState.current;
     pendingViewState.current = null;
@@ -250,10 +246,12 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     { value: CUSTOM_GROUP, label: quickGroupValue === CUSTOM_GROUP ? state.groups.map((group) => columnLabel(group.columnId)).join(" › ") : "Mais níveis…" },
   ];
   // E1D: agrupar ou trocar o modo pelos controles genéricos sai do tipo ("Personalizado", view null) — os
-  // controles próprios de um tipo (botões do Analítico, eixos da matriz) mantêm o tipo.
-  const setGroups = (groups) => update({ groups, drill: [], view: null, matrix: null });
-  // Voltar do detalhe de um grupo para o modo do tipo mantém o tipo (a matriz não some) — modeChangePatch.
-  const setMode = (mode) => update(modeChangePatch(definition, state, mode));
+  // controles próprios de um tipo (botões do Analítico, eixos da matriz) mantêm o tipo. A população do tipo
+  // (Vendas = Saída por Venda) continua fixa, com cadeado: nenhum controle a amplia (leaveViewPatch).
+  const setGroups = (groups) => update({ groups, drill: [], ...leaveViewPatch(definition, state) });
+  // Voltar do detalhe de um grupo para o modo do tipo mantém o tipo (a matriz não some) — modeChangePatch;
+  // trocar o modo fora disso sai do tipo levando a população dele (leaveViewPatch).
+  const setMode = (mode) => update(screenModePatch(definition, state, mode));
 
   // Tipo de relatório: atalho para agrupamento + modo (+ totais/colunas/ordem da visão) — nada de conta nova.
   // E1D: o tipo é explícito (state.view); estado de antes da E1D cai no que bate pela estrutura.
@@ -439,13 +437,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     try {
       // O detalhe de um grupo é passageiro: o modelo guarda a visão de onde ele saiu (o Resumido).
       const drilling = state.drill.length > 0;
-      const saved = await saveTemplate({
-        id, name, scope, baseReportId: definition.id,
-        columns: state.columns, filters: state.uiFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort,
-        search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)), widths: state.widths,
-        orientation: state.orientation, mode: drilling ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
-        view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
-      }, actor);
+      // E1D (Vendas): o modelo leva só o que o autor vê (Valor @ e Valor total ficam fora para CONSULTA/OPERADOR).
+      const saved = await saveTemplate({ id, name, scope, ...templatePayload(definition, state, actor.role) }, actor);
       setCurrentTemplate(saved);
       setDialog(null);
       toast.success(`Modelo “${saved.name}” salvo (${saved.scope === "SHARED" ? "compartilhado" : "pessoal"}).`, drilling ? { description: "O detalhe do grupo não fica no modelo: ele abre no Resumido." } : undefined);

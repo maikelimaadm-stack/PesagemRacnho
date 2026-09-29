@@ -110,7 +110,10 @@ export function resolveSelection(definition, selection = {}, role) {
   const typeDefaults = typed.view ? viewSelection(typed.view, definition) : null;
   const requestedColumns = selection.columns?.length ? selection.columns : (typeDefaults?.columns?.length ? typeDefaults.columns : definition.defaultColumns);
   for (const id of requestedColumns) if (!resolve(id)) throw new Error(`relatório ${definition.id}: coluna desconhecida (${id})`);
-  const hiddenByPermission = forbiddenColumnIds(definition, role, requestedColumns);
+  // E1D (Vendas): as colunas padrão do tipo que o perfil não vê (Valor @, Valor total sem commercial.values)
+  // também entram no aviso — modelo e último estado desse perfil já voltam sem elas, e o aviso tem de ficar.
+  const typeColumns = typed.view ? (typed.view.columnChoices?.defaults ?? typed.view.columns ?? []) : [];
+  const hiddenByPermission = forbiddenColumnIds(definition, role, [...new Set([...requestedColumns, ...typeColumns])]);
   if (hiddenByPermission.length) warnings.push({ code: 'COLUMNS_HIDDEN_BY_PERMISSION', message: `${hiddenByPermission.length} coluna(s) oculta(s) pelo seu perfil`, columns: hiddenByPermission });
   // Coluna só de cálculo (metricOnly: Machos, Fêmeas…) nunca vira coluna de dado nem filtro/ordenação.
   const columns = requestedColumns.filter((id) => !hiddenByPermission.includes(id) && !resolve(id).column.metricOnly);
@@ -378,6 +381,13 @@ export async function runReport(definitionOrId, request = {}, actor) {
   const afterAggregate = now();
 
   const period = Object.values(params).find((value) => value && value.preset && value.from) || null;
+  // E1D: cabeçalho próprio do tipo (columnLabels, ex.: Vendas "Qtd @") — o mesmo nas colunas visíveis e nas
+  // disponíveis (seletor "Colunas", pílulas de filtro, rodapé "Filtros:"), para a coluna não mudar de nome.
+  const typedColumn = (id) => {
+    const column = publicColumn(selection.resolve(id));
+    const label = selection.view?.columnLabels?.[id];
+    return label ? { ...column, label } : column;
+  };
   // Resumido: lista em profundidade de nós (nível, caminho, rótulo, linhas, agregados) — SEM linhas de dados.
   const summaryRows = selection.mode === REPORT_MODES.RESUMIDO ? buildSummaryRows(tree.nodes, { summarySort: selection.summarySort }) : null;
   const drill = selection.drill.map((part) => {
@@ -422,12 +432,8 @@ export async function runReport(definitionOrId, request = {}, actor) {
     period,
     periodDescription: period ? describePeriod(period) : null,
     // E1D: cabeçalho próprio do tipo (columnLabels, ex.: Vendas "Qtd @") vale na tela, na folha e nas exportações.
-    columns: selection.columns.map((id) => {
-      const column = publicColumn(selection.resolve(id));
-      const label = selection.view?.columnLabels?.[id];
-      return label ? { ...column, label } : column;
-    }),
-    availableColumns: definition.columns.filter((column) => canSeeColumn(column, role)).map((column) => publicColumn(selection.resolve(column.id))),
+    columns: selection.columns.map(typedColumn),
+    availableColumns: definition.columns.filter((column) => canSeeColumn(column, role)).map((column) => typedColumn(column.id)),
     hiddenByPermission: selection.hiddenByPermission,
     search: selection.search,
     filters: selection.filters,

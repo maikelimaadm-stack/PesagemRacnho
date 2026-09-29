@@ -38,6 +38,7 @@ import { EVENT_PERIOD_PARAM, EVENT_TOTALS, MATRIX_AXES, MATRIX_TOTALS } from '..
 import { DATA_CLASSIFICATION, defineReport } from '../src/modules/reporting/domain/reportDefinition.js';
 import { GRAINS } from '../src/modules/reporting/domain/reportGrain.js';
 import { modeChangePatch, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
+import { screenModePatch } from '../src/modules/reporting/domain/reportScreenState.js';
 import { buildMatrix, isMatrixViewModel, matrixValues, nextMatrixAxes } from '../src/modules/reporting/domain/matrixLayout.js';
 import { buildReportDocument, documentRows, DOC_ROW_TYPES } from '../src/modules/reporting/domain/reportDocument.js';
 import { buildSummaryLayout } from '../src/modules/reporting/domain/summaryLayout.js';
@@ -408,10 +409,12 @@ const caseSameName = checkMatrix('lotes de mesmo nome', vmSameName, {
   assert.ok(screen.includes('typeControls=') && /layout === VIEW_LAYOUTS\.MATRIX[\s\S]{0,120}<MatrixAxisControls /.test(screen), 'ReportView: MatrixAxisControls só no tipo com layout matrix (encaixe typeControls)');
   assert.match(screen, /const setMatrixAxes = \(matrix\) => update\(\{ matrix, drill: \[\]/, 'ReportView: trocar eixo mantém o tipo e sai do detalhe');
   // Voltar do detalhe de uma célula pela aba "Resumido" mantém o tipo (como o X da pílula): a matriz volta.
-  assert.match(screen, /const setMode = \(mode\) => update\(modeChangePatch\(definition, state, mode\)\)/, 'ReportView: abas Resumido/Detalhado usam modeChangePatch');
+  // A tela usa screenModePatch (modeChangePatch + a população do tipo ao sair dele — parte B, Vendas).
+  assert.match(screen, /const setMode = \(mode\) => update\(screenModePatch\(definition, state, mode\)\)/, 'ReportView: abas Resumido/Detalhado usam screenModePatch (modeChangePatch)');
   const drilled = { view: MATRIX, matrix: { eixoY: 'lote', eixoX: 'mes' }, groups: [], mode: 'DETALHADO', drill: [{ columnId: 'nome_lote', key: 'L1', label: 'Lote 01' }] };
   const back = modeChangePatch(PESAGENS, drilled, 'RESUMIDO');
   assert.deepEqual(back, { mode: 'RESUMIDO', drill: [] }, 'detalhe → aba Resumido: sai do detalhe e fica no tipo (sem view/matrix null)');
+  assert.deepEqual(screenModePatch(PESAGENS, drilled, 'RESUMIDO'), back, 'tela: a mesma volta do detalhe (screenModePatch não tira a matriz)');
   const screenState = { ...drilled, ...back };
   const reopenedMatrix = await run(DEZ_SET, { view: screenState.view, matrix: screenState.matrix, groups: screenState.groups, mode: screenState.mode, drill: screenState.drill });
   assert.ok(isMatrixViewModel(reopenedMatrix), 'detalhe → aba Resumido: a matriz volta');
