@@ -7,7 +7,9 @@
 //   - subtotal por comprador e total geral conferidos à mão: animais distintos, peso total, peso médio, @ viva
 //     (÷ 30 e ÷ 15, total e média) e valor total — total geral recalculado, nunca soma/média de subtotais;
 //   - cabeçalhos do antigo "Qtd @", "Valor @", "Valor total" na grade, na folha, no CSV e no XLSX;
-//   - decisão do valor total: sem valor digitado fica "—" e fora da soma (nada de peso ÷ 30 × valor @);
+//   - decisão do valor total: sem valor digitado fica "—" e fora da soma (nada de peso ÷ 30 × valor @); os fatos
+//     que a pergunta à responsável cita (≠ estimativa do "Resumo de Vendas" do Lançamento, 0 digitado, CSV sem
+//     "(n de m)") ficam presos aqui;
 //   - permissão comercial pela matriz real: ADMIN/GESTOR com valores; OPERADOR/CONSULTA sem colunas e sem totais
 //     de valor (folha, CSV, XLSX, JSON, impressão), sem erro, com o aviso; modelo do ADMIN aberto por CONSULTA.
 // Massa: a do fixture comum (A2 vendido à Frigo Sul) + as vendas deste gate, pela cadeia oficial (weighingService),
@@ -21,6 +23,7 @@ import { prepareEmission } from '../src/modules/reporting/application/reportExpo
 import { preparePrint } from '../src/modules/reporting/application/reportPrintService.js';
 import { getReportViewState, listTemplates, saveReportViewState, saveTemplate, templateToRequest } from '../src/modules/reporting/application/reportTemplateService.js';
 import { can } from '../src/modules/auth/domain/permissionService.js';
+import { calculateCarcassTrade } from '../src/modules/weighing/domain/commercialCalculations.js';
 import { withoutHiddenColumns } from '../src/modules/reporting/domain/reportPermissions.js';
 import { leaveViewPatch, screenFixedFilters, templatePayload, viewStatePayload } from '../src/modules/reporting/domain/reportScreenState.js';
 import { buildReportDocument, describeReportFilters, documentRows } from '../src/modules/reporting/domain/reportDocument.js';
@@ -218,6 +221,16 @@ assert.notEqual(vm.totals.valor_total.value, 29100 + (330 / 30) * 290, 'NEGATIVO
   near(agregados.total_arroba.value, 21, '@ viva sem o ausente');
   assert.deepEqual([agregados.total_arroba.n_validos, agregados.total_arroba.n_total], [2, 3]);
   near(agregados.valor_total.value, 10450, 'valor total = soma do digitado');
+  // Fatos da decisão do item 4 (pesagens.js; pergunta à responsável no REPORT da E1D):
+  // sem valor digitado, o "Resumo de Vendas" do Lançamento soma a estimativa pela @ de carcaça; o relatório não.
+  const estimativa = calculateCarcassTrade({ weight: 450, yieldPercent: 52, pricePerArroba: 300 }).estimatedValue;
+  near(estimativa, 4680, 'Resumo de Vendas do Lançamento: 450 × 52% = 234 kg ÷ 15 = 15,6 @ × R$ 300');
+  const vendaSemValor = { ...linha('y1', 'C1', 'Frigo Sul', 450, null), valor_arroba: 300, rendimento_carcaca: 52 };
+  const semValorDigitado = groupRows([vendaSemValor], [{ columnId: 'comprador' }], resolve, { aggregates: VENDAS_TOTALS }).nodes[0].aggregates.valor_total;
+  assert.ok(semValorDigitado.value !== estimativa && !semValorDigitado.n_validos, 'relatório: sem valor digitado fica fora (≠ Resumo de Vendas do dia — divergência registrada)');
+  // 0 digitado: o Lançamento grava 0 e o relatório conta R$ 0,00 digitado (o Resumo trata 0 como não informado).
+  const zero = groupRows([linha('y2', 'C2', 'Frigo Sul', 450, 0)], [{ columnId: 'comprador' }], resolve, { aggregates: VENDAS_TOTALS }).nodes[0].aggregates.valor_total;
+  assert.deepEqual([zero.value, zero.n_validos, zero.n_total], [0, 1, 1], '0 digitado = R$ 0,00 digitado (divergência registrada)');
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -332,6 +345,8 @@ esperado(30).grupos.forEach((grupo) => {
 const csvGeral = csv.filter((row) => row[0] === 'GRAND_TOTAL');
 assert.deepEqual(csvGeral.map((row) => row[3]), TOTAL_LABELS, 'CSV: rótulos do total geral');
 assert.deepEqual(csvGeral.map((row) => row[4]), ['6', '2350,0', '391,7', '78,33', '13,06', '29100,00'], 'CSV: total geral à mão');
+// O "(5 de 6)" da folha não sai no CSV/XLSX: só a soma do digitado (registrado na pergunta à responsável).
+assert.ok(csv.every((row) => !/ de \d/.test(row[4] ?? '')), 'CSV: valor sem "(n de m)"');
 
 const xlsx = await prepareEmission(vm, 'xlsx', ADMIN);
 const sheetXml = unzipStored(xlsx.content)['xl/worksheets/sheet1.xml'];

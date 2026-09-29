@@ -121,7 +121,11 @@ export const VENDAS_AVAILABLE_COLUMNS = Object.freeze([...VENDAS_COLUMNS, 'desti
 // divisor de Configurações › Relatórios, 30 como o antigo) — não é a @ de carcaça do Comercial; "Valor @" =
 // preço da @ digitado no lançamento; "Valor total" = o valor digitado no lançamento. Sem valor digitado a
 // célula fica "—" e fora da soma: o antigo inventava peso ÷ 30 × valor @, e o Lançamento de hoje não grava
-// conta nenhuma no valor total (a estimativa dele é pela @ de carcaça, com rendimento).
+// conta nenhuma no valor total. ATENÇÃO (pergunta à responsável, REPORT da E1D): o painel "Resumo de Vendas"
+// do Lançamento MOSTRA um "Valor total (R$)" que, sem valor digitado (ou com 0), soma a estimativa pela @ de
+// carcaça (peso × rendimento ÷ 15 × Valor @) — nesse caso o relatório e o Resumo do dia dão valores
+// diferentes. Um 0 digitado é gravado e aqui conta como R$ 0,00 digitado (o Resumo trata 0 como não
+// informado). O "(n de m)" de valor digitado sai na tela e na folha; no CSV/XLSX vai só a soma do digitado.
 export const VENDAS_COLUMN_LABELS = Object.freeze({ peso_arroba: 'Qtd @', valor_arroba: 'Valor @', valor_venda_total: 'Valor total' });
 // Subtotal por comprador e total geral (item 3): animais, peso total, peso médio, @ e valor total — a @ em
 // total e média (o antigo mostrava a "Média (@)"). Animais DISTINTOS (o antigo contava linhas); @ = soma/
