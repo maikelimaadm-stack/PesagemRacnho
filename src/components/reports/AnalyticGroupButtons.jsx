@@ -1,11 +1,12 @@
 import React from "react";
 import { MAX_GROUP_LEVELS } from "@/modules/reporting/domain/groupEngine";
+import { activeGroupChoices, toggleGroupChoice } from "@/modules/reporting/domain/groupChoices";
 
 // E1D — botões "Agrupar por" do Analítico (Detalhado), como no MAKGESTAO: Lote, Apartação, Sexo, Raça, vários
 // ao mesmo tempo, na ORDEM DE CLIQUE (1º clique = 1º nível). Clicar de novo tira o nível. No máximo 3 níveis
-// (limite do motor): com 3 ligados, o 4º não entra — a dica do botão explica. Só troca os grupos: o tipo
-// continua o Analítico (quem chama faz update({ groups, drill: [] }) sem mexer em view). Reusa a pílula dos
-// filtros rápidos (rpt-quick-filter / is-on); o visual final é da E1E.
+// (limite do motor): com 3 ligados, o 4º não entra — a dica do botão explica. Regra em domain/groupChoices.js.
+// Só troca os grupos: o tipo continua o Analítico (quem chama faz update({ groups, drill: [] }) sem mexer em
+// view). Reusa a pílula dos filtros rápidos (rpt-quick-filter / is-on); o visual final é da E1E.
 
 /**
  * @param {{ choices: string[], groups: { columnId: string }[], labelOf: (columnId: string) => string,
@@ -13,11 +14,11 @@ import { MAX_GROUP_LEVELS } from "@/modules/reporting/domain/groupEngine";
  *   choices = view.groupChoices (ids de coluna, na ordem dos botões); groups = níveis atuais (state.groups).
  */
 export default function AnalyticGroupButtons({ choices, groups, labelOf, onChange }) {
-  const active = (groups ?? []).map((group) => group.columnId).filter((columnId) => choices.includes(columnId));
+  const active = activeGroupChoices(choices, groups);
   const full = active.length >= MAX_GROUP_LEVELS;
   const toggle = (columnId) => {
-    if (active.includes(columnId)) onChange(active.filter((id) => id !== columnId).map((id) => ({ columnId: id })));
-    else if (!full) onChange([...active, columnId].map((id) => ({ columnId: id })));
+    const next = toggleGroupChoice(choices, groups, columnId);
+    if (!next.blocked) onChange(next.groups);
   };
   const hint = (columnId, label) => {
     const index = active.indexOf(columnId);
