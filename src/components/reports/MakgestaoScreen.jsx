@@ -81,12 +81,12 @@ export function MakgestaoFilterButton({ label, value, filterType = "text", listO
     const next = checked.includes(option) ? checked.filter((item) => item !== option) : [...checked, option];
     onChange(next.length ? { operator: "in", value: "", valueTo: "", values: next } : null);
   };
+  const text = count ? `${label} (${count})` : label;
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <button type="button" className="rpt-mak-btn" aria-label={`Filtrar ${label}`}>
-          {count ? `${label} (${count})` : label}
-        </button>
+        {/* Nome acessível com o texto visível (e o contador). */}
+        <button type="button" className="rpt-mak-btn" aria-label={`Filtrar ${text}`}>{text}</button>
       </PopoverTrigger>
       {/* Classes do antigo (PopoverContent w-64/w-48 max-h-96, space-y-2, h4 font-semibold text-sm, linhas
           flex items-center space-x-2 com Checkbox e label text-sm). */}
