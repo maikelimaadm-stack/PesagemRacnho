@@ -20,6 +20,7 @@ import { preparePrint } from '../src/modules/reporting/application/reportPrintSe
 import { getReportViewState, listTemplates, saveReportViewState, saveTemplate, templateToRequest } from '../src/modules/reporting/application/reportTemplateService.js';
 import { can } from '../src/modules/auth/domain/permissionService.js';
 import { withoutHiddenColumns } from '../src/modules/reporting/domain/reportPermissions.js';
+import { templatePayload, viewStatePayload } from '../src/modules/reporting/domain/reportScreenState.js';
 import { buildReportDocument, describeReportFilters, documentRows } from '../src/modules/reporting/domain/reportDocument.js';
 import { headerLabel, roundTo } from '../src/modules/reporting/domain/reportFormatting.js';
 import { createColumnResolver } from '../src/modules/reporting/domain/reportDefinition.js';
@@ -385,14 +386,41 @@ const limpo = withoutHiddenColumns(definition, 'CONSULTA', tipo);
 assert.deepEqual(limpo.columns, SEM_VALOR);
 assert.ok(!limpo.aggregates.some((spec) => spec.columnId === 'valor_venda_total'));
 assert.deepEqual(withoutHiddenColumns(definition, 'ADMIN', tipo).columns, [...VENDAS_COLUMNS], 'quem vê valores não perde nada');
-const meu = await saveTemplate({ baseReportId: 'pesagens', name: 'Minhas vendas', view: 'vendas', columns: limpo.columns, groups: tipo.groups, aggregates: limpo.aggregates, mode: tipo.mode }, CONSULTA);
-assert.equal(meu.view, 'vendas', 'CONSULTA salva o próprio modelo de Vendas');
-await saveReportViewState('pesagens', { columns: limpo.columns, groups: tipo.groups, aggregates: limpo.aggregates, sort: tipo.sort, mode: tipo.mode, view: 'vendas', period: period.periodo }, CONSULTA);
+// O que a tela grava vem de reportScreenState (o MESMO código da ReportView): estado da tela em Vendas.
+const telaVendas = (extra = {}) => ({
+  view: 'vendas', matrix: null, sortChoice: definition.defaultSortChoice ?? null, params: { ...period }, uiFilters: {}, fixedFilters: {},
+  columns: [...tipo.columns], groups: tipo.groups, aggregates: tipo.aggregates, sort: tipo.sort, search: '', widths: {}, mode: tipo.mode,
+  summarySort: null, drill: [], orientation: 'auto', showEmptyColumns: false, ...extra,
+});
+const semValorGravado = (payload, where) => {
+  assert.deepEqual(payload.columns, SEM_VALOR, `${where}: sem Valor @ e Valor total`);
+  assert.ok(!payload.aggregates.some((spec) => spec.id === 'valor_total' || spec.columnId === 'valor_venda_total' || spec.columnId === 'valor_arroba'), `${where}: sem total de valor`);
+  assert.deepEqual(payload.aggregates.map((spec) => spec.id), VENDAS_TOTALS.map((spec) => spec.id).filter((id) => id !== 'valor_total'), `${where}: os outros totais ficam`);
+};
+for (const [nome, montar] of [['modelo', templatePayload], ['último estado', viewStatePayload]]) {
+  for (const role of ['CONSULTA', 'OPERADOR']) semValorGravado(montar(definition, telaVendas(), role), `tela (${nome}) de ${role}`);
+  for (const role of ['ADMIN', 'GESTOR']) {
+    const gravado = montar(definition, telaVendas(), role);
+    assert.deepEqual(gravado.columns, [...VENDAS_COLUMNS], `tela (${nome}) de ${role}: com as colunas de valor`);
+    assert.ok(gravado.aggregates.some((spec) => spec.id === 'valor_total'), `tela (${nome}) de ${role}: com o total de valor`);
+  }
+  const gravado = montar(definition, telaVendas({ drill: [{ columnId: 'comprador', key: 'frigo sul' }], mode: 'DETALHADO' }), 'ADMIN');
+  assert.deepEqual([gravado.view, gravado.mode, gravado.period, gravado.params], ['vendas', 'RESUMIDO', period.periodo, {}], `tela (${nome}): tipo, período à parte e o detalhe de grupo não fica`);
+}
+assert.equal(templatePayload(definition, telaVendas(), 'ADMIN').baseReportId, 'pesagens');
+const meu = await saveTemplate({ name: 'Minhas vendas', ...templatePayload(definition, telaVendas(), 'CONSULTA') }, CONSULTA);
+assert.equal(meu.view, 'vendas', 'CONSULTA salva o próprio modelo de Vendas (pelo que a tela grava)');
+assert.deepEqual(meu.columns, SEM_VALOR);
+await saveReportViewState('pesagens', viewStatePayload(definition, telaVendas(), 'CONSULTA'), CONSULTA);
 const estado = await getReportViewState('pesagens', CONSULTA);
+assert.ok(estado, 'último estado da CONSULTA gravado (antes falhava em silêncio)');
 assert.equal(estado.selection.view, 'vendas', 'último estado da CONSULTA reabre em Vendas');
 semValorAlgum(await runReport('pesagens', { today: TODAY, params: estado.params, selection: estado.selection }, CONSULTA), 'último estado da CONSULTA');
+// A tela grava pelo reportScreenState (nada de montar o payload à parte, com state.columns cru).
 const tela = readFileSync(new URL('../src/components/reports/ReportView.jsx', import.meta.url), 'utf8');
-assert.equal((tela.match(/withoutHiddenColumns\(definition, actor\.role, \{ columns: state\.columns, aggregates: state\.aggregates \}\)/g) || []).length, 2, 'tela: modelo e último estado gravam só o que o perfil vê');
+assert.match(tela, /saveTemplate\(\{ id, name, scope, \.\.\.templatePayload\(definition, state, actor\.role\) \}, actor\)/, 'tela: "Salvar modelo" grava o templatePayload');
+assert.match(tela, /const payload = viewStatePayload\(definition, state, actor\.role\);/, 'tela: último estado grava o viewStatePayload');
+assert.ok(!/columns: state\.columns, filters: state\.uiFilters/.test(tela), 'NEGATIVO: a tela não monta outro payload com as colunas cruas');
 
 await resetDb();
 console.log(JSON.stringify({

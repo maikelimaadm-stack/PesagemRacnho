@@ -15,7 +15,8 @@ import { describePeriod } from "@/modules/reporting/domain/reportPeriod";
 import { REPORT_FAMILIES, REPORT_MODES } from "@/modules/reporting/domain/reportDefinition";
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
-import { canSeeColumn, withoutHiddenColumns } from "@/modules/reporting/domain/reportPermissions";
+import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
+import { templatePayload, viewStatePayload } from "@/modules/reporting/domain/reportScreenState";
 import { getReportView, listReportViews, parseSortChoice, resolveViewId, viewSelection } from "@/modules/reporting/domain/reportViews";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { aliasSelection, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
@@ -283,21 +284,14 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   useEffect(() => {
     if (!tracksViewState) return undefined;
     // E1D (Vendas): sem as colunas/totais de valor que o perfil não vê (senão o serviço recusa o estado inteiro).
-    const visible = withoutHiddenColumns(definition, actor.role, { columns: state.columns, aggregates: state.aggregates });
-    const payload = {
-      columns: visible.columns, filters: state.uiFilters, groups: state.groups, aggregates: visible.aggregates,
-      sort: state.sort, search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)),
-      widths: state.widths, orientation: state.orientation, mode: state.drill.length ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
-      showEmptyColumns: state.showEmptyColumns,
-      view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
-    };
+    const payload = viewStatePayload(definition, state, actor.role);
     pendingViewState.current = payload;
     const timer = setTimeout(() => {
       pendingViewState.current = null;
       saveReportViewState(definition.id, payload, actor).catch(() => {});
     }, 600);
     return () => clearTimeout(timer);
-  }, [tracksViewState, definition.id, state, period, periodParam, actor]);
+  }, [tracksViewState, definition, state, actor]);
   useEffect(() => () => {
     const pending = pendingViewState.current;
     pendingViewState.current = null;
@@ -434,14 +428,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       // O detalhe de um grupo é passageiro: o modelo guarda a visão de onde ele saiu (o Resumido).
       const drilling = state.drill.length > 0;
       // E1D (Vendas): o modelo leva só o que o autor vê (Valor @ e Valor total ficam fora para CONSULTA/OPERADOR).
-      const visible = withoutHiddenColumns(definition, actor.role, { columns: state.columns, aggregates: state.aggregates });
-      const saved = await saveTemplate({
-        id, name, scope, baseReportId: definition.id,
-        columns: visible.columns, filters: state.uiFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: visible.aggregates, sort: state.sort,
-        search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)), widths: state.widths,
-        orientation: state.orientation, mode: drilling ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
-        view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
-      }, actor);
+      const saved = await saveTemplate({ id, name, scope, ...templatePayload(definition, state, actor.role) }, actor);
       setCurrentTemplate(saved);
       setDialog(null);
       toast.success(`Modelo “${saved.name}” salvo (${saved.scope === "SHARED" ? "compartilhado" : "pessoal"}).`, drilling ? { description: "O detalhe do grupo não fica no modelo: ele abre no Resumido." } : undefined);
