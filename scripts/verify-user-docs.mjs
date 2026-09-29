@@ -29,7 +29,8 @@ export function requiredDocs(version) {
   const docs = [
     { doc: 'docs/user/GUIA-RAPIDO.md', contains: ['login', 'Usuários', 'Cadastros', 'Backup e Manutenção'] },
     { doc: 'docs/user/LOGIN.md', contains: ['Configuração Inicial', 'Bloquear', 'Trocar senha', '30 segundos', 'ADMIN'] },
-    { doc: 'docs/user/USUARIOS.md', contains: ['ADMIN', 'GESTOR', 'OPERADOR', 'último ADMIN'] },
+    // E1D (resposta 4 ao REPORT da E1C): os QUATRO perfis da matriz (permissionService.ROLES).
+    { doc: 'docs/user/USUARIOS.md', contains: ['ADMIN', 'GESTOR', 'OPERADOR', 'CONSULTA', 'último ADMIN'] },
     {
       doc: 'docs/user/CADASTROS.md',
       contains: ['Marcas', 'Raças', 'Categorias', 'Parceiros', 'Propriedades', 'Causas de Morte', 'Inativar', 'padrão'],
@@ -127,8 +128,11 @@ function runSelfTest() {
     (files) => { files['CHANGELOG.md'] = '# Changelog\n\n## [Não lançado]\n'; },
     expectFailureOn('CHANGELOG.md', `## [${version}]`));
   withFixture('USUARIOS sem a regra do último ADMIN reprova',
-    (files) => { files['docs/user/USUARIOS.md'] = 'ADMIN\nGESTOR\nOPERADOR\n'; },
+    (files) => { files['docs/user/USUARIOS.md'] = 'ADMIN\nGESTOR\nOPERADOR\nCONSULTA\n'; },
     expectFailureOn('docs/user/USUARIOS.md', 'último ADMIN'));
+  withFixture('USUARIOS só com três perfis (sem CONSULTA) reprova',
+    (files) => { files['docs/user/USUARIOS.md'] = 'ADMIN\nGESTOR\nOPERADOR\núltimo ADMIN\n'; },
+    expectFailureOn('docs/user/USUARIOS.md', 'CONSULTA'));
   withFixture('migração sem rollback reprova',
     (files) => {
       const doc = `docs/release/${version}/MIGRATION-1.1.17-TO-1.2.0.md`;
