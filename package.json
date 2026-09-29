@@ -105,6 +105,7 @@
     "registry:property-header:verify": "node scripts/verify-property-header.mjs",
     "registry:document-mask:verify": "node scripts/verify-document-mask.mjs",
     "reports:sheet-xlsx-parity:verify": "node scripts/verify-reports-sheet-xlsx-parity.mjs",
+    "reports:matrix:verify": "node scripts/verify-reports-matrix.mjs",
     "ui:dark-field-text:verify": "node scripts/verify-dark-field-text.mjs",
     "reports:performance:verify": "node --max-old-space-size=8192 scripts/verify-reports-performance.mjs",
     "perf:reports": "node --max-old-space-size=8192 scripts/measure-report-performance.mjs --mass=36k,250k --samples=3 --out=docs/evidence/reporting-program/R5-report-families-performance/bench",
