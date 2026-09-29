@@ -43,6 +43,23 @@ Data: 25/09/2026 · Esquema Dexie 8 (sem mudança) · Backup formato 3 · Instal
 - **Tema escuro:** o texto digitado nas fichas de Cadastros voltou a aparecer.
 - **Configurações:** salvar com o "Rendimento de carcaça padrão" em branco voltou a funcionar.
 
+### Relatório de Pesagens Individuais igual ao MAKGESTAO (E1D)
+- **Tela e folha como as do MAKGESTAO:** "Relatório de Pesagens Individuais" com o botão verde Imprimir,
+  quadro com Data Início, Data Fim, Orientação, Tipo Relatório, Ordenar Por e Pesagem Anterior, e os botões
+  Lotes, Apartações, Sexo, Raças, Era, Marcas, Status e Limpar Filtros. Na folha, "kg" em cada peso, subtotal
+  em linha de texto e "-" no zero. As contas continuam as corretas (cada animal conta uma vez; GMD ponderado).
+- **Os 5 tipos do antigo:** Analítico (Detalhado), Sintético (Matriz), Por Apartação/Lote, Por Apartação
+  (Resumo por Data), que é o tipo com que o relatório abre, e Vendas (Detalhado).
+- **Sintético (Matriz):** Linhas × Colunas entre Lote, Apartação, Sexo, Raça e Mês; cada célula com Qtd, Peso
+  médio e GMD; linha e coluna TOTAL.
+- **Vendas:** o relatório de venda do antigo (Métrica/Valor, totais por marca e por comprador, quadro de cada
+  comprador com **Mostrar Detalhes**, TOTAL GERAL). Valor total = o digitado; sem ele, peso ÷ 30 × valor da @.
+- **Analítico:** botões **Agrupar Por** Lote, Apartação, Sexo e Raça; colunas do antigo.
+- **Colunas** escolhidas por tipo e guardadas para cada usuário; **Ordenar Por** com as 8 opções do antigo.
+- Folha mais enxuta em todos os relatórios (sem "Emitido em" no cabeçalho e sem notas longas); telefone no
+  cabeçalho só com a opção marcada.
+- Grade de **Parceiros e Propriedades** com CPF/CNPJ formatado; a pesquisa acha com ou sem pontuação.
+
 ### Menos relatórios na lista
 - A lista caiu de **51 para 12** relatórios: Rebanho atual, Ocupação de lotes, Pesagens, Fechamento do
   dia, Desempenho, Movimentação de lotes, Saídas, Vendas, Abates e Compras do período, Romaneio de

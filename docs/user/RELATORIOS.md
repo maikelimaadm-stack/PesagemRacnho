@@ -33,7 +33,7 @@ nele, abre do mesmo jeito. Isso vale só para o seu usuário; os modelos salvos 
 |---|---|---|---|
 | Rebanho | **Rebanho atual** | Resumido por lote | Cabeças, peso médio e peso total de hoje — por lote, categoria, raça, marca, sexo, faixa de peso |
 | Rebanho | **Ocupação de lotes** | Resumido por apartação | Animais de cada lote contra a capacidade |
-| Pesagens | **Pesagens** | Resumido por sessão | Pesagens do período — por sessão, apartação e data, lote, data, tipo, operador |
+| Pesagens | **Pesagens** (Relatório de Pesagens Individuais) | Por Apartação (Resumo por Data) | Os 5 tipos do MAKGESTAO: Analítico, Sintético (Matriz), Por Apartação/Lote, Por Apartação (Resumo por Data) e Vendas |
 | Pesagens | **Fechamento do dia (imprimível)** | Detalhado | Conferência do dia, com as pendências da tela Fechamento do Dia |
 | Desempenho | **Desempenho** | Resumido por lote | Peso inicial e final, ganho e GMD do período |
 | Movimentação | **Movimentação de lotes** | Resumido por lote | Quem passou por cada lote, quantos dias ficou, quem mudou de lote |
@@ -68,7 +68,15 @@ Sem nenhum agrupamento, a folha do Resumido mostra só o **Total geral** e a dic
 
 ## 4. A barra de filtros
 
-Fica logo abaixo do nome do relatório, igual em todos os relatórios:
+**Em Pesagens a tela é como a do MAKGESTAO:** no alto, "Relatório de Pesagens Individuais" e o botão verde
+**Imprimir** (com Excel, PDF e o menu ⋯ ao lado); no quadro de filtros, **Data Início**, **Data Fim**,
+**Orientação** (Retrato ou Paisagem), **Tipo Relatório**, **Ordenar Por** e **Pesagem Anterior**, e os botões
+**Lotes, Apartações, Sexo, Raças, Era, Marcas, Status** e **Limpar Filtros** (o botão mostra quantos estão
+marcados, ex.: **Lotes (2)**). No Sintético aparecem **Linhas (Eixo Y)** e **Colunas (Eixo X)**; no Analítico,
+**Agrupar Por** e **Colunas**; em Vendas, **Mostrar Detalhes**. Abaixo do quadro vem sempre a folha, do jeito
+que sai na impressão.
+
+Nos outros relatórios a barra fica logo abaixo do nome do relatório:
 
 | Campo | Para que serve |
 |---|---|
@@ -98,27 +106,42 @@ Pesagens, Desempenho, Movimentação, Saídas, Comercial e Embarques pedem perí
 
 ## 5. Tipo de relatório
 
-Cada relatório traz os seus tipos prontos. Escolher um tipo troca de uma vez o agrupamento, o modo
-(Resumido/Detalhado) e os totais; os seus filtros continuam. Se você mudar o agrupamento na mão, o tipo
-passa a mostrar **Personalizado**.
+Cada relatório traz os seus tipos prontos. Escolher um tipo troca de uma vez o agrupamento, o modo e as
+colunas; os seus filtros continuam.
 
-Em **Pesagens**:
+**Pesagens** ("Relatório de Pesagens Individuais") tem os mesmos 5 tipos do MAKGESTAO e abre em **Por
+Apartação (Resumo por Data)**:
 
 | Tipo | Como sai |
 |---|---|
-| **Resumo por Sessão** | Como Pesagens abre: uma linha por sessão |
-| **Por apartação (resumo por data)** | Seção por apartação, dentro dela uma tabela por data com uma linha por lote, e no fim da apartação o **TOTAL POR LOTE** |
-| **Por lote** | Uma linha por lote |
-| **Por data** | Uma linha por data (sem a Faixa exigida, que é de cada lote) |
-| **Analítico por animal** | Detalhado, uma linha por pesagem |
+| **Analítico (Detalhado)** | Uma linha por pesagem. **Agrupar Por**: Lote, Apartação, Sexo e Raça — clique na ordem em que quer os níveis (até 3; clicar de novo tira). Subtotal de cada grupo com animais, peso médio e GMD médio, e o total geral. |
+| **Sintético (Matriz)** | Tabela cruzada: **Linhas (Eixo Y)** × **Colunas (Eixo X)**, cada um entre Lote, Apartação, Sexo, Raça e Mês. Cada célula mostra Qtd (animais), Peso médio e GMD médio; a linha e a coluna **TOTAL** são recalculadas com todos os animais (nunca soma de médias). Escolher o mesmo eixo nos dois lados troca os eixos de lugar. Clique numa célula para ver os animais dela. |
+| **Por Apartação/Lote** | Por apartação, uma tabela com uma linha por lote e o total da apartação. |
+| **Por Apartação (Resumo por Data)** | Apartação › data › lote, com o subtotal de cada data, o **TOTAL POR LOTE** da apartação e o **TOTAL GERAL**. |
+| **Vendas (Detalhado)** | Só as saídas por venda: Métrica/Valor, **Totais por marca**, **Totais por comprador**, o quadro de cada comprador (**Mostrar Detalhes** abre a lista de animais) e o **TOTAL GERAL**. |
 
-Nos relatórios sem tipos próprios aparecem **Resumo por <agrupamento padrão>** (ou **Lista por …**, nos
-que abrem no Detalhado), quando o relatório tem agrupamento padrão, e sempre **Analítico (uma linha por
-registro)**.
+**Colunas:** nos tipos Por Apartação, o botão **Colunas Painel** escolhe quais totais aparecem e em que
+ordem. O padrão é Lote, Qtd, Faixa Exigida, Menor, Maior, Peso Médio, Média (@), Peso Total, GMD Médio,
+Machos e Fêmeas; Total (@), Ganho Médio (kg e @), Ganho Total (kg e @) e Dias Médios ficam disponíveis.
+No Analítico e em Vendas, **Colunas** escolhe as colunas da lista (ex.: Data anterior, Peso anterior,
+Observação). A escolha fica guardada **para cada tipo e para cada usuário**: ao voltar ao tipo, ele abre
+como você deixou.
 
-O Tipo só aparece escolhido quando está aplicado por inteiro (agrupamento, modo e totais; no Detalhado,
-também as colunas). Se você mudar os totais ou as colunas, ele passa a mostrar **Personalizado**; escolher
-o Tipo de novo volta ao jeito dele.
+**Ordenar Por** (as 8 opções do antigo): Data (Mais Recente), Data (Mais Antiga), Peso (Maior), Peso
+(Menor), GMD (Maior), GMD (Menor), Animal (A-Z) e Lote (A-Z). No Analítico e em Vendas ordena as linhas
+(dentro de cada grupo). Nos resumidos, "Data" ordena as datas, e Peso/GMD ordenam os lotes dentro de cada
+data ou apartação pelo peso médio/GMD médio; Animal e Lote deixam os lotes em ordem alfabética. Na Matriz,
+Peso/GMD ordenam as linhas pelo total da linha e "Data" inverte os meses. GMD e peso vazios ficam sempre
+por último; "Animal (A-Z)" põe o 2 antes do 10.
+
+**A conta do valor em Vendas:** vale o valor total digitado na saída. Sem ele, o valor é **peso ÷ divisor
+da @ × valor da @** (como no MAKGESTAO); sem valor da @, a venda fica sem valor ("-") e fora da soma. A
+**Média valor da arroba** é ponderada pelas arrobas de cada venda.
+
+Um modelo salvo antes desta versão num tipo que saiu ("Resumo por Sessão", "Por lote", "Por data",
+"Analítico por animal") abre no tipo novo mais próximo (a troca fica registrada na auditoria). Nos outros
+relatórios aparecem **Resumo por <agrupamento padrão>** e **Analítico (uma linha por registro)**. Se você
+agrupar pela barra genérica (nos outros relatórios), o tipo passa a mostrar **Personalizado**.
 
 ## 6. Filtrar
 
@@ -273,7 +296,7 @@ raça**) e a marca "Visão salva de antes da 1.4.0".
 | Antes | Agora |
 |---|---|
 | Inventário atual do rebanho, Rebanho por marca/raça/categoria/sexo/situação/lote/apartação/faixa de peso, Animais sem pesagem recente | **Rebanho atual** (Agrupar por; filtro "Sem pesagem há mais de 30 dias") |
-| Pesagens por período/sessão/lote e apartação/operador/origem, Entradas e saídas | **Pesagens** (Agrupar por; filtro "Somente entradas e saídas") |
+| Pesagens por período/sessão/lote e apartação/operador/origem, Entradas e saídas | **Pesagens** (abre a mesma seleção do relatório antigo, como "Personalizado") |
 | Desempenho individual/por lote/por marca/raça/categoria/sexo/apartação, Animais perdendo peso, Distribuição por faixa de peso | **Desempenho** (Agrupar por; filtro "Somente perdendo peso") |
 | Mudanças de lote, Permanência em lotes | **Movimentação de lotes** (filtro "Somente mudanças de lote no período") |
 | Saídas por motivo, Mortes por período/causa/categoria/lote | **Saídas** (Agrupar por; filtro "Somente mortes") |

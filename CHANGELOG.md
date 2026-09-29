@@ -5,10 +5,49 @@ Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PAT
 
 ## [1.4.0] — 2026-09-25
 
-Etapas E1, E1B e os ajustes finais (E1C) do Plano Mestre 2. Esquema Dexie **8** e backup **formato 3**,
+Etapas E1, E1B, os ajustes finais (E1C) e o relatório de pesagens igual ao MAKGESTAO (E1D) do Plano Mestre 2. Esquema Dexie **8** e backup **formato 3**,
 **sem mudança de esquema**. A única conversão é das preferências de relatório (favoritos, recentes e
 modelos salvos), feita ao abrir Relatórios, repetível e registrada na auditoria. Instalador de
 diagnóstico não assinado em `release-unsigned/`. Notas em `docs/release/1.4.0/RELEASE-NOTES.md`.
+
+### Added (E1D — "Relatório de Pesagens Individuais" igual ao MAKGESTAO)
+- **Os 5 tipos do MAKGESTAO**, com os nomes e a ordem do antigo: **Analítico (Detalhado)**, **Sintético
+  (Matriz)**, **Por Apartação/Lote**, **Por Apartação (Resumo por Data)** — o tipo com que Pesagens abre — e
+  **Vendas (Detalhado)**. "Resumo por Sessão", "Por lote", "Por data" e "Analítico por animal" saíram da
+  lista; modelos salvos e o último estado que usavam um deles abrem no tipo novo mais próximo (conversão
+  registrada na auditoria, origem `relatorios-tipos-e1d`).
+- **Sintético (Matriz):** Linhas (Eixo Y) × Colunas (Eixo X) entre Lote, Apartação, Sexo, Raça e Mês
+  ("set/2026", em ordem cronológica); célula com Qtd (animais distintos), Peso médio e GMD médio (ponderado);
+  linha e coluna TOTAL recalculadas sobre a população (nunca soma de médias); mesmo eixo nos dois lados
+  troca os eixos de lugar. Excel com a matriz numa planilha.
+- **Vendas (Detalhado)** igual ao relatório de venda do antigo: Métrica/Valor (animais vendidos, peso
+  total e médio, média (@), média do valor da arroba, valor total), TOTAIS POR MARCA, TOTAIS POR COMPRADOR,
+  VENDAS POR COMPRADOR com o cartão de cada comprador e **Mostrar Detalhes** (a lista de animais), e o
+  TOTAL GERAL. Só saídas por venda (condição fixa do tipo). Valor total = o valor digitado; sem ele,
+  peso ÷ divisor da @ × valor da @, como no antigo. Quem não vê valores comerciais vê o relatório sem eles.
+- **Analítico (Detalhado):** botões **Agrupar Por** Lote, Apartação, Sexo e Raça (em ordem de clique, até 3
+  níveis), colunas do antigo (Data, Animal, Sexo, Raça, Peso, Lote, Apartação, Dias, Ganho, GMD; Data
+  anterior, Peso anterior e Observação no seletor), subtotal por grupo com animais, peso médio e GMD médio.
+- **Colunas por tipo e por usuário:** o seletor "Colunas" guarda a escolha de cada tipo para cada pessoa. Os
+  resumidos abrem com Lote, Qtd, Faixa exigida, Menor, Maior, Peso médio, Média (@), Peso total, GMD médio,
+  Machos e Fêmeas (os outros 6 totais ficam no seletor).
+- **Ordenar Por** com as 8 opções do antigo: Data (Mais Recente/Mais Antiga), Peso (Maior/Menor), GMD
+  (Maior/Menor), Animal (A-Z) e Lote (A-Z), traduzidas para cada tipo.
+- **Tela e folha de Pesagens com a cara do MAKGESTAO:** título "Relatório de Pesagens Individuais", quadro
+  de filtros (Data Início, Data Fim, Orientação, Tipo Relatório, Ordenar Por, Pesagem Anterior; botões Lotes,
+  Apartações, Sexo, Raças, Era, Marcas, Status e Limpar Filtros) e a folha como a do antigo: "kg" em cada
+  peso, subtotal em linha de texto, "-" no zero. As contas continuam as corretas (animais distintos, GMD
+  ponderado). Os outros relatórios não mudam de cara; Excel/CSV continuam com números de verdade.
+- **Folha mais enxuta (todos os relatórios):** abaixo do título só o período; sem "Emitido em" no cabeçalho
+  nem notas longas; rodapé com filtros, "@ = peso vivo ÷ N", quem emitiu e quando, e "Página X de Y".
+  Telefone no cabeçalho só com "Mostrar CPF/CNPJ, IE e telefone no cabeçalho" marcado.
+- **Cadastros:** a grade de Parceiros e de Propriedades mostra o CPF/CNPJ com máscara; pesquisa e filtro
+  acham com ou sem pontuação (resposta 2 ao REPORT da E1C).
+- Gates novos: `reports:pesagens-tipos`, `reports:columns-per-type`, `reports:matrix` e
+  `reports:vendas-por-comprador`.
+
+### Changed (E1D)
+- `docs/user/USUARIOS.md` descreve os 4 perfis (ADMIN, GESTOR, OPERADOR e CONSULTA) — resposta 4.
 
 ### Added (E1C — ajustes finais pedidos no REPORT da E1B)
 - **CPF/CNPJ com máscara** nas fichas de Parceiros e de Propriedades: 000.000.000-00, 00.000.000/0000-00

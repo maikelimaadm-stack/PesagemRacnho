@@ -1,29 +1,35 @@
 # Checklist da release 1.4.0
 
-Versão 1.4.0 (E1 + E1B + E1C) · esquema Dexie 8 (sem mudança) · backup formato 3 · `signed=false` · branch
+Versão 1.4.0 (E1 + E1B + E1C + E1D) · esquema Dexie 8 (sem mudança) · backup formato 3 · `signed=false` · branch
 `program/e1-relatorios` (main só avança com autorização da responsável, depois do teste no instalador).
 
 ## Versão
 - [x] `package.json`, `package-lock.json` e `src/lib/appVersion.js` em 1.4.0.
-- [x] CHANGELOG `## [1.4.0] — 2026-09-25`, sem bloco "Não lançado" (E1, E1B e E1C no mesmo bloco).
+- [x] CHANGELOG `## [1.4.0] — 2026-09-25`, sem bloco "Não lançado" (E1, E1B, E1C e E1D no mesmo bloco).
 - [x] `RELEASE-NOTES.md`, este checklist e `MIGRATION-1.3.0-TO-1.4.0.md` em `docs/release/1.4.0/`.
 - [x] `docs/user/RELATORIOS.md` ("A folha do relatório", "Cabeçalho da propriedade", barra de filtros,
       Tipo de relatório, Excel com TOTAL POR, título de Pesagens), `CADASTROS.md` (máscara de CPF/CNPJ),
       `USUARIOS.md` (GESTOR em Configurações › Relatórios), `BACKUP-E-RESTAURACAO.md`,
       `INSTALACAO-WINDOWS.md` e `TESTE-MAQUINA-LIMPA.md` citam a 1.4.0.
+- [x] E1D: `RELATORIOS.md` (os 5 tipos, colunas por tipo, Ordenar Por, tela de Pesagens como o MAKGESTAO,
+      valor de Vendas) e `USUARIOS.md` (os 4 perfis).
 
 ## Validações automatizadas
 - [x] `npm run test:quick` completo verde (inclui, da E1B, `reports:sheet-data:verify`,
       `reports:document-layout:verify` e `registry:property-header:verify`; da E1C,
-      `registry:document-mask:verify`, `reports:sheet-xlsx-parity:verify` e `ui:dark-field-text:verify`).
-- [x] `npm run test:full` completo verde (inclui `storage:all:verify`, com os gates do Dexie corrigidos).
+      `registry:document-mask:verify`, `reports:sheet-xlsx-parity:verify` e `ui:dark-field-text:verify`; da E1D,
+      `reports:pesagens-tipos`, `reports:columns-per-type`, `reports:matrix` e `reports:vendas-por-comprador`).
+- [x] `npm run test:full` completo verde na E1C (inclui `storage:all:verify`). Na E1D não foi rodado (nada de
+      esquema mudou — PROMPT-01D).
 - [x] `npm run release:version-contract:verify`.
 - [x] `npm run docs:user:verify`.
-- [x] Tudo commitado ANTES do build (manifesto com `gitCommit` sem "-dirty").
-- [x] `npm run dist:unsigned` (build + electron-builder sem assinatura + checksum + manifesto +
+- [ ] E1D: tudo commitado ANTES do build (manifesto com `gitCommit` sem "-dirty").
+- [ ] E1D: `npm run dist:unsigned` com o instalador novo, SHA-256 no REPORT da E1D e cópia em
+      `..\INSTALAR-ESTE-1.4.0\`.
+- [x] E1C: `npm run dist:unsigned` (build + electron-builder sem assinatura + checksum + manifesto +
       `diagnostic:packaged:source:verify` + `diagnostic:packaged:build:verify` +
       `diagnostic:e2e:verify`) — instalador FINAL da 1.4.0, com `gitCommit` `31f7733`.
-- [x] SHA-256 do `Pesagens Individuais Setup 1.4.0.exe` final anotado no REPORT da E1C
+- [x] E1C: SHA-256 do `Pesagens Individuais Setup 1.4.0.exe` anotado no REPORT da E1C
       (`e584a7fa…3a49bec`).
 
 ## Evidências
@@ -35,9 +41,12 @@ Versão 1.4.0 (E1 + E1B + E1C) · esquema Dexie 8 (sem mudança) · backup forma
   - [x] ficha com a máscara de CPF/CNPJ;
   - [x] XLSX aberto no Excel mostrando o bloco TOTAL POR;
   - [x] tema escuro antes/depois (fichas de Propriedade e de Parceiro; Configurações depois).
+- E1D (`docs/evidence/e1d/`):
+  - [x] um PDF de cada um dos 5 tipos de Pesagens com a massa de teste (e Vendas também com "Mostrar Detalhes");
+  - [x] referência do antigo (código, print do Resumo por Data e o PDF de venda da responsável).
 
 ## Teste manual no app instalado (responsável)
-O roteiro completo e atualizado está em `docs/evidence/e1c/REPORT.md`, seção 7.
+O roteiro completo e atualizado está em `docs/evidence/e1d/REPORT.md`, seção 7.
 
 ## Teste físico
 - [ ] Balança, impressora, curral: **não executado** (a impressão da folha numa impressora real faz parte
