@@ -38,6 +38,7 @@ import { buildVendasBlocks, isVendasViewModel, VENDAS_BLOCK_TOTALS, VENDAS_MISSI
 import { parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
 import { renderSheetBody } from '../src/modules/reporting/infrastructure/exporters/sheetHtml.js';
 import { renderVendasBody } from '../src/modules/reporting/infrastructure/exporters/vendasHtml.js';
+import { SHEET_CSS } from '../src/modules/reporting/infrastructure/exporters/sheetStyles.js';
 import { buildSheetRows, unzipStored } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
 import { XLSX_VENDAS_KINDS } from '../src/modules/reporting/infrastructure/exporters/vendasXlsx.js';
 import { getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
@@ -453,8 +454,14 @@ assert.ok(spaces(htmlSem).includes('<h1 class="sheet-title">Relatório de Pesage
 // Impressão/PDF: preparePrint repassa showDetails ao documento (printReport/exportPdf repassam as mesmas opções).
 const impressoSem = preparePrint(vm, ADMIN);
 const impressoCom = preparePrint(vm, ADMIN, { showDetails: true });
-assert.ok(!impressoSem.html.includes('sv-table--detail') && impressoCom.html.includes('sv-table--detail'), 'impressão/PDF: "Mostrar Detalhes" liga e desliga a tabela');
+// A marcação da tabela (o CSS embutido também cita a classe).
+const tabelaDetalhe = 'class="sv-table sv-table--detail"';
+assert.ok(!impressoSem.html.includes(tabelaDetalhe) && impressoCom.html.includes(tabelaDetalhe), 'impressão/PDF: "Mostrar Detalhes" liga e desliga a tabela');
 assert.deepEqual([impressoSem.manifest.showDetails, impressoCom.manifest.showDetails], [false, true], 'manifesto registra se saiu com detalhes');
+// TOTAL GERAL nunca sozinho na última página (conferido no PDF do Electron): depois da tabela de detalhe, a última
+// linha reserva o lugar dele; depois do cartão, break-before: avoid.
+assert.match(SHEET_CSS, /\.sv-comprador:last-child \.sv-table--detail > tbody > tr:last-child > td::after \{ content: ""; display: block; height: 3\.5em; margin-bottom: -3\.5em; \}/, 'folha: a última venda desce junto com o TOTAL GERAL');
+assert.match(SHEET_CSS, /\.sv-total-geral \{[^}]*break-before: avoid;/, 'folha: TOTAL GERAL colado no último cartão');
 assert.equal(impressoSem.layout.orientation, 'portrait', 'retrato, como o PDF');
 // Muitas colunas no seletor: só a tabela de detalhe precisa de largura — sem "Mostrar Detalhes" continua retrato.
 const todasColunas = await vendas(ADMIN, { columns: [...view.columnChoices.available] });

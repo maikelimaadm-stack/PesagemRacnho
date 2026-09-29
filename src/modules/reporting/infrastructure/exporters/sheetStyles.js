@@ -114,6 +114,10 @@ export const SHEET_CSS = `
 .rpt-sheet .sheet-vendas .sv-card__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.3333em; color: var(--sv-card-text); }
 .rpt-sheet .sheet-vendas .sv-card__grid strong { font-weight: 700; }
 .rpt-sheet .sheet-vendas .sv-total-geral { text-align: right; font-weight: 600; break-inside: avoid; page-break-inside: avoid; break-before: avoid; page-break-before: avoid; }
+/* O TOTAL GERAL nunca sai sozinho numa página. Depois do cartão o break-before: avoid basta; depois da tabela
+   de detalhe o Chromium não volta para dentro dela, então a última linha reserva o lugar do TOTAL (3,5em =
+   espaço + linha; a margem negativa não muda a altura): se os dois não cabem, a linha desce junto. */
+.rpt-sheet .sheet-vendas .sv-comprador:last-child .sv-table--detail > tbody > tr:last-child > td::after { content: ""; display: block; height: 3.5em; margin-bottom: -3.5em; }
 `;
 
 /**
