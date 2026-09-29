@@ -23,8 +23,8 @@ Versão 1.4.0 (E1 + E1B + E1C + E1D) · esquema Dexie 8 (sem mudança) · backup
       esquema mudou — PROMPT-01D).
 - [x] `npm run release:version-contract:verify`.
 - [x] `npm run docs:user:verify`.
-- [ ] E1D: tudo commitado ANTES do build (manifesto com `gitCommit` sem "-dirty").
-- [ ] E1D: `npm run dist:unsigned` com o instalador novo, SHA-256 no REPORT da E1D e cópia em
+- [x] E1D: tudo commitado ANTES do build (manifesto com `gitCommit` sem "-dirty").
+- [x] E1D: `npm run dist:unsigned` com o instalador novo (`gitCommit` `d428d4a`, SHA-256 `32754ed2…4b4f8811`) no REPORT da E1D e cópia em
       `..\INSTALAR-ESTE-1.4.0\`.
 - [x] E1C: `npm run dist:unsigned` (build + electron-builder sem assinatura + checksum + manifesto +
       `diagnostic:packaged:source:verify` + `diagnostic:packaged:build:verify` +
