@@ -322,6 +322,7 @@ for (const view of views) {
 }
 assert.equal(folhas.vendas.mode, 'DETALHADO', 'controle: Vendas é Detalhado');
 assert.equal(buildReportDocument(folhas.vendas).title, TITLE.Sintético, 'Vendas (Detalhado) é "(Sintético)", como no antigo');
+assert.equal(buildReportDocument(folhas.vendas).layout, 'vendas', 'Vendas: miolo do relatório de venda, com o título comum');
 assert.equal(folhas.analitico.mode, 'DETALHADO');
 // Sem tipo: pelo modo (Personalizado e os outros relatórios).
 const semTipoDetalhado = await run({ ...viewSelection('vendas', PESAGENS), view: null, fixedFilters: {} });

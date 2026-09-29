@@ -6,6 +6,9 @@
 import { formatCell } from '../../domain/reportFormatting.js';
 import { buildVendasBlocks, VENDAS_FORMATS } from '../../domain/vendasLayout.js';
 
+// Cabeçalho do cartão/TOTAL GERAL na planilha: na folha a unidade vai no valor ("455,20 kg"); aqui, no cabeçalho.
+const headerOf = (total, animais) => (total.key === 'animais_vendidos' ? animais : total.unit === 'kg' ? `${total.label} (kg)` : total.label);
+
 export const XLSX_VENDAS_KINDS = Object.freeze({
   TITLE: 'VENDAS_TITLE', // título do bloco ("TOTAIS POR MARCA", "COMPRADOR: W3")
   HEADER: 'VENDAS_HEADER',
@@ -51,7 +54,7 @@ export function buildVendasSheetRows(viewModel, { STYLE, numberStyle, metaRows }
   for (const entry of blocks.compradores.items) {
     title(entry.title);
     // Cartão do comprador: os totais dele numa linha (Total = animais distintos).
-    header(['', ...entry.totals.map((total) => (total.key === 'animais_vendidos' ? 'Total (animais)' : total.label))]);
+    header(['', ...entry.totals.map((total) => headerOf(total, 'Total (animais)'))]);
     totalsRow(`Total ${entry.label}`, entry.totals, XLSX_VENDAS_KINDS.ROW, STYLE.subtotal);
     header(detailColumns.map((column) => column.label));
     for (const row of entry.rows ?? []) {
@@ -65,7 +68,7 @@ export function buildVendasSheetRows(viewModel, { STYLE, numberStyle, metaRows }
     }
     blank();
   }
-  header(['', ...blocks.totalGeral.items.map((total) => (total.key === 'animais_vendidos' ? 'Animais' : total.label))]);
+  header(['', ...blocks.totalGeral.items.map((total) => headerOf(total, 'Animais'))]);
   totalsRow('TOTAL GERAL', blocks.totalGeral.items, XLSX_VENDAS_KINDS.TOTAL, STYLE.total);
   const width = Math.max(2, ...rows.map((row) => row.cells.length));
   return { rows, width, dataHeaders: detailColumns.map((column) => column.label), freeze: { rows: 6, cols: 0 } };
