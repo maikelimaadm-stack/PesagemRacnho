@@ -3,6 +3,7 @@
 // Todo texto passa por escapeHtml; o logo só entra se for data URL PNG/JPEG válido. Cada célula leva
 // data-col=<índice> igual ao do cabeçalho da sua coluna (base do gate de alinhamento).
 import { isAcceptedLogo } from '../../../catalog/domain/propertyHeader.js';
+import { renderVendasBody } from './vendasHtml.js';
 
 export function escapeHtml(value) {
   return String(value ?? '')
@@ -125,9 +126,10 @@ export function renderSheetBody(doc, { mode = 'fragment', interactive = false, s
   const header = renderSheetHeaderHtml(doc.header);
   // Abaixo do título só o período (E1D item 8), no lugar do antigo subtítulo — mesma marcação e estilo.
   const titleRow = `<div class="sheet-title-row"><h1 class="sheet-title">${escapeHtml(doc.title)}</h1><span class="sheet-title-side">${escapeHtml(doc.periodText)}</span></div>`;
+  // E1D: "Vendas (Detalhado)" tem miolo próprio (o relatório de venda do MAKGESTAO — vendasHtml.js).
   const content = doc.empty
     ? '<p class="sheet-empty">Nenhum registro para os filtros informados.</p>'
-    : [
+    : doc.layout === 'vendas' ? renderVendasBody(doc) : [
       ...doc.sections.map((section) => renderSection(doc, section, options)),
       renderTable(doc, doc.flat, options),
       doc.grandTotal ? `<div class="sheet-grand-block">${renderTable(doc, doc.grandTotal, options)}</div>` : '',
