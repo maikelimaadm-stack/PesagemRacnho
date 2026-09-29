@@ -6,12 +6,16 @@
 //      cruzamento sem pesagem = célula vazia;
 //   b) totais recalculados pelo motor: coluna TOTAL = nó da linha, linha TOTAL = população inteira reagrupada
 //      pelo eixo X (groupRows), canto = total geral — com casos em que a soma das Qtd e a média das médias dão
-//      outro número (o mesmo animal em duas colunas, e em duas linhas da mesma coluna);
+//      outro número (o mesmo animal em duas colunas, e em duas linhas da mesma coluna); com filtro (Sexo),
+//      "Pesagem anterior: Com" e pesquisa, os totais saem só da população FILTRADA (conferidos à mão);
+//      lotes de MESMO nome em apartações diferentes viram colunas/linhas distintas com a apartação no rótulo
+//      ("Lote 01 · Recria"; contexto repetido → número de ordem), e o ganho negativo sai "-0,500";
 //   c) ordem: mês cronológico (jan/2026 depois de dez/2025 — a ordem alfabética poria "ago/2026" antes de
 //      "dez/2025"), "Não informado" por último (linhas e colunas), direção do nível X e das linhas, e
 //      "Ordenar por" peso/GMD (summarySort) ordena as LINHAS pelo total da linha;
 //   d) eixos iguais ou desconhecidos recusados — serviço, definição e modelo salvo (que guarda os eixos); a
-//      tela troca os eixos de lugar em vez de travar (nextMatrixAxes, usado por MatrixAxisControls);
+//      tela troca os eixos de lugar em vez de travar (nextMatrixAxes, usado por MatrixAxisControls); voltar do
+//      detalhe de uma célula pela aba "Resumido" mantém o tipo e a matriz (modeChangePatch);
 //   e) folha (tela = impressão = PDF): layout "matrix", legenda, 3 valores por célula (Qtd, "x kg", GMD),
 //      alinhamento data-col (com negativos), clique na linha/célula/coluna = detalhe exato; muitas colunas →
 //      paisagem/fonte menor/aviso, nunca corta coluna;
@@ -33,12 +37,12 @@ import { EVENT_COLUMNS } from '../src/modules/reporting/definitions/columns/even
 import { EVENT_PERIOD_PARAM, EVENT_TOTALS, MATRIX_AXES, MATRIX_TOTALS } from '../src/modules/reporting/definitions/pesagens.js';
 import { DATA_CLASSIFICATION, defineReport } from '../src/modules/reporting/domain/reportDefinition.js';
 import { GRAINS } from '../src/modules/reporting/domain/reportGrain.js';
-import { viewSelection } from '../src/modules/reporting/domain/reportViews.js';
+import { modeChangePatch, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
 import { buildMatrix, isMatrixViewModel, matrixValues, nextMatrixAxes } from '../src/modules/reporting/domain/matrixLayout.js';
 import { buildReportDocument, documentRows, DOC_ROW_TYPES } from '../src/modules/reporting/domain/reportDocument.js';
 import { buildSummaryLayout } from '../src/modules/reporting/domain/summaryLayout.js';
 import { DEFAULT_DECIMALS, roundTo } from '../src/modules/reporting/domain/reportFormatting.js';
-import { NONE_GROUP_KEY } from '../src/modules/reporting/domain/groupEngine.js';
+import { groupRows, NONE_GROUP_KEY } from '../src/modules/reporting/domain/groupEngine.js';
 import { renderSheetBody } from '../src/modules/reporting/infrastructure/exporters/sheetHtml.js';
 import { parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
 import { buildSheetRows, columnLetter, crc32, unzipStored, XLSX_MATRIX_KINDS } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
@@ -49,10 +53,31 @@ import { buildSheetRows, columnLetter, crc32, unzipStored, XLSX_MATRIX_KINDS } f
 //  A6 606 fêmea Angus sem lote: 20/01/2026 180 kg (sem anterior → GMD "—");
 //  A7 707 macho Nelore Lote 01: 20/12/2025 250 kg → 19/01/2026 262 kg (30 d, +12);
 //  A8 808 fêmea Angus sem lote: uma pesagem por mês de out/2024 a nov/2025 (só no caso "muitas colunas").
-await seedReportFixture();
+// ... e em mai–jul/2024 (fora de todos os outros períodos) lotes com o MESMO nome em apartações diferentes (o
+// cadastro aceita: a unicidade é por apartação) e um ganho negativo:
+//  B1 911 macho Lote 01 da Engorda (L1): 10/05/2024 300 kg → 09/06/2024 285 kg (30 d, −15 → GMD −0,500);
+//  B2 912 macho Lote 01 da Recria (L9): 12/05/2024 200 kg → 11/06/2024 230 kg (30 d, +30);
+//  B3 913 fêmea Lote 01 da Recria (L9): 20/05/2024 180 kg (sem anterior);
+//  B4 914 fêmea Lote 01 da OUTRA "Recria" (L7, apartação ap3 de mesmo nome): 05/07/2024 190 kg.
+const { db } = await seedReportFixture();
+await db.table('apartacoes').bulkAdd([
+  { id: 'ap2', empresa_id: 'local', nome_apartacao: 'Recria', ativo: true, created_at: '2024-01-01T00:00:00.000Z', updated_at: '2024-01-01T00:00:00.000Z', deleted_at: null },
+  { id: 'ap3', empresa_id: 'local', nome_apartacao: 'Recria', ativo: true, created_at: '2024-01-01T00:00:00.000Z', updated_at: '2024-01-01T00:00:00.000Z', deleted_at: null },
+]);
+await db.table('loteApartacoes').bulkAdd([
+  { id: 'L9', empresa_id: 'local', apartacao_id: 'ap2', nome_apartacao: 'Recria', nome_lote: 'Lote 01', quantidade_maxima: 10, peso_minimo: 150, peso_maximo: 250, created_at: '2024-01-01T00:00:00.000Z', updated_at: '2024-01-01T00:00:00.000Z', deleted_at: null },
+  { id: 'L7', empresa_id: 'local', apartacao_id: 'ap3', nome_apartacao: 'Recria', nome_lote: 'Lote 01', quantidade_maxima: 10, peso_minimo: 150, peso_maximo: 250, created_at: '2024-01-01T00:00:00.000Z', updated_at: '2024-01-01T00:00:00.000Z', deleted_at: null },
+]);
 const base = { empresa_id: 'local', status_animal: 'Ativo' };
 const L1 = { lote_id: 'L1', nome_lote: 'Lote 01', apartacao_id: 'ap1', nome_apartacao: 'Engorda' };
 const L2 = { lote_id: 'L2', nome_lote: 'Lote 02', apartacao_id: 'ap1', nome_apartacao: 'Engorda' };
+const L9 = { lote_id: 'L9', nome_lote: 'Lote 01', apartacao_id: 'ap2', nome_apartacao: 'Recria' };
+const L7 = { lote_id: 'L7', nome_lote: 'Lote 01', apartacao_id: 'ap3', nome_apartacao: 'Recria' };
+const nelore = { raca: 'Nelore', raca_id: 'r-nelore', marca: 'ALFA', marca_id: 'm-alfa' };
+const b1 = { ...base, ...nelore, ...L1, animal_id: 'B1', numero_animal: '911', sexo: 'M' };
+const b2 = { ...base, ...nelore, ...L9, animal_id: 'B2', numero_animal: '912', sexo: 'M' };
+const b3 = { ...base, ...nelore, ...L9, animal_id: 'B3', numero_animal: '913', sexo: 'F' };
+const b4 = { ...base, ...nelore, ...L7, animal_id: 'B4', numero_animal: '914', sexo: 'F' };
 const a5 = { ...base, animal_id: 'A5', numero_animal: '505', marca: 'ALFA', marca_id: 'm-alfa', sexo: 'M', raca: 'Nelore', raca_id: 'r-nelore' };
 const a6 = { ...base, animal_id: 'A6', numero_animal: '606', marca: 'BETA', marca_id: 'm-beta', sexo: 'F', raca: 'Angus', raca_id: 'r-angus' };
 const a7 = { ...base, animal_id: 'A7', numero_animal: '707', marca: 'ALFA', marca_id: 'm-alfa', sexo: 'M', raca: 'Nelore', raca_id: 'r-nelore', ...L1 };
@@ -70,6 +95,12 @@ for (const entry of [
   { ...a7, id: 'm4', tipo_manejo: 'Manejo', data_pesagem: '2026-01-19', peso: 262 },
   { ...a6, id: 'm5', tipo_manejo: 'Cadastro', data_pesagem: '2026-01-20', peso: 180 },
   { ...a5, ...L1, id: 'm6', tipo_manejo: 'Manejo', data_pesagem: '2026-01-29', peso: 236 },
+  { ...b1, id: 'n1', tipo_manejo: 'Cadastro', data_pesagem: '2024-05-10', peso: 300 },
+  { ...b2, id: 'n2', tipo_manejo: 'Cadastro', data_pesagem: '2024-05-12', peso: 200 },
+  { ...b3, id: 'n3', tipo_manejo: 'Cadastro', data_pesagem: '2024-05-20', peso: 180 },
+  { ...b1, id: 'n4', tipo_manejo: 'Manejo', data_pesagem: '2024-06-09', peso: 285 },
+  { ...b2, id: 'n5', tipo_manejo: 'Manejo', data_pesagem: '2024-06-11', peso: 230 },
+  { ...b4, id: 'n6', tipo_manejo: 'Cadastro', data_pesagem: '2024-07-05', peso: 190 },
 ]) await weighingService.createEntry(entry);
 
 const PESAGENS = getReportDefinition('pesagens');
@@ -77,6 +108,8 @@ const MATRIX = 'sintetico-matriz';
 const AGO_SET = { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' };
 const DEZ_SET = { preset: 'personalizado', from: '2025-12-01', to: '2026-09-15' };
 const WIDE = { preset: 'personalizado', from: '2024-10-01', to: '2026-09-15' };
+const MAI_JUN = { preset: 'personalizado', from: '2024-05-01', to: '2024-06-30' };
+const MAI_JUL = { preset: 'personalizado', from: '2024-05-01', to: '2024-07-31' };
 const run = (periodo, selection = {}) => runReport('pesagens', { today: TODAY, params: { periodo }, selection: { ...viewSelection(MATRIX, PESAGENS), ...selection }, arrobaDivisor: 30 }, ADMIN);
 const results = [];
 
@@ -188,6 +221,99 @@ const case34 = checkMatrix('3×4 Lote × Mês', vm34, {
   results.push({ caso: '3×4 Lote × Mês', celulas: case34.cells });
 }
 
+// ---- b2) filtro, "Pesagem anterior" e pesquisa: linha TOTAL, coluna TOTAL e canto só da população FILTRADA ----
+// (a linha TOTAL reagrupa as linhas do relatório — vm.rows —, nunca a população inteira do período).
+{
+  const unfilteredTotal = case34.matrix.totalRow.cells.map((node) => matrixValues(case34.matrix, node));
+  const filteredCases = [];
+  // Sexo = Macho (Lote × Mês, dez/2025–set/2026): saem A2, A4 e A6 (fêmeas) — "Não informado" some;
+  //   Lote 02 = só A5 (200, sem anterior); TOTAL de jan/2026 = A7 262 + A5 236 (2 cabeças, sem a A6 de 180);
+  //   canto = 4 cabeças (A1, A3, A5, A7), (2.348 + 200) ÷ 9 kg, 93 ÷ 120.
+  const vmMacho = await run(DEZ_SET, { matrix: { eixoY: 'lote', eixoX: 'mes' }, filters: { sexo: { operator: 'in', values: ['M'] } } });
+  checkMatrix('filtro Sexo = Macho', vmMacho, {
+    rows: ['Lote 01', 'Lote 02'],
+    columns: ['dez/2025', 'jan/2026', 'ago/2026', 'set/2026'],
+    cells: {
+      'Lote 01': { 'dez/2025': [2, 232.5, 0.75], 'jan/2026': [2, 249, 33 / 60], 'ago/2026': [2, 1040 / 3, 1.5], 'set/2026': [2, 345, 0.75], TOTAL: [4, 293.5, 93 / 120] },
+      'Lote 02': { 'dez/2025': [1, 200, null], 'jan/2026': null, 'ago/2026': null, 'set/2026': null, TOTAL: [1, 200, null] },
+      TOTAL: { 'dez/2025': [2, 665 / 3, 0.75], 'jan/2026': [2, 249, 33 / 60], 'ago/2026': [2, 1040 / 3, 1.5], 'set/2026': [2, 345, 0.75], TOTAL: [4, 2548 / 9, 93 / 120] },
+    },
+  });
+  filteredCases.push(['filtro Sexo = Macho', vmMacho]);
+  // "Pesagem anterior: Com" (só pesagens com anterior — a Saída não tem): A5 215 (dez), A7 262 e A5 236 (jan),
+  //   A1 330 (ago, Lote 01), A2 260 (ago, Lote 02), A1 345 (set). TOTAL do Lote 01 = 3 cabeças, 1.388 ÷ 5 kg;
+  //   ago/2026 = 2 cabeças, 590 ÷ 2, 40 ÷ 30; canto = 4 cabeças, 1.648 ÷ 6, 103 ÷ 130.
+  const vmCom = await run(DEZ_SET, { matrix: { eixoY: 'lote', eixoX: 'mes' }, filters: { tem_pesagem_anterior: { operator: 'equals', value: true } } });
+  checkMatrix('Pesagem anterior: Com', vmCom, {
+    rows: ['Lote 01', 'Lote 02'],
+    columns: ['dez/2025', 'jan/2026', 'ago/2026', 'set/2026'],
+    cells: {
+      'Lote 01': { 'dez/2025': [1, 215, 0.75], 'jan/2026': [2, 249, 33 / 60], 'ago/2026': [1, 330, 1.5], 'set/2026': [1, 345, 0.75], TOTAL: [3, 1388 / 5, 93 / 120] },
+      'Lote 02': { 'dez/2025': null, 'jan/2026': null, 'ago/2026': [1, 260, 1], 'set/2026': null, TOTAL: [1, 260, 1] },
+      TOTAL: { 'dez/2025': [1, 215, 0.75], 'jan/2026': [2, 249, 33 / 60], 'ago/2026': [2, 295, 40 / 30], 'set/2026': [1, 345, 0.75], TOTAL: [4, 1648 / 6, 103 / 130] },
+    },
+  });
+  filteredCases.push(['Pesagem anterior: Com', vmCom]);
+  // Pesquisa "101" (A1): só ago e set/2026; TOTAL = o próprio A1 (325 kg, 45 ÷ 40) — nunca 2 cabeças/346,25.
+  const vmBusca = await run(DEZ_SET, { matrix: { eixoY: 'lote', eixoX: 'mes' }, search: '101' });
+  checkMatrix('pesquisa 101', vmBusca, {
+    rows: ['Lote 01'],
+    columns: ['ago/2026', 'set/2026'],
+    cells: {
+      'Lote 01': { 'ago/2026': [1, 315, 1.5], 'set/2026': [1, 345, 0.75], TOTAL: [1, 325, 45 / 40] },
+      TOTAL: { 'ago/2026': [1, 315, 1.5], 'set/2026': [1, 345, 0.75], TOTAL: [1, 325, 45 / 40] },
+    },
+  });
+  filteredCases.push(['pesquisa 101', vmBusca]);
+  for (const [name, vm] of filteredCases) {
+    assert.ok(vm.rows.length < vm.population.length, `${name}: o filtro tirou pesagens (${vm.rows.length} de ${vm.population.length})`);
+    const matrix = buildMatrix(vm);
+    // Controle: a população inteira reagrupada daria outra linha TOTAL — o caso distingue as duas.
+    const specs = vm.aggregates.map((spec) => ({ id: spec.id, op: spec.op, ...(spec.columnId ? { columnId: spec.columnId } : {}) }));
+    const whole = groupRows(vm.population, [{ columnId: vm.groups[1].columnId }], vm.resolve, { aggregates: specs }).nodes;
+    assert.notDeepEqual(matrix.totalRow.cells.map((node) => matrixValues(matrix, node)), whole.map((node) => matrixValues(matrix, node)), `${name}: linha TOTAL ≠ população inteira reagrupada`);
+    assert.notDeepEqual(matrix.totalRow.cells.map((node) => matrixValues(matrix, node)), unfilteredTotal, `${name}: linha TOTAL ≠ a sem filtro`);
+  }
+  results.push({ caso: 'filtros/pesquisa na matriz', casos: filteredCases.map(([name, vm]) => `${name} (${vm.rows.length}/${vm.population.length})`) });
+}
+
+// ---- b3) lotes de MESMO nome em apartações diferentes + ganho negativo (mai–jun/2024), conferido à mão ----
+//   Sexo × Lote (padrão do tipo): Macho × Lote 01 · Engorda = B1 (300; 285 −15/30) → 1 / 292,5 kg / −0,500;
+//   Macho × Lote 01 · Recria = B2 (200; 230 +30/30) → 1 / 215 / 1,000; Fêmea × Lote 01 · Recria = B3 (180, sem
+//   anterior); TOTAL de Macho = 2 cabeças, 1.015 ÷ 4, 15 ÷ 60; canto = 3 cabeças, 1.195 ÷ 5, 15 ÷ 60.
+const vmSameName = await run(MAI_JUN);
+const caseSameName = checkMatrix('lotes de mesmo nome', vmSameName, {
+  rows: ['Fêmea', 'Macho'],
+  columns: ['Lote 01 · Engorda', 'Lote 01 · Recria'],
+  cells: {
+    Fêmea: { 'Lote 01 · Engorda': null, 'Lote 01 · Recria': [1, 180, null], TOTAL: [1, 180, null] },
+    Macho: { 'Lote 01 · Engorda': [1, 292.5, -0.5], 'Lote 01 · Recria': [1, 215, 1], TOTAL: [2, 1015 / 4, 15 / 60] },
+    TOTAL: { 'Lote 01 · Engorda': [1, 292.5, -0.5], 'Lote 01 · Recria': [2, 610 / 3, 1], TOTAL: [3, 1195 / 5, 15 / 60] },
+  },
+});
+{
+  const { matrix, doc, docRows } = caseSameName;
+  assert.deepEqual(matrix.columns.map((column) => column.key), ['L1', 'L9'], 'mesmo nome: uma coluna por lote (chave), não uma por nome');
+  const headers = doc.columns.map((column) => column.label);
+  assert.equal(new Set(headers).size, headers.length, `mesmo nome: cabeçalhos da folha distintos (${headers.join(' | ')})`);
+  assert.deepEqual(docRows[1].cells[1].lines, ['1', '292,5 kg', '-0,500'], 'ganho negativo: Macho × Lote 01 · Engorda = 1 / 292,5 kg / -0,500');
+  // O detalhe (pílula) mostra o mesmo rótulo do cabeçalho.
+  const recria = doc.drillTargets[docRows[2].cells[2].drill];
+  assert.deepEqual(recria.map((part) => [part.columnId, part.key, part.label]), [['nome_lote', 'L9', 'Lote 01 · Recria']], 'mesmo nome: TOTAL × Lote 01 · Recria abre o L9 com o rótulo do cabeçalho');
+  assert.deepEqual(docRows[1].cells[1].drill && doc.drillTargets[docRows[1].cells[1].drill].map((part) => part.label), ['Macho', 'Lote 01 · Engorda'], 'mesmo nome: célula abre com os rótulos da folha');
+  // Nas LINHAS também (Lote × Sexo).
+  const loteSexo = buildMatrix(await run(MAI_JUN, { matrix: { eixoY: 'lote', eixoX: 'sexo' } }));
+  assert.deepEqual(loteSexo.rows.map((row) => [row.key, row.label]), [['L1', 'Lote 01 · Engorda'], ['L9', 'Lote 01 · Recria']], 'mesmo nome nas linhas: contexto da apartação');
+  // Contexto também repetido (duas apartações "Recria", cada uma com um "Lote 01"): número de ordem.
+  const twice = buildMatrix(await run(MAI_JUL));
+  assert.deepEqual(twice.columns.map((column) => [column.key, column.label]), [['L1', 'Lote 01 · Engorda'], ['L9', 'Lote 01 · Recria (1)'], ['L7', 'Lote 01 · Recria (2)']], 'mesmo nome e mesma apartação: número de ordem');
+  const apartacoes = buildMatrix(await run(MAI_JUL, { matrix: { eixoY: 'sexo', eixoX: 'apartacao' } }));
+  assert.deepEqual(apartacoes.columns.map((column) => [column.key, column.label]), [['ap1', 'Engorda'], ['ap2', 'Recria (1)'], ['ap3', 'Recria (2)']], 'Apartação de mesmo nome (sem contexto): número de ordem');
+  // Nome único continua sem contexto (a massa de dez/2025–set/2026: "Lote 01", "Lote 02").
+  assert.deepEqual(buildMatrix(await run(DEZ_SET)).columns.map((column) => column.label), ['Lote 01', 'Lote 02', 'Não informado'], 'nome único: rótulo sem contexto');
+  results.push({ caso: 'lotes de mesmo nome', colunas: headers.slice(1, -1), ordinal: twice.columns.map((column) => column.label) });
+}
+
 // ---- c) ordem ----
 {
   const collator = new Intl.Collator('pt-BR', { sensitivity: 'base', numeric: true });
@@ -281,6 +407,22 @@ const case34 = checkMatrix('3×4 Lote × Mês', vm34, {
   const screen = readFileSync(new URL('../src/components/reports/ReportView.jsx', import.meta.url), 'utf8');
   assert.ok(screen.includes('typeControls=') && /layout === VIEW_LAYOUTS\.MATRIX[\s\S]{0,120}<MatrixAxisControls /.test(screen), 'ReportView: MatrixAxisControls só no tipo com layout matrix (encaixe typeControls)');
   assert.match(screen, /const setMatrixAxes = \(matrix\) => update\(\{ matrix, drill: \[\]/, 'ReportView: trocar eixo mantém o tipo e sai do detalhe');
+  // Voltar do detalhe de uma célula pela aba "Resumido" mantém o tipo (como o X da pílula): a matriz volta.
+  assert.match(screen, /const setMode = \(mode\) => update\(modeChangePatch\(definition, state, mode\)\)/, 'ReportView: abas Resumido/Detalhado usam modeChangePatch');
+  const drilled = { view: MATRIX, matrix: { eixoY: 'lote', eixoX: 'mes' }, groups: [], mode: 'DETALHADO', drill: [{ columnId: 'nome_lote', key: 'L1', label: 'Lote 01' }] };
+  const back = modeChangePatch(PESAGENS, drilled, 'RESUMIDO');
+  assert.deepEqual(back, { mode: 'RESUMIDO', drill: [] }, 'detalhe → aba Resumido: sai do detalhe e fica no tipo (sem view/matrix null)');
+  const screenState = { ...drilled, ...back };
+  const reopenedMatrix = await run(DEZ_SET, { view: screenState.view, matrix: screenState.matrix, groups: screenState.groups, mode: screenState.mode, drill: screenState.drill });
+  assert.ok(isMatrixViewModel(reopenedMatrix), 'detalhe → aba Resumido: a matriz volta');
+  assert.deepEqual(buildMatrix(reopenedMatrix).rows.map((row) => row.label), case34.matrix.rows.map((row) => row.label), 'detalhe → aba Resumido: a mesma matriz');
+  // Controle (o defeito): virar Personalizado com os grupos do estado da matriz ([]) perde a matriz.
+  const lost = await run(DEZ_SET, { view: null, matrix: null, groups: [], mode: 'RESUMIDO', drill: [] });
+  assert.equal(isMatrixViewModel(lost), false, 'controle: Personalizado sem grupos não é matriz (só o Total geral)');
+  // Fora do detalhe, as abas continuam saindo do tipo (contrato §3); no detalhe, a aba Detalhado não muda nada.
+  assert.deepEqual(modeChangePatch(PESAGENS, { ...drilled, mode: 'RESUMIDO', drill: [] }, 'DETALHADO'), { mode: 'DETALHADO', drill: [], view: null, matrix: null }, 'Resumido → Detalhado sem detalhe: Personalizado');
+  assert.deepEqual(modeChangePatch(PESAGENS, drilled, 'DETALHADO'), { mode: 'DETALHADO', drill: drilled.drill }, 'no detalhe, aba Detalhado: nada muda');
+  assert.deepEqual(modeChangePatch(PESAGENS, { ...drilled, view: null, matrix: null }, 'RESUMIDO'), { mode: 'RESUMIDO', drill: [], view: null, matrix: null }, 'Personalizado no detalhe → Resumido: continua Personalizado');
   results.push({ caso: 'eixos', paresRodados: pairs });
 }
 
@@ -302,6 +444,24 @@ function assertTablesAligned(html) {
   }
   return tables.length;
 }
+/** Cada célula da folha da matriz: sob a sua coluna; 3 valores (Qtd, "x kg", GMD com sinal e 3 casas, ou "—") ou vazia. */
+function assertMatrixCellTexts(name, doc) {
+  let negatives = 0;
+  for (const row of documentRows(doc)) {
+    assert.equal(row.cells.length, doc.columns.length, `${name} · ${row.id}: uma célula por coluna`);
+    row.cells.forEach((cell, index) => {
+      assert.equal(cell.col, index, `${name} · ${row.id}: célula ${index} no índice certo`);
+      assert.equal(cell.key, doc.columns[index].key, `${name} · ${row.id}: célula ${index} sob a coluna ${doc.columns[index].key}`);
+      if (index === 0 || !cell.lines.length) return;
+      assert.equal(cell.lines.length, 3, `${name} · ${row.id}: 3 valores na célula ${index}`);
+      assert.match(cell.lines[0], /^\d+$/, `${name} · ${row.id}: Qtd inteira`);
+      assert.match(cell.lines[1], /^\d{1,3}(\.\d{3})*,\d kg$/, `${name} · ${row.id}: Peso médio "x kg" com 1 casa`);
+      assert.match(cell.lines[2], /^(-?\d+,\d{3}|—)$/, `${name} · ${row.id}: GMD com 3 casas (negativo com "-") ou "—"`);
+      if (cell.lines[2].startsWith('-')) negatives += 1;
+    });
+  }
+  return negatives;
+}
 {
   const { doc } = case34;
   assert.equal(doc.layout, 'matrix', 'folha: layout matrix');
@@ -310,24 +470,19 @@ function assertTablesAligned(html) {
   assert.equal(doc.sections.length + (doc.grandTotal ? 1 : 0), 0, 'folha: uma tabela só (sem seções nem bloco de total à parte)');
   const rows = documentRows(doc);
   assert.deepEqual(rows.map((row) => row.type), [DOC_ROW_TYPES.GROUP, DOC_ROW_TYPES.GROUP, DOC_ROW_TYPES.GROUP, DOC_ROW_TYPES.GRAND_TOTAL], 'folha: 3 linhas de Y + TOTAL');
-  for (const row of rows) {
-    assert.equal(row.cells.length, doc.columns.length, `${row.id}: uma célula por coluna`);
-    row.cells.forEach((cell, index) => {
-      assert.equal(cell.col, index, `${row.id}: célula ${index} no índice certo`);
-      assert.equal(cell.key, doc.columns[index].key, `${row.id}: célula ${index} sob a coluna ${doc.columns[index].key}`);
-      if (index === 0) return;
-      // 3 valores empilhados (Qtd, "x kg", GMD com 3 casas ou "—") ou célula vazia.
-      if (!cell.lines.length) return;
-      assert.equal(cell.lines.length, 3, `${row.id}: 3 valores na célula ${index}`);
-      assert.match(cell.lines[0], /^\d+$/, `${row.id}: Qtd inteira`);
-      assert.match(cell.lines[1], /^\d{1,3}(\.\d{3})*,\d kg$/, `${row.id}: Peso médio "x kg" com 1 casa`);
-      assert.match(cell.lines[2], /^(\d+,\d{3}|—)$/, `${row.id}: GMD com 3 casas ou "—"`);
-    });
-  }
+  assertMatrixCellTexts('3×4', doc);
   assert.deepEqual(rows[0].cells[1].lines, ['2', '232,5 kg', '0,750'], 'folha: Lote 01 × dez/2025');
   assert.deepEqual(rows[1].cells[2].lines, [], 'folha: Lote 02 × jan/2026 vazio');
   assert.deepEqual(rows[3].cells[5].lines, ['7', '265,6 kg', '0,792'], 'folha: canto');
-  // HTML (tela = impressão): alinhamento, 3 valores com <br>, legenda; negativos.
+  // Negativos: o ganho negativo (B1) sai "-0,500" com o sinal, alinhado sob a coluna do seu lote.
+  const negDoc = caseSameName.doc;
+  assert.equal(assertMatrixCellTexts('ganho negativo', negDoc), 2, 'ganho negativo: 2 células com GMD negativo (Macho e TOTAL × Lote 01 · Engorda)');
+  const negHtml = renderSheetBody(negDoc, { mode: 'print' });
+  assert.equal(assertTablesAligned(negHtml), 1, 'ganho negativo: folha alinhada');
+  assert.ok(negHtml.includes('1<br>292,5 kg<br>-0,500'), 'ganho negativo: "-0,500" empilhado na célula');
+  assert.match(negHtml, /<td data-col="1" data-key="x:L1"[^>]*>1<br>292,5 kg<br>-0,500</, 'ganho negativo: sob a coluna Lote 01 · Engorda (x:L1)');
+  assert.ok(negHtml.includes('>Lote 01 · Engorda<') && negHtml.includes('>Lote 01 · Recria<'), 'mesmo nome: cabeçalhos com a apartação no HTML');
+  // HTML (tela = impressão): alinhamento, 3 valores com <br>, legenda.
   const html = renderSheetBody(doc, { mode: 'print' });
   assert.equal(assertTablesAligned(html), 1, 'folha: uma tabela');
   assert.ok(html.includes('2<br>232,5 kg<br>0,750'), 'folha: valores empilhados com <br>');
@@ -479,7 +634,7 @@ function checkXlsxAgainstSheet(name, vm, rows) {
   });
   return compared;
 }
-const xlsxCases = [['2×2 Sexo × Mês', vm22], ['3×4 Lote × Mês', vm34], ['padrão Sexo × Lote', await run(AGO_SET)]];
+const xlsxCases = [['2×2 Sexo × Mês', vm22], ['3×4 Lote × Mês', vm34], ['padrão Sexo × Lote', await run(AGO_SET)], ['lotes de mesmo nome (ganho negativo)', vmSameName]];
 const keptXlsx = {};
 for (const [name, vm] of xlsxCases) {
   const { files, sheet } = await emitXlsx(vm);
@@ -506,6 +661,10 @@ for (const [name, vm] of xlsxCases) {
   assert.deepEqual(pick(body[1], 4), [null, null, null], 'XLSX: Lote 02 × jan/2026 vazio');
   assert.deepEqual(pick(body[1], 1), [1, 200, null], 'XLSX: Lote 02 × dez/2025 com GMD vazio (sem anterior)');
   assert.deepEqual(pick(body[3], 13), [7, 265.6, 0.792], 'XLSX: canto');
+  // Lotes de mesmo nome: cabeçalhos distintos (com a apartação) e o ganho negativo como número negativo.
+  const same = keptXlsx['lotes de mesmo nome (ganho negativo)'].rows;
+  assert.deepEqual(same[HEADER_ROW - 1].cells.map((cell) => cell.value).filter(Boolean), ['Sexo', 'Lote 01 · Engorda', 'Lote 01 · Recria', 'TOTAL'], 'XLSX: lotes de mesmo nome com a apartação no cabeçalho');
+  assert.deepEqual(pick(same[HEADER_ROW + 2], 1), [1, 292.5, -0.5], 'XLSX: Macho × Lote 01 · Engorda = 1 / 292,5 / -0,5 (número negativo)');
   // Adulterações são detectadas pela comparação com a folha.
   const { vm, sheet } = keptXlsx['3×4 Lote × Mês'];
   const setCell = (xml, ref, cell) => {
