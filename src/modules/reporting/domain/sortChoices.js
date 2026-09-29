@@ -125,6 +125,29 @@ export function applySortChoice(definition, view, selection, choiceId) {
 }
 
 /**
+ * "Ordenar por" de um modelo/último estado/visão antiga SEM sortChoice (de antes da E1D). Com ordem própria
+ * (linhas numa ordem que não é a padrão do relatório, ou métrica/rótulo no Resumido) → null: abre em
+ * "Personalizado" com a ordem dele. Sem ela, a opção que mostra os níveis como o estado mostrava: a padrão ou,
+ * quando a data está na outra direção (o "Data (mais antiga)" da E1B gravava só a direção do nível), a Data
+ * nessa direção; se nenhuma reproduz, null. Assim nada abre invertido sem aviso.
+ * @param view tipo que bate com o estado (objeto de listReportViews) ou null
+ * @param {{ sort?: object[], summarySort?: object|null, groups?: object[], aggregates?: object[] }} state
+ * @returns {string|null}
+ */
+export function legacySortChoice(definition, view, state = {}) {
+  const fallback = definition?.defaultSortChoice ?? null;
+  if (!fallback) return null;
+  const ownSort = Array.isArray(state.sort) && state.sort.length > 0 && JSON.stringify(state.sort) !== JSON.stringify(definition.defaultSort);
+  if (ownSort || state.summarySort?.key) return null;
+  const groups = (state.groups ?? definition.defaultGroups ?? []).filter((group) => group?.columnId);
+  const directions = (list) => list.map((group) => `${group.columnId}:${group.direction === 'desc' ? 'desc' : 'asc'}`).join('|');
+  const shown = directions(groups);
+  const dateChoices = (definition.sortChoices ?? []).map((choice) => choice.id).filter((id) => SORT_CHOICE_RULES[id]?.kind === 'data');
+  const shows = (choiceId) => directions(applySortChoice(definition, view, { sort: state.sort, summarySort: null, groups, aggregates: state.aggregates }, choiceId).groups) === shown;
+  return [fallback, ...dateChoices].find(shows) ?? null;
+}
+
+/**
  * Clique no cabeçalho da GRADE (Detalhado) num relatório com opções fixas: a opção cuja coluna principal e
  * direção são essas (ex.: Peso crescente → "Peso (Menor)"), ou null (a tela passa a "Personalizado").
  */

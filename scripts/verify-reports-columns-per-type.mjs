@@ -8,7 +8,8 @@
 //   4. Papel sem valores comerciais (OPERADOR, CONSULTA) não recebe nem grava coluna sensível.
 //   5. As 8 ordenações do antigo: rótulos e ordem exatos; em cada tipo a ordem REAL das linhas/seções numa
 //      massa pequena (ausentes por último, "2" antes de "10"); Personalizado; clique no cabeçalho → opção;
-//      clique numa métrica sem opção (Peso total, Qtd) num tipo resumido não tira as seções da ordem do tipo.
+//      clique numa métrica sem opção (Peso total, Qtd) num tipo resumido não tira as seções da ordem do tipo;
+//      estado/modelo de antes da E1D abre na opção que mostra a ordem dele (nada invertido).
 //   6. Analítico: botões de agrupamento (ordem de clique, clicar de novo tira, 4º não entra) e subtotal por
 //      grupo (animais distintos, peso médio, GMD ponderado) na folha, no CSV e no XLSX.
 // A grade usa os mesmos agregados do view model (reportUi.aggregateChips) — conferida aqui pelo view model.
@@ -23,9 +24,9 @@ import {
   ANALITICO_AVAILABLE_COLUMNS, ANALITICO_COLUMNS, EVENT_TOTALS, PESAGENS_SORT_CHOICES, SHEET_COLUMN_KEYS, SHEET_DEFAULT_KEYS,
   SHEET_TOTALS, VENDAS_AVAILABLE_COLUMNS, VENDAS_COLUMNS,
 } from '../src/modules/reporting/definitions/pesagens.js';
-import { applyColumnKeys, columnKeysOf, getReportView, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
+import { applyColumnKeys, columnKeysOf, getReportView, resolveViewId, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
 import { hasTypeColumns, typeColumnDefaults, typeColumnOptions } from '../src/modules/reporting/domain/typeColumns.js';
-import { SORT_CHOICE_RULES, applySortChoice, sortChoiceForColumn, sortChoiceForMetric } from '../src/modules/reporting/domain/sortChoices.js';
+import { SORT_CHOICE_RULES, applySortChoice, legacySortChoice, sortChoiceForColumn, sortChoiceForMetric } from '../src/modules/reporting/domain/sortChoices.js';
 import { toggleGroupChoice } from '../src/modules/reporting/domain/groupChoices.js';
 import { MAX_GROUP_LEVELS } from '../src/modules/reporting/domain/groupEngine.js';
 import { headerLabel } from '../src/modules/reporting/domain/reportFormatting.js';
@@ -344,6 +345,32 @@ assert.equal(porData.groups[0].direction, 'asc', 'Personalizado por data: "Data 
 assert.equal((await run({ view: null, mode: 'RESUMIDO', groups: [{ columnId: 'data_pesagem' }], sortChoice: 'data_desc' })).groups[0].direction, 'desc');
 const semOpcao = await run({ view: null, mode: 'DETALHADO', groups: [], sort: [{ columnId: 'sexo', direction: 'asc' }], sortChoice: null });
 assert.deepEqual(plain(semOpcao.sort), [{ columnId: 'sexo', direction: 'asc' }], 'sem opção ("Personalizado" de um clique): a ordem da tela vale');
+
+// Modelo/último estado de antes da E1D (sem sortChoice): abre na opção que mostra a ordem que ele tinha. O
+// "Data (mais antiga)" da E1B no Resumido gravava só a direção do nível — não pode abrir em "Data (Mais
+// Recente)" com as datas invertidas. Com ordem própria (linhas, métrica), "Personalizado" (null).
+const legado = {
+  mode: 'RESUMIDO', aggregates: SHEET_TOTALS, sort: definition.defaultSort, summarySort: null,
+  groups: [{ columnId: 'nome_apartacao', direction: 'asc' }, { columnId: 'data_pesagem', direction: 'asc' }, { columnId: 'nome_lote', direction: 'asc' }],
+};
+await saveReportViewState('pesagens', { ...legado, period: P.periodo }, ADMIN);
+const legadoReaberto = (await getReportViewState('pesagens', ADMIN)).selection;
+assert.equal(legadoReaberto.sortChoice, undefined, 'estado antigo volta sem sortChoice');
+const legadoTipo = resolveViewId(definition, legadoReaberto);
+assert.equal(legadoTipo, null, 'data na mais antiga não é o tipo Resumo por Data (que abre na mais recente): Personalizado');
+const legadoOpcao = legacySortChoice(definition, null, legadoReaberto);
+assert.equal(legadoOpcao, 'data_asc', 'estado antigo com "Data (mais antiga)" abre em "Data (Mais Antiga)", não na padrão');
+const datasLegado = async (sortChoice) => labels(child(outline((await run({ ...legadoReaberto, view: legadoTipo, sortChoice })).summaryRows), 'Engorda'));
+assert.deepEqual(await datasLegado(null), [...DATAS].reverse(), 'estado antigo sozinho: datas da mais antiga para a mais recente');
+assert.deepEqual(await datasLegado(legadoOpcao), [...DATAS].reverse(), 'com a opção escolhida: a mesma ordem (nada invertido)');
+const legadoRecente = { ...legado, groups: view('por-apartacao-data').groups };
+assert.equal(resolveViewId(definition, legadoRecente), 'por-apartacao-data');
+assert.equal(legacySortChoice(definition, view('por-apartacao-data'), legadoRecente), 'data_desc', 'tipo com a data na mais recente: a padrão');
+assert.equal(legacySortChoice(definition, null, { ...legado, groups: [{ columnId: 'nome_lote' }] }), 'data_desc', 'sem nível de data: a padrão');
+assert.equal(legacySortChoice(definition, null, { ...legado, groups: [{ columnId: 'data_pesagem', direction: 'desc' }] }), 'data_desc', 'Personalizado por data, mais recente: a padrão');
+assert.equal(legacySortChoice(definition, null, { ...legado, sort: [{ columnId: 'gmd', direction: 'desc' }] }), null, 'ordem de linhas própria: Personalizado');
+assert.equal(legacySortChoice(definition, null, { ...legado, summarySort: { key: 'peso_total', direction: 'desc' } }), null, 'métrica própria: Personalizado');
+assert.equal(legacySortChoice(getReportDefinition('desempenho'), null, legado), null, 'relatório sem "Ordenar por" fixo: sem opção');
 
 // Negativos.
 await assert.rejects(() => run({ view: 'analitico', sortChoice: 'xpto' }), /opção de ordenação desconhecida/, 'NEGATIVO: opção inexistente');

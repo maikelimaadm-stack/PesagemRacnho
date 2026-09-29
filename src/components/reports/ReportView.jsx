@@ -17,7 +17,7 @@ import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
 import { applyColumnKeys, columnKeysOf, getReportView, listReportViews, parseSortChoice, resolveViewId, viewSelection } from "@/modules/reporting/domain/reportViews";
-import { applySortChoice, sortChoiceForColumn, sortChoiceForMetric } from "@/modules/reporting/domain/sortChoices";
+import { applySortChoice, legacySortChoice, sortChoiceForColumn, sortChoiceForMetric } from "@/modules/reporting/domain/sortChoices";
 import { hasTypeColumns, typeColumnOptions } from "@/modules/reporting/domain/typeColumns";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { aliasSelection, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
@@ -53,24 +53,17 @@ const FILTER_BUTTONS = Object.freeze([
 ]);
 
 // E1D (contrato §3): tipo explícito no estado da tela. Estado/modelo de antes da E1D (sem `view`) ganha o
-// tipo que bate pela estrutura (resolveViewId); nenhum → null ("Personalizado").
+// tipo que bate pela estrutura (resolveViewId); nenhum → null ("Personalizado"). Sem sortChoice, a opção que
+// mostra a ordem que ele tinha, ou "Personalizado" (sortChoices.legacySortChoice — nada abre invertido).
 function withTypedState(definition, state) {
   const view = state.view !== undefined ? state.view : resolveViewId(definition, state);
+  const typed = view ? getReportView(definition, view) : null;
   return {
     ...state,
     view: view ?? null,
-    matrix: state.matrix ?? (view ? getReportView(definition, view)?.matrix ?? null : null),
-    sortChoice: state.sortChoice !== undefined ? state.sortChoice : legacySortChoice(definition, state),
+    matrix: state.matrix ?? typed?.matrix ?? null,
+    sortChoice: state.sortChoice !== undefined ? state.sortChoice : legacySortChoice(definition, typed, state),
   };
-}
-
-// "Ordenar por" de um modelo/estado/visão antiga sem sortChoice (antes da E1D): com ordem própria (não a padrão
-// do relatório) abre em "Personalizado" com a ordem dele — a opção padrão passaria por cima dela; sem ordem
-// própria, na opção padrão (Data (Mais Recente)).
-function legacySortChoice(definition, state) {
-  if (!definition.defaultSortChoice) return null;
-  const ownSort = Array.isArray(state.sort) && state.sort.length > 0 && JSON.stringify(state.sort) !== JSON.stringify(definition.defaultSort);
-  return ownSort || state.summarySort?.key ? null : definition.defaultSortChoice;
 }
 
 // E1D (item 5): seleção de um tipo com a escolha do seletor "Colunas" que a pessoa salvou para ELE
