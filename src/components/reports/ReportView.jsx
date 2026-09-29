@@ -12,11 +12,11 @@ import MgTablePanelStrip from "@/components/mak/MgTablePanelStrip";
 import { ModeloBase1PageContainer, ModeloBase1PageHeader } from "@/components/modelobase1";
 import { describeFilter, isFilterActive, normalizeFilter } from "@/modules/reporting/domain/filterEngine";
 import { describePeriod } from "@/modules/reporting/domain/reportPeriod";
-import { REPORT_FAMILIES, REPORT_MODES } from "@/modules/reporting/domain/reportDefinition";
+import { REPORT_FAMILIES, REPORT_MODES, VIEW_LAYOUTS } from "@/modules/reporting/domain/reportDefinition";
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
-import { applyColumnKeys, columnKeysOf, getReportView, listReportViews, parseSortChoice, resolveViewId } from "@/modules/reporting/domain/reportViews";
+import { applyColumnKeys, columnKeysOf, getReportView, listReportViews, modeChangePatch, parseSortChoice, resolveViewId } from "@/modules/reporting/domain/reportViews";
 import { applySortChoice, sortChoiceForColumn, sortChoiceForMetric } from "@/modules/reporting/domain/sortChoices";
 import { hasTypeColumns, typeColumnOptions } from "@/modules/reporting/domain/typeColumns";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
@@ -31,6 +31,7 @@ import { favoriteKey, getFavorites, recordRecent, saveReportViewState, saveTempl
 import AnalyticGroupButtons from "./AnalyticGroupButtons";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportFilterBar from "./ReportFilterBar";
+import MatrixAxisControls from "./MatrixAxisControls";
 import ReportSheetView from "./ReportSheetView";
 import ReportTable from "./ReportTable";
 import { pillFilterType, pillOptions, toDisplayFilters, toServiceFilters, useCan } from "./reportUi";
@@ -251,7 +252,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   // E1D: agrupar ou trocar o modo pelos controles genéricos sai do tipo ("Personalizado", view null) — os
   // controles próprios de um tipo (botões do Analítico, eixos da matriz) mantêm o tipo.
   const setGroups = (groups) => update({ groups, drill: [], view: null, matrix: null });
-  const setMode = (mode) => update({ mode, drill: mode === REPORT_MODES.RESUMIDO ? [] : state.drill, ...(mode === state.mode ? {} : { view: null, matrix: null }) });
+  // Voltar do detalhe de um grupo para o modo do tipo mantém o tipo (a matriz não some) — modeChangePatch.
+  const setMode = (mode) => update(modeChangePatch(definition, state, mode));
 
   // Tipo de relatório: atalho para agrupamento + modo (+ totais/colunas/ordem da visão) — nada de conta nova.
   // E1D: o tipo é explícito (state.view); estado de antes da E1D cai no que bate pela estrutura.
@@ -278,6 +280,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       drill: [],
     });
   };
+  // E1D Sintético (Matriz): trocar Linhas/Colunas mantém o tipo e sai do detalhe de uma célula (volta à matriz).
+  const setMatrixAxes = (matrix) => update({ matrix, drill: [], mode: currentView?.mode ?? state.mode });
 
   // E1D (item 5): seletor "Colunas" do TIPO (columnChoices) — no Resumido escolhe as métricas por chave, no
   // Detalhado só as colunas disponíveis do tipo. Vale quando o tipo está no próprio modo (no detalhe de um
@@ -308,7 +312,9 @@ export default function ReportView({ reportId, presetId = null, template, savedS
 
   // E1D: controles próprios do tipo atual, no encaixe typeControls da barra (C: botões do Analítico).
   // Trocam só os grupos — o tipo continua (update sem mexer em view); o detalhe de grupo sai.
-  const typeControls = currentView?.groupChoices?.length ? (
+  const typeControls = currentView?.layout === VIEW_LAYOUTS.MATRIX ? (
+    <MatrixAxisControls axes={definition.matrixAxes} matrix={state.matrix ?? currentView.matrix} onChange={setMatrixAxes} />
+  ) : currentView?.groupChoices?.length ? (
     <AnalyticGroupButtons choices={currentView.groupChoices} groups={state.groups} labelOf={(columnId) => columnLabel(columnId)} onChange={(groups) => update({ groups, drill: [] })} />
   ) : null;
 
