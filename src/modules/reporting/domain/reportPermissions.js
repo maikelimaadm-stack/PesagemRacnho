@@ -48,6 +48,21 @@ export function forbiddenColumnIds(definition, role, columnIds = []) {
 }
 
 /**
+ * Seleção da tela sem as colunas e os totais que o papel não vê (E1D: o tipo Vendas traz Valor @ e Valor
+ * total por padrão). Usado ao gravar modelo e último estado: o serviço recusa inteiro o que carrega coluna
+ * que o autor não vê, e quem não tem commercial.values ficaria sem conseguir salvar nada em Vendas. Só tira.
+ * @returns {{ columns: string[], aggregates: object[] }}
+ */
+export function withoutHiddenColumns(definition, role, { columns = [], aggregates = [] } = {}) {
+  const byId = new Map(definition.columns.map((column) => [column.id, column]));
+  const visible = (id) => byId.has(id) && canSeeColumn(byId.get(id), role);
+  return {
+    columns: columns.filter(visible),
+    aggregates: aggregates.filter((spec) => !spec?.columnId || visible(spec.columnId)),
+  };
+}
+
+/**
  * Exportação: reports.export + tudo que a definição exige + nenhuma coluna sensível sem permissão.
  * Chamado pelo serviço de exportação — recusa mesmo se a UI for contornada.
  */
