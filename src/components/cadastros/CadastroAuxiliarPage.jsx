@@ -42,6 +42,8 @@ import {
   groupFields,
   hasFieldValue,
   isDocumentField,
+  matchesDocumentColumnFilter,
+  matchesDocumentSearch,
   multiLabels,
   payloadFromForm,
   recordCodeOf,
@@ -393,6 +395,8 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
     if (campo?.tipo === 'multiselect' && Array.isArray(filter?.values) && filter.values.length) {
       return multiLabels(campo, record[column.id]).some((label) => filter.values.includes(label));
     }
+    // CPF/CNPJ: com ou sem pontuação (resposta 2 ao REPORT da E1C).
+    if (isDocumentField(campo)) return matchesDocumentColumnFilter(cellText(column, record), filter);
     return matchesMakColumnFilter(cellText(column, record), filter, column.filterType || 'text');
   }, [fieldsById, cellText]);
   const clearFilters = () => { setTypeFilter(null); setColumnFilters({}); setCurrentPage(1); };
@@ -433,7 +437,9 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
     const normalized = normalizeSearchQuery(term);
     if (!normalized) return true;
     const haystack = [record._typeLabel, ...listColumns.map((column) => cellText(column, record)), ...definition.campos.filter((campo) => campo.tipo === 'texto').map((campo) => record[campo.id])];
-    return haystack.some((value) => normalizeSearchQuery(String(value ?? '')).includes(normalized));
+    if (haystack.some((value) => normalizeSearchQuery(String(value ?? '')).includes(normalized))) return true;
+    // CPF/CNPJ digitado com ou sem pontuação (resposta 2 ao REPORT da E1C).
+    return definition.campos.filter(isDocumentField).some((campo) => matchesDocumentSearch(record[campo.id], term));
   }, [listColumns, cellText, definition]);
   const filtered = useMemo(() => records.filter((record) => {
     if (isMakColumnFilterActive(typeFilter) && !matchesMakColumnFilter(record._typeLabel, typeFilter, 'text')) return false;

@@ -6,13 +6,16 @@
 // O que é GRAVADO não muda: normalizeDocument(texto mascarado) = normalizeDocument(texto digitado antes),
 // e reabrir e salvar a ficha não regrava o documento. Cada regra tem o caso negativo (ou controle que
 // mostra que o teste pegaria o erro).
+// E1D (resposta 2 ao REPORT da E1C): a GRADE de Parceiros e Propriedades mostra o CPF/CNPJ mascarado, e a
+// pesquisa e o filtro da coluna aceitam o documento com ou sem pontuação.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deleteDbForTests, ensureStorageReady } from '../src/storage/indexedDb/db.js';
-import { PARCEIROS, PROPRIEDADES, REGISTRY_DEFINITIONS, coerceRecord } from '../src/modules/catalog/domain/registryDefinitions.js';
+import { MARCAS, PARCEIROS, PROPRIEDADES, REGISTRY_DEFINITIONS, coerceRecord } from '../src/modules/catalog/domain/registryDefinitions.js';
+import { matchesFilter } from '../src/modules/reporting/domain/filterEngine.js';
 import { partnerService, propertyService } from '../src/modules/catalog/application/index.js';
 import { normalizeDocument } from '../src/modules/catalog/domain/normalize.js';
 import { formatDocumento } from '../src/modules/catalog/domain/propertyHeader.js';
@@ -27,7 +30,9 @@ import {
   formatDocumentMask,
   maskDocument,
 } from '../src/modules/catalog/domain/documentMask.js';
-import { emptyFor, formFromRecord, formProblems, headerPreviewFromForm, isDocumentField, payloadFromForm } from '../src/components/cadastros/registryFormModel.js';
+import {
+  emptyFor, formFromRecord, formProblems, formatCellValue, headerPreviewFromForm, isDocumentField, matchesDocumentColumnFilter, matchesDocumentSearch, payloadFromForm,
+} from '../src/components/cadastros/registryFormModel.js';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const read = (file) => readFileSync(join(root, file), 'utf8');
@@ -406,6 +411,56 @@ assert.equal(formProblems(PARCEIROS, fichaInvalida).length, 1, 'ficha de Parceir
 assert.equal(formProblems(PARCEIROS, { ...fichaInvalida, documento: maskDocument('12abc34501de35') }).length, 0, 'com o CNPJ certo, nenhum');
 assert.equal(formProblems(PROPRIEDADES, { ...emptyFor(PROPRIEDADES), nome: 'Faz', documento: '12.ABC' }).length, 1, 'ficha de Propriedade também');
 ok('documento-invalido-na-ficha');
+
+// ---------------------------------------------------------------------------
+// E1D — resposta 2 ao REPORT da E1C: na GRADE de Parceiros e de Propriedades o CPF/CNPJ aparece com a
+// máscara; a pesquisa e o filtro da coluna aceitam o documento com ou sem pontuação. O valor guardado não muda.
+// ---------------------------------------------------------------------------
+const colunaDoc = (def) => def.colunas.find((coluna) => coluna.id === 'documento');
+for (const def of [PARCEIROS, PROPRIEDADES]) {
+  const coluna = colunaDoc(def);
+  assert.ok(coluna && coluna.label === 'CPF/CNPJ', `${def.store}: coluna CPF/CNPJ na grade`);
+  const campo = def.campos.find((item) => item.id === 'documento');
+  const cell = (documento) => formatCellValue(coluna, { id: 'x', nome: 'X', documento }, { campo });
+  assert.equal(cell('11222333000181'), '11.222.333/0001-81', `${def.store}: CNPJ mascarado na grade`);
+  assert.equal(cell('12345678901'), '123.456.789-01', `${def.store}: CPF mascarado na grade`);
+  assert.equal(cell('12ABC34501DE35'), '12.ABC.345/01DE-35', `${def.store}: CNPJ alfanumérico mascarado na grade`);
+  assert.equal(cell('123456789012345'), '123456789012345', `NEGATIVO ${def.store}: documento antigo fora do padrão aparece como está`);
+  assert.equal(cell(null), '', `${def.store}: sem documento, célula vazia`);
+}
+assert.ok(!PROPRIEDADES.colunas.some((coluna) => ['inscricao_estadual', 'telefone', 'logo'].includes(coluna.id)), 'NEGATIVO: só o CPF/CNPJ entra na grade de Propriedades (IE, telefone e logo não)');
+assert.equal(colunaDoc(MARCAS), undefined, 'NEGATIVO: Marcas não ganha coluna de documento');
+// Guardado continua sem pontuação (a máscara é só da tela).
+assert.equal(coerceRecord(PARCEIROS, { nome: 'X', papeis: ['COMPRADOR'], documento: '11.222.333/0001-81' }).documento, '11222333000181', 'guardado sem pontuação (não muda)');
+// Pesquisa geral: com ou sem pontuação, trecho também; termo sem dígito não casa pelo documento.
+for (const termo of ['11.222.333/0001-81', '11222333000181', '222.333', '222333', '0001-81', '12.ABC.345/01DE-35', '12abc34501de35']) {
+  const guardado = /abc/i.test(termo) ? '12ABC34501DE35' : '11222333000181';
+  assert.ok(matchesDocumentSearch(guardado, termo), `pesquisa "${termo}" acha ${guardado}`);
+}
+assert.ok(!matchesDocumentSearch('11222333000181', '11.222.333/0001-82'), 'NEGATIVO: outro CNPJ não casa');
+assert.ok(!matchesDocumentSearch('12ABC34501DE35', 'abc'), 'NEGATIVO: termo sem dígito (um nome) não casa pelo documento');
+assert.ok(!matchesDocumentSearch(null, '123'), 'NEGATIVO: sem documento não casa');
+assert.ok(!matchesDocumentSearch('11222333000181', '...'), 'NEGATIVO: só pontuação não casa');
+// Filtro da coluna (pílula/menu): "contém", "igual a" e a lista de valores, com ou sem pontuação.
+const celulaCnpj = '11.222.333/0001-81';
+for (const valor of ['11.222.333/0001-81', '11222333000181']) {
+  assert.ok(matchesDocumentColumnFilter(celulaCnpj, { operator: 'equals', value: valor }), `filtro "igual a" ${valor}`);
+  assert.ok(matchesDocumentColumnFilter(celulaCnpj, { operator: 'contains', value: valor.slice(3, 10) }), `filtro "contém" trecho de ${valor}`);
+}
+assert.ok(matchesDocumentColumnFilter('12.ABC.345/01DE-35', { operator: 'equals', value: '12abc34501de35' }), 'filtro no CNPJ alfanumérico sem pontuação e em minúsculas');
+assert.ok(matchesDocumentColumnFilter(celulaCnpj, { operator: 'in', values: ['11.222.333/0001-81'] }), 'lista de valores (o que a pílula oferece: o texto mascarado)');
+assert.ok(matchesDocumentColumnFilter(celulaCnpj, { operator: 'in', values: ['11222333000181'] }), 'lista com o valor sem pontuação');
+assert.ok(!matchesDocumentColumnFilter(celulaCnpj, { operator: 'equals', value: '11222333000182' }), 'NEGATIVO: outro CNPJ fica fora');
+assert.ok(!matchesDocumentColumnFilter(celulaCnpj, { operator: 'not_contains', value: '222333' }), 'NEGATIVO: "não contém" também compara sem pontuação');
+assert.ok(matchesDocumentColumnFilter('', { operator: 'empty' }) && !matchesDocumentColumnFilter(celulaCnpj, { operator: 'empty' }), '"vazio" continua valendo');
+assert.ok(matchesDocumentColumnFilter(celulaCnpj, null), 'sem filtro, passa');
+// Controle: o filtro comum de texto (sem a regra) não acharia o CNPJ digitado sem pontuação.
+assert.ok(!matchesFilter(celulaCnpj, { operator: 'equals', value: '11222333000181' }, 'text'), 'controle: sem a regra, "igual a" sem pontuação não acharia');
+// A grade usa as duas funções na coluna/campo de documento (e só nele).
+assert.match(page, /if \(isDocumentField\(campo\)\) return matchesDocumentColumnFilter\(cellText\(column, record\), filter\);/, 'filtro da coluna CPF/CNPJ sem pontuação na grade');
+assert.match(page, /definition\.campos\.filter\(isDocumentField\)\.some\(\(campo\) => matchesDocumentSearch\(record\[campo\.id\], term\)\)/, 'pesquisa da grade acha o documento com ou sem pontuação');
+assert.match(read('src/modules/catalog/domain/registryDefinitions.js'), /export const renderDocumento = \(value\) => documentToForm\(value\);/, 'célula da grade = a mesma máscara da ficha (documentToForm → formatDocumentMask)');
+ok('grade-documento-e1d');
 
 console.log('OK verify-document-mask');
 console.log(JSON.stringify(resumo, null, 2));

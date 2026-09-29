@@ -5,6 +5,7 @@
 import { PARCEIRO_PAPEIS } from '../../../storage/indexedDb/schema.js';
 import { cleanText, normalizeDocument, normalizeName } from './normalize.js';
 import { isAcceptedLogo, logoProblem } from './propertyHeader.js';
+import { documentToForm } from './documentMask.js';
 
 export const RACA_GRUPOS = ['ZEBUINO', 'TAURINO', 'CRUZADO', 'OUTRO'];
 export const CATEGORIA_SEXOS = ['M', 'F'];
@@ -31,6 +32,9 @@ const labelDe = (labels) => (value) => (value == null || value === '' ? '' : lab
 export const renderSimNao = (value) => (value ? 'Sim' : 'Não');
 export const renderSituacao = (value) => (value === false ? 'Inativo' : 'Ativo');
 export const renderPapeis = (value) => (Array.isArray(value) ? value.map((p) => PARCEIRO_PAPEL_LABELS[p] ?? p).join(', ') : '');
+// CPF/CNPJ na grade com a máscara da ficha (resposta 2 ao REPORT da E1C). O valor guardado não muda; um
+// documento antigo fora do padrão aparece como está (documentToForm só mascara o que volta igual).
+export const renderDocumento = (value) => documentToForm(value);
 
 // Campo do formulário. tipo: texto | numero | booleano | select | multiselect | imagem.
 // `referencia` (opcional) indica que o select é preenchido com outro cadastro:
@@ -281,7 +285,7 @@ export const PARCEIROS = definicao({
   ],
   colunas: [
     { id: 'nome', label: 'Nome/Razão social' },
-    { id: 'documento', label: 'CPF/CNPJ' },
+    { id: 'documento', label: 'CPF/CNPJ', render: renderDocumento },
     { id: 'papeis', label: 'Papéis', render: renderPapeis },
     { id: 'telefone', label: 'Telefone' },
     { id: 'cidade', label: 'Cidade' },
@@ -328,6 +332,8 @@ export const PROPRIEDADES = definicao({
   ],
   colunas: [
     { id: 'nome', label: 'Propriedade' },
+    // Resposta 2 ao REPORT da E1C: o CPF/CNPJ do produtor também na grade de Propriedades, com a máscara.
+    { id: 'documento', label: 'CPF/CNPJ', render: renderDocumento },
     { id: 'tipo', label: 'Tipo', render: labelDe(PROPRIEDADE_TIPO_LABELS) },
     { id: 'municipio', label: 'Município' },
     { id: 'uf', label: 'UF' },
