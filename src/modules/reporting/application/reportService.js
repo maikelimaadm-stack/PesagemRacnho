@@ -177,11 +177,14 @@ export function resolveSelection(definition, selection = {}, role) {
   });
 
   // Ordem das linhas do Resumido: por rótulo, por quantidade de linhas ou por uma métrica selecionada.
+  // E1D: `columnId` restringe a ordem a um nível (as linhas dentro de cada seção — "Ordenar por" fixo);
+  // nível que não está no agrupamento é ignorado (a ordem volta a valer em todos, como na E1).
   let summarySort = null;
   if (typed.summarySort?.key) {
     const key = String(typed.summarySort.key);
     const known = key === SUMMARY_LABEL_SORT || key === SUMMARY_ROWS_METRIC || aggregates.some((spec) => aggregateSpecId(spec) === key);
-    if (known) summarySort = { key, direction: typed.summarySort.direction === 'desc' ? 'desc' : 'asc' };
+    const level = typed.summarySort.columnId && groups.some((group) => group.columnId === typed.summarySort.columnId) ? String(typed.summarySort.columnId) : null;
+    if (known) summarySort = { key, direction: typed.summarySort.direction === 'desc' ? 'desc' : 'asc', ...(level ? { columnId: level } : {}) };
   }
   return {
     resolve, columns, filters, fixedFilters, search: String(selection.search ?? '').trim(), searchColumnIds, sort, groups, aggregates, warnings, hiddenByPermission, mode, drill, summarySort,
@@ -230,7 +233,10 @@ export function resolveViewSelection(definition, selection = {}) {
   }
   const sortChoice = selection.sortChoice ?? null;
   if (sortChoice != null && !isKnownSortChoice(definition, sortChoice)) throw new Error(`relatório ${definition.id}: opção de ordenação desconhecida (${sortChoice})`);
-  const sorted = applySortChoice(definition, view, { sort: selection.sort, summarySort: selection.summarySort, groups }, sortChoice);
+  // A métrica equivalente da opção (peso médio, GMD médio) é procurada nos totais efetivos: os da seleção ou
+  // os padrão do tipo (resolveSelection usa a mesma regra).
+  const aggregates = selection.aggregates ?? (view ? viewSelection(view, definition).aggregates : definition.defaultAggregates) ?? [];
+  const sorted = applySortChoice(definition, view, { sort: selection.sort, summarySort: selection.summarySort, groups, aggregates }, sortChoice);
   return { view, matrix, sortChoice, groups: sorted.groups, sort: sorted.sort, summarySort: sorted.summarySort };
 }
 

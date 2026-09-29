@@ -5,7 +5,7 @@ import ReportView from "@/components/reports/ReportView";
 import { useReportActor } from "@/components/reports/reportUi";
 import { resolveReportId } from "@/modules/reporting/definitions/reportCatalog";
 import { getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
-import { getReportViewState, listTemplates } from "@/modules/reporting/application/reportTemplateService";
+import { getReportViewState, getTypeColumnPrefs, listTemplates } from "@/modules/reporting/application/reportTemplateService";
 import "@/styles/reports.css";
 
 // Relatórios: uma entrada no menu. Sem `?r=` mostra o catálogo; com `?r=<id>` (e `&m=<modelo>`)
@@ -15,6 +15,8 @@ import "@/styles/reports.css";
 // E1B: sem modelo e sem visão antiga, o relatório volta como a pessoa deixou (último estado por usuário),
 // lido ANTES de montar a tela (sem piscar nem calcular duas vezes). Precedência: modelo > visão antiga >
 // último estado > padrão do relatório; `&d=` (atalho do Fechamento) só troca o período.
+// E1D: a escolha de "Colunas" de cada tipo (por usuário) também é lida antes de montar — o relatório abre
+// no tipo padrão já com as colunas que a pessoa escolheu para ele.
 export default function Relatorios() {
   const actor = useReportActor();
   const location = useLocation();
@@ -32,7 +34,10 @@ export default function Relatorios() {
   const [templateReady, setTemplateReady] = useState(!templateId);
   const [savedState, setSavedState] = useState(null);
   const [savedReady, setSavedReady] = useState(false);
+  const [typeColumns, setTypeColumns] = useState(null);
+  const [typeColumnsReady, setTypeColumnsReady] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const hasTypeColumns = Boolean(resolved?.definition?.views?.some((view) => view.columnChoices));
 
   useEffect(() => {
     let alive = true;
@@ -57,11 +62,22 @@ export default function Relatorios() {
     return () => { alive = false; };
   }, [reportId, actor, templateId, presetId]);
 
+  useEffect(() => {
+    let alive = true;
+    setTypeColumnsReady(false);
+    if (!reportId || !actor || !hasTypeColumns) { setTypeColumns(null); setTypeColumnsReady(true); return undefined; }
+    getTypeColumnPrefs(reportId, actor)
+      .then((prefs) => { if (alive) setTypeColumns(prefs); })
+      .catch(() => { if (alive) setTypeColumns(null); })
+      .finally(() => { if (alive) setTypeColumnsReady(true); });
+    return () => { alive = false; };
+  }, [reportId, actor, hasTypeColumns]);
+
   if (!actor) return null;
   const open = ({ reportId: id, template: chosen, presetId: view }) => navigate(`/Relatorios?r=${encodeURIComponent(id)}${chosen ? `&m=${encodeURIComponent(chosen.id)}` : ""}${!chosen && view ? `&v=${encodeURIComponent(view)}` : ""}`);
 
   if (resolved?.definition) {
-    if (!templateReady || !savedReady) return null;
+    if (!templateReady || !savedReady || !typeColumnsReady) return null;
     return (
       <ReportView
         key={`${resolved.definition.id}:${presetId ?? ""}:${templateId ?? ""}:${day ?? ""}`}
@@ -69,6 +85,7 @@ export default function Relatorios() {
         presetId={template ? null : presetId}
         template={template}
         savedState={template || presetId ? null : savedState}
+        typeColumnPrefs={typeColumns}
         initialPeriod={day ? { preset: "personalizado", from: day, to: day } : null}
         actor={actor}
         onBack={() => navigate("/Relatorios")}

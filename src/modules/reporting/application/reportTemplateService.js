@@ -20,6 +20,12 @@
 // "Analítico por animal"…) — modelos e último estado sem `view` que usavam um deles abrem no tipo novo mais
 // próximo (definitions/legacyViews.js): em memória ao abrir e gravado uma vez, com auditoria própria
 // ("relatorios-tipos-e1d"), no mesmo passo idempotente da consolidação da E1.
+//
+// E1D (1.4.0): escolha do seletor "Colunas" POR TIPO de relatório e por usuário (o MAKGESTAO guardava por tipo):
+//   report-type-columns:<empresa_id>:<usuario_id>   → { version: 1, reports: { [reportId]: { [viewId]: [chave] } } }
+// chave = de columnChoices.available do tipo (id de coluna no Detalhado; chave de métrica no Resumido), na
+// ordem escolhida. Validada contra o tipo e o papel ao gravar e ao ler (nunca amplia permissão); sem escolha
+// (ou lista vazia) = colunas padrão do tipo.
 import { readAppSetting, writeAppSetting } from '../../../storage/indexedDb/repositories/index.js';
 import { ensureStorageReady } from '../../../storage/indexedDb/db.js';
 import { can, forbiddenError } from '../../auth/domain/permissionService.js';
@@ -33,6 +39,7 @@ import { isFilterActive, serializeFilters } from '../domain/filterEngine.js';
 import { PERIOD_PRESETS } from '../domain/reportPeriod.js';
 import { getReportView } from '../domain/reportViews.js';
 import { isKnownSortChoice } from '../domain/sortChoices.js';
+import { hasTypeColumns, sanitizeTypeColumnKeys, typeColumnDefaults } from '../domain/typeColumns.js';
 
 export const TEMPLATE_VERSION = 1;
 export const TEMPLATE_SCOPES = Object.freeze({ PERSONAL: 'PERSONAL', SHARED: 'SHARED' });
@@ -45,6 +52,8 @@ const favoritesKey = (empresaId, userId) => `report-favorites:${empresaId}:${use
 const recentsKey = (empresaId, userId) => `report-recents:${empresaId}:${userId}`;
 const viewStateKey = (empresaId, userId) => `report-view-state:${empresaId}:${userId}`;
 export const VIEW_STATE_VERSION = 1;
+export const typeColumnsKey = (empresaId, userId) => `report-type-columns:${empresaId}:${userId}`;
+export const TYPE_COLUMNS_VERSION = 1;
 
 function requireActor(actor) {
   if (!actor?.id || !actor?.role) throw forbiddenError(actor?.role ?? null, 'reports.read');
@@ -643,4 +652,65 @@ export async function getReportViewState(reportId, actor, { empresaId = 'local' 
   } catch {
     return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Colunas por tipo de relatório e por usuário (E1D)
+// ---------------------------------------------------------------------------
+
+/** Tipo com seletor "Colunas" próprio, ou erro (tipo inexistente, gerado ou sem columnChoices). */
+function typeWithColumns(definition, viewId) {
+  const view = viewId ? getReportView(definition, String(viewId)) : null;
+  if (!view || view.generated) throw templateError(`Tipo de relatório inexistente (${viewId})`);
+  if (!hasTypeColumns(view)) throw templateError(`O tipo "${view.label}" não tem seletor de colunas`);
+  return view;
+}
+
+/**
+ * Escolha de colunas de cada tipo do relatório para o usuário: { [viewId]: [chave] } (só os tipos com
+ * escolha). Revalidada contra os tipos atuais e o papel de quem lê: tipo que sumiu sai, chave que deixou de
+ * existir ou que o papel não vê sai (nunca amplia permissão). Sem nada salvo (ou ilegível) → {}.
+ */
+export async function getTypeColumnPrefs(reportId, actor, { empresaId = 'local' } = {}) {
+  requireActor(actor);
+  const definition = getReportDefinition(reportId);
+  if (!definition || !canRunReport(definition, actor.role)) return {};
+  const stored = await readAppSetting(typeColumnsKey(empresaId, actor.id));
+  const byView = stored?.reports?.[definition.id];
+  if (!byView || typeof byView !== 'object') return {};
+  const out = {};
+  for (const [viewId, keys] of Object.entries(byView)) {
+    const view = getReportView(definition, viewId);
+    if (!view || view.generated || !hasTypeColumns(view)) continue;
+    const clean = sanitizeTypeColumnKeys(definition, view, keys, actor.role);
+    if (clean.length) out[view.id] = clean;
+  }
+  return out;
+}
+
+/**
+ * Grava a escolha do seletor "Colunas" de UM tipo para o usuário (os outros tipos e os outros usuários não
+ * mudam). Chave fora de columnChoices.available, repetida ou de coluna que o papel não vê é descartada; lista
+ * vazia (ou igual ao padrão do tipo) apaga a escolha — o tipo volta às colunas padrão. Sem auditoria (como o
+ * último estado e os favoritos).
+ * @returns {Promise<string[]>} chaves gravadas ([] = padrão do tipo)
+ */
+export async function saveTypeColumnPrefs(reportId, viewId, keys, actor, { empresaId = 'local' } = {}) {
+  requireActor(actor);
+  const definition = getReportDefinition(reportId);
+  if (!definition || resolveReportId(reportId)?.aliasId) throw templateError('Relatório inexistente');
+  if (!canRunReport(definition, actor.role)) throw forbiddenError(actor.role, definition.requires.find((action) => !can(actor.role, action)) || 'reports.read');
+  if (keys != null && !Array.isArray(keys)) throw templateError('Colunas do tipo devem ser uma lista');
+  const view = typeWithColumns(definition, viewId);
+  const clean = sanitizeTypeColumnKeys(definition, view, keys ?? [], actor.role);
+  const isDefault = clean.join('|') === typeColumnDefaults(definition, view, actor.role).join('|');
+  const stored = await readAppSetting(typeColumnsKey(empresaId, actor.id));
+  const reports = stored && typeof stored === 'object' && stored.reports && typeof stored.reports === 'object' ? { ...stored.reports } : {};
+  const byView = reports[definition.id] && typeof reports[definition.id] === 'object' ? { ...reports[definition.id] } : {};
+  if (clean.length && !isDefault) byView[view.id] = clean;
+  else delete byView[view.id];
+  if (Object.keys(byView).length) reports[definition.id] = byView;
+  else delete reports[definition.id];
+  await writeAppSetting(typeColumnsKey(empresaId, actor.id), { version: TYPE_COLUMNS_VERSION, reports });
+  return clean.length && !isDefault ? clean : [];
 }

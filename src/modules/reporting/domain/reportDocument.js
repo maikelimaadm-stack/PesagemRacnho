@@ -99,9 +99,13 @@ function metricValueOf(node, key) {
   return node.aggregates?.[key]?.value ?? null;
 }
 
-/** Ordem dos irmãos: a mesma do Resumido da E1 (summarySort dentro do nível; ausente sempre por último). */
+/**
+ * Ordem dos irmãos: a mesma do Resumido da E1 (summarySort dentro do nível; ausente sempre por último).
+ * E1D: summarySort.columnId restringe a ordem ao nível dessa coluna (as seções acima ficam na ordem natural).
+ */
 export function orderNodes(nodes, summarySort) {
   if (!summarySort?.key) return nodes;
+  if (summarySort.columnId && nodes[0]?.columnId !== summarySort.columnId) return nodes;
   const direction = summarySort.direction === 'desc' ? -1 : 1;
   return [...nodes].sort((left, right) => {
     if (left.missing !== right.missing) return left.missing ? 1 : -1;
