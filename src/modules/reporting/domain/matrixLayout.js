@@ -33,6 +33,39 @@ export function isMatrixViewModel(viewModel) {
 // "Peso médio (kg)" → "Peso médio": a legenda diz o que está na célula; a unidade vai no próprio valor.
 const shortLabel = (label) => String(label ?? '').replace(/\s*\([^)]*\)\s*$/, '');
 
+// O nome do lote é único só dentro da apartação (o cadastro aceita "Lote 01" na Engorda e na Recria) e a
+// matriz agrupa pela chave (lote_id): sem contexto sairiam dois cabeçalhos "Lote 01" com números diferentes.
+export const MATRIX_LABEL_CONTEXT = Object.freeze({ nome_lote: 'nome_apartacao' });
+export const MATRIX_CONTEXT_SEPARATOR = ' · ';
+
+const countLabels = (labels) => labels.reduce((count, label) => count.set(label, (count.get(label) ?? 0) + 1), new Map());
+
+/**
+ * Rótulos distintos para os valores de um eixo (folha, PDF e XLSX leem estes). Rótulo único fica como está;
+ * rótulo repetido com chave diferente ganha o contexto ("Lote 01 · Recria" — apartação do lote) e, se ainda
+ * repetir (eixo sem contexto, ou mesmo contexto), o número de ordem ("Lote 01 · Recria (2)").
+ * @param entries [{ label, node }] na ordem do eixo (node = nó do motor, com as linhas do grupo)
+ */
+function distinctLabels(entries, level, resolve) {
+  const first = countLabels(entries.map((entry) => entry.label));
+  if (entries.every((entry) => first.get(entry.label) === 1)) return entries.map((entry) => entry.label);
+  const contextId = MATRIX_LABEL_CONTEXT[level.columnId];
+  const accessor = contextId ? resolve(contextId) : null;
+  const withContext = entries.map((entry) => {
+    if (first.get(entry.label) === 1 || !accessor) return entry.label;
+    const context = (entry.node.rows ?? []).map((row) => accessor.groupLabelOf(row)).find((value) => value != null && String(value).trim() !== '');
+    return context ? `${entry.label}${MATRIX_CONTEXT_SEPARATOR}${context}` : entry.label;
+  });
+  const second = countLabels(withContext);
+  const seen = new Map();
+  return withContext.map((label) => {
+    if (second.get(label) === 1) return label;
+    const index = (seen.get(label) ?? 0) + 1;
+    seen.set(label, index);
+    return `${label} (${index})`;
+  });
+}
+
 /**
  * Modelo da matriz a partir do view model (Resumido do tipo "sintetico-matriz").
  * @param viewModel resultado de runReport (usa groups, tree, rows, totals, aggregates, summarySort, matrix, resolve)
@@ -40,8 +73,10 @@ const shortLabel = (label) => String(label ?? '').replace(/\s*\([^)]*\)\s*$/, ''
  * @returns {{ rowAxis: object, colAxis: object, metrics: object[], legend: string,
  *   columns: { key, label, missing, node }[],
  *   rows: { id, key, label, missing, path, node, cells: (object|null)[], total: object }[],
- *   totalRow: { id, label, cells: object[], total: { rowCount, aggregates } } }}
+ *   totalRow: { id, label, cells: object[], total: { rowCount, aggregates } },
+ *   drillPath: (node) => { columnId, key, label }[]|null }}
  *   cells[i] = nó do motor (agregados) da coluna columns[i], ou null quando não há pesagem no cruzamento.
+ *   Rótulos de linha/coluna são distintos (distinctLabels); drillPath = caminho do nó com esses rótulos.
  */
 export function buildMatrix(viewModel, { target = 'print' } = {}) {
   const levels = viewModel?.groups ?? [];
@@ -59,7 +94,8 @@ export function buildMatrix(viewModel, { target = 'print' } = {}) {
   // recalcula cada coluna sobre a própria população — nunca soma das células).
   const specs = (viewModel.aggregates ?? []).map((spec) => ({ id: spec.id, op: spec.op, ...(spec.columnId ? { columnId: spec.columnId } : {}) }));
   const regrouped = groupRows(viewModel.rows ?? [], [{ columnId: colLevel.columnId, direction: colLevel.direction }], viewModel.resolve, { aggregates: specs }).nodes;
-  const columns = regrouped.map((node) => ({ key: node.key, label: labelOf(colLevel, node), missing: node.missing, node }));
+  const columnLabels = distinctLabels(regrouped.map((node) => ({ label: labelOf(colLevel, node), node })), colLevel, viewModel.resolve);
+  const columns = regrouped.map((node, index) => ({ key: node.key, label: columnLabels[index], missing: node.missing, node }));
 
   // Linhas: a ordem do Resumido (a mesma do CSV/JSON — buildSummaryRows aplica o summarySort só entre irmãos).
   const treeById = new Map((viewModel.tree ?? []).map((node) => [node.id, node]));
@@ -67,12 +103,13 @@ export function buildMatrix(viewModel, { target = 'print' } = {}) {
     .filter((row) => row.level === 1)
     .map((row) => treeById.get(row.id))
     .filter(Boolean);
-  const rows = ordered.map((node) => {
+  const rowLabels = distinctLabels(ordered.map((node) => ({ label: labelOf(rowLevel, node), node })), rowLevel, viewModel.resolve);
+  const rows = ordered.map((node, index) => {
     const byKey = new Map((node.children ?? []).map((child) => [child.key, child]));
     return {
       id: node.id,
       key: node.key,
-      label: labelOf(rowLevel, node),
+      label: rowLabels[index],
       missing: node.missing,
       path: node.path,
       node,
@@ -80,6 +117,11 @@ export function buildMatrix(viewModel, { target = 'print' } = {}) {
       total: node,
     };
   });
+  // Detalhe (clique na folha): a pílula mostra o mesmo rótulo do cabeçalho — só troca o que ganhou contexto.
+  const relabeled = new Map();
+  regrouped.forEach((node, index) => { if (columnLabels[index] !== labelOf(colLevel, node)) relabeled.set(`${colLevel.columnId}=${node.key}`, columnLabels[index]); });
+  ordered.forEach((node, index) => { if (rowLabels[index] !== labelOf(rowLevel, node)) relabeled.set(`${rowLevel.columnId}=${node.key}`, rowLabels[index]); });
+  const drillPath = (node) => (node?.path?.length ? node.path.map((part) => ({ ...part, label: relabeled.get(`${part.columnId}=${part.key}`) ?? part.label })) : null);
   const values = metrics.map((metric) => metric.shortLabel).join(' / ');
   return {
     rowAxis,
@@ -88,6 +130,7 @@ export function buildMatrix(viewModel, { target = 'print' } = {}) {
     legend: `Linhas: ${rowAxis.label} · Colunas: ${colAxis.label} · Valores: ${values}`,
     columns,
     rows,
+    drillPath,
     totalRow: {
       id: '#matrix-total',
       label: MATRIX_TOTAL_LABEL,

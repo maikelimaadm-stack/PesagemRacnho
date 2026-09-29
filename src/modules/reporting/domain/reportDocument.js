@@ -446,7 +446,7 @@ function buildMatrixBody(matrix, columns) {
   const drillTargets = {};
   const target = (node) => {
     if (!node?.path?.length) return null;
-    drillTargets[node.id] = node.path;
+    drillTargets[node.id] = matrix.drillPath(node); // mesmo rótulo do cabeçalho ("Lote 01 · Recria")
     return node.id;
   };
   const position = new Map(matrix.columns.map((column, index) => [column.key, index]));
