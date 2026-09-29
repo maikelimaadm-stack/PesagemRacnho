@@ -12,7 +12,7 @@ import MgTablePanelStrip from "@/components/mak/MgTablePanelStrip";
 import { ModeloBase1PageContainer, ModeloBase1PageHeader } from "@/components/modelobase1";
 import { describeFilter, isFilterActive, normalizeFilter } from "@/modules/reporting/domain/filterEngine";
 import { describePeriod } from "@/modules/reporting/domain/reportPeriod";
-import { REPORT_FAMILIES, REPORT_MODES } from "@/modules/reporting/domain/reportDefinition";
+import { REPORT_FAMILIES, REPORT_MODES, VIEW_LAYOUTS } from "@/modules/reporting/domain/reportDefinition";
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
@@ -27,6 +27,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { favoriteKey, getFavorites, recordRecent, saveReportViewState, saveTemplate, templateToRequest, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportFilterBar from "./ReportFilterBar";
+import MatrixAxisControls from "./MatrixAxisControls";
 import ReportSheetView from "./ReportSheetView";
 import ReportTable from "./ReportTable";
 import { pillFilterType, pillOptions, toDisplayFilters, toServiceFilters, useCan } from "./reportUi";
@@ -344,6 +345,9 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       drill: [],
     });
   };
+  // E1D Sintético (Matriz): trocar Linhas/Colunas mantém o tipo e sai do detalhe de uma célula (volta à matriz).
+  const currentView = views.find((item) => item.id === viewId) ?? null;
+  const setMatrixAxes = (matrix) => update({ matrix, drill: [], mode: currentView?.mode ?? state.mode });
 
   const metricsForSort = useMemo(() => (viewModel && summaryMode ? summaryMetrics(viewModel) : []), [viewModel, summaryMode]);
   const sortOptions = useMemo(() => buildSortOptions({ summaryMode, groups: state.groups, columnOf, metrics: metricsForSort, visibleColumns }), [summaryMode, state.groups, columnOf, metricsForSort, visibleColumns]);
@@ -559,6 +563,9 @@ export default function ReportView({ reportId, presetId = null, template, savedS
         sortValue={sortValue}
         onSort={applySort}
         previous={previousColumn ? { value: previousValue, onChange: setPrevious } : null}
+        typeControls={currentView?.layout === VIEW_LAYOUTS.MATRIX
+          ? <MatrixAxisControls axes={definition.matrixAxes} matrix={state.matrix ?? currentView.matrix} onChange={setMatrixAxes} />
+          : null}
       />
 
       <div className="mak-mother-page__panel-strip" data-mak-region="panel-strip">

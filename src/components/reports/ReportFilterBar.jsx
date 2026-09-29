@@ -20,7 +20,8 @@ export const PREVIOUS_OPTIONS = Object.freeze([
   { value: "sem", label: "Sem pesagem anterior" },
 ]);
 
-function BarSelect({ id, label, value, options, onChange, disabled = false, title }) {
+// Exportado para os controles próprios de cada tipo no encaixe typeControls (E1D: eixos da matriz).
+export function BarSelect({ id, label, value, options, onChange, disabled = false, title }) {
   return (
     <div className="rpt-bar-field" data-field={id}>
       <span className="rpt-bar-field__label" id={`rpt-bar-label-${id}`}>{label}</span>
