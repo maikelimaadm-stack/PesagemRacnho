@@ -87,13 +87,110 @@ function assertAggregateList(aggregates, byId, context, grain) {
 
 // "Tipo de relatório" (E1B §3): visão nomeada = atalho para agrupamentos/modo/totais da E1. Só
 // seleção — nenhuma conta nova. Não entra em LEGACY_REPORT_ALIASES (aliases congelados da E1).
-const VIEW_KEYS = new Set(['id', 'label', 'description', 'groups', 'mode', 'aggregates', 'columns', 'sort', 'summarySort', 'filters']);
+// E1D (contratos, docs/evidence/e1d/CONTRATOS-AGENTES.md): a visão pode também declarar
+//   layout        'matrix' = Sintético (Matriz): Linhas (eixo Y) × Colunas (eixo X), grupos derivados dos eixos;
+//   matrix        { eixoY, eixoX } eixos padrão (ids de definition.matrixAxes, diferentes);
+//   population    condições FIXAS da visão (ex.: Vendas = Saída por Venda), aplicadas pelo serviço como
+//                 lockedFilters — a população do tipo não depende da tela;
+//   groupChoices  colunas que os botões "Agrupar por" do tipo oferecem (Analítico), até 3 níveis;
+//   columnChoices { available, defaults } do seletor "Colunas" do tipo: no Detalhado, ids de coluna; no
+//                 Resumido, chaves de métrica (id da agregação, ou id do par "de–até" = as duas métricas);
+//   columnLabels  cabeçalho da coluna neste tipo ({ columnId: rótulo });
+//   titleKind     'Analítico' | 'Sintético' no título da folha (sem ele: pelo modo).
+const VIEW_KEYS = new Set(['id', 'label', 'description', 'groups', 'mode', 'aggregates', 'columns', 'sort', 'summarySort', 'filters',
+  'layout', 'matrix', 'population', 'groupChoices', 'columnChoices', 'columnLabels', 'titleKind']);
 const DIRECTIONS = new Set(['asc', 'desc']);
+export const VIEW_LAYOUTS = Object.freeze({ MATRIX: 'matrix' });
+export const TITLE_KINDS = Object.freeze(['Analítico', 'Sintético']);
+
+/** Chaves de métrica de uma lista de totais: pares "de–até" viram uma chave só (o id do par). */
+export function metricKeysOf(aggregates = [], metricPairs = []) {
+  const ids = aggregates.map(aggregateSpecId);
+  const keys = [];
+  for (const id of ids) {
+    const pair = metricPairs.find((item) => item.from === id || item.to === id);
+    const key = pair ? pair.id : id;
+    if (!keys.includes(key)) keys.push(key);
+  }
+  return keys;
+}
 const cloneFrozen = (value) => {
   if (Array.isArray(value)) return Object.freeze(value.map(cloneFrozen));
   if (value && typeof value === 'object') return Object.freeze(Object.fromEntries(Object.entries(value).map(([key, item]) => [key, cloneFrozen(item)])));
   return value;
 };
+
+/** Chaves E1D da visão (layout, matrix, population, groupChoices, columnChoices, columnLabels, titleKind). */
+function defineViewExtensions(view, spec, byId, where) {
+  if (view.layout != null) {
+    if (!Object.values(VIEW_LAYOUTS).includes(view.layout)) throw new Error(`${where}: layout inválido (${view.layout})`);
+    if (view.mode !== REPORT_MODES.RESUMIDO) throw new Error(`${where}: a matriz é um modo de visão do Resumido`);
+    if (view.groups.length) throw new Error(`${where}: na matriz os agrupamentos vêm dos eixos (groups vazio)`);
+    const axes = new Set((spec.matrixAxes || []).map((axis) => axis.id));
+    const { eixoY, eixoX } = view.matrix || {};
+    if (!axes.has(eixoY) || !axes.has(eixoX)) throw new Error(`${where}: eixos da matriz desconhecidos (${eixoY} × ${eixoX})`);
+    if (eixoY === eixoX) throw new Error(`${where}: Linhas e Colunas da matriz não podem ser o mesmo eixo`);
+  } else if (view.matrix != null) {
+    throw new Error(`${where}: matrix só com layout "matrix"`);
+  }
+  if (view.population != null) {
+    if (typeof view.population !== 'object' || Array.isArray(view.population) || !Object.keys(view.population).length) throw new Error(`${where}: population deve ser objeto de filtros`);
+    assertIds(Object.keys(view.population), byId, `${where} population`);
+  }
+  if (view.groupChoices != null) {
+    if (!Array.isArray(view.groupChoices) || !view.groupChoices.length) throw new Error(`${where}: groupChoices deve ser lista não vazia`);
+    assertIds(view.groupChoices, byId, `${where} groupChoices`);
+    for (const id of view.groupChoices) if (!byId.get(id).groupable) throw new Error(`${where}: ${id} não é agrupável (groupChoices)`);
+    if (new Set(view.groupChoices).size !== view.groupChoices.length) throw new Error(`${where}: groupChoices repetido`);
+    for (const group of view.groups) if (!view.groupChoices.includes(group.columnId)) throw new Error(`${where}: agrupamento ${group.columnId} fora de groupChoices`);
+  }
+  if (view.columnChoices != null) {
+    const { available, defaults } = view.columnChoices;
+    if (!Array.isArray(available) || !available.length || !Array.isArray(defaults) || !defaults.length) throw new Error(`${where}: columnChoices exige available e defaults não vazios`);
+    if (new Set(available).size !== available.length) throw new Error(`${where}: columnChoices.available repetido`);
+    for (const key of defaults) if (!available.includes(key)) throw new Error(`${where}: coluna padrão ${key} fora de columnChoices.available`);
+    if (view.mode === REPORT_MODES.DETALHADO) {
+      assertIds(available, byId, `${where} columnChoices`);
+    } else {
+      const known = metricKeysOf(view.aggregates ?? spec.defaultAggregates ?? [], spec.metricPairs ?? []);
+      for (const key of available) if (!known.includes(key)) throw new Error(`${where}: métrica ${key} fora dos totais do tipo (columnChoices)`);
+    }
+  }
+  if (view.columnLabels != null) {
+    if (typeof view.columnLabels !== 'object' || Array.isArray(view.columnLabels)) throw new Error(`${where}: columnLabels deve ser objeto`);
+    assertIds(Object.keys(view.columnLabels), byId, `${where} columnLabels`);
+    for (const label of Object.values(view.columnLabels)) if (typeof label !== 'string' || !label.trim()) throw new Error(`${where}: rótulo vazio em columnLabels`);
+  }
+  if (view.titleKind != null && !TITLE_KINDS.includes(view.titleKind)) throw new Error(`${where}: titleKind inválido (${view.titleKind})`);
+}
+
+/** Eixos da matriz (Sintético): { id, label, columnId } com coluna agrupável. */
+function defineMatrixAxes(axes, byId, context) {
+  if (axes == null) return Object.freeze([]);
+  if (!Array.isArray(axes)) throw new Error(`${context}: matrixAxes deve ser lista`);
+  const seen = new Set();
+  for (const axis of axes) {
+    if (!axis?.id || !axis.label || !axis.columnId) throw new Error(`${context}: eixo da matriz sem id/rótulo/coluna`);
+    if (seen.has(axis.id)) throw new Error(`${context}: eixo da matriz repetido (${axis.id})`);
+    seen.add(axis.id);
+    assertIds([axis.columnId], byId, `${context} matrixAxes`);
+    if (!byId.get(axis.columnId).groupable) throw new Error(`${context}: eixo ${axis.id} em coluna não agrupável (${axis.columnId})`);
+  }
+  return cloneFrozen(axes);
+}
+
+/** Opções fixas de "Ordenar por" do relatório (E1D: as 8 do MAKGESTAO): { id, label }. */
+function defineSortChoices(choices, context) {
+  if (choices == null) return Object.freeze([]);
+  if (!Array.isArray(choices) || !choices.length) throw new Error(`${context}: sortChoices deve ser lista não vazia`);
+  const seen = new Set();
+  for (const choice of choices) {
+    if (!choice?.id || !choice.label) throw new Error(`${context}: opção de ordenação sem id/rótulo`);
+    if (seen.has(choice.id)) throw new Error(`${context}: opção de ordenação repetida (${choice.id})`);
+    seen.add(choice.id);
+  }
+  return cloneFrozen(choices);
+}
 
 function defineViews(views, spec, byId, context) {
   if (views == null) return Object.freeze([]);
@@ -131,6 +228,7 @@ function defineViews(views, spec, byId, context) {
       if (sort.direction != null && !DIRECTIONS.has(sort.direction)) throw new Error(`${where}: direção inválida (${sort.direction})`);
     }
     if (view.filters != null) assertIds(Object.keys(view.filters), byId, `${where} filters`);
+    defineViewExtensions(view, spec, byId, where);
     if (view.summarySort != null) {
       const metricIds = (view.aggregates ?? spec.defaultAggregates ?? []).map(aggregateSpecId);
       const key = view.summarySort?.key;
@@ -228,9 +326,15 @@ export function defineReport(spec) {
     assertIds([columnId], byId, `${context} quickGroups`);
     if (!byId.get(columnId).groupable) throw new Error(`${context}: ${columnId} não é agrupável (quickGroups)`);
   }
+  const matrixAxes = defineMatrixAxes(spec.matrixAxes, byId, context);
   const views = defineViews(spec.views, spec, byId, context);
   const metricLabels = defineMetricLabels(spec.metricLabels, context);
   const metricPairs = defineMetricPairs(spec.metricPairs, spec, views, context);
+  const sortChoices = defineSortChoices(spec.sortChoices, context);
+  // E1D: o tipo com que o relatório abre (sem modelo, visão antiga nem último estado). Com ele, o seletor
+  // mostra só os tipos declarados (sem o "Resumo por <agrupamento padrão>" gerado).
+  if (spec.defaultView != null && !views.some((view) => view.id === spec.defaultView)) throw new Error(`${context}: defaultView desconhecida (${spec.defaultView})`);
+  if (spec.defaultSortChoice != null && !sortChoices.some((choice) => choice.id === spec.defaultSortChoice)) throw new Error(`${context}: defaultSortChoice desconhecida (${spec.defaultSortChoice})`);
   const sensitivities = [...new Set(columns.map((column) => column.sensitive).filter(Boolean))];
   return Object.freeze({
     description: '',
@@ -257,5 +361,10 @@ export function defineReport(spec) {
     views,
     metricLabels,
     metricPairs,
+    // E1D: eixos da matriz, opções fixas de "Ordenar por" e o tipo padrão (null = como na E1B).
+    matrixAxes,
+    sortChoices,
+    defaultView: spec.defaultView ?? null,
+    defaultSortChoice: spec.defaultSortChoice ?? null,
   });
 }

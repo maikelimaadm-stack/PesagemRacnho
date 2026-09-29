@@ -3,7 +3,8 @@
 // caminho de filtro. As visões declaradas na definição (`views`, validadas em defineReport) valem; sem
 // nenhuma, o relatório ganha "Resumo por <agrupamento padrão>" (se tiver) e "Analítico".
 // Visões NÃO são aliases antigos (LEGACY_REPORT_ALIASES) e não viram presetId no manifesto.
-import { REPORT_MODES } from './reportDefinition.js';
+import { REPORT_MODES, metricKeysOf } from './reportDefinition.js';
+import { aggregateSpecId } from './reportAggregates.js';
 
 export const DEFAULT_VIEW_ID = 'padrao';
 export const ANALYTIC_VIEW_ID = 'analitico';
@@ -41,6 +42,8 @@ function defaultView(definition) {
 
 export function listReportViews(definition) {
   if (!definition) return [];
+  // E1D: relatório com tipo padrão declarado (Pesagens) mostra exatamente os tipos declarados, na ordem.
+  if (definition.defaultView && definition.views?.length) return definition.views.map((view) => ({ ...view }));
   const standard = defaultView(definition);
   if (definition.views?.length) {
     const declared = definition.views.map((view) => ({ ...view }));
@@ -67,16 +70,66 @@ export function getReportView(definition, viewId) {
 export function viewSelection(view, definition) {
   const resolved = typeof view === 'string' ? getReportView(definition, view) : view;
   if (!resolved) throw new Error(`relatório ${definition?.id}: visão desconhecida (${view})`);
+  const aggregates = clone(resolved.aggregates ?? definition.defaultAggregates ?? []);
+  const columns = [...(resolved.columns ?? definition.defaultColumns ?? [])];
+  // E1D: columnChoices.defaults = o que o tipo mostra sem escolha da pessoa (colunas no Detalhado, métricas no Resumido).
+  const chosen = resolved.columnChoices ? applyColumnKeys(resolved, definition, resolved.columnChoices.defaults) : null;
   return {
+    // E1D: o tipo vai explícito na seleção (o serviço aplica a população e os eixos dele).
+    view: resolved.generated ? null : resolved.id,
     groups: clone(resolved.groups ?? []),
     mode: resolved.mode,
-    aggregates: clone(resolved.aggregates ?? definition.defaultAggregates ?? []),
-    columns: [...(resolved.columns ?? definition.defaultColumns ?? [])],
+    aggregates: chosen?.aggregates ?? aggregates,
+    columns: chosen?.columns ?? columns,
     sort: clone(resolved.sort ?? definition.defaultSort ?? []),
     summarySort: clone(resolved.summarySort ?? null),
     filters: clone(resolved.filters ?? definition.defaultFilters ?? {}),
+    matrix: resolved.matrix ? { ...resolved.matrix } : null,
     drill: [],
   };
+}
+
+/**
+ * Chaves do seletor "Colunas" de um tipo → seleção. Detalhado: as chaves são ids de coluna (na ordem dada).
+ * Resumido: chaves de métrica → agregações do tipo na ordem dada (o par "de–até" vira as duas métricas).
+ * Chave fora de columnChoices.available é ignorada; lista vazia/ausente → defaults do tipo.
+ * @returns {{ columns?: string[], aggregates?: object[] }}
+ */
+export function applyColumnKeys(view, definition, keys) {
+  const choices = view.columnChoices;
+  if (!choices) return {};
+  const wanted = (Array.isArray(keys) && keys.length ? keys : choices.defaults).filter((key) => choices.available.includes(key));
+  const list = wanted.length ? [...new Set(wanted)] : [...choices.defaults];
+  if (view.mode === REPORT_MODES.DETALHADO) return { columns: list };
+  const pool = view.aggregates ?? definition.defaultAggregates ?? [];
+  const pairs = definition.metricPairs ?? [];
+  const aggregates = [];
+  for (const key of list) {
+    const pair = pairs.find((item) => item.id === key);
+    const ids = pair ? [pair.from, pair.to] : [key];
+    for (const id of ids) {
+      const spec = pool.find((item) => aggregateSpecId(item) === id);
+      if (spec && !aggregates.includes(spec)) aggregates.push(spec);
+    }
+  }
+  return { aggregates: clone(aggregates) };
+}
+
+/** Chaves atuais do seletor "Colunas" de um tipo a partir da seleção (inverso de applyColumnKeys). */
+export function columnKeysOf(view, definition, selection = {}) {
+  if (!view?.columnChoices) return [];
+  if (view.mode === REPORT_MODES.DETALHADO) return (selection.columns ?? []).filter((id) => view.columnChoices.available.includes(id));
+  return metricKeysOf(selection.aggregates ?? [], definition.metricPairs ?? []).filter((key) => view.columnChoices.available.includes(key));
+}
+
+/**
+ * Tipo atual da tela: o explícito (state.view, E1D) quando é um tipo declarado; senão o que bate pela
+ * estrutura (matchView — estados e modelos de antes da E1D); nenhum → null ("Personalizado").
+ */
+export function resolveViewId(definition, state = {}) {
+  if (state.view && getReportView(definition, state.view)) return state.view;
+  if (state.view === null && definition?.defaultView) return null;
+  return matchView(definition, state);
 }
 
 /**

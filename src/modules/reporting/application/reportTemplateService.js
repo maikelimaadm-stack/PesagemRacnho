@@ -25,6 +25,8 @@ import { canRunReport, canSeeColumn } from '../domain/reportPermissions.js';
 import { MAX_GROUP_LEVELS } from '../domain/groupEngine.js';
 import { isFilterActive, serializeFilters } from '../domain/filterEngine.js';
 import { PERIOD_PRESETS } from '../domain/reportPeriod.js';
+import { getReportView } from '../domain/reportViews.js';
+import { isKnownSortChoice } from '../domain/sortChoices.js';
 
 export const TEMPLATE_VERSION = 1;
 export const TEMPLATE_SCOPES = Object.freeze({ PERSONAL: 'PERSONAL', SHARED: 'SHARED' });
@@ -336,10 +338,43 @@ export function normalizeTemplateConfig(definition, config = {}) {
   }
   const widths = {};
   for (const [id, width] of Object.entries(config.widths || {})) if (ids.has(id) && Number.isFinite(Number(width))) widths[id] = Math.max(60, Math.min(600, Number(width)));
+  // E1D: tipo explícito, eixos da matriz e opção fixa de "Ordenar por" (contrato §2). Ausentes = como antes.
+  const typed = normalizeTypedConfig(definition, config);
   return {
     columns, filters, ...(Object.keys(fixedFilters).length ? { fixedFilters } : {}), groups, aggregates, sort, mode, summarySort, period, params,
     search: String(config.search ?? ''), widths, orientation: ['portrait', 'landscape', 'auto'].includes(config.orientation) ? config.orientation : 'auto',
+    ...typed,
   };
+}
+
+/**
+ * view/matrix/sortChoice de um modelo ou do último estado (E1D). Tipo desconhecido, eixos desconhecidos ou
+ * iguais e opção de ordenação desconhecida são erro ao salvar (ao abrir, templateToRequest descarta com aviso).
+ * @returns {{ view?: string|null, matrix?: { eixoY, eixoX }|null, sortChoice?: string|null }}
+ */
+export function normalizeTypedConfig(definition, config = {}) {
+  const out = {};
+  if (config.view !== undefined) {
+    const view = config.view === null || config.view === '' ? null : getReportView(definition, String(config.view));
+    if (config.view !== null && config.view !== '' && (!view || view.generated)) throw templateError(`Tipo de relatório inexistente (${config.view})`);
+    out.view = view ? view.id : null;
+  }
+  if (config.matrix !== undefined) {
+    if (config.matrix === null) out.matrix = null;
+    else {
+      const axes = (definition.matrixAxes ?? []).map((axis) => axis.id);
+      const eixoY = String(config.matrix?.eixoY ?? '');
+      const eixoX = String(config.matrix?.eixoX ?? '');
+      if (!axes.includes(eixoY) || !axes.includes(eixoX)) throw templateError(`Eixo da matriz inexistente (${eixoY} × ${eixoX})`);
+      if (eixoY === eixoX) throw templateError('Linhas e Colunas da matriz não podem ser o mesmo eixo');
+      out.matrix = { eixoY, eixoX };
+    }
+  }
+  if (config.sortChoice !== undefined) {
+    if (config.sortChoice !== null && config.sortChoice !== '' && !isKnownSortChoice(definition, String(config.sortChoice))) throw templateError(`Ordenação inexistente (${config.sortChoice})`);
+    out.sortChoice = config.sortChoice ? String(config.sortChoice) : null;
+  }
+  return out;
 }
 
 /** Cria ou atualiza. PERSONAL: só o dono edita. SHARED: exige reports.templates.share. */
@@ -428,6 +463,13 @@ export function templateToRequest(source, role) {
   const aggregates = (template.aggregates || []).filter((spec) => (!spec.columnId ? spec.op === 'count' : keep(spec.columnId) && known.get(spec.columnId).aggregations.includes(spec.op)));
   if (dropped.size) warnings.push({ code: 'TEMPLATE_COLUMNS_REMOVED', message: `${dropped.size} coluna(s) do modelo não estão disponíveis para você ou deixaram de existir`, columns: [...dropped] });
   if (template.baseReportVersion && template.baseReportVersion > definition.version) warnings.push({ code: 'TEMPLATE_NEWER', message: 'Modelo criado em versão mais nova do relatório' });
+  // E1D: tipo/eixos/ordenação guardados; o que deixou de existir sai com aviso (nunca erro ao abrir).
+  let typed = {};
+  try {
+    typed = normalizeTypedConfig(definition, { view: template.view, matrix: template.matrix, sortChoice: template.sortChoice });
+  } catch (error) {
+    warnings.push({ code: 'TEMPLATE_TYPE_REMOVED', message: `${error.message}: o modelo abre sem ele` });
+  }
   return {
     reportId: definition.id,
     params: { ...(template.period ? { periodo: template.period } : {}), ...(template.params || {}) },
@@ -439,6 +481,10 @@ export function templateToRequest(source, role) {
       // só se tiver agrupamento; salvo como lista abre Detalhado (nunca um Resumido só com o Total geral).
       mode: template.mode ? normalizeReportMode(template.mode, definition.defaultMode) : (groups.length ? REPORT_MODES.RESUMIDO : REPORT_MODES.DETALHADO),
       summarySort: template.summarySort ?? null,
+      // E1D (ausentes em modelos anteriores: a tela identifica o tipo pela estrutura — reportViews.resolveViewId).
+      ...(typed.view !== undefined ? { view: typed.view } : {}),
+      ...(typed.matrix !== undefined ? { matrix: typed.matrix } : {}),
+      ...(typed.sortChoice !== undefined ? { sortChoice: typed.sortChoice } : {}),
     },
     widths: template.widths || {},
     orientation: template.orientation || 'auto',

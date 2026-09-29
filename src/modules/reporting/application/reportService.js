@@ -9,7 +9,9 @@ import { applyFilters, isFilterActive, serializeFilters } from '../domain/filter
 import { sortRows } from '../domain/sortEngine.js';
 import { groupRows, MAX_GROUP_LEVELS, NONE_GROUP_KEY, NONE_GROUP_LABEL } from '../domain/groupEngine.js';
 import { aggregateSpecId, assertAggregateSpec, computeAggregates } from '../domain/reportAggregates.js';
-import { REPORT_MODES, REPORT_VISIBILITY, createColumnResolver, normalizeReportMode } from '../domain/reportDefinition.js';
+import { REPORT_MODES, REPORT_VISIBILITY, VIEW_LAYOUTS, createColumnResolver, normalizeReportMode } from '../domain/reportDefinition.js';
+import { getReportView, viewSelection } from '../domain/reportViews.js';
+import { applySortChoice, isKnownSortChoice } from '../domain/sortChoices.js';
 import { GRAIN_LABELS, grainHasAnimal } from '../domain/reportGrain.js';
 import { describePeriod, localToday, resolvePeriod } from '../domain/reportPeriod.js';
 import { assertCanRunReport, canRunReport, canSeeColumn, forbiddenColumnIds } from '../domain/reportPermissions.js';
@@ -102,7 +104,11 @@ function mergeAliasSelection(alias, selection = {}, params = {}) {
 export function resolveSelection(definition, selection = {}, role) {
   const resolve = createColumnResolver(definition.columns);
   const warnings = [];
-  const requestedColumns = selection.columns?.length ? selection.columns : definition.defaultColumns;
+  // E1D: tipo explícito (view), eixos da matriz e "Ordenar por" fixo — ver resolveViewSelection. O que a
+  // seleção não disser vem do tipo (colunas/totais padrão dele), e só depois da definição.
+  const typed = resolveViewSelection(definition, selection);
+  const typeDefaults = typed.view ? viewSelection(typed.view, definition) : null;
+  const requestedColumns = selection.columns?.length ? selection.columns : (typeDefaults?.columns?.length ? typeDefaults.columns : definition.defaultColumns);
   for (const id of requestedColumns) if (!resolve(id)) throw new Error(`relatório ${definition.id}: coluna desconhecida (${id})`);
   const hiddenByPermission = forbiddenColumnIds(definition, role, requestedColumns);
   if (hiddenByPermission.length) warnings.push({ code: 'COLUMNS_HIDDEN_BY_PERMISSION', message: `${hiddenByPermission.length} coluna(s) oculta(s) pelo seu perfil`, columns: hiddenByPermission });
@@ -120,13 +126,13 @@ export function resolveSelection(definition, selection = {}, role) {
     }
   }
 
-  const sort = (selection.sort?.length ? selection.sort : definition.defaultSort).filter((item) => {
+  const sort = (typed.sort?.length ? typed.sort : definition.defaultSort).filter((item) => {
     const accessor = resolve(item.columnId);
     if (!accessor) throw new Error(`relatório ${definition.id}: ordenação em coluna desconhecida (${item.columnId})`);
     return canSeeColumn(accessor.column, role) && !accessor.column.metricOnly;
   });
 
-  const groups = (selection.groups ?? definition.defaultGroups).filter((item) => item?.columnId);
+  const groups = typed.groups;
   if (groups.length > MAX_GROUP_LEVELS) throw new Error(`relatório ${definition.id}: no máximo ${MAX_GROUP_LEVELS} níveis de agrupamento`);
   for (const group of groups) {
     const accessor = resolve(group.columnId);
@@ -135,7 +141,7 @@ export function resolveSelection(definition, selection = {}, role) {
     if (!canSeeColumn(accessor.column, role)) throw forbiddenError(role, 'commercial.values');
   }
 
-  const aggregates = (selection.aggregates ?? definition.defaultAggregates).filter((spec) => {
+  const aggregates = (selection.aggregates ?? typeDefaults?.aggregates ?? definition.defaultAggregates).filter((spec) => {
     assertAggregateSpec(spec, resolve);
     if (!spec.columnId) return true;
     return canSeeColumn(resolve(spec.columnId).column, role);
@@ -144,7 +150,9 @@ export function resolveSelection(definition, selection = {}, role) {
   // Condições fixas de um modelo convertido na 1.4.0 (a condição do relatório antigo numa coluna em
   // que o modelo também filtrava): aplicadas como as `lockedFilters` da definição. Nunca são
   // removidas por perfil — tirar uma condição ampliaria a população.
-  const fixedFilters = serializeFilters(selection.fixedFilters ?? {});
+  // E1D: a população do tipo (Vendas = Saída por Venda) entra aqui também — vale na tela, nas exportações
+  // e nos modelos, e nenhum controle a tira (na mesma coluna, a condição do tipo prevalece).
+  const fixedFilters = { ...serializeFilters(selection.fixedFilters ?? {}), ...serializeFilters(typed.view?.population ?? {}) };
   for (const id of Object.keys(fixedFilters)) {
     const accessor = resolve(id);
     if (!accessor) throw new Error(`relatório ${definition.id}: condição fixa em coluna desconhecida (${id})`);
@@ -153,8 +161,10 @@ export function resolveSelection(definition, selection = {}, role) {
 
   const searchColumnIds = definition.searchColumns.filter((id) => canSeeColumn(resolve(id).column, role));
 
-  // Modo: RESUMIDO | DETALHADO (padrão da definição — Resumido quando nasce agrupada).
-  const mode = normalizeReportMode(selection.mode, definition.defaultMode ?? REPORT_MODES.DETALHADO);
+  // Modo: RESUMIDO | DETALHADO (padrão da definição — Resumido quando nasce agrupada). E1D: com tipo, o
+  // modo é o do tipo — exceto no detalhe de um grupo (clique na folha), que é sempre o Detalhado.
+  const drilling = (selection.drill ?? []).some((part) => part?.columnId);
+  const mode = typed.view && !drilling ? typed.view.mode : normalizeReportMode(selection.mode, definition.defaultMode ?? REPORT_MODES.DETALHADO);
 
   // Detalhe de um grupo (clique no Resumido): recorte EXATO pela mesma chave do agrupamento
   // (groupKeyOf), inclusive "Não informado" — não é filtro de texto, então nunca mistura grupos.
@@ -168,12 +178,60 @@ export function resolveSelection(definition, selection = {}, role) {
 
   // Ordem das linhas do Resumido: por rótulo, por quantidade de linhas ou por uma métrica selecionada.
   let summarySort = null;
-  if (selection.summarySort?.key) {
-    const key = String(selection.summarySort.key);
+  if (typed.summarySort?.key) {
+    const key = String(typed.summarySort.key);
     const known = key === SUMMARY_LABEL_SORT || key === SUMMARY_ROWS_METRIC || aggregates.some((spec) => aggregateSpecId(spec) === key);
-    if (known) summarySort = { key, direction: selection.summarySort.direction === 'desc' ? 'desc' : 'asc' };
+    if (known) summarySort = { key, direction: typed.summarySort.direction === 'desc' ? 'desc' : 'asc' };
   }
-  return { resolve, columns, filters, fixedFilters, search: String(selection.search ?? '').trim(), searchColumnIds, sort, groups, aggregates, warnings, hiddenByPermission, mode, drill, summarySort };
+  return {
+    resolve, columns, filters, fixedFilters, search: String(selection.search ?? '').trim(), searchColumnIds, sort, groups, aggregates, warnings, hiddenByPermission, mode, drill, summarySort,
+    view: typed.view, matrix: typed.matrix, sortChoice: typed.sortChoice,
+  };
+}
+
+/**
+ * E1D — tipo explícito na seleção (contrato: docs/evidence/e1d/CONTRATOS-AGENTES.md §2).
+ *   selection.view        id de um tipo declarado (definition.views) ou null/ausente (Personalizado);
+ *   selection.matrix      { eixoY, eixoX } — só no tipo com layout "matrix" (padrão = o do tipo);
+ *   selection.sortChoice  id de definition.sortChoices (ou null) — vira sort/summarySort/direção do grupo.
+ * Com tipo: na matriz os grupos SÃO os eixos (Linhas › Colunas); no tipo com groupChoices (Analítico) os
+ * grupos têm de estar entre as escolhas; nos demais, as colunas de agrupamento são as do tipo (a direção
+ * pode mudar — "Data (Mais Antiga)" inverte o nível de data). Fora disso é erro (a tela passa a
+ * "Personalizado" — view null — quando a pessoa agrupa por outro caminho).
+ * @returns {{ view: object|null, matrix: object|null, sortChoice: string|null, groups: object[], sort: object[], summarySort: object|null }}
+ */
+export function resolveViewSelection(definition, selection = {}) {
+  let view = null;
+  if (selection.view != null && selection.view !== '') {
+    view = getReportView(definition, String(selection.view));
+    if (!view || view.generated) throw new Error(`relatório ${definition.id}: tipo de relatório desconhecido (${selection.view})`);
+  }
+  // Sem grupos na seleção: os do tipo (ou os padrão da definição, sem tipo).
+  const requestedGroups = (selection.groups ?? (view ? view.groups : definition.defaultGroups) ?? []).filter((item) => item?.columnId);
+  let matrix = null;
+  let groups = requestedGroups.map((group) => ({ ...group }));
+  if (view?.layout === VIEW_LAYOUTS.MATRIX) {
+    const axes = definition.matrixAxes ?? [];
+    const eixoY = selection.matrix?.eixoY ?? view.matrix.eixoY;
+    const eixoX = selection.matrix?.eixoX ?? view.matrix.eixoX;
+    const rowAxis = axes.find((axis) => axis.id === eixoY);
+    const colAxis = axes.find((axis) => axis.id === eixoX);
+    if (!rowAxis || !colAxis) throw new Error(`relatório ${definition.id}: eixo da matriz desconhecido (${eixoY} × ${eixoX})`);
+    if (rowAxis.id === colAxis.id) throw new Error(`relatório ${definition.id}: Linhas e Colunas da matriz não podem ser o mesmo eixo (${rowAxis.label})`);
+    matrix = { eixoY: rowAxis.id, eixoX: colAxis.id, rowAxis: { ...rowAxis }, colAxis: { ...colAxis } };
+    const direction = (columnId) => requestedGroups.find((group) => group.columnId === columnId)?.direction;
+    groups = [rowAxis, colAxis].map((axis) => ({ columnId: axis.columnId, ...(direction(axis.columnId) ? { direction: direction(axis.columnId) } : {}) }));
+  } else if (view?.groupChoices) {
+    const outside = groups.filter((group) => !view.groupChoices.includes(group.columnId));
+    if (outside.length) throw new Error(`relatório ${definition.id}: o tipo "${view.label}" agrupa só por ${view.groupChoices.join(', ')} (recebido ${outside.map((group) => group.columnId).join(', ')})`);
+  } else if (view) {
+    const expected = (view.groups ?? []).map((group) => group.columnId).join('|');
+    if (groups.map((group) => group.columnId).join('|') !== expected) throw new Error(`relatório ${definition.id}: o tipo "${view.label}" agrupa por ${expected || 'nada'} (recebido ${groups.map((group) => group.columnId).join('|') || 'nada'})`);
+  }
+  const sortChoice = selection.sortChoice ?? null;
+  if (sortChoice != null && !isKnownSortChoice(definition, sortChoice)) throw new Error(`relatório ${definition.id}: opção de ordenação desconhecida (${sortChoice})`);
+  const sorted = applySortChoice(definition, view, { sort: selection.sort, summarySort: selection.summarySort, groups }, sortChoice);
+  return { view, matrix, sortChoice, groups: sorted.groups, sort: sorted.sort, summarySort: sorted.summarySort };
 }
 
 function applyDrill(rows, drill, resolve) {
@@ -343,6 +401,10 @@ export async function runReport(definitionOrId, request = {}, actor) {
     notes: definition.notes,
     mode: selection.mode,
     summarySort: selection.summarySort,
+    // E1D: tipo explícito (null = Personalizado), eixos da matriz e opção fixa de "Ordenar por".
+    view: selection.view ? { id: selection.view.id, label: selection.view.label, layout: selection.view.layout ?? null, titleKind: selection.view.titleKind ?? null } : null,
+    matrix: selection.matrix,
+    sortChoice: selection.sortChoice,
     summaryRows,
     drill,
     generatedAt: new Date().toISOString(),
@@ -353,7 +415,12 @@ export async function runReport(definitionOrId, request = {}, actor) {
     params,
     period,
     periodDescription: period ? describePeriod(period) : null,
-    columns: selection.columns.map((id) => publicColumn(selection.resolve(id))),
+    // E1D: cabeçalho próprio do tipo (columnLabels, ex.: Vendas "Qtd @") vale na tela, na folha e nas exportações.
+    columns: selection.columns.map((id) => {
+      const column = publicColumn(selection.resolve(id));
+      const label = selection.view?.columnLabels?.[id];
+      return label ? { ...column, label } : column;
+    }),
     availableColumns: definition.columns.filter((column) => canSeeColumn(column, role)).map((column) => publicColumn(selection.resolve(column.id))),
     hiddenByPermission: selection.hiddenByPermission,
     search: selection.search,

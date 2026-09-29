@@ -65,8 +65,106 @@ export const SHEET_METRIC_LABELS = Object.freeze({
   femeas: 'Fêmeas',
 });
 
-// "Analítico por animal": uma linha por pesagem com os dados úteis da conferência no curral.
+// E1B "Analítico por animal" (até a E1C): uma linha por pesagem com os dados da conferência no curral.
+// Continua exportado para a conversão de modelos da E1B (reportTemplateService) e para os gates.
 export const ANALYTIC_EVENT_COLUMNS = Object.freeze(['data_pesagem', 'numero_animal', 'marca', 'sexo', 'raca', 'era', 'nome_lote', 'nome_apartacao', 'peso', 'peso_arroba', 'peso_anterior', 'dias', 'ganho', 'gmd']);
+
+// ---------------------------------------------------------------------------------------------------
+// E1D — "Relatório de Pesagens Individuais" igual ao MAKGESTAO (docs/plano-mestre/E1D-...md): os 5 tipos,
+// com os nomes e a ordem do antigo, e as contas corretas do motor atual (animais distintos, GMD ponderado).
+// Contratos entre as partes: docs/evidence/e1d/CONTRATOS-AGENTES.md.
+// ---------------------------------------------------------------------------------------------------
+
+// Chaves de coluna das tabelas por lote ("Colunas" dos tipos resumidos), na ordem do painel do antigo. A
+// coluna Lote (rótulo) está sempre na folha; "faixa" é o par Faixa exigida (faixa_min + faixa_max).
+export const SHEET_COLUMN_KEYS = Object.freeze(['qtd', 'faixa', 'menor', 'maior', 'peso_medio', 'media_arroba', 'peso_total', 'total_arroba', 'ganho_medio', 'ganho_medio_arroba', 'ganho_total', 'ganho_total_arroba', 'dias_medios', 'gmd_medio', 'machos', 'femeas']);
+// Visíveis por padrão (item 5): Lote, Qtd, Faixa exigida, Menor, Maior, Peso médio, Média (@), Peso total,
+// GMD médio, Machos, Fêmeas. As demais ficam no seletor "Colunas".
+export const SHEET_DEFAULT_KEYS = Object.freeze(['qtd', 'faixa', 'menor', 'maior', 'peso_medio', 'media_arroba', 'peso_total', 'gmd_medio', 'machos', 'femeas']);
+
+// Analítico (Detalhado): colunas do antigo, na ordem dele (item 4); as 3 opcionais ficam no seletor.
+export const ANALITICO_COLUMNS = Object.freeze(['data_pesagem', 'numero_animal', 'sexo', 'raca', 'peso', 'nome_lote', 'nome_apartacao', 'dias', 'ganho', 'gmd']);
+export const ANALITICO_AVAILABLE_COLUMNS = Object.freeze(['data_pesagem', 'numero_animal', 'sexo', 'raca', 'peso', 'nome_lote', 'nome_apartacao', 'data_anterior', 'peso_anterior', 'dias', 'ganho', 'gmd', 'observacao']);
+// Subtotal por grupo e total geral do Analítico: animais (distintos), peso médio, GMD médio (ponderado).
+export const ANALITICO_TOTALS = Object.freeze([
+  { id: 'animais', columnId: 'numero_animal', op: 'countDistinct' },
+  { id: 'peso_medio', columnId: 'peso', op: 'avg' },
+  { id: 'gmd_medio', columnId: 'gmd', op: 'weightedGmd' },
+]);
+// Botões "Agrupar por" do Analítico (em ordem de clique, até 3 níveis).
+export const ANALITICO_GROUP_CHOICES = Object.freeze(['nome_lote', 'nome_apartacao', 'sexo', 'raca']);
+
+// Sintético (Matriz): eixos e célula (Qtd = animais distintos, Peso médio, GMD médio ponderado).
+export const MATRIX_AXES = Object.freeze([
+  { id: 'lote', label: 'Lote', columnId: 'nome_lote' },
+  { id: 'apartacao', label: 'Apartação', columnId: 'nome_apartacao' },
+  { id: 'sexo', label: 'Sexo', columnId: 'sexo' },
+  { id: 'raca', label: 'Raça', columnId: 'raca' },
+  { id: 'mes', label: 'Mês', columnId: 'mes_pesagem' },
+]);
+export const MATRIX_TOTALS = Object.freeze([
+  { id: 'qtd', columnId: 'numero_animal', op: 'countDistinct' },
+  { id: 'peso_medio', columnId: 'peso', op: 'avg' },
+  { id: 'gmd_medio', columnId: 'gmd', op: 'weightedGmd' },
+]);
+
+// Vendas (Detalhado): só saídas por venda (condição FIXA do tipo, pelo código — a mesma população de
+// "Vendas do período"), agrupadas por comprador (texto do lançamento; na E5 vira o parceiro).
+export const VENDAS_POPULATION = Object.freeze({
+  tipo_manejo: { operator: 'in', values: ['Saída'], match: 'code' },
+  motivo_saida: { operator: 'in', values: ['Venda'], match: 'code' },
+});
+export const VENDAS_COLUMNS = Object.freeze(['comprador', 'data_pesagem', 'numero_animal', 'peso', 'peso_arroba', 'valor_arroba', 'valor_venda_total']);
+export const VENDAS_AVAILABLE_COLUMNS = Object.freeze([...VENDAS_COLUMNS, 'destino_venda', 'nome_lote', 'nome_apartacao', 'sexo', 'raca', 'era', 'marca', 'observacao']);
+export const VENDAS_TOTALS = Object.freeze([
+  { id: 'animais', columnId: 'numero_animal', op: 'countDistinct' },
+  { id: 'peso_total', columnId: 'peso', op: 'sum' },
+  { id: 'peso_medio', columnId: 'peso', op: 'avg' },
+  { id: 'arrobas', columnId: 'peso_arroba', op: 'sum' },
+  { id: 'valor_total', columnId: 'valor_venda_total', op: 'sum' },
+]);
+
+// "Ordenar por": exatamente as 8 opções do antigo (item 6), com os rótulos dele. A tradução de cada uma
+// para a seleção de cada tipo fica em domain/sortChoices.js.
+export const PESAGENS_SORT_CHOICES = Object.freeze([
+  { id: 'data_desc', label: 'Data (Mais Recente)' },
+  { id: 'data_asc', label: 'Data (Mais Antiga)' },
+  { id: 'peso_desc', label: 'Peso (Maior)' },
+  { id: 'peso_asc', label: 'Peso (Menor)' },
+  { id: 'gmd_desc', label: 'GMD (Maior)' },
+  { id: 'gmd_asc', label: 'GMD (Menor)' },
+  { id: 'animal_asc', label: 'Animal (A-Z)' },
+  { id: 'lote_asc', label: 'Lote (A-Z)' },
+]);
+
+// Os 5 tipos, nesta ordem (item 1). Ids estáveis: vão para o último estado, os modelos e o manifesto.
+export const PESAGENS_VIEW_IDS = Object.freeze(['analitico', 'sintetico-matriz', 'por-apartacao-lote', 'por-apartacao-data', 'vendas']);
+export const PESAGENS_DEFAULT_VIEW = 'por-apartacao-data';
+const SHEET_CHOICES = { available: [...SHEET_COLUMN_KEYS], defaults: [...SHEET_DEFAULT_KEYS] };
+export const PESAGENS_VIEWS = Object.freeze([
+  {
+    id: 'analitico', label: 'Analítico (Detalhado)', mode: 'DETALHADO', groups: [], titleKind: 'Analítico',
+    groupChoices: [...ANALITICO_GROUP_CHOICES], columns: [...ANALITICO_COLUMNS], aggregates: ANALITICO_TOTALS,
+    columnChoices: { available: [...ANALITICO_AVAILABLE_COLUMNS], defaults: [...ANALITICO_COLUMNS] },
+  },
+  {
+    id: 'sintetico-matriz', label: 'Sintético (Matriz)', mode: 'RESUMIDO', groups: [], titleKind: 'Sintético',
+    layout: 'matrix', matrix: { eixoY: 'sexo', eixoX: 'lote' }, aggregates: MATRIX_TOTALS,
+  },
+  {
+    id: 'por-apartacao-lote', label: 'Por Apartação/Lote', mode: 'RESUMIDO', titleKind: 'Sintético',
+    groups: [{ columnId: 'nome_apartacao' }, { columnId: 'nome_lote' }], aggregates: SHEET_TOTALS, columnChoices: SHEET_CHOICES,
+  },
+  {
+    id: 'por-apartacao-data', label: 'Por Apartação (Resumo por Data)', mode: 'RESUMIDO', titleKind: 'Sintético',
+    groups: [{ columnId: 'nome_apartacao' }, { columnId: 'data_pesagem', direction: 'desc' }, { columnId: 'nome_lote' }], aggregates: SHEET_TOTALS, columnChoices: SHEET_CHOICES,
+  },
+  {
+    id: 'vendas', label: 'Vendas (Detalhado)', mode: 'DETALHADO', titleKind: 'Sintético',
+    groups: [{ columnId: 'comprador' }], population: VENDAS_POPULATION, columns: [...VENDAS_COLUMNS], aggregates: VENDAS_TOTALS,
+    columnChoices: { available: [...VENDAS_AVAILABLE_COLUMNS], defaults: [...VENDAS_COLUMNS] },
+  },
+]);
 
 export const PESAGENS = defineReport({
   id: 'pesagens',
@@ -92,13 +190,13 @@ export const PESAGENS = defineReport({
   quickFilters: [
     { id: 'entradas-saidas', label: 'Somente entradas e saídas', filters: { tipo_manejo: { operator: 'in', values: ['Cadastro', 'Saída'] } } },
   ],
-  // E1B "Tipo de relatório": atalhos para agrupamentos/modo da E1 (não mudam defaultGroups/Aggregates).
-  views: [
-    { id: 'por-apartacao-data', label: 'Por apartação (resumo por data)', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'data_pesagem', direction: 'desc' }, { columnId: 'nome_lote' }], mode: 'RESUMIDO', aggregates: SHEET_TOTALS },
-    { id: 'por-lote', label: 'Por lote', groups: [{ columnId: 'nome_lote' }], mode: 'RESUMIDO', aggregates: SHEET_TOTALS },
-    { id: 'por-data', label: 'Por data', groups: [{ columnId: 'data_pesagem', direction: 'desc' }], mode: 'RESUMIDO', aggregates: SHEET_TOTALS_SEM_FAIXA },
-    { id: 'analitico', label: 'Analítico por animal', groups: [], mode: 'DETALHADO', columns: [...ANALYTIC_EVENT_COLUMNS] },
-  ],
+  // E1D "Tipo de relatório": os 5 tipos do MAKGESTAO (não mudam defaultGroups/Aggregates, que continuam
+  // servindo aos links e modelos antigos). Abre em "Por Apartação (Resumo por Data)".
+  views: PESAGENS_VIEWS,
+  defaultView: PESAGENS_DEFAULT_VIEW,
+  matrixAxes: MATRIX_AXES,
+  sortChoices: PESAGENS_SORT_CHOICES,
+  defaultSortChoice: 'data_desc',
   metricLabels: SHEET_METRIC_LABELS,
   // A faixa exigida é do LOTE: só aparece quando o último nível de agrupamento é o lote (e no "TOTAL POR
   // LOTE"); em qualquer outro agrupamento as duas métricas saem da folha e das exportações.

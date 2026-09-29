@@ -16,7 +16,7 @@ import { REPORT_FAMILIES, REPORT_MODES } from "@/modules/reporting/domain/report
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
-import { listReportViews, matchView, parseSortChoice, viewSelection } from "@/modules/reporting/domain/reportViews";
+import { getReportView, listReportViews, parseSortChoice, resolveViewId, viewSelection } from "@/modules/reporting/domain/reportViews";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { aliasSelection, getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
 import { runReport } from "@/modules/reporting/application/reportService";
@@ -49,8 +49,23 @@ const FILTER_BUTTONS = Object.freeze([
   { label: "Status", ids: ["situacao_atual", "situacao"] },
 ]);
 
-function stateFromRequest(definition, request, extra = {}) {
+// E1D (contrato §3): tipo explícito no estado da tela. Estado/modelo de antes da E1D (sem `view`) ganha o
+// tipo que bate pela estrutura (resolveViewId); nenhum → null ("Personalizado").
+function withTypedState(definition, state) {
+  const view = state.view !== undefined ? state.view : resolveViewId(definition, state);
   return {
+    ...state,
+    view: view ?? null,
+    matrix: state.matrix ?? (view ? getReportView(definition, view)?.matrix ?? null : null),
+    sortChoice: state.sortChoice !== undefined ? state.sortChoice : (definition.defaultSortChoice ?? null),
+  };
+}
+
+function stateFromRequest(definition, request, extra = {}) {
+  return withTypedState(definition, {
+    view: request.selection.view,
+    matrix: request.selection.matrix,
+    sortChoice: request.selection.sortChoice,
     params: request.params,
     uiFilters: toDisplayFilters(request.selection.filters, definition.columns),
     fixedFilters: request.selection.fixedFilters ?? {},
@@ -67,7 +82,7 @@ function stateFromRequest(definition, request, extra = {}) {
     showEmptyColumns: false,
     detailSheet: false,
     ...extra,
-  };
+  });
 }
 
 function initialState(definition, template, preset, role, savedState) {
@@ -82,6 +97,19 @@ function initialState(definition, template, preset, role, savedState) {
   }
   const params = {};
   for (const param of definition.params) if (param.default != null) params[param.id] = param.default;
+  // E1D: relatório com tipo padrão (Pesagens → "Por Apartação (Resumo por Data)") abre nele.
+  if (!preset && definition.defaultView) {
+    const selection = viewSelection(definition.defaultView, definition);
+    return withTypedState(definition, {
+      view: selection.view, matrix: selection.matrix, sortChoice: definition.defaultSortChoice ?? null,
+      params,
+      uiFilters: toDisplayFilters(definition.defaultFilters ?? {}, definition.columns),
+      fixedFilters: {},
+      columns: selection.columns, groups: selection.groups, aggregates: selection.aggregates, sort: selection.sort,
+      search: "", widths: {}, mode: selection.mode, summarySort: selection.summarySort, drill: [],
+      orientation: "auto", showEmptyColumns: false, detailSheet: false,
+    });
+  }
   // Visão de um relatório antigo (favorito, recente ou link de antes da 1.4.0): mesma seleção.
   const legacy = preset ? aliasSelection(preset) : null;
   // Condições que eram fixas no relatório antigo comparavam o código (motivo = Morte, tipo
@@ -89,7 +117,7 @@ function initialState(definition, template, preset, role, savedState) {
   const legacyFilters = legacy
     ? Object.fromEntries(Object.entries(legacy.filters).map(([columnId, filter]) => [columnId, preset.fixed.includes(columnId) ? { ...filter, match: "code" } : filter]))
     : null;
-  return {
+  return withTypedState(definition, {
     params,
     uiFilters: toDisplayFilters(legacyFilters ?? definition.defaultFilters ?? {}, definition.columns),
     fixedFilters: {},
@@ -105,7 +133,7 @@ function initialState(definition, template, preset, role, savedState) {
     orientation: "auto",
     showEmptyColumns: false,
     detailSheet: false,
-  };
+  });
 }
 
 // Filtro rápido "ligado": compara a forma normalizada (modelo salvo e pílula guardam valueTo/values
@@ -200,6 +228,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
         selection: {
           columns: state.columns, filters: serviceFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort, search: state.search,
           mode: state.mode, summarySort: state.summarySort, drill: state.drill,
+          // E1D: tipo explícito, eixos da matriz e opção fixa de "Ordenar por" (o serviço aplica).
+          view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
         },
         reuse: reload ? null : lastViewModel.current,
         // Visão antiga (favorito/link de antes da 1.4.0): vai para o manifesto das emissões.
@@ -214,7 +244,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     } finally {
       if (seq === runSeq.current) setLoading(false);
     }
-  }, [definition.id, state.params, state.columns, serviceFilters, state.fixedFilters, state.groups, state.aggregates, state.sort, state.search, state.mode, state.summarySort, state.drill, actor, preset, presetId, template]);
+  }, [definition.id, state.params, state.columns, serviceFilters, state.fixedFilters, state.groups, state.aggregates, state.sort, state.search, state.mode, state.summarySort, state.drill, state.view, state.matrix, state.sortChoice, actor, preset, presetId, template]);
 
   useEffect(() => {
     const timer = setTimeout(() => execute(), 200);
@@ -257,6 +287,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       sort: state.sort, search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)),
       widths: state.widths, orientation: state.orientation, mode: state.drill.length ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
       showEmptyColumns: state.showEmptyColumns,
+      view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
     };
     pendingViewState.current = payload;
     const timer = setTimeout(() => {
@@ -287,16 +318,21 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     ...quickGroupOptions.map((column) => ({ value: column.id, label: column.label })),
     { value: CUSTOM_GROUP, label: quickGroupValue === CUSTOM_GROUP ? state.groups.map((group) => columnLabel(group.columnId)).join(" › ") : "Mais níveis…" },
   ];
-  const setGroups = (groups) => update({ groups, drill: [] });
-  const setMode = (mode) => update({ mode, drill: mode === REPORT_MODES.RESUMIDO ? [] : state.drill });
+  // E1D: agrupar ou trocar o modo pelos controles genéricos sai do tipo ("Personalizado", view null) — os
+  // controles próprios de um tipo (botões do Analítico, eixos da matriz) mantêm o tipo.
+  const setGroups = (groups) => update({ groups, drill: [], view: null, matrix: null });
+  const setMode = (mode) => update({ mode, drill: mode === REPORT_MODES.RESUMIDO ? [] : state.drill, ...(mode === state.mode ? {} : { view: null, matrix: null }) });
 
   // Tipo de relatório: atalho para agrupamento + modo (+ totais/colunas/ordem da visão) — nada de conta nova.
-  const viewId = matchView(definition, { groups: state.groups, mode: state.mode, aggregates: state.aggregates, columns: state.columns }) ?? "custom";
+  // E1D: o tipo é explícito (state.view); estado de antes da E1D cai no que bate pela estrutura.
+  const viewId = resolveViewId(definition, { view: state.view, groups: state.groups, mode: state.mode, aggregates: state.aggregates, columns: state.columns }) ?? "custom";
   const applyView = (id) => {
     const view = views.find((item) => item.id === id);
     if (!view) return;
     const selection = viewSelection(view, definition);
     update({
+      view: selection.view,
+      matrix: selection.matrix,
       groups: selection.groups,
       mode: selection.mode,
       aggregates: selection.aggregates ?? state.aggregates,
@@ -400,6 +436,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
         columns: state.columns, filters: state.uiFilters, fixedFilters: state.fixedFilters, groups: state.groups, aggregates: state.aggregates, sort: state.sort,
         search: state.search, period, params: Object.fromEntries(Object.entries(state.params).filter(([key]) => key !== periodParam?.id)), widths: state.widths,
         orientation: state.orientation, mode: drilling ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
+        view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
       }, actor);
       setCurrentTemplate(saved);
       setDialog(null);

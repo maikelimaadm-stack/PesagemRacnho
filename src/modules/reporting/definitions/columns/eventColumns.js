@@ -42,6 +42,18 @@ const sexCodeOf = (row) => {
 
 const isBlank = (value) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
 
+// Mês da pesagem (E1D, eixo "Mês" da matriz): chave e ordem "aaaa-mm" (cronológica — o MAKGESTAO antigo
+// ordenava por texto), rótulo "set/2026". Lido do texto da data civil, sem fuso.
+const MONTHS_PT = Object.freeze(['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez']);
+const monthKeyOf = (row) => {
+  const match = /^(\d{4})-(\d{2})/.exec(String(row?.data_pesagem ?? ''));
+  return match && Number(match[2]) >= 1 && Number(match[2]) <= 12 ? `${match[1]}-${match[2]}` : null;
+};
+export function monthLabelOf(row) {
+  const key = monthKeyOf(row);
+  return key ? `${MONTHS_PT[Number(key.slice(5, 7)) - 1]}/${key.slice(0, 4)}` : null;
+}
+
 // E1B: @ de PESO VIVO = kg ÷ divisor da linha (30 padrão ou 15, Configurações › Relatórios; gravado
 // em `arroba_divisor` pela fonte). NÃO é a @ de carcaça do Comercial (quantidade_arrobas = carcaça ÷ 15,
 // com rendimento, sensível). Sem kg (ou sem divisor) → null, nunca 0.
@@ -89,6 +101,13 @@ const purchaseFreight = (row) => {
 
 export const EVENT_COLUMNS = [
   defineColumn({ id: 'data_pesagem', label: 'Data', type: 'date', grains: EVENT_GRAINS, groupable: true, defaultVisible: true, defaultWidth: 108 }),
+  defineColumn({
+    id: 'mes_pesagem', label: 'Mês', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'derivado', defaultWidth: 92,
+    // Ordenar/filtrar pelo texto ("abr" < "jan") seria errado: o mês só agrupa (ordem cronológica pelo groupOrder).
+    sortable: false, filterable: false,
+    accessor: monthLabelOf, groupKey: monthKeyOf, groupLabel: monthLabelOf, groupOrder: monthKeyOf,
+    description: 'Mês da data da pesagem ("set/2026"), em ordem cronológica — eixo "Mês" da matriz.',
+  }),
   defineColumn({ id: 'tipo_manejo', label: 'Tipo', type: 'enum', options: TIPO_MANEJO_OPTIONS, grains: EVENT_GRAINS, groupable: true, defaultVisible: true, defaultWidth: 112 }),
   defineColumn({ id: 'motivo_saida', label: 'Motivo da saída', type: 'enum', options: MOTIVO_SAIDA_OPTIONS, grains: EVENT_GRAINS, groupable: true, defaultVisible: true }),
   defineColumn({

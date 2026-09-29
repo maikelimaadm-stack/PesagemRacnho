@@ -49,7 +49,9 @@ function BarDate({ id, label, value, onChange }) {
  * @param {{ period?: object|null, resolvedPeriod?: {from, to}|null, onPeriod?: Function, orientation: string,
  *   onOrientation: Function, views: object[], viewId: string, onView: Function, groupOptions: object[],
  *   groupValue: string, onGroup: Function, sortOptions: object[], sortValue: string, onSort: Function,
- *   previous?: { value: string, onChange: Function }|null }} props
+ *   previous?: { value: string, onChange: Function }|null, typeControls?: React.ReactNode }} props
+ *   typeControls (E1D): controles próprios do tipo atual (eixos da matriz, botões de agrupamento do
+ *   Analítico), logo depois do "Tipo de relatório". O visual final é da E1E.
  */
 export default function ReportFilterBar({
   period = null, resolvedPeriod = null, onPeriod,
@@ -58,6 +60,7 @@ export default function ReportFilterBar({
   groupOptions, groupValue, onGroup,
   sortOptions, sortValue, onSort,
   previous = null,
+  typeControls = null,
 }) {
   const from = period?.preset === "personalizado" ? period.from : resolvedPeriod?.from;
   const to = period?.preset === "personalizado" ? period.to : resolvedPeriod?.to;
@@ -90,6 +93,7 @@ export default function ReportFilterBar({
       )}
       <BarSelect id="orientacao" label="Orientação" value={orientation} options={ORIENTATION_OPTIONS} onChange={onOrientation} title="Orientação da folha na tela, na impressão e no PDF" />
       <BarSelect id="tipo" label="Tipo de relatório" value={viewId} options={viewOptions} onChange={(value) => value !== "custom" && onView(value)} />
+      {typeControls}
       <BarSelect id="agrupar" label="Agrupar por" value={groupValue} options={groupOptions} onChange={onGroup} />
       <BarSelect id="ordenar" label="Ordenar por" value={sortValue} options={sortChoices} onChange={(value) => value !== "custom" && onSort(value)} />
       {previous ? <BarSelect id="anterior" label="Pesagem anterior" value={previous.value} options={PREVIOUS_OPTIONS} onChange={previous.onChange} /> : null}
