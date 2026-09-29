@@ -2,6 +2,8 @@
 // em marcação HTML — a mesma na tela (fragmento dentro do app), na impressão e no PDF (documento completo).
 // Todo texto passa por escapeHtml; o logo só entra se for data URL PNG/JPEG válido. Cada célula leva
 // data-col=<índice> igual ao do cabeçalho da sua coluna (base do gate de alinhamento).
+// E1D visual: documento com style 'makgestao' (os 5 tipos de Pesagens) sai com o desenho da folha do antigo
+// (seção abaixo); os demais continuam com o desenho da E1B.
 import { isAcceptedLogo } from '../../../catalog/domain/propertyHeader.js';
 
 export function escapeHtml(value) {
@@ -108,6 +110,121 @@ function renderSection(doc, section, options) {
   return `<section class="sheet-sec sheet-sec--${section.level}${keep}" data-node-id="${escapeHtml(section.id)}">\n${inner}\n</section>`;
 }
 
+// ---------------------------------------------------------------------------
+// Folha no estilo do MAKGESTAO (E1D visual — doc.style = 'makgestao', só nos 5 tipos de Pesagens)
+// ---------------------------------------------------------------------------
+// Mesma marcação de base (data-col/data-key em cada célula, cabeçalho e rodapé iguais); muda o desenho: as
+// linhas de total (row.line) saem como LINHA DE TEXTO abaixo da tabela ("Subtotal 02/06/2026: 103 animais …"),
+// a célula da matriz empilha os 3 valores em <span> e as classes dizem alinhamento/fonte/negrito como no antigo.
+
+const ALIGN_CLASS = Object.freeze({ left: 'al-l', center: 'al-c', right: 'al-r' });
+
+function makCellClass(doc, cell) {
+  const column = doc.columns[cell.col];
+  const parts = [cellClass(cell), ALIGN_CLASS[cell.kind === 'label' ? 'left' : cell.align ?? column?.align] ?? 'al-l'];
+  if (column?.mk?.mono && cell.kind !== 'label') parts.push('mk-mono');
+  if (column?.mk?.weight) parts.push(`mk-${column.mk.weight}`);
+  if (cell.tone) parts.push(`mk-${cell.tone}`);
+  if (column?.total) parts.push('mk-tcol'); // coluna TOTAL da matriz
+  if (cell.partial) parts.push('sheet-partial');
+  return parts.join(' ');
+}
+
+function renderMakHeadRow(doc, { interactive, sort }) {
+  const cells = doc.columns.map((column, index) => {
+    const align = ALIGN_CLASS[column.align] ?? 'al-l';
+    const cls = `${column.align === 'left' ? 'lbl ' : ''}${align}${column.total ? ' mk-tcol' : ''}`;
+    let content = escapeHtml(column.label);
+    if (interactive && column.kind === 'metric' && doc.layout === 'summary') {
+      const state = sort?.key === column.key ? (sort.direction === 'desc' ? 'descending' : 'ascending') : 'none';
+      content = `<button type="button" class="sheet-sort" data-sort="${escapeHtml(column.key)}" aria-sort="${state}" title="Ordenar os grupos por ${escapeHtml(column.label)}">${escapeHtml(column.label)}</button>`;
+    }
+    return `<th data-col="${index}" data-key="${escapeHtml(column.key)}" class="${cls}" scope="col">${content}</th>`;
+  });
+  return `<tr>${cells.join('')}</tr>`;
+}
+
+function renderMakRow(doc, row, { interactive }) {
+  const cls = ROW_CLASS[row.type] ?? 'sheet-row';
+  const attrs = `class="${cls}" data-row-type="${row.type}" data-row-id="${escapeHtml(row.id)}"`;
+  const cells = row.cells.map((cell) => {
+    // Matriz: Qtd, Peso Médio e GMD Médio, um embaixo do outro (cada um com o seu tamanho/cor, como no antigo).
+    let text = Array.isArray(cell.lines) ? cell.lines.map((line, index) => `<span class="mk-v mk-v${index + 1}${line === '-' ? ' mk-none' : ''}">${escapeHtml(line)}</span>`).join('') : escapeHtml(cell.text);
+    if (interactive && cell.kind === 'label' && row.drill) {
+      text = `<button type="button" class="sheet-drill" data-drill="${escapeHtml(row.drill)}" title="Abrir o detalhado de ${escapeHtml(cell.text)}">${text}</button>`;
+    } else if (interactive && cell.drill && text) {
+      text = `<button type="button" class="sheet-drill" data-drill="${escapeHtml(cell.drill)}" title="Abrir o detalhado deste cruzamento">${text}</button>`;
+    }
+    const title = cell.partial ? ` title="Calculado com ${cell.partial.nValid} de ${cell.partial.nTotal} valores"` : '';
+    return `<td data-col="${cell.col}" data-key="${escapeHtml(cell.key)}" class="${makCellClass(doc, cell)}"${title}>${text}</td>`;
+  });
+  return `<tr ${attrs}>${cells.join('')}</tr>`;
+}
+
+/**
+ * Linha de total em texto. grid = itens espalhados na largura (Resumo por Data, Por Apartação/Lote, quadro do
+ * comprador): "<b>Subtotal 02/06/2026:</b> 103 animais"; box/right = uma frase com " | " (Analítico, TOTAL GERAL
+ * de Vendas).
+ */
+export function renderMakLine(row) {
+  const { layout, items } = row.line;
+  const attrs = `class="mk-line mk-line--${layout}" data-row-type="${row.type}" data-row-id="${escapeHtml(row.id)}"`;
+  if (layout === 'grid') {
+    const cells = items.map((item) => `<div class="mk-item" data-key="${escapeHtml(item.key)}"><strong>${escapeHtml(item.label)}:</strong> ${escapeHtml(item.text)}</div>`).join('');
+    return `<div ${attrs} style="grid-template-columns: repeat(${items.length}, minmax(0, 1fr))">${cells}</div>`;
+  }
+  const parts = items.map((item) => `<span class="mk-item" data-key="${escapeHtml(item.key)}">${escapeHtml(item.label)}: ${escapeHtml(item.text)}</span>`);
+  return `<div ${attrs}>${parts.join('<span class="mk-sep"> | </span>')}</div>`;
+}
+
+function renderMakTable(doc, table, options) {
+  if (!table) return '';
+  const drawn = table.rows.filter((row) => !row.line);
+  const lines = table.rows.filter((row) => row.line).map(renderMakLine).join('\n');
+  let heading = '';
+  if (table.legend) {
+    // Matriz: "Linhas: Sexo | Colunas: Lote | Valores: Qtd / Peso Médio / GMD Médio" com os rótulos em negrito.
+    heading = `<div class="mk-legend">${table.legend.map((part) => `<strong>${escapeHtml(part.label)}:</strong> ${escapeHtml(part.text)}`).join(' | ')}</div>`;
+  } else if (table.heading ?? table.title) {
+    heading = `<h3 class="sheet-sec-title sheet-sec-title--total">${escapeHtml(table.heading ?? table.title)}</h3>`;
+  }
+  if (!drawn.length) return `${heading}${lines}`;
+  const colgroup = `<colgroup>${doc.print.widthPercents.map((percent) => `<col style="width:${percent}%">`).join('')}</colgroup>`;
+  const rows = drawn.map((row) => renderMakRow(doc, row, options)).join('\n');
+  return `${heading}<table class="sheet-table sheet-table--${table.kind.toLowerCase()}" data-table-id="${escapeHtml(table.id)}" data-kind="${table.kind}">${colgroup}<thead>${renderMakHeadRow(doc, options)}</thead><tbody>\n${rows}\n</tbody></table>${lines ? `\n${lines}` : ''}`;
+}
+
+function renderMakSection(doc, section, options) {
+  const tag = section.level === 1 ? 'h2' : 'h3';
+  let title = '';
+  if (section.title) {
+    let text = escapeHtml(section.title);
+    if (options.interactive && section.drill) {
+      text = `<button type="button" class="sheet-drill" data-drill="${escapeHtml(section.drill)}" title="Abrir o detalhado deste grupo">${text}</button>`;
+    }
+    title = `<${tag} class="sheet-sec-title sheet-sec-title--${section.level}">${text}</${tag}>`;
+  }
+  // Vendas do antigo: quadro do comprador (título + totais) antes da tabela.
+  const head = section.lead ? `<div class="mk-box">${title}${renderMakLine(section.lead)}</div>` : title;
+  const inner = [
+    head,
+    ...section.sections.map((child) => renderMakSection(doc, child, options)),
+    renderMakTable(doc, section.table, options),
+    section.leafTotal ? `<div class="mk-block">${renderMakTable(doc, section.leafTotal, options)}</div>` : '',
+  ].filter(Boolean).join('\n');
+  const keep = section.level === 1 ? ' sheet-keep' : '';
+  const leaf = section.sections.length ? '' : ' mk-leaf';
+  return `<section class="sheet-sec sheet-sec--${section.level}${keep}${leaf}" data-node-id="${escapeHtml(section.id)}">\n${inner}\n</section>`;
+}
+
+function renderMakContent(doc, options) {
+  return [
+    ...doc.sections.map((section) => renderMakSection(doc, section, options)),
+    renderMakTable(doc, doc.flat, options),
+    doc.grandTotal ? `<div class="mk-grand">${renderMakTable(doc, doc.grandTotal, options)}</div>` : '',
+  ].filter(Boolean).join('\n');
+}
+
 // E1D item 8: filtros, @ (quando houver), colunas omitidas pelo perfil (quando houver) e quem emitiu/quando.
 function renderFooter(doc) {
   const parts = [doc.footer.filtros, doc.footer.arroba, doc.footer.omitidas, doc.footer.emitidoPor].filter(Boolean);
@@ -125,17 +242,23 @@ export function renderSheetBody(doc, { mode = 'fragment', interactive = false, s
   const header = renderSheetHeaderHtml(doc.header);
   // Abaixo do título só o período (E1D item 8), no lugar do antigo subtítulo — mesma marcação e estilo.
   const titleRow = `<div class="sheet-title-row"><h1 class="sheet-title">${escapeHtml(doc.title)}</h1><span class="sheet-title-side">${escapeHtml(doc.periodText)}</span></div>`;
-  const content = doc.empty
-    ? '<p class="sheet-empty">Nenhum registro para os filtros informados.</p>'
-    : [
+  const mak = doc.style === 'makgestao';
+  let content;
+  if (doc.empty) content = `<p class="sheet-empty">${escapeHtml(doc.emptyText ?? 'Nenhum registro para os filtros informados.')}</p>`;
+  else if (mak) content = renderMakContent(doc, options);
+  else {
+    content = [
       ...doc.sections.map((section) => renderSection(doc, section, options)),
       renderTable(doc, doc.flat, options),
       doc.grandTotal ? `<div class="sheet-grand-block">${renderTable(doc, doc.grandTotal, options)}</div>` : '',
     ].join('\n');
+  }
   // Nenhuma nota na folha; só na tela, o aviso de linhas limitadas (a impressão leva todas).
   const notes = mode !== 'print' && doc.screenNotice ? `<ul class="sheet-notes"><li>${escapeHtml(doc.screenNotice)}</li></ul>` : '';
   const rootClass = `rpt-sheet rpt-sheet--${mode === 'print' ? 'print' : 'screen'} sheet--${doc.print.orientation} sheet-size-${doc.print.sizeClass}`;
-  return `<div class="${rootClass}" data-orientation="${doc.print.orientation}" data-layout="${doc.layout}">
+  // E1D visual: data-style/data-view escopam o CSS da folha do MAKGESTAO (só os 5 tipos de Pesagens).
+  const styleAttrs = mak ? ` data-style="makgestao" data-view="${escapeHtml(doc.variant)}"` : '';
+  return `<div class="${rootClass}" data-orientation="${doc.print.orientation}" data-layout="${doc.layout}"${styleAttrs}>
 <table class="sheet-page">
 <thead><tr><td>${header}${titleRow}</td></tr></thead>
 <tfoot><tr><td>${renderFooter(doc)}</td></tr></tfoot>

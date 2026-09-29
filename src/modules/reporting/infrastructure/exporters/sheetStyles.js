@@ -2,6 +2,129 @@
 // em papel), na impressão e no PDF. Tudo sob `.rpt-sheet` para não herdar nem vazar regras do app.
 // Medidas em mm/pt (papel A4, margens de 10 mm). Números em fonte monoespaçada, alinhados à direita.
 // A folha é sempre "papel branco", também no tema escuro (é a pré-visualização do que sai na impressora).
+//
+// E1D visual: a folha dos 5 tipos de Pesagens tem a cara da do MAKGESTAO — regras escopadas em
+// `.rpt-sheet[data-style="makgestao"]` (M abaixo) e por tipo em [data-view]; os outros relatórios e o
+// Personalizado não mudam. Medidas tiradas das classes do antigo (Tailwind + shadcn Table): text-xs 12 px
+// (9 pt, a base), text-sm 14 px, text-base 16 px; TableHead h-10 px-2, TableCell p-2; cores slate/gray.
+
+const M = '.rpt-sheet[data-style="makgestao"]';
+const MONO = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+const MAKGESTAO_CSS = `
+/* ---- Folha no estilo do MAKGESTAO (E1D visual) ---- */
+${M} { --mk-fg: #020817; --mk-muted: #64748b; --mk-line: #e2e8f0; --mk-slate-50: #f8fafc; --mk-slate-100: #f1f5f9; --mk-slate-300: #cbd5e1; --mk-slate-500: #64748b; --mk-slate-600: #475569; --mk-slate-700: #334155; --mk-slate-800: #1e293b; --mk-slate-900: #0f172a; --mk-gray-50: #f9fafb; --mk-gray-100: #f3f4f6; --mk-gray-300: #d1d5db; --mk-gray-500: #6b7280; --mk-gray-600: #4b5563; --mk-gray-700: #374151; --mk-emerald: #059669; --mk-red: #dc2626;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 9pt; line-height: 1.3333; color: var(--mk-fg); }
+.rpt-sheet.sheet-size-s[data-style="makgestao"] { font-size: 8pt; }
+.rpt-sheet.sheet-size-xs[data-style="makgestao"] { font-size: 7.2pt; }
+
+/* Cabeçalho: logo 96 px à esquerda (h-24 w-24), produtor/fazenda/endereço centralizados no resto da largura;
+   título + período com a linha preta de 2 px embaixo (border-b-2 border-black pb-1 mb-2). */
+${M} .sheet-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 0; }
+${M} .sheet-header__logo { flex: none; width: 96px; height: 96px; min-height: 0; justify-content: center; }
+${M} .sheet-header__logo:empty { display: none; }
+${M} .sheet-logo { width: 100%; height: 100%; max-width: none; max-height: none; object-fit: contain; }
+${M} .sheet-header__id { flex: 1 1 auto; text-align: center; }
+${M} .sheet-header__meta { display: none; }
+${M} .sheet-titular, ${M} .sheet-header--system .sheet-titular { font-size: 1.3333em; line-height: 1.25; font-weight: 700; text-transform: uppercase; letter-spacing: 0; color: inherit; }
+${M} .sheet-fazenda, ${M} .sheet-endereco, ${M} .sheet-docs { font-size: 1em; line-height: 1.25; }
+${M} .sheet-title-row { display: block; border-bottom: 2px solid #000; padding: 0 0 4px; margin: 0 0 8px; }
+${M} .sheet-title { font-size: 1.3333em; line-height: 1.5; font-weight: 700; }
+${M} .sheet-title-side { display: block; text-align: left; font-size: 1em; line-height: 1.3333; color: var(--mk-gray-600); }
+
+/* Tabelas (shadcn Table): cabeçalho cinza em negrito, linhas com borda fina, sem zebra. */
+${M} .sheet-table { margin: 0; }
+${M} .sheet-table th { background: none; color: var(--mk-muted); font-weight: 700; font-size: 1em; line-height: 1.3333; height: 40px; padding: 0 8px; vertical-align: middle; text-align: left; border-bottom: 1px solid var(--mk-line); white-space: normal; }
+${M} .sheet-table td { padding: 8px; font-size: 1em; border-bottom: 1px solid var(--mk-line); vertical-align: middle; text-align: left; background: none; }
+${M} .sheet-table tbody tr:last-child td { border-bottom: 0; }
+${M} .sheet-table tbody tr.sheet-row:nth-child(even) td { background: none; }
+${M} .sheet-table .num { font-family: inherit; }
+${M} .sheet-table .al-l { text-align: left; }
+${M} .sheet-table .al-c { text-align: center; }
+${M} .sheet-table .al-r { text-align: right; }
+${M} .sheet-table .mk-mono { font-family: ${MONO}; }
+${M} .mk-bold { font-weight: 700; }
+${M} .mk-semibold { font-weight: 600; }
+${M} .mk-medium { font-weight: 500; }
+${M} .sheet-table td.mk-pos { color: var(--mk-emerald); }
+${M} .sheet-table td.mk-neg { color: var(--mk-red); }
+${M} .sheet-table .txt, ${M} .sheet-table .lbl { overflow-wrap: anywhere; }
+/* O antigo corria as seções de página em página (só o título não fica sozinho no pé) e não marcava valor parcial. */
+${M} .sheet-sec--1.sheet-keep { break-inside: auto; page-break-inside: auto; }
+.rpt-sheet[data-style="makgestao"].rpt-sheet--screen .sheet-partial { text-decoration: none; cursor: default; }
+
+/* Linha de total EM TEXTO ("Subtotal 02/06/2026: 103 animais   Peso Médio: 258,7 kg …"). */
+${M} .mk-line { font-size: 1em; line-height: 1.3333; color: var(--mk-slate-700); break-inside: avoid; page-break-inside: avoid; }
+${M} .mk-line strong { font-weight: 700; }
+${M} .mk-line--grid { display: grid; column-gap: 16px; padding: 8px 0; border-top: 1px solid var(--mk-line); }
+${M} .mk-line--box { margin-top: 8px; font-weight: 700; background: var(--mk-slate-50); padding: 8px 12px; border: 1px solid var(--mk-line); border-radius: 6px; }
+${M} .mk-line--right { margin-top: 8px; text-align: right; font-weight: 600; color: inherit; }
+${M} .mk-grand { margin-top: 24px; }
+${M} .mk-grand .mk-line--grid { padding: 12px 0; border-top: 2px solid var(--mk-slate-300); color: var(--mk-slate-800); }
+
+/* Por Apartação (Resumo por Data): APARTAÇÃO (text-sm, linha dupla embaixo), DATA (xs semi), tabela com
+   cabeçalho gray-50, Subtotal em texto; bloco TOTAL POR LOTE (cabeçalho gray-100, Total com linha de 2 px). */
+${M}[data-view="resumo-data"] .sheet-sec--1 { margin: 0 0 24px; }
+${M}[data-view="resumo-data"] .sheet-sec-title--1 { font-size: 1.1667em; line-height: 1.4286; color: var(--mk-slate-800); border-bottom: 2px solid var(--mk-line); padding: 0 0 8px; margin: 0 0 12px; }
+${M}[data-view="resumo-data"] .sheet-sec--2 { border-top: 1px solid var(--mk-line); }
+${M}[data-view="resumo-data"] .sheet-sec-title--2 { font-size: 1em; line-height: 1.3333; font-weight: 600; color: var(--mk-slate-700); padding: 8px 0; margin: 0 0 4px; }
+${M}[data-view="resumo-data"] .sheet-table thead th { background: var(--mk-gray-50); }
+${M}[data-view="resumo-data"] .mk-block { margin-top: 16px; }
+${M}[data-view="resumo-data"] .sheet-sec-title--total { font-size: 1em; line-height: 1.3333; font-weight: 700; color: var(--mk-slate-700); border-bottom: 1px solid var(--mk-line); padding: 0 0 8px; margin: 0 0 8px; }
+${M}[data-view="resumo-data"] .sheet-table--leaf_total thead th { background: var(--mk-gray-100); }
+${M}[data-view="resumo-data"] .mk-block .mk-line--grid { padding: 12px 0; border-top-width: 2px; margin-top: 8px; }
+
+/* Por Apartação/Lote: título normal-case, grade com bordas (cabeçalho font-medium gray-700), tudo à esquerda. */
+${M}[data-view="apartacao-lote"] .sheet-sec-title--1 { font-size: 1.1667em; line-height: 1.4286; text-transform: none; color: var(--mk-slate-800); margin: 4px 0; padding: 0; border: 0; }
+${M}[data-view="apartacao-lote"] .sheet-table th { height: 40px; padding: 4px 8px; font-weight: 500; color: var(--mk-gray-700); border: 1px solid var(--mk-line); }
+${M}[data-view="apartacao-lote"] .sheet-table td { padding: 4px 8px; color: var(--mk-gray-700); border: 1px solid var(--mk-gray-300); }
+${M}[data-view="apartacao-lote"] .sheet-table tbody tr:last-child td { border-bottom: 1px solid var(--mk-gray-300); }
+${M}[data-view="apartacao-lote"] .mk-line--grid { padding: 4px 0; border-top: 0; }
+${M}[data-view="apartacao-lote"] .mk-grand .mk-line--grid { padding: 12px 0; border-top: 2px solid var(--mk-slate-300); }
+
+/* Analítico: grupo (text-sm slate-700, linha embaixo), tabela, quadro do Subtotal e do TOTAL GERAL em negrito. */
+${M}[data-view="analitico"] .sheet-sec-title { font-size: 1.1667em; line-height: 1.4286; color: var(--mk-slate-700); border-bottom: 1px solid var(--mk-line); padding: 0 0 8px; margin: 16px 0 8px; }
+${M}[data-view="analitico"] .mk-leaf { margin-bottom: 16px; }
+${M}[data-view="analitico"] .mk-grand { margin-top: 16px; padding-top: 12px; border-top: 2px solid var(--mk-slate-300); }
+${M}[data-view="analitico"] .mk-grand .mk-line--box { margin-top: 0; padding: 12px; color: var(--mk-slate-800); }
+
+/* Vendas: quadro do comprador (slate-50, borda, cantos) com os totais ANTES da tabela; TOTAL GERAL à direita. */
+${M}[data-view="vendas"] .sheet-sec--1 { margin: 0 0 24px; }
+${M} .mk-box { background: var(--mk-slate-50); border: 1px solid var(--mk-line); border-radius: 6px; padding: 12px; margin: 0 0 8px; break-inside: avoid; page-break-inside: avoid; }
+${M} .mk-box .sheet-sec-title { font-size: 1.1667em; line-height: 1.4286; color: var(--mk-slate-800); margin: 0 0 8px; padding: 0; border: 0; }
+${M} .mk-box .mk-line--grid { padding: 0; border-top: 0; color: var(--mk-slate-600); }
+${M}[data-view="vendas"] .mk-grand { margin-top: 8px; }
+
+/* Sintético (Matriz): legenda, célula centralizada com Qtd (semi), peso (10 px slate-500) e GMD (10 px verde);
+   coluna TOTAL slate-50, linha TOTAL slate-50 em negrito, canto slate-100. */
+${M} .mk-legend { font-size: 1em; margin: 0 0 4px; }
+${M} .mk-legend strong { font-weight: 700; }
+${M}[data-view="matriz"] .sheet-table th { white-space: nowrap; }
+${M}[data-view="matriz"] .sheet-table td.num { border-left: 1px solid var(--mk-slate-100); }
+${M}[data-view="matriz"] .mk-v { display: block; line-height: 1.25; }
+${M}[data-view="matriz"] .mk-v1 { font-weight: 600; }
+${M}[data-view="matriz"] .mk-v2, ${M}[data-view="matriz"] .mk-v3 { font-size: .8333em; }
+${M}[data-view="matriz"] .mk-v2 { color: var(--mk-slate-500); }
+${M}[data-view="matriz"] .mk-v3 { color: var(--mk-emerald); }
+${M}[data-view="matriz"] .mk-v.mk-none { color: var(--mk-slate-500); }
+${M}[data-view="matriz"] .sheet-table td.mk-tcol { background: var(--mk-slate-50); border-left: 1px solid var(--mk-line); }
+${M}[data-view="matriz"] td.mk-tcol .mk-v1 { font-weight: 700; color: var(--mk-slate-800); }
+${M}[data-view="matriz"] td.mk-tcol .mk-v3 { color: var(--mk-slate-500); }
+${M}[data-view="matriz"] .sheet-table tr.sheet-grand td { background: var(--mk-slate-50); color: inherit; font-weight: 700; border-top: 1px solid var(--mk-line); border-bottom: 0; }
+${M}[data-view="matriz"] .sheet-table tr.sheet-grand .lbl { letter-spacing: 0; }
+${M}[data-view="matriz"] tr.sheet-grand .mk-v1 { font-weight: 700; color: var(--mk-slate-800); }
+${M}[data-view="matriz"] tr.sheet-grand .mk-v3 { color: var(--mk-slate-500); }
+${M}[data-view="matriz"] .sheet-table tr.sheet-grand td.mk-tcol { background: var(--mk-slate-100); border-left: 1px solid var(--mk-line); }
+${M}[data-view="matriz"] tr.sheet-grand td.mk-tcol .mk-v1 { color: var(--mk-slate-900); }
+${M}[data-view="matriz"] tr.sheet-grand td.mk-tcol .mk-v2, ${M}[data-view="matriz"] tr.sheet-grand td.mk-tcol .mk-v3 { color: var(--mk-slate-600); }
+
+/* Rodapé discreto como o "Impresso em" do antigo; folha vazia como o aviso dele. */
+${M} .sheet-footer { margin-top: 24px; padding-top: 8px; border-top: 1px solid var(--mk-gray-300); text-align: center; font-size: 1em; color: var(--mk-gray-500); }
+${M} .sheet-empty { padding: 48px 0; color: #94a3b8; }
+
+/* Muitas colunas (fonte menor, decideSheetLayout): menos respiro dos lados da célula (6 px em s, 4 px em xs). */
+.rpt-sheet.sheet-size-s[data-style="makgestao"] .sheet-table th, .rpt-sheet.sheet-size-s[data-style="makgestao"] .sheet-table td { padding-left: 6px; padding-right: 6px; }
+.rpt-sheet.sheet-size-xs[data-style="makgestao"] .sheet-table th, .rpt-sheet.sheet-size-xs[data-style="makgestao"] .sheet-table td { padding-left: 4px; padding-right: 4px; }
+`;
 
 export const SHEET_CSS = `
 .rpt-sheet { --sheet-text: #1f2328; --sheet-muted: #6b7280; --sheet-line: #d8dde3; --sheet-strong-line: #9aa3ad; --sheet-head: #f3f4f6; --sheet-sub: #f6f8fa; --sheet-total: #eef7f1; --sheet-total-text: #0b3b1f; --sheet-accent: #0f5132;
@@ -80,7 +203,7 @@ export const SHEET_CSS = `
 
 /* Pré-visualização do cabeçalho na ficha da Propriedade ("Assim vai sair nos relatórios"). */
 .rpt-sheet.rpt-sheet--preview { padding: 5mm 6mm; border: 1px dashed #cbd5e1; border-radius: 6px; }
-`;
+${MAKGESTAO_CSS}`;
 
 /**
  * Estilo de impressão (só no documento impresso/PDF): página A4, margens de 10 mm e "Página X de Y".

@@ -6,7 +6,8 @@
 //   - agrupado por comprador (texto do lançamento), "Não informado" (comprador em branco) por último;
 //   - subtotal por comprador e total geral conferidos à mão: animais distintos, peso total, peso médio, @ viva
 //     (÷ 30 e ÷ 15, total e média) e valor total — total geral recalculado, nunca soma/média de subtotais;
-//   - cabeçalhos do antigo "Qtd @", "Valor @", "Valor total" na grade, na folha, no CSV e no XLSX;
+//   - cabeçalhos do antigo "Qtd @", "Valor @", "Valor total" na grade, no CSV e no XLSX; na folha (E1D visual,
+//     cara da folha do MAKGESTAO) "Valor Total", o quadro do comprador antes da tabela e o TOTAL GERAL em texto;
 //   - decisão do valor total: sem valor digitado fica "—" e fora da soma (nada de peso ÷ 30 × valor @); os fatos
 //     que a pergunta à responsável cita (≠ estimativa do "Resumo de Vendas" do Lançamento, 0 digitado, CSV sem
 //     "(n de m)") ficam presos aqui;
@@ -27,6 +28,7 @@ import { calculateCarcassTrade } from '../src/modules/weighing/domain/commercial
 import { withoutHiddenColumns } from '../src/modules/reporting/domain/reportPermissions.js';
 import { leaveViewPatch, screenFixedFilters, screenModePatch, templatePayload, viewStatePayload } from '../src/modules/reporting/domain/reportScreenState.js';
 import { buildReportDocument, describeReportFilters, documentRows } from '../src/modules/reporting/domain/reportDocument.js';
+import { renderSheetBody } from '../src/modules/reporting/infrastructure/exporters/sheetHtml.js';
 import { headerLabel, roundTo } from '../src/modules/reporting/domain/reportFormatting.js';
 import { createColumnResolver } from '../src/modules/reporting/domain/reportDefinition.js';
 import { groupRows, NONE_GROUP_LABEL } from '../src/modules/reporting/domain/groupEngine.js';
@@ -377,31 +379,52 @@ assert.equal(json.totals.valor_total.value, 29100);
 assert.deepEqual(Object.keys(json.lockedFilters).sort(), ['motivo_saida', 'tipo_manejo'], 'JSON: condição fixa do tipo');
 
 // Folha (Detalhado como folha): seção por comprador com as linhas e o subtotal; total geral.
+// E1D visual: a folha tem a cara da do MAKGESTAO — cabeçalhos do antigo ("Valor Total"), o quadro do comprador
+// com "Total: N animais | Peso Médio | Peso Total | Média (@) | Valor Total" ANTES da tabela (section.lead) e o
+// "TOTAL GERAL: … " em linha de texto; ausente "-". A @ total (Total (@)) fica no XLSX/CSV (o antigo não a
+// mostrava na folha). Os números continuam os do motor — conferidos contra o XLSX, total a total.
+const SHEET_HEADERS = ['Comprador', 'Data', 'Animal', 'Peso (kg)', 'Qtd @', 'Valor @', 'Valor Total'];
+const LINE_KEYS = ['animais_vendidos', 'peso_medio', 'peso_total', 'media_arroba', 'valor_total'];
+const GRAND_KEYS = ['animais_vendidos', 'peso_total', 'peso_medio', 'media_arroba', 'valor_total'];
 const doc = buildReportDocument(vm);
 assert.equal(doc.layout, 'detail');
-assert.deepEqual(doc.columns.map((column) => column.label), HEADERS, 'folha: cabeçalhos');
+assert.deepEqual([doc.style, doc.variant], ['makgestao', 'vendas'], 'folha no estilo do MAKGESTAO');
+assert.deepEqual(doc.columns.map((column) => column.label), SHEET_HEADERS, 'folha: cabeçalhos do antigo');
 assert.deepEqual(doc.sections.map((section) => section.title), ORDEM.map((comprador) => `COMPRADOR: ${comprador.toLocaleUpperCase('pt-BR')}`), 'folha: uma seção por comprador, "Não informado" por último');
 const valorCol = doc.columns.findIndex((column) => column.key === 'valor_venda_total');
-const numberOf = (text) => Number(spaces(text).replace(/ \(\d+ de \d+\)$/, '').replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.'));
+const numberOf = (text) => Number(spaces(text).replace(/ \(\d+ de \d+\)$/, '').replace(/ (animais|animal|kg)$/, '').replace('R$', '').replace(/\s/g, '').replace(/\./g, '').replace(',', '.'));
+// Número da planilha pelo id do total (as linhas do XLSX vêm na ordem de VENDAS_TOTALS).
+const xlsxByKey = (rowsOfGroup) => Object.fromEntries(VENDAS_TOTALS.map((spec, index) => [spec.id, rowsOfGroup[index].cells[3][0]]));
 doc.sections.forEach((section, index) => {
   const grupo = esperado(30).grupos[index];
   const dados = section.table.rows.filter((row) => row.type === 'DATA');
   assert.equal(dados.length, grupo.ids.length, `folha ${grupo.comprador}: linhas`);
-  const chips = section.table.rows.find((row) => row.type === 'SUBTOTAL').chips;
-  assert.equal(chips.title, `Subtotal ${grupo.comprador}`);
-  assert.deepEqual(chips.items.map((item) => item.label), TOTAL_LABELS, `folha ${grupo.comprador}: rótulos do subtotal`);
+  assert.ok(!section.table.rows.some((row) => row.type === 'SUBTOTAL'), `folha ${grupo.comprador}: o total não fica embaixo da tabela`);
+  const line = section.lead.line;
+  assert.equal(section.lead.type, 'SUBTOTAL');
+  assert.deepEqual(line.items.map((item) => item.key), LINE_KEYS, `folha ${grupo.comprador}: itens do quadro do antigo`);
+  assert.deepEqual(line.items.map((item) => item.label), ['Total', 'Peso Médio', 'Peso Total', 'Média (@)', 'Valor Total'], `folha ${grupo.comprador}: rótulos do quadro`);
+  assert.match(line.items[0].text, /^\d+ anima(l|is)$/, `folha ${grupo.comprador}: "Total: N animais" (1 animal)`);
   // Folha × XLSX: o mesmo número em cada total (a folha arredonda para exibir; o XLSX guarda o número).
-  const planilha = sheetRows.filter((row) => row.kind === 'SUBTOTAL' && row.cells[1][0] === grupo.comprador).map((row) => row.cells[3][0]);
-  assert.deepEqual(chips.items.map((item) => numberOf(item.text)), planilha, `folha × XLSX ${grupo.comprador}`);
+  const planilha = xlsxByKey(sheetRows.filter((row) => row.kind === 'SUBTOTAL' && row.cells[1][0] === grupo.comprador));
+  assert.deepEqual(line.items.map((item) => numberOf(item.text)), line.items.map((item) => planilha[item.key]), `folha × XLSX ${grupo.comprador}`);
 });
-const chipsAgro = doc.sections[0].table.rows.find((row) => row.type === 'SUBTOTAL').chips.items;
-assert.equal(spaces(chipsAgro.at(-1).text), 'R$ 6.750,00 (1 de 2)', 'folha: valor do comprador diz quantos tinham valor digitado');
+const linhaAgro = doc.sections[0].lead.line.items;
+assert.equal(spaces(linhaAgro.at(-1).text), 'R$ 6.750,00 (1 de 2)', 'folha: valor do comprador diz quantos tinham valor digitado');
 const dadosAgro = doc.sections[0].table.rows.filter((row) => row.type === 'DATA');
-assert.ok(dadosAgro.some((row) => row.cells[valorCol].text === '—'), 'folha: v6 com "—" no Valor total');
-const chipsGeral = doc.grandTotal.rows[0].chips;
-assert.equal(chipsGeral.title, 'Total geral');
-assert.deepEqual(chipsGeral.items.map((item) => spaces(item.text)), ['6', '2.350,0', '391,7', '78,33', '13,06', 'R$ 29.100,00 (5 de 6)'], 'folha: total geral à mão');
-assert.deepEqual(chipsGeral.items.map((item) => numberOf(item.text)), xlsxGeral.map((row) => row.cells[3][0]), 'folha × XLSX: total geral');
+assert.ok(dadosAgro.some((row) => row.cells[valorCol].text === '-'), 'folha: v6 com "-" no Valor Total (ausente, como no antigo)');
+const linhaGeral = doc.grandTotal.rows[0].line;
+assert.equal(linhaGeral.layout, 'right', 'TOTAL GERAL à direita, numa frase, como no antigo');
+assert.deepEqual(linhaGeral.items.map((item) => item.key), GRAND_KEYS, 'TOTAL GERAL: itens na ordem do antigo');
+assert.equal(linhaGeral.items[0].label, 'TOTAL GERAL');
+assert.deepEqual(linhaGeral.items.map((item) => spaces(item.text)), ['6 animais', '2.350,0 kg', '391,7 kg', '13,06', 'R$ 29.100,00 (5 de 6)'], 'folha: total geral à mão');
+const planilhaGeral = xlsxByKey(xlsxGeral);
+assert.deepEqual(linhaGeral.items.map((item) => numberOf(item.text)), linhaGeral.items.map((item) => planilhaGeral[item.key]), 'folha × XLSX: total geral');
+// No HTML: o quadro do comprador vem ANTES da tabela; o TOTAL GERAL é texto.
+const vendasHtml = renderSheetBody(doc, { mode: 'print' });
+const agroAt = vendasHtml.indexOf('COMPRADOR: AGROPECUÁRIA BOA VISTA');
+assert.ok(agroAt > 0 && vendasHtml.indexOf('data-row-type="SUBTOTAL"', agroAt) < vendasHtml.indexOf('<table class="sheet-table', agroAt), 'folha: quadro do comprador antes da tabela');
+assert.ok(vendasHtml.includes('<span class="mk-item" data-key="animais_vendidos">TOTAL GERAL: 6 animais</span>'), 'folha: "TOTAL GERAL: 6 animais | …"');
 assert.ok(JSON.stringify(doc.footer).includes('@ = peso vivo ÷ 30'), 'folha: rodapé explica a @ viva');
 assert.ok(JSON.stringify(buildReportDocument(vm15).footer).includes('@ = peso vivo ÷ 15'), 'folha: divisor 15');
 assert.equal(documentRows(doc).filter((row) => row.type === 'DATA').length, vm.rowCount, 'folha: mesma população');
@@ -434,7 +457,8 @@ const semValorAlgum = (viewModel, where) => {
   const folha = buildReportDocument(viewModel);
   assert.ok(!folha.columns.some((column) => /Valor/.test(column.label)), `${where}: folha sem coluna de valor`);
   assert.ok(!JSON.stringify(folha.sections).includes('R$') && !JSON.stringify(folha.grandTotal).includes('R$'), `${where}: folha sem R$`);
-  assert.deepEqual(folha.grandTotal.rows[0].chips.items.map((item) => item.label), TOTAL_LABELS.slice(0, 5), `${where}: total geral sem "Valor total"`);
+  assert.deepEqual(folha.grandTotal.rows[0].line.items.map((item) => item.label), ['TOTAL GERAL', 'Peso Total', 'Peso Médio', 'Média (@)'], `${where}: total geral sem "Valor Total"`);
+  assert.ok(folha.sections.every((section) => !section.lead.line.items.some((item) => item.key === 'valor_total')), `${where}: quadro do comprador sem "Valor Total"`);
 };
 for (const actor of semValores) {
   assert.equal(await code(() => vendas(actor)), 'OK', `${actor.role}: Vendas abre sem erro`);

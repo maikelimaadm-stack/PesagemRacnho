@@ -12,13 +12,15 @@
 //   g) estruturas com 0, 1, 2 e 3 níveis e o Detalhado como folha (linhas por animal).
 // E1D: o caso principal é o tipo "Por Apartação (Resumo por Data)" com TODAS as colunas do seletor
 // "Colunas" (as 16 chaves; o padrão do tipo mostra 11) — assim as regras valem para cada métrica da folha.
+// E1D visual: o tipo sai com a cara da folha do MAKGESTAO — "kg" em cada peso, ausente "-" e os totais como
+// LINHA DE TEXTO (b'); as linhas de total continuam no documento com as células (conferidas em b/c).
 import assert from 'node:assert/strict';
 import { ADMIN, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
 import { runReport } from '../src/modules/reporting/application/reportService.js';
 import { getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { SHEET_COLUMN_KEYS } from '../src/modules/reporting/definitions/pesagens.js';
 import { applyColumnKeys, listReportViews, viewSelection } from '../src/modules/reporting/domain/reportViews.js';
-import { DOC_ROW_TYPES, buildReportDocument, documentRows } from '../src/modules/reporting/domain/reportDocument.js';
+import { DOC_ROW_TYPES, MAK_MISSING, buildReportDocument, documentRows } from '../src/modules/reporting/domain/reportDocument.js';
 import { computeAggregates } from '../src/modules/reporting/domain/reportAggregates.js';
 import { groupRows } from '../src/modules/reporting/domain/groupEngine.js';
 import { renderSheetBody } from '../src/modules/reporting/infrastructure/exporters/sheetHtml.js';
@@ -150,6 +152,52 @@ for (const column of metricColumns) {
   assert.ok(close(rawOf(grand, column.key), expected), `Total geral ${column.key} = população inteira`);
 }
 
+// ---- b') E1D visual: Subtotal, Total e TOTAL GERAL como LINHA DE TEXTO (folha do MAKGESTAO) ----
+// A tabela desenha só as linhas de lote; cada total vira a linha do antigo ("Subtotal 02/06/2026: 103 animais
+// | Peso Médio | Peso Total | GMD Médio | Lotes"). Os números da linha são os do motor sobre a população do nó
+// (os mesmos das células que o XLSX grava): animais distintos e GMD ponderado — o que o antigo errava (contar
+// pesagens como animais, média simples do GMD) não volta. Lotes = lotes da tabela (Subtotal), do bloco TOTAL
+// POR LOTE (Total) e da população inteira (TOTAL GERAL).
+const LINE_KEYS = ['qtd', 'peso_medio', 'peso_total', 'gmd_medio', 'lotes'];
+const lineSpecs = specs.filter((spec) => LINE_KEYS.includes(spec.id));
+let checkedLines = 0;
+const checkLine = (row, population, lead, lotes) => {
+  assert.ok(row.line?.layout === 'grid', `${row.id}: total em linha de texto`);
+  assert.deepEqual(row.line.items.map((item) => item.key), LINE_KEYS, `${row.id}: itens do antigo, na ordem dele`);
+  assert.equal(row.line.items[0].label, lead, `${row.id}: rótulo "${lead}"`);
+  const recomputed = computeAggregates(population, lineSpecs, vm.resolve);
+  for (const item of row.line.items) {
+    if (item.key === 'lotes') {
+      assert.deepEqual([item.raw, item.text], [lotes, String(lotes)], `${row.id}: Lotes ${lotes}`);
+      continue;
+    }
+    assert.ok(close(item.raw, recomputed[item.key]?.value ?? null), `${row.id}: ${item.key} da linha = motor sobre a população (${item.raw})`);
+    assert.ok(close(item.raw, rawOf(row, item.key)), `${row.id}: ${item.key} da linha = célula do total (a mesma do XLSX)`);
+  }
+  const text = Object.fromEntries(row.line.items.map((item) => [item.key, item.text]));
+  assert.match(text.qtd, /^\d+ anima(l|is)$/, `${row.id}: "N animais" (${text.qtd})`);
+  // Data só com saída sem peso (a morte da massa): "-" (ausente), nunca "0,0 kg".
+  assert.match(text.peso_medio, /^(\d{1,3}(\.\d{3})*,\d kg|-)$/, `${row.id}: Peso Médio "x kg" ou "-" (${text.peso_medio})`);
+  assert.match(text.peso_total, /^(\d{1,3}(\.\d{3})*,\d kg|-)$/, `${row.id}: Peso Total "x kg" ou "-" (${text.peso_total})`);
+  assert.match(text.gmd_medio, /^(-?\d+,\d{3} kg\/dia|-)$/, `${row.id}: GMD Médio "x kg/dia" ou "-" (${text.gmd_medio})`);
+  checkedLines += 1;
+};
+walkSections(doc.sections, (section) => {
+  const node = nodesById.get(section.id);
+  if (section.table) checkLine(section.table.rows.find((row) => row.type === DOC_ROW_TYPES.SUBTOTAL), node.rows, `Subtotal ${section.title.replace(/^DATA: /, '')}`, node.children.length);
+  if (section.leafTotal) checkLine(section.leafTotal.rows.find((row) => row.type === DOC_ROW_TYPES.TOTAL), node.rows, 'Total', section.leafTotal.rows.filter((row) => row.type === DOC_ROW_TYPES.LEAF_TOTAL).length);
+});
+checkLine(grand, vm.rows, 'TOTAL GERAL', groupRows(vm.rows, [{ columnId: 'nome_lote' }], vm.resolve).nodes.length);
+assert.ok(checkedLines >= 4, 'massa exercita as linhas de Subtotal, Total e TOTAL GERAL');
+// Animais distintos na linha: a apartação tem menos animais do que a soma das datas (o antigo somaria).
+assert.ok(firstTotal.line.items[0].raw < sumDates, 'NEGATIVO: "Total: N animais" não é a soma das datas');
+// Na folha (HTML): nenhum total como linha da tabela; um <div> de texto por total, rótulo em negrito.
+assert.ok(!/<tr class="[^"]*" data-row-type="(SUBTOTAL|TOTAL|GRAND_TOTAL)"/.test(html), 'NEGATIVO: Subtotal/Total fora da tabela (linha de texto)');
+assert.equal((html.match(/<div class="mk-line mk-line--grid" data-row-type="(SUBTOTAL|TOTAL|GRAND_TOTAL)"/g) || []).length, checkedLines, 'cada total é uma linha de texto na folha');
+assert.match(html, /<strong>Subtotal \d{2}\/\d{2}\/\d{4}:<\/strong> \d+ anima(l|is)</, 'linha "Subtotal dd/mm/aaaa: N animais"');
+assert.match(html, /<strong>TOTAL GERAL:<\/strong> \d+ anima(l|is)</, 'linha "TOTAL GERAL: N animais"');
+assert.ok(html.includes('data-style="makgestao" data-view="resumo-data"'), 'CSS da folha do MAKGESTAO escopado pelo documento');
+
 // ---- d) colunas vazias, zeros e GMD "—" ----
 const cadastros = await run({ ...FULL, filters: { tipo_manejo: { operator: 'in', values: ['Cadastro'] } } });
 const cadDoc = buildReportDocument(cadastros);
@@ -160,9 +208,12 @@ const cadHtml = renderSheetBody(cadDoc, { mode: 'print' });
 assert.ok(cadDoc.notes === undefined && !cadHtml.includes('sheet-notes') && !cadHtml.includes('Sem nenhum valor'), 'NEGATIVO: sem nota de colunas ocultas na folha');
 const cadAll = buildReportDocument(cadastros, { showEmptyColumns: true });
 assert.ok(cadAll.columns.some((column) => column.key === 'gmd_medio') && cadAll.hiddenColumns.length === 0, '"mostrar colunas vazias" traz as colunas de volta');
+// E1D visual: o tipo tem a cara da folha do MAKGESTAO — ausente é "-" (hífen, como no antigo), nunca 0,000.
 for (const row of documentRows(cadAll)) {
   const gmd = row.cells.find((cell) => cell.key === 'gmd_medio');
-  assert.equal(gmd.text, '—', `sem pesagem anterior: GMD "—" (nunca 0,000) em ${row.id}`);
+  assert.equal(gmd.text, MAK_MISSING, `sem pesagem anterior: GMD "-" (nunca 0,000) em ${row.id}`);
+  const item = row.line?.items.find((part) => part.key === 'gmd_medio');
+  if (item) assert.equal(item.text, MAK_MISSING, `sem pesagem anterior: "GMD Médio: -" na linha de total ${row.id}`);
 }
 const machos = await run({ ...FULL, filters: { sexo: { operator: 'in', values: ['M'] } } });
 const machosDoc = buildReportDocument(machos);
@@ -179,14 +230,21 @@ for (const row of rows) {
 }
 
 // ---- e) casas decimais, @ e divisor ----
+// E1D visual (folha do MAKGESTAO): "kg" em cada peso ("286,9 kg"; Menor/Maior em kg inteiros "250 kg"),
+// ausente "-"; as casas continuam: kg médio/total 1, @ 2, GMD 3.
 const textOf = (row, key) => row.cells.find((cell) => cell.key === key)?.text;
+assert.equal(doc.style, 'makgestao', 'o tipo sai com a cara da folha do MAKGESTAO');
 for (const row of rows) {
   const peso = textOf(row, 'peso_medio');
-  if (peso && peso !== '—') assert.match(peso, /^\d{1,3}(\.\d{3})*,\d$/, `kg com 1 casa (${peso})`);
+  if (peso && peso !== MAK_MISSING) assert.match(peso, /^\d{1,3}(\.\d{3})*,\d kg$/, `kg com 1 casa e "kg" (${peso})`);
+  for (const key of ['menor', 'maior']) {
+    const extreme = textOf(row, key);
+    if (extreme && extreme !== MAK_MISSING) assert.match(extreme, /^\d{1,3}(\.\d{3})* kg$/, `${key} em kg inteiro, como o antigo (${extreme})`);
+  }
   const arroba = textOf(row, 'media_arroba');
-  if (arroba && arroba !== '—') assert.match(arroba, /^\d{1,3}(\.\d{3})*,\d{2}$/, `@ com 2 casas (${arroba})`);
+  if (arroba && arroba !== MAK_MISSING) assert.match(arroba, /^\d{1,3}(\.\d{3})*,\d{2}$/, `@ com 2 casas (${arroba})`);
   const gmd = textOf(row, 'gmd_medio');
-  if (gmd && gmd !== '—') assert.match(gmd, /^-?\d+,\d{3}$/, `GMD com 3 casas (${gmd})`);
+  if (gmd && gmd !== MAK_MISSING) assert.match(gmd, /^-?\d+,\d{3}$/, `GMD com 3 casas (${gmd})`);
   const media = rawOf(row, 'peso_medio');
   if (media !== null && rawOf(row, 'media_arroba') !== null) assert.ok(close(rawOf(row, 'media_arroba'), media / vm.arrobaDivisor), `${row.id}: Média (@) = Peso médio ÷ ${vm.arrobaDivisor}`);
   const total = rawOf(row, 'peso_total');
@@ -226,6 +284,9 @@ const oneLevel = buildReportDocument(await run({ mode: 'RESUMIDO', groups: [{ co
 assert.ok(oneLevel.flat && oneLevel.sections.length === 0 && oneLevel.flat.rows.at(-1).type === DOC_ROW_TYPES.GRAND_TOTAL, '1 nível: tabela única com Total geral no fim');
 const twoLevels = buildReportDocument(await run({ mode: 'RESUMIDO', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'nome_lote' }] }));
 assert.ok(twoLevels.sections.every((section) => section.table && section.table.rows.at(-1).type === DOC_ROW_TYPES.SUBTOTAL && !section.leafTotal), '2 níveis: seção com Subtotal, sem TOTAL POR');
+// E1D visual: o Personalizado (e os outros relatórios) continua na folha da E1B — subtotal na tabela, "—".
+assert.equal(twoLevels.style, 'e1b', 'Personalizado: folha da E1B');
+assert.ok(/<tr class="sheet-subtotal" data-row-type="SUBTOTAL"/.test(renderSheetBody(twoLevels, { mode: 'print' })) && !twoLevels.sections.some((section) => section.table.rows.some((row) => row.line)), 'Personalizado: subtotal continua linha da tabela');
 const zeroLevels = buildReportDocument(await run({ mode: 'RESUMIDO', groups: [] }));
 assert.ok(zeroLevels.grandTotal && zeroLevels.sections.length === 0 && !zeroLevels.flat, '0 nível: só o Total geral');
 const analitico = views.find((item) => item.id === 'analitico');

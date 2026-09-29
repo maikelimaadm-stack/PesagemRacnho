@@ -18,10 +18,16 @@
 // cabeçalho sem "Emitido em"; nenhuma nota longa. O rodapé leva só os filtros (numa linha), "@ = peso vivo
 // ÷ N" quando houver @, as colunas omitidas pelo perfil (quando houver) e quem emitiu e quando; "Página X
 // de Y" fica na margem da página.
+//
+// E1D visual (decisão da responsável: "igual ao MAKGESTAO no visual, com as contas certas"): os 5 tipos de
+// Pesagens saem com a cara da folha do antigo (doc.style = 'makgestao' — seção "Folha no estilo do
+// MAKGESTAO" abaixo); o Personalizado e os outros relatórios continuam nesta folha da E1B.
+import { PESAGENS_SHEET_HEADERS, PESAGENS_SHEET_LINES, PESAGENS_VIEW_IDS } from '../definitions/pesagens.js';
 import { aggregateLabel, aggregateValueColumn } from './aggregateLabels.js';
 import { describeFilter } from './filterEngine.js';
 import { compareGroupLabels, groupRows, NONE_GROUP_KEY } from './groupEngine.js';
 import { buildMatrix, isMatrixViewModel, MATRIX_TOTAL_LABEL, matrixCellLines, matrixValues } from './matrixLayout.js';
+import { computeAggregate } from './reportAggregates.js';
 import { REPORT_MODES } from './reportDefinition.js';
 import { formatCell, headerLabel, MISSING_SCREEN } from './reportFormatting.js';
 import { formatGroupLabel, summaryMetrics, SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC } from './summaryLayout.js';
@@ -55,6 +61,11 @@ export const SHEET_PAGE = Object.freeze({
 });
 // Largura média de caractere (px) em 8,5 pt: rótulo em Arial, número em Consolas, cabeçalho em negrito menor.
 const CHAR_PX = Object.freeze({ label: 6.2, number: 6.3, header: 5.9 });
+// Folha do MAKGESTAO: 9 pt (text-xs do antigo, 12 px) em Segoe UI/Consolas (medidas no Electron: cabeçalho
+// 6,65, rótulo 6,83, número 6,6 px por caractere), cabeçalho numa linha só (negrito) e 8 px de respiro de cada
+// lado da célula (p-2); com a fonte menor (s/xs) o respiro cai para 6/4 px (sheetStyles).
+const CHAR_PX_MAK = Object.freeze({ label: 7.0, number: 6.6, header: 6.7 });
+const CELL_PADDING_MAK_PX = Object.freeze({ m: 16, s: 12, xs: 8 });
 
 const collator = new Intl.Collator('pt-BR', { sensitivity: 'base', numeric: true });
 const upper = (text) => String(text ?? '').toLocaleUpperCase('pt-BR');
@@ -140,6 +151,162 @@ export function rangeText(from, to) {
 }
 
 // ---------------------------------------------------------------------------
+// Folha no estilo do MAKGESTAO (E1D visual)
+// ---------------------------------------------------------------------------
+// Só os 5 tipos de Pesagens (doc.style = 'makgestao'; o Personalizado e os outros relatórios continuam na
+// folha da E1B). Muda a APRESENTAÇÃO, como na folha do antigo (RelatorioPesagensIndividuais.jsx): cabeçalhos
+// dele (Title Case, sem unidade entre parênteses), "kg" em cada peso (Menor/Maior/Faixa em kg inteiros),
+// ausente/zero = "-", e Subtotal/Total/TOTAL GERAL como LINHA DE TEXTO (row.line). As linhas de total da
+// tabela continuam no documento com as células (os mesmos números do XLSX) — a folha desenha a linha.
+// As contas continuam as do motor (animais distintos, GMD ponderado, médias recalculadas, meses em ordem):
+// cada número da linha é um agregado do motor sobre a população do grupo (PESAGENS_SHEET_LINES).
+
+export const SHEET_STYLES = Object.freeze({ E1B: 'e1b', MAKGESTAO: 'makgestao' });
+// Ausente e zero de contagem aparecem "-" (hífen), como no antigo.
+export const MAK_MISSING = '-';
+// Negrito/semi-negrito das tabelas por lote do antigo (Qtd em negrito; Peso Médio e GMD Médio semi).
+const MAK_EMPHASIS = Object.freeze({ qtd: 'bold', peso_medio: 'semibold', gmd_medio: 'semibold' });
+const MAK_SMALL_WORDS = new Set(['a', 'o', 'e', 'de', 'da', 'do', 'das', 'dos', 'em', 'no', 'na', 'por']);
+// Zero que o antigo mostrava "-" nas linhas de dados (Dias: `p.dias || '-'`).
+const MAK_ZERO_AS_MISSING = new Set(['dias']);
+
+/** Estilo da folha: 'makgestao' só nos 5 tipos de Pesagens; o resto (Personalizado, outros relatórios) 'e1b'. */
+export function sheetStyleOf(viewModel) {
+  return viewModel?.reportId === 'pesagens' && PESAGENS_VIEW_IDS.includes(viewModel.view?.id) ? SHEET_STYLES.MAKGESTAO : SHEET_STYLES.E1B;
+}
+
+/** Variante do desenho do antigo (cada tipo tinha o seu): data-view da folha. */
+function makVariant(viewModel, layout) {
+  if (layout === 'matrix') return 'matriz';
+  if (layout === 'summary') return viewModel.view?.id === 'por-apartacao-lote' ? 'apartacao-lote' : 'resumo-data';
+  return viewModel.view?.id === 'vendas' ? 'vendas' : 'analitico';
+}
+
+/** Cabeçalho no jeito do antigo: sem "(unidade)" no fim (menos "(@)") e em Title Case ("Peso médio (kg)" → "Peso Médio"). */
+export function makHeaderLabel(label) {
+  const base = String(label ?? '').replace(/\s*\((?!@\))[^)]*\)\s*$/, '').trim();
+  return base.split(/\s+/).map((word, index) => (index > 0 && MAK_SMALL_WORDS.has(word.toLowerCase())
+    ? word.toLowerCase()
+    : word.charAt(0).toLocaleUpperCase('pt-BR') + word.slice(1))).join(' ');
+}
+
+const makInteger = (value) => Math.round(Number(value)).toLocaleString('pt-BR');
+
+/** Faixa exigida como no antigo: "250-500 kg" (inteiros); um lado só "≥ 250 kg"/"≤ 500 kg"; sem faixa "-". */
+export function makRangeText(from, to) {
+  const hasFrom = !isMissingValue(from);
+  const hasTo = !isMissingValue(to);
+  if (hasFrom && hasTo) return `${makInteger(from)}-${makInteger(to)} kg`;
+  if (hasFrom) return `≥ ${makInteger(from)} kg`;
+  if (hasTo) return `≤ ${makInteger(to)} kg`;
+  return MAK_MISSING;
+}
+
+/**
+ * Texto de um número da folha do antigo: casas da coluna, "kg" em todo peso (Menor/Maior em kg inteiros —
+ * fmtInteiro do antigo), ausente "-". Arredondar é só apresentação (o número do motor não muda).
+ * @param column coluna de valor (aggregateValueColumn ou a coluna da linha)
+ * @param {{ op?: string, decimals?: number, unit?: boolean }} options unit=false tira o "kg" (Vendas: "Peso (kg)")
+ */
+function makNumberText(column, value, { op = null, decimals = null, unit = true } = {}) {
+  if (isMissingValue(value) || value === '') return MAK_MISSING;
+  const isWeight = column?.type === 'weight';
+  const places = Number.isInteger(decimals) ? decimals : isWeight && (op === 'min' || op === 'max') ? 0 : null;
+  const text = formatCell(Number.isInteger(places) ? { ...column, decimals: places } : column, value, 'print');
+  if (text === MISSING_SCREEN || text === '') return MAK_MISSING;
+  return unit && isWeight && column.unit ? `${text} ${column.unit}` : text;
+}
+
+/**
+ * Colunas das tabelas por lote no estilo do antigo (rótulo, alinhamento e o que é monoespaçado/negrito).
+ * Resumo por Data: centralizado, números em fonte mono, Lote/Peso Médio/GMD Médio semi e Qtd em negrito; Por
+ * Apartação/Lote: grade com bordas, tudo à esquerda e sem destaque (como o antigo desenhava esse tipo).
+ */
+function makSummaryColumns(columns, variant) {
+  const plain = variant === 'apartacao-lote';
+  const align = plain ? 'left' : 'center';
+  return columns.map((column) => {
+    if (column.kind === 'label') return { ...column, align: 'left', mk: { mono: false, weight: plain ? null : 'semibold' } };
+    if (column.kind === 'matrix') return { ...column, align: 'center', mk: { mono: true, weight: null } };
+    const id = column.kind === 'pair' ? column.pair.id : column.key;
+    const label = PESAGENS_SHEET_HEADERS.metrics[id] ?? makHeaderLabel(column.label);
+    const mono = !plain && (column.kind === 'pair' || !COUNT_OPS.has(column.op));
+    return { ...column, label, align, mk: { mono, weight: plain ? null : MAK_EMPHASIS[column.key] ?? null } };
+  });
+}
+
+/**
+ * Número de uma linha de total do antigo: o agregado do tipo quando o view model já o tem (mesmo número da
+ * grade e do XLSX); senão o MESMO motor sobre a população do grupo — só em coluna que o perfil vê (a lista de
+ * colunas do view model já vem sem as que o perfil não vê). undefined = o item não entra (sem permissão).
+ */
+function makLineResult(mak, spec, source) {
+  const own = (mak.viewModel.aggregates ?? []).find((item) => item.op === spec.op && (item.columnId ?? null) === (spec.columnId ?? null));
+  if (own) return source.aggregates?.[own.id] ?? null;
+  if (typeof mak.viewModel.resolve !== 'function' || (spec.columnId && !mak.available.some((column) => column.id === spec.columnId))) return undefined;
+  return computeAggregate(source.rows ?? [], spec, mak.viewModel.resolve);
+}
+
+/**
+ * Linha de total em texto (Subtotal/Total/TOTAL GERAL do antigo).
+ * @param items itens de PESAGENS_SHEET_LINES (o 1º sem rótulo recebe o `lead`: "Subtotal 02/06/2026", "Total")
+ * @param source { aggregates, rows } — nó do motor, ou { aggregates: totals, rows } no total geral
+ * @param {{ lead: string, layout: 'grid'|'box'|'right', lotes?: number|null }} options
+ * @returns {{ layout, items: { key, label, text, raw }[] }}
+ */
+function makLine(mak, items, source, { lead, layout, lotes = null }) {
+  const out = [];
+  for (const item of items) {
+    if (item.lotes) {
+      if (lotes !== null) out.push({ key: item.key, label: item.label, text: makInteger(lotes), raw: lotes });
+      continue;
+    }
+    const result = makLineResult(mak, item.spec, source);
+    if (result === undefined) continue;
+    const value = result?.value ?? null;
+    const column = aggregateValueColumn(item.spec, mak.available);
+    let text;
+    if (isMissingValue(value)) text = MAK_MISSING;
+    else if (item.unit === 'animais') text = `${makInteger(value)} ${value === 1 ? 'animal' : 'animais'}`;
+    else {
+      text = formatCell(column, value, 'print');
+      if (item.unit) text = `${text} ${item.unit}`;
+      // Valor total digitado só em parte das vendas: a linha diz quantas (decisão da E1D, como na E1B).
+      if (column.type === 'money' && result.n_validos > 0 && result.n_validos < result.n_total) text = `${text} (${result.n_validos} de ${result.n_total})`;
+    }
+    // arroba: a linha mostra @ (o rodapé explica "@ = peso vivo ÷ N" mesmo sem a coluna de @ na tabela).
+    out.push({ key: item.key, label: item.label ?? lead, text, raw: value, ...(column.unit === '@' ? { arroba: true } : {}) });
+  }
+  return { layout, items: out };
+}
+
+/** Quantos grupos do nível folha (lotes) uma população tem — o mesmo motor de agrupamento (groupRows). */
+function makLeafCount(mak, rows) {
+  const leaf = (mak.viewModel.groups ?? []).at(-1);
+  if (!leaf || typeof mak.viewModel.resolve !== 'function') return null;
+  return groupRows(rows ?? [], [{ columnId: leaf.columnId }], mak.viewModel.resolve).nodes.length;
+}
+
+/** Texto de uma célula de dados (Analítico/Vendas) como no antigo: Sexo "M"/"F", kg nos pesos, "-" no vazio. */
+function makDataCell(mak, column, raw) {
+  const source = column.column;
+  if (source.id === 'sexo' && !isMissingValue(raw) && String(raw).trim() !== '') {
+    const text = String(raw).trim();
+    if (/^m/i.test(text)) return { text: 'M' };
+    if (/^f/i.test(text)) return { text: 'F' };
+  }
+  if (MAK_ZERO_AS_MISSING.has(source.id) && Number(raw) === 0) return { text: MAK_MISSING };
+  const numeric = ['integer', 'number', 'weight', 'gmd', 'money', 'percentage'].includes(source.type);
+  const text = numeric
+    ? makNumberText(source, raw, { decimals: column.mk.decimals, unit: column.mk.unit })
+    : formatCell(source, raw, 'print');
+  const shown = text === MISSING_SCREEN || text === '' ? MAK_MISSING : text;
+  // GMD verde quando ganha, vermelho quando perde (text-emerald-600 / text-red-600 do antigo).
+  const tone = source.type === 'gmd' && typeof raw === 'number' && raw !== 0 ? (raw > 0 ? 'pos' : 'neg') : null;
+  return { text: shown, tone };
+}
+
+// ---------------------------------------------------------------------------
 // Colunas do Resumido
 // ---------------------------------------------------------------------------
 
@@ -184,20 +351,22 @@ function metricIsEmpty(column, totals) {
   return column.zeroAsEmpty && value === 0;
 }
 
-function summaryCell(column, index, { node, aggregates, isLeafRow, labelText }) {
+function summaryCell(column, index, { node, aggregates, isLeafRow, labelText }, mak = null) {
+  const align = mak ? column.align : 'right';
   if (column.kind === 'label') return { col: index, key: column.key, text: labelText, raw: labelText, align: 'left', kind: 'label' };
   if (column.kind === 'pair') {
-    if (column.pair.leafOnly && !isLeafRow) return { col: index, key: column.key, text: '', raw: null, align: 'right', kind: 'num' };
+    if (column.pair.leafOnly && !isLeafRow) return { col: index, key: column.key, text: '', raw: null, align, kind: 'num' };
     const from = aggregates?.[column.from.key]?.value ?? null;
     const to = aggregates?.[column.to.key]?.value ?? null;
-    return { col: index, key: column.key, text: rangeText(from, to), raw: [from, to], align: 'right', kind: 'num' };
+    return { col: index, key: column.key, text: mak ? makRangeText(from, to) : rangeText(from, to), raw: [from, to], align, kind: 'num' };
   }
   const result = column.key === SUMMARY_ROWS_METRIC ? { value: node?.rowCount ?? null } : aggregates?.[column.key];
   let value = result?.value ?? null;
   if (column.zeroAsEmpty && value === 0) value = null;
   const partial = result && !COUNT_OPS.has(column.op) && Number.isInteger(result.n_validos) && Number.isInteger(result.n_total)
     && result.n_validos > 0 && result.n_validos < result.n_total ? { nValid: result.n_validos, nTotal: result.n_total } : null;
-  return { col: index, key: column.key, text: formatCell(column.metric.column, value, 'print'), raw: value, align: 'right', kind: 'num', partial };
+  const text = mak ? makNumberText(column.metric.column, value, { op: column.op }) : formatCell(column.metric.column, value, 'print');
+  return { col: index, key: column.key, text, raw: value, align, kind: 'num', partial };
 }
 
 // ---------------------------------------------------------------------------
@@ -243,7 +412,7 @@ export function buildLeafTotalBlock(viewModel, node, { target = 'print' } = {}) 
 // Corpo do Resumido
 // ---------------------------------------------------------------------------
 
-function buildSummaryBody(viewModel, columns) {
+function buildSummaryBody(viewModel, columns, mak = null) {
   const columnOf = columnLookup(viewModel);
   const levels = viewModel.groups ?? [];
   const depth = levels.length;
@@ -251,10 +420,14 @@ function buildSummaryBody(viewModel, columns) {
   const nodeLabel = (node) => formatGroupLabel(levelColumn(node.level), node.label, 'print', node.missing || node.key === NONE_GROUP_KEY);
   const stats = { sections: 0, tables: 0, groupRows: 0, subtotalRows: 0, leafTotalRows: 0, totalRows: 0, dataRows: 0, grandRows: 0 };
   const drillTargets = {};
+  // Estilo MAKGESTAO: itens da linha de total do tipo (Resumo por Data: 5; Por Apartação/Lote: 6).
+  const lineItems = mak ? PESAGENS_SHEET_LINES[mak.variant === 'apartacao-lote' ? 'por-apartacao-lote' : 'por-apartacao-data'] : null;
 
-  const row = (type, id, cellsArgs, drill) => {
+  const row = (type, id, cellsArgs, drill, line = null) => {
     if (drill) drillTargets[id] = drill;
-    return { type, id, drill: drill ? id : null, cells: columns.map((column, index) => summaryCell(column, index, cellsArgs)) };
+    const out = { type, id, drill: drill ? id : null, cells: columns.map((column, index) => summaryCell(column, index, cellsArgs, mak)) };
+    if (line) out.line = line;
+    return out;
   };
   const groupRow = (node) => {
     stats.groupRows += 1;
@@ -265,7 +438,9 @@ function buildSummaryBody(viewModel, columns) {
     const childLevel = levels[node.level];
     const children = node.children?.length ?? 0;
     const text = `Subtotal ${nodeLabel(node)}${childLevel ? ` · ${pluralOf(childLevel.label)}: ${children}` : ''}`;
-    return row(DOC_ROW_TYPES.SUBTOTAL, `${node.id}#subtotal`, { node, aggregates: node.aggregates, isLeafRow: false, labelText: text }, node.path);
+    // Antigo: "Subtotal 02/06/2026: 103 animais … Lotes: 3" (data) e "Total: … Lotes: 3" (apartação).
+    const line = mak ? makLine(mak, lineItems, node, { lead: node.level === 1 ? 'Total' : `Subtotal ${nodeLabel(node)}`, layout: 'grid', lotes: node.level === depth - 1 ? children : makLeafCount(mak, node.rows) }) : null;
+    return row(DOC_ROW_TYPES.SUBTOTAL, `${node.id}#subtotal`, { node, aggregates: node.aggregates, isLeafRow: false, labelText: text }, node.path, line);
   };
   const table = (id, kind, rows, title = null) => {
     stats.tables += 1;
@@ -280,7 +455,9 @@ function buildSummaryBody(viewModel, columns) {
     const buildSection = (node) => {
       stats.sections += 1;
       drillTargets[node.id] = node.path;
-      const title = `${upper(node.columnLabel ?? levels[node.level - 1]?.label)}: ${upper(nodeLabel(node))}`;
+      // Por Apartação/Lote do antigo: "APARTAÇÃO: " + o nome como foi digitado (normal-case).
+      const name = mak?.variant === 'apartacao-lote' ? nodeLabel(node) : upper(nodeLabel(node));
+      const title = `${upper(node.columnLabel ?? levels[node.level - 1]?.label)}: ${name}`;
       const section = { id: node.id, level: node.level, title, drill: node.id, sections: [], table: null, leafTotal: null };
       const children = orderNodes(node.children ?? [], viewModel.summarySort);
       if (node.level === depth - 1) {
@@ -297,8 +474,11 @@ function buildSummaryBody(viewModel, columns) {
           return row(DOC_ROW_TYPES.LEAF_TOTAL, line.id, { node: line.node, aggregates: line.node.aggregates, isLeafRow: true, labelText: line.label }, line.path);
         });
         stats.totalRows += 1;
-        rows.push(row(DOC_ROW_TYPES.TOTAL, block.total.id, { node, aggregates: node.aggregates, isLeafRow: false, labelText: block.total.label }, block.total.path));
+        const totalLine = mak ? makLine(mak, lineItems, node, { lead: 'Total', layout: 'grid', lotes: block.lines.length }) : null;
+        rows.push(row(DOC_ROW_TYPES.TOTAL, block.total.id, { node, aggregates: node.aggregates, isLeafRow: false, labelText: block.total.label }, block.total.path, totalLine));
         section.leafTotal = table(block.id, 'LEAF_TOTAL', rows, block.title);
+        // Título do antigo na folha ("TOTAL POR LOTE - APARTE 02/06", com hífen); `title` continua o do XLSX.
+        if (mak) section.leafTotal.heading = `TOTAL POR ${upper(block.leafLevel.label)} - ${upper(nodeLabel(node))}`;
       }
       return section;
     };
@@ -310,8 +490,10 @@ function buildSummaryBody(viewModel, columns) {
     type: DOC_ROW_TYPES.GRAND_TOTAL,
     id: '#grand',
     drill: null,
-    cells: columns.map((column, index) => summaryCell(column, index, { node: { rowCount: viewModel.rowCount }, aggregates: viewModel.totals, isLeafRow: false, labelText: 'Total geral' })),
+    cells: columns.map((column, index) => summaryCell(column, index, { node: { rowCount: viewModel.rowCount }, aggregates: viewModel.totals, isLeafRow: false, labelText: 'Total geral' }, mak)),
   };
+  // TOTAL GERAL do antigo em linha de texto, com os números do motor sobre a população inteira.
+  if (mak) grandRow.line = makLine(mak, lineItems, { aggregates: viewModel.totals, rows: viewModel.rows }, { lead: 'TOTAL GERAL', layout: 'grid', lotes: makLeafCount(mak, viewModel.rows) });
   if (flat) flat.rows.push(grandRow);
   const grandTotal = flat ? null : table('grand', 'GRAND', [grandRow]);
   return { sections, flat, grandTotal, stats, drillTargets };
@@ -331,6 +513,27 @@ function detailColumns(viewModel) {
     // Na folha, kg com 1 casa (a grade e as exportações de pesagem continuam com as casas da coluna).
     column: column.type === 'weight' && !Number.isInteger(column.decimals) ? { ...column, decimals: 1 } : column,
   }));
+}
+
+/**
+ * Colunas de dados no estilo do antigo. Analítico: "Peso", "Peso Ant.", "Ganho" com 2 casas e " kg" em cada
+ * número (formatarDecimal(p.peso, 2)); Vendas: "Peso (kg)" no cabeçalho e o peso inteiro (fmtNum(v.peso, 0)),
+ * Valor Total em semi-negrito; Animal em peso médio (font-medium).
+ */
+function makDetailColumns(columns, variant) {
+  const labels = variant === 'vendas' ? PESAGENS_SHEET_HEADERS.vendas : PESAGENS_SHEET_HEADERS.columns;
+  return columns.map((column) => {
+    const source = column.column;
+    const numeric = column.align === 'right';
+    const weight = source.type === 'weight';
+    const mk = {
+      mono: numeric,
+      weight: source.id === 'numero_animal' ? 'medium' : source.id === 'valor_venda_total' ? 'semibold' : null,
+      decimals: weight ? (variant === 'vendas' ? 0 : 2) : null,
+      unit: variant !== 'vendas',
+    };
+    return { ...column, label: labels[source.id] ?? makHeaderLabel(source.label), mk };
+  });
 }
 
 function dataCellRaw(viewModel, column, row) {
@@ -368,11 +571,13 @@ function detailChips(viewModel, aggregates, rowCount, { leafLevel = false } = {}
   return items;
 }
 
-function buildDetailBody(viewModel, columns, { maxDataRows = Infinity } = {}) {
+function buildDetailBody(viewModel, columns, { maxDataRows = Infinity } = {}, mak = null) {
   const columnOf = columnLookup(viewModel);
   const levels = viewModel.groups ?? [];
   const stats = { sections: 0, tables: 0, groupRows: 0, subtotalRows: 0, leafTotalRows: 0, totalRows: 0, dataRows: 0, grandRows: 0 };
   const drillTargets = {};
+  const vendas = mak?.variant === 'vendas';
+  const lineItems = mak ? PESAGENS_SHEET_LINES[vendas ? 'vendas' : 'analitico'] : null;
   let emitted = 0;
   const dataRow = (row, index) => {
     stats.dataRows += 1;
@@ -382,12 +587,20 @@ function buildDetailBody(viewModel, columns, { maxDataRows = Infinity } = {}) {
       id: `${row.id ?? index}`,
       drill: null,
       cells: columns.map((column, col) => {
-        const text = formatCell(column.column, dataCellRaw(viewModel, column.column, row), 'print');
-        return { col, key: column.key, text, raw: null, align: column.align, kind: column.align === 'right' ? 'num' : 'txt' };
+        const raw = dataCellRaw(viewModel, column.column, row);
+        const kind = column.align === 'right' ? 'num' : 'txt';
+        if (mak) {
+          const { text, tone } = makDataCell(mak, column, raw);
+          return { col, key: column.key, text, raw: null, align: column.align, kind, ...(tone ? { tone } : {}) };
+        }
+        return { col, key: column.key, text: formatCell(column.column, raw, 'print'), raw: null, align: column.align, kind };
       }),
     };
   };
   const chipsRow = (type, id, title, aggregates, rowCount, leafLevel = false) => ({ type, id, drill: null, chips: { title, items: detailChips(viewModel, aggregates, rowCount, { leafLevel }) } });
+  // Estilo MAKGESTAO: o subtotal é a linha de texto do antigo ("Subtotal: 8 animais | Peso Médio: … | GMD
+  // Médio: …"; Vendas: "Total: … Valor Total: …" no quadro do comprador) — no lugar dos itens da E1B.
+  const lineRow = (type, id, line) => ({ type, id, drill: null, line });
   const rowsOf = (population) => {
     const out = [];
     for (const [index, row] of population.entries()) {
@@ -404,26 +617,42 @@ function buildDetailBody(viewModel, columns, { maxDataRows = Infinity } = {}) {
     stats.tables += 1;
     flat = { id: 'flat', kind: 'FLAT', title: null, rows: rowsOf(viewModel.rows ?? []) };
   } else {
-    const buildSection = (node) => {
+    const buildSection = (node, trail = []) => {
       stats.sections += 1;
       drillTargets[node.id] = node.path;
-      const section = { id: node.id, level: node.level, title: `${upper(node.columnLabel)}: ${upper(nodeLabel(node))}`, drill: node.id, sections: [], table: null, leafTotal: null };
-      const subtotal = chipsRow(DOC_ROW_TYPES.SUBTOTAL, `${node.id}#subtotal`, `Subtotal ${nodeLabel(node)}`, node.aggregates, node.rowCount, node.level === levels.length);
+      const path = [...trail, nodeLabel(node)];
+      const leaf = !node.children?.length;
+      // Analítico do antigo: o grupo é o próprio valor ("LOTE 01"; com mais níveis "LOTE 01 → MACHO", no
+      // grupo de baixo); Vendas: "COMPRADOR: X". Estilo da E1B: "LOTE: LOTE 01" em cada nível.
+      let title = `${upper(node.columnLabel)}: ${upper(nodeLabel(node))}`;
+      if (mak && !vendas) title = leaf ? upper(path.join(' → ')) : null;
+      const section = { id: node.id, level: node.level, title, drill: node.id, sections: [], table: null, leafTotal: null };
+      const subtotal = mak
+        ? lineRow(DOC_ROW_TYPES.SUBTOTAL, `${node.id}#subtotal`, makLine(mak, lineItems.subtotal, node, vendas
+          ? { lead: 'Total', layout: 'grid' }
+          : { lead: leaf ? 'Subtotal' : `Subtotal ${upper(path.join(' → '))}`, layout: 'box' }))
+        : chipsRow(DOC_ROW_TYPES.SUBTOTAL, `${node.id}#subtotal`, `Subtotal ${nodeLabel(node)}`, node.aggregates, node.rowCount, node.level === levels.length);
       stats.subtotalRows += 1;
       stats.tables += 1;
       if (node.children?.length) {
-        section.sections = node.children.map(buildSection);
+        section.sections = node.children.map((child) => buildSection(child, path));
         section.table = { id: `${node.id}#subtotal-table`, kind: 'SUBTOTAL', title: null, rows: [subtotal] };
+      } else if (vendas) {
+        // Vendas do antigo: o quadro do comprador (título + totais) vem ANTES da tabela.
+        section.lead = subtotal;
+        section.table = { id: node.id, kind: 'SECTION', title: null, rows: rowsOf(node.rows) };
       } else {
         section.table = { id: node.id, kind: 'SECTION', title: null, rows: [...rowsOf(node.rows), subtotal] };
       }
       return section;
     };
-    sections.push(...(viewModel.tree ?? []).map(buildSection));
+    sections.push(...(viewModel.tree ?? []).map((node) => buildSection(node)));
   }
   stats.grandRows += 1;
   stats.tables += 1;
-  const grand = chipsRow(DOC_ROW_TYPES.GRAND_TOTAL, '#grand', 'Total geral', viewModel.totals, viewModel.rowCount);
+  const grand = mak
+    ? lineRow(DOC_ROW_TYPES.GRAND_TOTAL, '#grand', makLine(mak, lineItems.total, { aggregates: viewModel.totals, rows: viewModel.rows }, { lead: 'TOTAL GERAL', layout: vendas ? 'right' : 'box' }))
+    : chipsRow(DOC_ROW_TYPES.GRAND_TOTAL, '#grand', 'Total geral', viewModel.totals, viewModel.rowCount);
   const grandTotal = { id: 'grand', kind: 'GRAND', title: null, rows: [grand] };
   const truncated = emitted < (viewModel.rows?.length ?? 0) ? { shown: emitted, total: viewModel.rows.length } : null;
   return { sections, flat, grandTotal, stats, drillTargets, truncated };
@@ -450,7 +679,17 @@ function matrixColumns(matrix) {
  * (`lines`, na ordem de matrix.metrics) e os brutos (`raw`, mesma ordem — base da paridade com o XLSX).
  * Na tela, o rótulo da linha e cada célula abrem o Detalhado daquele recorte (mesmo detalhe da E1).
  */
-function buildMatrixBody(matrix, columns) {
+/**
+ * Legenda da matriz no jeito do antigo: "Linhas: Sexo | Colunas: Lote | Valores: Qtd / Peso Médio / GMD Médio"
+ * (rótulos em negrito na folha). O XLSX continua com a legenda do modelo (matrix.legend).
+ */
+function makMatrixLegend(matrix) {
+  const values = matrix.metrics.map((metric) => PESAGENS_SHEET_HEADERS.matrix[metric.key] ?? makHeaderLabel(metric.shortLabel ?? metric.label)).join(' / ');
+  const parts = [{ label: 'Linhas', text: matrix.rowAxis.label }, { label: 'Colunas', text: matrix.colAxis.label }, { label: 'Valores', text: values }];
+  return { text: parts.map((part) => `${part.label}: ${part.text}`).join(' | '), parts };
+}
+
+function buildMatrixBody(matrix, columns, mak = null) {
   const stats = { sections: 0, tables: 1, groupRows: 0, subtotalRows: 0, leafTotalRows: 0, totalRows: 0, dataRows: 0, grandRows: 0 };
   const drillTargets = {};
   const target = (node) => {
@@ -460,8 +699,9 @@ function buildMatrixBody(matrix, columns) {
   };
   const position = new Map(matrix.columns.map((column, index) => [column.key, index]));
   const valueCell = (column, index, source, drill) => {
-    const lines = matrixCellLines(matrix, source, 'print');
-    return { col: index, key: column.key, text: lines.join(' / '), lines, raw: matrixValues(matrix, source), align: 'right', kind: 'num', drill: source ? drill : null };
+    // Estilo MAKGESTAO: "347 kg" (kg inteiro, pesoMed.toFixed(0) do antigo) e "-" no GMD sem pesagem anterior.
+    const lines = matrixCellLines(matrix, source, 'print', mak ? { style: SHEET_STYLES.MAKGESTAO } : {});
+    return { col: index, key: column.key, text: lines.join(' / '), lines, raw: matrixValues(matrix, source), align: mak ? 'center' : 'right', kind: 'num', drill: source ? drill : null };
   };
   const line = (type, id, label, drill, { cells, total, totalDrill, cellDrill }) => ({
     type,
@@ -482,7 +722,9 @@ function buildMatrixBody(matrix, columns) {
   stats.grandRows += 1;
   // Linha TOTAL: cada coluna abre o Detalhado daquele valor do eixo X (todas as linhas); o canto não abre.
   rows.push(line(DOC_ROW_TYPES.GRAND_TOTAL, '#grand', matrix.totalRow.label, null, { cells: matrix.totalRow.cells, total: matrix.totalRow.total, totalDrill: null, cellDrill: target }));
-  const flat = { id: 'matrix', kind: 'MATRIX', title: matrix.legend, rows };
+  const legend = mak ? makMatrixLegend(matrix) : null;
+  const flat = { id: 'matrix', kind: 'MATRIX', title: legend ? legend.text : matrix.legend, rows };
+  if (legend) flat.legend = legend.parts;
   return { sections: [], flat, grandTotal: null, stats, drillTargets };
 }
 
@@ -493,6 +735,7 @@ function buildMatrixBody(matrix, columns) {
 function allRows(body) {
   const out = [];
   const walk = (section) => {
+    if (section.lead) out.push(section.lead); // Vendas no estilo MAKGESTAO: totais do comprador antes da tabela
     if (section.table) out.push(...section.table.rows);
     section.sections.forEach(walk);
     if (section.leafTotal) out.push(...section.leafTotal.rows);
@@ -507,17 +750,23 @@ const longestWord = (text) => String(text ?? '').split(/\s+/).reduce((max, word)
 // Célula com valores empilhados (matriz, E1D): a largura é a do maior valor, não a do texto emendado.
 const widthText = (cell) => (Array.isArray(cell?.lines) ? cell.lines.reduce((widest, line) => (line.length > widest.length ? line : widest), '') : cell?.text ?? '');
 
-function summaryWidths(columns, rows, factor) {
-  const pad = SHEET_PAGE.CELL_PADDING_PX;
+function summaryWidths(columns, rows, factor, style = SHEET_STYLES.E1B, { oneLineHeader = true, sizeId = 'm' } = {}) {
+  const mak = style === SHEET_STYLES.MAKGESTAO;
+  const pad = mak ? CELL_PADDING_MAK_PX[sizeId] ?? CELL_PADDING_MAK_PX.m : SHEET_PAGE.CELL_PADDING_PX;
+  const chars = mak ? CHAR_PX_MAK : CHAR_PX;
+  // Estilo MAKGESTAO: o cabeçalho fica numa linha (como no antigo) quando cabe, e as linhas de total viram
+  // texto fora da tabela — só as linhas desenhadas na tabela contam.
+  const drawn = rows.filter((row) => row.cells && !(mak && row.line));
+  const headerWidth = (label) => (mak && oneLineHeader ? String(label ?? '').length : longestWord(label)) * chars.header;
   return columns.map((column, index) => {
-    const texts = rows.filter((row) => row.cells).map((row) => widthText(row.cells[index]));
+    const texts = drawn.map((row) => widthText(row.cells[index]));
     if (column.kind === 'label') {
       // O rótulo do subtotal ("Subtotal 02/06/2026 · Lotes: 3") quebra linha: não alarga a coluna.
-      const labels = rows.filter((row) => row.cells && row.type !== 'SUBTOTAL').map((row) => row.cells[index]?.text ?? '');
-      const widest = Math.max(longestWord(column.label) * CHAR_PX.header, ...labels.map((text) => Math.min(text.length, 34) * CHAR_PX.label));
+      const labels = drawn.filter((row) => row.type !== 'SUBTOTAL').map((row) => row.cells[index]?.text ?? '');
+      const widest = Math.max(headerWidth(column.label), ...labels.map((text) => Math.min(text.length, 34) * chars.label));
       return Math.round(Math.min(SHEET_PAGE.LABEL_MAX_PX, Math.max(SHEET_PAGE.LABEL_MIN_PX, widest * factor + pad)));
     }
-    const widest = Math.max(longestWord(column.label) * CHAR_PX.header, ...texts.map((text) => text.length * CHAR_PX.number));
+    const widest = Math.max(headerWidth(column.label), ...texts.map((text) => text.length * chars.number));
     return Math.round(Math.max(SHEET_PAGE.METRIC_MIN_PX, widest * factor + pad));
   });
 }
@@ -547,7 +796,7 @@ function detailWidths(columns, widths = {}) {
  * Orientação e tamanho: "auto" tenta retrato, depois paisagem, reduzindo a fonte (8,5 → 7,6 → 6,8 pt);
  * retrato/paisagem escolhidos pela pessoa só reduzem a fonte. Se nada couber, avisa (nunca corta coluna).
  */
-export function decideSheetLayout({ layout, columns, rows }, { orientation = 'auto', widths: userWidths = {} } = {}) {
+export function decideSheetLayout({ layout, columns, rows, style = SHEET_STYLES.E1B }, { orientation = 'auto', widths: userWidths = {} } = {}) {
   const orientations = orientation === 'auto' ? ['portrait', 'landscape'] : [orientation === 'landscape' ? 'landscape' : 'portrait'];
   const candidates = orientation === 'auto'
     ? [['portrait', 'm'], ['landscape', 'm'], ['landscape', 's'], ['landscape', 'xs']]
@@ -560,10 +809,13 @@ export function decideSheetLayout({ layout, columns, rows }, { orientation = 'au
       const limit = pageOrientation === 'landscape' ? SHEET_PAGE.DETAIL_LANDSCAPE_MAX : SHEET_PAGE.DETAIL_PORTRAIT_MAX;
       return { orientation: pageOrientation, sizeClass: sizeId, widths, totalWidth: Math.round(total), fits: total <= limit };
     }
-    const base = summaryWidths(columns, rows, factorOf(sizeId));
-    const total = base.reduce((sum, width) => sum + width, 0);
     const limit = pageOrientation === 'landscape' ? SHEET_PAGE.LANDSCAPE_WIDTH_PX : SHEET_PAGE.PORTRAIT_WIDTH_PX;
-    const widths = total <= limit ? growLabelIntoSlack(columns, rows, base, factorOf(sizeId), limit) : base;
+    let base = summaryWidths(columns, rows, factorOf(sizeId), style, { sizeId });
+    // Folha do MAKGESTAO com muitas colunas: o cabeçalho quebra entre palavras (como na E1B) antes de reduzir a fonte.
+    if (style === SHEET_STYLES.MAKGESTAO && base.reduce((sum, width) => sum + width, 0) > limit) base = summaryWidths(columns, rows, factorOf(sizeId), style, { oneLineHeader: false, sizeId });
+    const total = base.reduce((sum, width) => sum + width, 0);
+    // Estilo MAKGESTAO: o subtotal não é linha da tabela (é texto abaixo dela) — nada a alargar.
+    const widths = total <= limit && style !== SHEET_STYLES.MAKGESTAO ? growLabelIntoSlack(columns, rows, base, factorOf(sizeId), limit) : base;
     return { orientation: pageOrientation, sizeClass: sizeId, widths, totalWidth: total, fits: total <= limit };
   };
   const tried = candidates.map(evaluate);
@@ -613,7 +865,13 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const levels = (viewModel.groups ?? []).map((level) => ({ columnId: level.columnId, label: level.label }));
   // E1D: Sintético (Matriz) = o Resumido de 2 níveis desenhado como tabela cruzada (domain/matrixLayout).
   const matrix = summary && isMatrixViewModel(viewModel) ? buildMatrix(viewModel, { target: 'print' }) : null;
-  const allColumns = matrix ? matrixColumns(matrix) : summary ? summaryColumns(viewModel) : detailColumns(viewModel);
+  const layout = matrix ? 'matrix' : summary ? 'summary' : 'detail';
+  // E1D visual: os 5 tipos de Pesagens com a cara da folha do MAKGESTAO (o resto continua na folha da E1B).
+  const style = sheetStyleOf(viewModel);
+  const variant = style === SHEET_STYLES.MAKGESTAO ? makVariant(viewModel, layout) : null;
+  const mak = variant ? { variant, viewModel, available: viewModel.availableColumns ?? viewModel.columns ?? [] } : null;
+  let allColumns = matrix ? matrixColumns(matrix) : summary ? summaryColumns(viewModel) : detailColumns(viewModel);
+  if (mak) allColumns = layout === 'detail' ? makDetailColumns(allColumns, variant) : makSummaryColumns(allColumns, variant);
   const hasRows = (viewModel.rowCount ?? 0) > 0;
   const isEmptyColumn = (column) => {
     // Coluna da matriz nunca some: cada valor do eixo X existe porque há pesagem nele.
@@ -625,14 +883,16 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const hiddenKeys = new Set(hiddenColumns.map((column) => column.key));
   const columns = allColumns.filter((column) => !hiddenKeys.has(column.key)).map((column, index) => ({ ...column, index }));
 
-  const body = matrix ? buildMatrixBody(matrix, columns) : summary ? buildSummaryBody(viewModel, columns) : buildDetailBody(viewModel, columns, { maxDataRows });
-  const print = decideSheetLayout({ layout: summary ? 'summary' : 'detail', columns, rows: allRows(body) }, { orientation, widths });
+  const body = matrix ? buildMatrixBody(matrix, columns, mak) : summary ? buildSummaryBody(viewModel, columns, mak) : buildDetailBody(viewModel, columns, { maxDataRows }, mak);
+  const bodyRows = allRows(body);
+  const print = decideSheetLayout({ layout: summary ? 'summary' : 'detail', columns, rows: bodyRows, style }, { orientation, widths });
 
   // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
   // Sem linhas a folha é só "Nenhum registro…" (nenhuma coluna aparece): nada em @ para explicar.
   const usesArroba = hasRows && (columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
     || Boolean(matrix?.metrics.some((metric) => metric.column?.unit === '@'))
-    || (!summary && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@')));
+    || (mak ? bodyRows.some((row) => row.line?.items.some((item) => item.arroba)) : false)
+    || (!summary && !mak && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@')));
   const divisor = viewModel.arrobaDivisor ?? 30;
   const omitted = viewModel.hiddenByPermission?.length ?? 0;
 
@@ -651,8 +911,11 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     kind: DOCUMENT_KIND,
     version: 1,
     mode: viewModel.mode,
-    layout: matrix ? 'matrix' : summary ? 'summary' : 'detail',
+    layout,
     reportId: viewModel.reportId,
+    // E1D visual: 'makgestao' nos 5 tipos de Pesagens (variant = desenho de cada tipo do antigo), senão 'e1b'.
+    style,
+    variant,
     title: sheetTitleOf(viewModel),
     header: header ?? null,
     // Abaixo do título (no lugar do antigo "Resumido · Apartação › Data › Lote"): só o período.
@@ -668,11 +931,14 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     truncated: body.truncated ?? null,
     screenNotice: body.truncated ? `Na tela aparecem ${body.truncated.shown.toLocaleString('pt-BR')} de ${body.truncated.total.toLocaleString('pt-BR')} linhas; a impressão e o PDF levam todas.` : null,
     empty: !hasRows,
+    // Folha vazia: o texto do antigo nos tipos de Pesagens ("Nenhuma pesagem/venda encontrada…").
+    emptyText: mak ? `Nenhuma ${variant === 'vendas' ? 'venda' : 'pesagem'} encontrada com os filtros aplicados.` : 'Nenhum registro para os filtros informados.',
     footer,
     print,
     stats: body.stats,
     // E1D: eixos e legenda da matriz (null fora do Sintético (Matriz)); os valores de cada célula estão em cells[].raw.
-    matrix: matrix ? { legend: matrix.legend, rowAxis: matrix.rowAxis, colAxis: matrix.colAxis, values: matrix.metrics.map((metric) => ({ key: metric.key, label: metric.label })) } : null,
+    // Estilo MAKGESTAO: a legenda da folha é a do antigo ("Linhas: … | Colunas: … | Valores: …").
+    matrix: matrix ? { legend: body.flat.title, rowAxis: matrix.rowAxis, colAxis: matrix.colAxis, values: matrix.metrics.map((metric) => ({ key: metric.key, label: metric.label })) } : null,
   };
 }
 

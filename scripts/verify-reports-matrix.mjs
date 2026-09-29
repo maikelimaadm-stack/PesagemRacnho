@@ -18,7 +18,10 @@
 //      detalhe de uma célula pela aba "Resumido" mantém o tipo e a matriz (modeChangePatch);
 //   e) folha (tela = impressão = PDF): layout "matrix", legenda, 3 valores por célula (Qtd, "x kg", GMD),
 //      alinhamento data-col (com negativos), clique na linha/célula/coluna = detalhe exato; muitas colunas →
-//      paisagem/fonte menor/aviso, nunca corta coluna;
+//      paisagem/fonte menor/aviso, nunca corta coluna. E1D visual: a folha tem a cara da do MAKGESTAO —
+//      legenda "Linhas: … | Colunas: … | Valores: Qtd / Peso Médio / GMD Médio", peso em kg INTEIRO ("347 kg",
+//      como o pesoMed.toFixed(0) do antigo) e ausente "-"; o XLSX continua com 1 casa (conferido com a folha
+//      na precisão da folha);
 //   f) XLSX: cabeçalho em 2 linhas (valor de X mesclado sobre Qtd / Peso médio (kg) / GMD médio (kg/dia),
 //      TOTAL no fim), números como números no formato da coluna, paridade com a folha célula a célula (e
 //      adulterações detectadas); o XLSX dos outros tipos não muda;
@@ -188,9 +191,10 @@ const case22 = checkMatrix('2×2 Sexo × Mês', vm22, {
   assert.ok(Math.abs(case22.matrix.totalRow.cells[0].aggregates.gmd_medio.value - 1.25) > 0.05, '2×2: GMD não é a média simples');
   // GMD sem pesagem anterior: "—" na folha (nunca "0,000") e célula vazia no XLSX.
   const femeaSet = case22.docRows[0].cells[2];
-  assert.deepEqual(femeaSet.lines, ['2', '240,0 kg', '—'], '2×2: Fêmea × set/2026 = 2 / 240,0 kg / —');
-  assert.deepEqual(case22.docRows[1].cells[1].lines, ['2', '346,7 kg', '1,500'], '2×2: Macho × ago/2026 = 2 / 346,7 kg / 1,500');
-  assert.deepEqual(case22.docRows[2].cells[3].lines, ['4', '296,9 kg', '1,100'], '2×2: canto = 4 / 296,9 kg / 1,100');
+  // E1D visual: kg inteiro e "-" no ausente, como a célula do antigo (os números continuam os do motor, em raw).
+  assert.deepEqual(femeaSet.lines, ['2', '240 kg', '-'], '2×2: Fêmea × set/2026 = 2 / 240 kg / -');
+  assert.deepEqual(case22.docRows[1].cells[1].lines, ['2', '347 kg', '1,500'], '2×2: Macho × ago/2026 = 2 / 347 kg (346,67) / 1,500');
+  assert.deepEqual(case22.docRows[2].cells[3].lines, ['4', '297 kg', '1,100'], '2×2: canto = 4 / 297 kg (296,875) / 1,100');
   results.push({ caso: '2×2 Sexo × Mês', celulas: case22.cells });
 }
 
@@ -297,7 +301,7 @@ const caseSameName = checkMatrix('lotes de mesmo nome', vmSameName, {
   assert.deepEqual(matrix.columns.map((column) => column.key), ['L1', 'L9'], 'mesmo nome: uma coluna por lote (chave), não uma por nome');
   const headers = doc.columns.map((column) => column.label);
   assert.equal(new Set(headers).size, headers.length, `mesmo nome: cabeçalhos da folha distintos (${headers.join(' | ')})`);
-  assert.deepEqual(docRows[1].cells[1].lines, ['1', '292,5 kg', '-0,500'], 'ganho negativo: Macho × Lote 01 · Engorda = 1 / 292,5 kg / -0,500');
+  assert.deepEqual(docRows[1].cells[1].lines, ['1', '293 kg', '-0,500'], 'ganho negativo: Macho × Lote 01 · Engorda = 1 / 293 kg (292,5) / -0,500');
   // O detalhe (pílula) mostra o mesmo rótulo do cabeçalho.
   const recria = doc.drillTargets[docRows[2].cells[2].drill];
   assert.deepEqual(recria.map((part) => [part.columnId, part.key, part.label]), [['nome_lote', 'L9', 'Lote 01 · Recria']], 'mesmo nome: TOTAL × Lote 01 · Recria abre o L9 com o rótulo do cabeçalho');
@@ -447,7 +451,9 @@ function assertTablesAligned(html) {
   }
   return tables.length;
 }
-/** Cada célula da folha da matriz: sob a sua coluna; 3 valores (Qtd, "x kg", GMD com sinal e 3 casas, ou "—") ou vazia. */
+const stacked = (lines) => lines.map((line, index) => `<span class="mk-v mk-v${index + 1}${line === '-' ? ' mk-none' : ''}">${line}</span>`).join('');
+const plainText = (markup) => markup.replace(/<[^>]+>/g, '');
+/** Cada célula da folha da matriz: sob a sua coluna; 3 valores (Qtd, "x kg" inteiro, GMD com sinal e 3 casas, ou "-") ou vazia. */
 function assertMatrixCellTexts(name, doc) {
   let negatives = 0;
   for (const row of documentRows(doc)) {
@@ -458,9 +464,9 @@ function assertMatrixCellTexts(name, doc) {
       if (index === 0 || !cell.lines.length) return;
       assert.equal(cell.lines.length, 3, `${name} · ${row.id}: 3 valores na célula ${index}`);
       assert.match(cell.lines[0], /^\d+$/, `${name} · ${row.id}: Qtd inteira`);
-      assert.match(cell.lines[1], /^\d{1,3}(\.\d{3})*,\d kg$/, `${name} · ${row.id}: Peso médio "x kg" com 1 casa`);
-      assert.match(cell.lines[2], /^(-?\d+,\d{3}|—)$/, `${name} · ${row.id}: GMD com 3 casas (negativo com "-") ou "—"`);
-      if (cell.lines[2].startsWith('-')) negatives += 1;
+      assert.match(cell.lines[1], /^\d{1,3}(\.\d{3})* kg$/, `${name} · ${row.id}: Peso médio "x kg" inteiro (como o antigo)`);
+      assert.match(cell.lines[2], /^(-?\d+,\d{3}|-)$/, `${name} · ${row.id}: GMD com 3 casas (negativo com "-") ou "-"`);
+      if (/^-\d/.test(cell.lines[2])) negatives += 1;
     });
   }
   return negatives;
@@ -468,28 +474,32 @@ function assertMatrixCellTexts(name, doc) {
 {
   const { doc } = case34;
   assert.equal(doc.layout, 'matrix', 'folha: layout matrix');
-  assert.equal(doc.matrix.legend, 'Linhas: Lote · Colunas: Mês · Valores: Qtd / Peso médio / GMD médio', 'folha: legenda');
+  assert.equal(doc.matrix.legend, 'Linhas: Lote | Colunas: Mês | Valores: Qtd / Peso Médio / GMD Médio', 'folha: legenda do antigo');
+  assert.deepEqual(doc.flat.legend.map((part) => part.label), ['Linhas', 'Colunas', 'Valores'], 'folha: rótulos da legenda (em negrito)');
+  assert.equal(buildMatrix(vm34).legend, 'Linhas: Lote · Colunas: Mês · Valores: Qtd / Peso médio / GMD médio', 'o modelo (e o XLSX) continua com a sua legenda');
   assert.equal(doc.flat.title, doc.matrix.legend, 'folha: legenda como título da tabela');
   assert.equal(doc.sections.length + (doc.grandTotal ? 1 : 0), 0, 'folha: uma tabela só (sem seções nem bloco de total à parte)');
   const rows = documentRows(doc);
   assert.deepEqual(rows.map((row) => row.type), [DOC_ROW_TYPES.GROUP, DOC_ROW_TYPES.GROUP, DOC_ROW_TYPES.GROUP, DOC_ROW_TYPES.GRAND_TOTAL], 'folha: 3 linhas de Y + TOTAL');
   assertMatrixCellTexts('3×4', doc);
-  assert.deepEqual(rows[0].cells[1].lines, ['2', '232,5 kg', '0,750'], 'folha: Lote 01 × dez/2025');
+  assert.deepEqual(rows[0].cells[1].lines, ['2', '233 kg', '0,750'], 'folha: Lote 01 × dez/2025 (232,5 kg)');
   assert.deepEqual(rows[1].cells[2].lines, [], 'folha: Lote 02 × jan/2026 vazio');
-  assert.deepEqual(rows[3].cells[5].lines, ['7', '265,6 kg', '0,792'], 'folha: canto');
+  assert.deepEqual(rows[3].cells[5].lines, ['7', '266 kg', '0,792'], 'folha: canto (265,57 kg)');
   // Negativos: o ganho negativo (B1) sai "-0,500" com o sinal, alinhado sob a coluna do seu lote.
   const negDoc = caseSameName.doc;
   assert.equal(assertMatrixCellTexts('ganho negativo', negDoc), 2, 'ganho negativo: 2 células com GMD negativo (Macho e TOTAL × Lote 01 · Engorda)');
   const negHtml = renderSheetBody(negDoc, { mode: 'print' });
   assert.equal(assertTablesAligned(negHtml), 1, 'ganho negativo: folha alinhada');
-  assert.ok(negHtml.includes('1<br>292,5 kg<br>-0,500'), 'ganho negativo: "-0,500" empilhado na célula');
-  assert.match(negHtml, /<td data-col="1" data-key="x:L1"[^>]*>1<br>292,5 kg<br>-0,500</, 'ganho negativo: sob a coluna Lote 01 · Engorda (x:L1)');
+  assert.ok(negHtml.includes(stacked(['1', '293 kg', '-0,500'])), 'ganho negativo: "-0,500" empilhado na célula');
+  assert.ok(new RegExp(`<td data-col="1" data-key="x:L1"[^>]*>${stacked(['1', '293 kg', '-0,500'])}<`).test(negHtml), 'ganho negativo: sob a coluna Lote 01 · Engorda (x:L1)');
   assert.ok(negHtml.includes('>Lote 01 · Engorda<') && negHtml.includes('>Lote 01 · Recria<'), 'mesmo nome: cabeçalhos com a apartação no HTML');
   // HTML (tela = impressão): alinhamento, 3 valores com <br>, legenda.
   const html = renderSheetBody(doc, { mode: 'print' });
   assert.equal(assertTablesAligned(html), 1, 'folha: uma tabela');
-  assert.ok(html.includes('2<br>232,5 kg<br>0,750'), 'folha: valores empilhados com <br>');
-  assert.ok(html.includes('Linhas: Lote · Colunas: Mês · Valores: Qtd / Peso médio / GMD médio'), 'folha: legenda no HTML');
+  assert.ok(html.includes(stacked(['2', '233 kg', '0,750'])), 'folha: valores empilhados (um <span> por valor, como as 3 linhas do antigo)');
+  assert.ok(plainText(html).includes('Linhas: Lote | Colunas: Mês | Valores: Qtd / Peso Médio / GMD Médio'), 'folha: legenda no HTML');
+  assert.ok(html.includes('<strong>Linhas:</strong> Lote'), 'folha: rótulo da legenda em negrito');
+  assert.ok(html.includes(stacked(['1', '200 kg', '-'])), 'folha: GMD sem anterior = "-", nunca 0,000');
   assert.ok(html.includes('data-layout="matrix"'), 'folha: data-layout="matrix"');
   const swapped = html.replace(/(<td data-col="1" data-key=")([^"]*)(")/, '$1__trocada__$3');
   assert.throws(() => assertTablesAligned(swapped), 'NEGATIVO: célula sob a coluna errada é detectada');
@@ -518,7 +528,7 @@ function assertMatrixCellTexts(name, doc) {
   // Impressão/PDF: o mesmo documento.
   const printed = preparePrint(vm34, ADMIN, { orientation: 'auto' });
   assert.equal(printed.document.layout, 'matrix', 'impressão: folha da matriz');
-  assert.ok(printed.html.includes('232,5 kg') && printed.html.includes(doc.matrix.legend), 'impressão: valores e legenda');
+  assert.ok(printed.html.includes('233 kg') && plainText(printed.html).includes(doc.matrix.legend), 'impressão: valores e legenda');
   assert.ok(printed.layout.fits, '3×4 cabe na página');
   results.push({ caso: 'folha 3×4', orientacao: printed.layout.orientation, fonte: printed.layout.sizeClass, cliques: drills.length });
 }
@@ -581,7 +591,9 @@ const STYLE = { text: 1, header: 2, total: 4, int: 8, num1: 11, num3: 7 };
 const METRIC_HEADERS = ['Qtd', 'Peso médio (kg)', 'GMD médio (kg/dia)'];
 const METRIC_STYLES = [STYLE.int, STYLE.num1, STYLE.num3];
 const HEADER_ROW = 7; // título, 4 metadados, branco → 1ª linha do cabeçalho da matriz
-const printedNumber = (text) => (text === '—' ? null : Number(text.replace(/ kg$/, '').replace(/\./g, '').replace(',', '.')));
+const printedNumber = (text) => (text === '-' ? null : Number(text.replace(/ kg$/, '').replace(/\./g, '').replace(',', '.')));
+// E1D visual: a folha mostra o kg inteiro (como o antigo); a planilha guarda 1 casa. Conferência na precisão da folha.
+const SHEET_DECIMALS = [0, 0, 3];
 
 /** Compara a planilha (o arquivo) com a folha, célula a célula. Lança na primeira divergência. */
 function checkXlsxAgainstSheet(name, vm, rows) {
@@ -629,7 +641,7 @@ function checkXlsxAgainstSheet(name, vm, rows) {
           assert.equal(cell.type, 'n', `${at}: número (nunca texto)`);
           assert.equal(cell.value, expected, `${at} = folha (${docCell.lines[metric]})`);
           assert.equal(cell.style, METRIC_STYLES[metric], `${at}: formato da coluna`);
-          assert.equal(printedNumber(docCell.lines[metric]), expected, `${at}: o que a folha imprime = o número da planilha`);
+          assert.equal(printedNumber(docCell.lines[metric]), roundTo(cell.value, SHEET_DECIMALS[metric]), `${at}: o que a folha imprime = o número da planilha (na precisão da folha)`);
         }
         compared += 1;
       }
