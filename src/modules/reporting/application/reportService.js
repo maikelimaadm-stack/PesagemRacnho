@@ -326,6 +326,9 @@ async function resolveArrobaDivisor(requested, empresaId) {
   }
 }
 
+// E1F: nome do relatório do usuário para o título da folha (texto; vazio = o nome do relatório).
+const requestedSheetTitle = (value) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, 80) : null);
+
 /**
  * Executa um relatório.
  * @param {string|object} definitionOrId
@@ -334,6 +337,7 @@ async function resolveArrobaDivisor(requested, empresaId) {
  *   forem iguais, as linhas canônicas já carregadas são reaproveitadas (mudou só filtro/coluna/grupo/total).
  *   Não é cache persistido: vive só no objeto que a tela já segura.
  *   arrobaDivisor (E1B): divisor da @ de peso vivo; ausente → Configurações › Relatórios (padrão 30).
+ *   sheetTitle (E1F): nome do relatório do usuário (modelo aberto) no título da folha; só título — nada de seleção.
  * @param {{ id: string, nome?: string, role: string }} actor
  */
 export async function runReport(definitionOrId, request = {}, actor) {
@@ -404,7 +408,8 @@ export async function runReport(definitionOrId, request = {}, actor) {
     reportId: definition.id,
     reportName: definition.title,
     // Nome no título da folha (E1C: Pesagens → "Pesagens Individuais"); os demais usam o próprio nome.
-    sheetTitle: selection.view?.sheetTitle ?? definition.sheetTitle ?? definition.title,
+    // E1F: relatório do usuário (modelo aberto) → o nome dele ("Relatório de <nome>"), pedido pela tela.
+    sheetTitle: requestedSheetTitle(request.sheetTitle) ?? selection.view?.sheetTitle ?? definition.sheetTitle ?? definition.title,
     reportDefinitionVersion: definition.version,
     // Aberto por id antigo consolidado (favorito/modelo/link de antes da 1.4.0). A tela chama com o id
     // novo e a seleção já aplicada, e informa a visão em `request.presetId` só para rastreabilidade.
