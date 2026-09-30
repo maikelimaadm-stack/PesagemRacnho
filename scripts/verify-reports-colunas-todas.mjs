@@ -262,6 +262,19 @@ for (const definition of withTypes) {
   for (const view of typed) await saveTypeColumnPrefs(definition.id, view.id, [], ADMIN);
   assert.deepEqual(await getTypeColumnPrefs(definition.id, ADMIN), {}, `${definition.id}: lista vazia volta ao padrão`);
 }
+// O par Faixa exigida (uma chave = duas métricas) grava, volta na ordem e reabre pelo último estado.
+for (const id of ['por-apartacao-lote', 'por-apartacao-data']) {
+  const faixa = ['faixa', 'qtd', 'peso_medio'];
+  await saveTypeColumnPrefs('pesagens', id, faixa, ADMIN);
+  const selection = typedViewSelection(PESAGENS, pview(id), await getTypeColumnPrefs('pesagens', ADMIN));
+  assert.deepEqual(selection.aggregates.map((spec) => spec.id), ['faixa_min', 'faixa_max', 'qtd', 'peso_medio'], `${id}: Faixa = as duas métricas, na frente`);
+  assert.deepEqual(columnKeysOf(pview(id), PESAGENS, selection), faixa, `${id}: Faixa volta como uma chave`);
+  await saveReportViewState('pesagens', viewStatePayload(PESAGENS, { ...selection, params: P, uiFilters: {}, search: '', widths: {}, orientation: 'auto', showEmptyColumns: false }, 'ADMIN'), ADMIN);
+  assert.deepEqual(columnKeysOf(pview(id), PESAGENS, stateFromRequest(PESAGENS, await getReportViewState('pesagens', ADMIN))), faixa, `${id}: Faixa volta pelo último estado`);
+  const doc = buildReportDocument(await run(PESAGENS, selection));
+  assert.deepEqual(doc.columns.map((column) => column.key), [LABEL_COLUMN_KEY, 'pair:faixa', 'qtd', 'peso_medio'], `${id}: Faixa na folha, na ordem`);
+  await saveTypeColumnPrefs('pesagens', id, [], ADMIN);
+}
 // NEGATIVO: CONSULTA não grava coluna de valor (Pesagens › Vendas) — e o que grava é só o que vê.
 assert.deepEqual(await saveTypeColumnPrefs('pesagens', 'vendas', ['comprador', 'valor_venda_calc', 'peso'], CONSULTA), ['comprador', 'peso'], 'NEGATIVO: CONSULTA sem Valor Total');
 resumo.tiposGravados = gravados;
