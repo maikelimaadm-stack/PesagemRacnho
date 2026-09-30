@@ -4,11 +4,13 @@
 // é resolvido pela tela (propertyHeaderService) e entra no documento; "Página X de Y" vem do próprio
 // documento (margem do @page) nos três canais — impressão, PDF e iframe de desenvolvimento.
 import { assertCanExport } from '../domain/reportPermissions.js';
+import { buildReportCharts, chartColumnIds, chartsManifest } from '../domain/reportCharts.js';
 import { getReportDefinition } from '../definitions/reportCatalog.js';
 import { buildPrintDocument } from '../infrastructure/exporters/printDocument.js';
 import { buildManifest, exportFileName } from './reportExportService.js';
 
-function authorize(viewModel, actor) {
+// E1G: colunas extras que a exportação também leva (as dos gráficos) entram no mesmo assertCanExport.
+function authorize(viewModel, actor, extraColumnIds = []) {
   if (!actor?.role) {
     const error = new Error('Acesso não permitido: sessão sem papel.');
     error.code = 'AUTH_FORBIDDEN';
@@ -21,7 +23,8 @@ function authorize(viewModel, actor) {
   }
   const definition = getReportDefinition(viewModel.reportId);
   if (!definition) throw new Error(`relatório desconhecido (${viewModel.reportId})`);
-  assertCanExport(definition, actor.role, viewModel.columns.map((column) => column.id));
+  assertCanExport(definition, actor.role, [...viewModel.columns.map((column) => column.id), ...extraColumnIds]);
+  return definition;
 }
 
 /**
@@ -29,13 +32,24 @@ function authorize(viewModel, actor) {
  * (buildPrintDocument): orientation, header, showEmptyColumns, widths e, no relatório de Vendas (E1D),
  * showDetails ("Mostrar Detalhes": as vendas de cada comprador abaixo do cartão) — printReport e exportPdf
  * repassam as mesmas opções.
+ * E1G (vista Gráficos): chartsConfig = configuração dos gráficos da tela ({ [id]: { serie, eixo, … } }, {} = os
+ * padrões) → "gráficos + folha"; chartsOnly → "só os gráficos". Os gráficos são calculados AQUI com a MESMA função
+ * da tela (buildReportCharts) sobre o MESMO view model (sem voltar ao banco); as colunas deles passam pelo mesmo
+ * assertCanExport (imprimir = exportar) e o manifesto lista o que saiu.
  */
 export function preparePrint(viewModel, actor, options = {}) {
-  authorize(viewModel, actor);
-  const document = buildPrintDocument(viewModel, options);
+  const wantsCharts = (options.chartsConfig != null && typeof options.chartsConfig === 'object') || Boolean(options.chartsOnly);
+  const definition = authorize(viewModel, actor, wantsCharts ? chartColumnIds(getReportDefinition(viewModel.reportId)) : []);
+  const charts = wantsCharts ? buildReportCharts(viewModel, definition, options.chartsConfig ?? {}, actor.role) : null;
+  const document = buildPrintDocument(viewModel, { ...options, charts, chartsOnly: wantsCharts && Boolean(options.chartsOnly) });
   const manifest = { ...buildManifest(viewModel, options.format ?? 'print'), orientation: document.layout.orientation, fileName: exportFileName(viewModel, 'pdf') };
   if (document.document.layout === 'vendas') manifest.showDetails = Boolean(options.showDetails);
-  return { ...document, manifest };
+  if (charts) {
+    manifest.display = 'graficos';
+    manifest.chartsOnly = Boolean(options.chartsOnly);
+    manifest.charts = chartsManifest(charts);
+  }
+  return { ...document, manifest, ...(charts ? { charts } : {}) };
 }
 
 function bridge() {

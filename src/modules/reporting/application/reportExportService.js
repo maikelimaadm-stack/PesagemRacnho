@@ -6,6 +6,7 @@
 // Nenhum segredo de autenticação entra no manifesto (só id, nome e papel do emissor).
 import { sha256Hex } from '../../../lib/sha256.js';
 import { assertCanExport } from '../domain/reportPermissions.js';
+import { buildReportCharts, chartColumnIds, chartsManifest } from '../domain/reportCharts.js';
 import { describePeriod } from '../domain/reportPeriod.js';
 import { getReportDefinition } from '../definitions/reportCatalog.js';
 import { buildCsv } from '../infrastructure/exporters/csvExporter.js';
@@ -72,9 +73,12 @@ export function buildManifest(viewModel, format) {
 
 /**
  * Gera conteúdo + manifesto sem gravar (usado pelos gates e pela gravação).
+ * @param {{ chartsConfig?: object|null }} options E1G: na vista Gráficos, a configuração dos gráficos da tela → o
+ *   XLSX ganha a aba "Gráficos" (mesma função buildReportCharts da tela e do PDF; colunas dos gráficos no mesmo
+ *   assertCanExport; manifesto com os gráficos). CSV e JSON não mudam.
  * @returns {Promise<{ fileName, mime, content, manifest }>}
  */
-export async function prepareEmission(viewModel, format, actor) {
+export async function prepareEmission(viewModel, format, actor, options = {}) {
   const spec = EXPORT_FORMATS[format];
   if (!spec) throw new Error(`formato de exportação desconhecido (${format})`);
   if (!actor?.role) {
@@ -89,16 +93,22 @@ export async function prepareEmission(viewModel, format, actor) {
     error.code = 'AUTH_FORBIDDEN';
     throw error;
   }
-  assertCanExport(definition, actor.role, viewModel.columns.map((column) => column.id));
+  const withCharts = format === 'xlsx' && options.chartsConfig != null && typeof options.chartsConfig === 'object';
+  assertCanExport(definition, actor.role, [...viewModel.columns.map((column) => column.id), ...(withCharts ? chartColumnIds(definition) : [])]);
+  const charts = withCharts ? buildReportCharts(viewModel, definition, options.chartsConfig, actor.role) : null;
   const manifest = buildManifest(viewModel, format);
   manifest.fileName = exportFileName(viewModel, spec.extension);
+  if (charts) {
+    manifest.display = 'graficos';
+    manifest.charts = chartsManifest(charts);
+  }
   let content;
   if (format === 'csv') {
     content = buildCsv(viewModel);
     manifest.sha256 = await sha256Hex(content);
   } else if (format === 'xlsx') {
     // A aba Manifesto leva o manifesto sem o hash (o hash é do próprio arquivo, calculado depois).
-    content = buildXlsx(viewModel, { ...manifest });
+    content = buildXlsx(viewModel, { ...manifest }, { charts });
     manifest.sha256 = await sha256Hex(content);
   } else {
     const body = buildJsonBody(viewModel);
@@ -142,8 +152,8 @@ export async function defaultReportWriter({ fileName, content, mime }) {
 }
 
 /** Emite CSV/JSON/XLSX: grava o arquivo e o manifesto (<arquivo>.manifest.json). */
-export async function emitReport(viewModel, format, actor, { writer = defaultReportWriter } = {}) {
-  const prepared = await prepareEmission(viewModel, format, actor);
+export async function emitReport(viewModel, format, actor, { writer = defaultReportWriter, chartsConfig = null } = {}) {
+  const prepared = await prepareEmission(viewModel, format, actor, { chartsConfig });
   const written = await writer(prepared);
   if (written.canceled) return { ...prepared, written, manifestWritten: null, canceled: true };
   if (written.sha256 && written.sha256 !== prepared.manifest.sha256) {

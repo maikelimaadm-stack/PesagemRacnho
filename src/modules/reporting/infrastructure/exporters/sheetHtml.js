@@ -258,11 +258,16 @@ function renderFooter(doc) {
 /**
  * Marcação da folha inteira (cabeçalho que se repete, título e período, seções, total geral e rodapé).
  * @param doc documento de buildReportDocument
- * @param {{ mode?: 'fragment'|'print', interactive?: boolean, sort?: {key, direction}|null, headerMenu?: boolean }} options
+ * @param {{ mode?: 'fragment'|'print', interactive?: boolean, sort?: {key, direction}|null, headerMenu?: boolean,
+ *   prelude?: string, sheet?: boolean }} options
  *   fragment = dentro do app (tela); print = corpo do documento impresso/PDF. headerMenu (E1F, só na tela
  *   do MAKGESTAO): cabeçalho interativo (renderHeaderCell) — ignorado na impressão.
+ *   E1G: prelude = marcação JÁ escapada que entra no começo do corpo, antes da folha (o bloco de gráficos da
+ *   impressão — exporters/chartSvg.renderChartsBlock); sheet: false = só o prelude ("só os gráficos"). O
+ *   cabeçalho da propriedade, o título e o rodapé continuam (thead/tfoot repetem em todas as páginas). A tela
+ *   nunca passa prelude: nada muda para ela.
  */
-export function renderSheetBody(doc, { mode = 'fragment', interactive = false, sort = null, headerMenu = false } = {}) {
+export function renderSheetBody(doc, { mode = 'fragment', interactive = false, sort = null, headerMenu = false, prelude = '', sheet = true } = {}) {
   const options = { interactive, sort, headerMenu: headerMenu && mode !== 'print' };
   const header = renderSheetHeaderHtml(doc.header);
   // Abaixo do título só o período (E1D item 8), no lugar do antigo subtítulo — mesma marcação e estilo.
@@ -280,6 +285,8 @@ export function renderSheetBody(doc, { mode = 'fragment', interactive = false, s
       doc.grandTotal ? `<div class="sheet-grand-block">${renderTable(doc, doc.grandTotal, options)}</div>` : '',
     ].join('\n');
   }
+  if (!sheet) content = '';
+  if (prelude) content = content ? `${prelude}\n${content}` : prelude;
   // Nenhuma nota na folha; só na tela, o aviso de linhas limitadas (a impressão leva todas).
   const notes = mode !== 'print' && doc.screenNotice ? `<ul class="sheet-notes"><li>${escapeHtml(doc.screenNotice)}</li></ul>` : '';
   const rootClass = `rpt-sheet rpt-sheet--${mode === 'print' ? 'print' : 'screen'} sheet--${doc.print.orientation} sheet-size-${doc.print.sizeClass}`;

@@ -257,24 +257,72 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 
-function workbookFiles(viewModel, manifest) {
+// E1G — aba "Gráficos" (fase 1): a tabela de dados de cada gráfico (título, subtítulo, cabeçalho e uma linha por
+// série/grupo/faixa), números como números no formato da coluna — os MESMOS números da tela e do PDF (a tabela vem
+// de domain/reportCharts; o texto do PDF é o sheetNumberText do mesmo valor). O gráfico nativo do Excel (DrawingML)
+// fica para a fase 2.
+export const XLSX_CHART_KINDS = Object.freeze({ TITLE: 'CHART_TITLE', SUBTITLE: 'CHART_SUBTITLE', HEADER: 'CHART_HEADER', ROW: 'CHART_ROW', NOTE: 'CHART_NOTE' });
+
+export function buildChartSheetRows(viewModel, charts = []) {
+  const rows = [
+    { kind: 'TITLE', cells: [[`Gráficos — ${viewModel.exportName ?? viewModel.reportName}`, STYLE.title]] },
+    { kind: 'META', cells: [['Período', STYLE.meta], [viewModel.period ? describePeriod(viewModel.period) : 'Estado atual', null]] },
+    { kind: 'META', cells: [['Filtros', STYLE.meta], [describeFilters(viewModel), null]] },
+    { kind: 'BLANK', cells: [] },
+  ];
+  let width = 2;
+  for (const chart of charts) {
+    const table = chart.tabela;
+    rows.push({ kind: XLSX_CHART_KINDS.TITLE, chartId: chart.id, cells: [[chart.title, STYLE.group]] });
+    if (chart.subtitle) rows.push({ kind: XLSX_CHART_KINDS.SUBTITLE, chartId: chart.id, cells: [[chart.subtitle, STYLE.meta]], overflow: true });
+    if (table?.linhas?.length) {
+      width = Math.max(width, table.cabecalho.length);
+      rows.push({ kind: XLSX_CHART_KINDS.HEADER, chartId: chart.id, cells: table.cabecalho.map((cell) => [cell, STYLE.header]) });
+      table.linhas.forEach((line, lineIndex) => {
+        const last = lineIndex === table.linhas.length - 1;
+        rows.push({
+          kind: XLSX_CHART_KINDS.ROW, chartId: chart.id,
+          cells: line.map((text, index) => {
+            if (index === 0) return [text, last ? STYLE.total : STYLE.text];
+            const format = table.formatos?.[index] ?? null;
+            const raw = table.valores?.[lineIndex]?.[index] ?? null;
+            const value = format && raw !== null ? formatCell(format, raw, 'xlsx') : null;
+            return [value, typeof value === 'number' ? numberStyle(format) : STYLE.text];
+          }),
+        });
+      });
+    }
+    if (chart.semValor?.texto) rows.push({ kind: XLSX_CHART_KINDS.NOTE, chartId: chart.id, cells: [[chart.semValor.texto, null]], overflow: true });
+    for (const nota of chart.notas ?? []) rows.push({ kind: XLSX_CHART_KINDS.NOTE, chartId: chart.id, cells: [[nota, null]], overflow: true });
+    rows.push({ kind: 'BLANK', cells: [] });
+  }
+  return { rows, width };
+}
+
+function workbookFiles(viewModel, manifest, { charts = null } = {}) {
   const { rows, width, merges = [], freeze = null } = buildSheetRows(viewModel);
   // O título do bloco "TOTAL POR" transborda para as células vazias ao lado: não alarga a coluna A.
   const measured = rows.slice(6).filter((row) => row.kind !== XLSX_BLOCK_KINDS.TITLE && !row.overflow);
   const widths = Array.from({ length: width }, (_, index) => Math.min(48, Math.max(10, measured.reduce((max, row) => Math.max(max, String(row.cells[index]?.[0] ?? '').length), 0) + 2)));
   const manifestRows = Object.entries(manifest || {}).map(([key, value]) => ({ cells: [[key, STYLE.meta], [typeof value === 'object' ? JSON.stringify(value) : value, STYLE.text]] }));
+  // E1G: com gráficos (vista Gráficos), a 3ª aba "Gráficos"; sem eles, o arquivo não muda.
+  const chartSheet = Array.isArray(charts) ? buildChartSheetRows(viewModel, charts) : null;
+  const chartWidths = chartSheet ? Array.from({ length: chartSheet.width }, (_, index) => Math.min(40, Math.max(12, chartSheet.rows.filter((row) => row.kind === XLSX_CHART_KINDS.ROW || row.kind === XLSX_CHART_KINDS.HEADER).reduce((max, row) => Math.max(max, String(row.cells[index]?.[0] ?? '').length), 0) + 2))) : [];
+  const sheetType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml';
+  const worksheetRel = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet';
   return {
     '[Content_Types].xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="${sheetType}"/><Override PartName="/xl/worksheets/sheet2.xml" ContentType="${sheetType}"/>${chartSheet ? `<Override PartName="/xl/worksheets/sheet3.xml" ContentType="${sheetType}"/>` : ''}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`,
     '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
     'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escapeXml(sanitizeSheetName(viewModel.exportName ?? viewModel.reportName))}" sheetId="1" r:id="rId1"/><sheet name="Manifesto" sheetId="2" r:id="rId2"/></sheets></workbook>`,
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escapeXml(sanitizeSheetName(viewModel.exportName ?? viewModel.reportName))}" sheetId="1" r:id="rId1"/><sheet name="Manifesto" sheetId="2" r:id="rId2"/>${chartSheet ? '<sheet name="Gráficos" sheetId="3" r:id="rId4"/>' : ''}</sheets></workbook>`,
     'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${worksheetRel}" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="${worksheetRel}" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>${chartSheet ? `<Relationship Id="rId4" Type="${worksheetRel}" Target="worksheets/sheet3.xml"/>` : ''}</Relationships>`,
     'xl/styles.xml': STYLES_XML,
     'xl/worksheets/sheet1.xml': worksheetXml(rows, width, widths, { merges, freeze }),
     'xl/worksheets/sheet2.xml': worksheetXml([{ cells: [['Manifesto da emissão', STYLE.title]] }, ...manifestRows], 2, [28, 90]),
+    ...(chartSheet ? { 'xl/worksheets/sheet3.xml': worksheetXml(chartSheet.rows, chartSheet.width, chartWidths, { freeze: { rows: 1, cols: 0 } }) } : {}),
   };
 }
 
@@ -342,6 +390,9 @@ export function unzipStored(bytes) {
   return files;
 }
 
-export function buildXlsx(viewModel, manifest) {
-  return zipStored(workbookFiles(viewModel, manifest));
+/**
+ * @param {{ charts?: object[]|null }} options E1G: gráficos JÁ calculados (buildReportCharts) → aba "Gráficos".
+ */
+export function buildXlsx(viewModel, manifest, options = {}) {
+  return zipStored(workbookFiles(viewModel, manifest, options));
 }
