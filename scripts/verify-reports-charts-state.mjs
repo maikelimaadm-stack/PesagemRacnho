@@ -21,7 +21,9 @@
 //   i) revisão: o clique no gráfico SOMA ao detalhe já aberto (NEGATIVO: trocar o detalhe abria as fêmeas de todos
 //      os lotes); o × volta ao modo e ao detalhe de antes — Analítico continua Detalhado e "Salvar alterações" não
 //      acende (NEGATIVO: o × antigo, "Resumido sem detalhe", acendia); "Demais" de um grupo só abre aquele grupo
-//      (NEGATIVO: o caminho antigo só tinha o mês); todas as séries escondidas dizem isso (não "nenhum valor").
+//      (NEGATIVO: o caminho antigo só tinha o mês); todas as séries escondidas dizem isso (não "nenhum valor");
+//   j) revisão (desempenho): o texto dos números usa um formatador guardado — o MESMO texto de toLocaleString
+//      (peso, GMD, @, cabeças, dinheiro e %), sem criar um formatador a cada ponto do gráfico.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ADMIN, CONSULTA, OPERADOR, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
@@ -40,6 +42,7 @@ import { getReportView } from '../src/modules/reporting/domain/reportViews.js';
 import { createColumnResolver } from '../src/modules/reporting/domain/reportDefinition.js';
 import { groupRows } from '../src/modules/reporting/domain/groupEngine.js';
 import { TEXTO_TODAS_ESCONDIDAS, renderChartSvg } from '../src/modules/reporting/infrastructure/exporters/chartSvg.js';
+import { formatCell } from '../src/modules/reporting/domain/reportFormatting.js';
 import {
   CHART_DISPLAYS, CHART_DRILL_HINT, TEXTO_SEM_GMD, buildReportChart, buildReportCharts, chartConfigToggleSeries, chartConfigWith, chartOptionsOf, chartTargetDrill,
   chartTargetTip, chartsOf, chartsStateOf, displayOf, normalizeChartConfig, withHiddenSeries,
@@ -356,6 +359,24 @@ const vm = await runReport('pesagens', { today: TODAY, params: { periodo: PERIOD
   const vazio = buildReportCharts({ ...vm, rows: vm.rows.filter((row) => row.tipo_manejo === 'Cadastro') }, PESAGENS, {}, 'OPERADOR').find((chart) => chart.id === 'gmd-por-grupo');
   assert.ok(renderChartSvg(vazio).includes(TEXTO_SEM_GMD), 'sem valor de verdade: continua o porquê');
   results.push({ caso: 'revisão', somaDetalhe: patch.drill.length, voltaAoModo: after.mode, demaisDeUm: click.length });
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// j) revisão: formatador guardado = o mesmo texto de antes
+// ---------------------------------------------------------------------------------------------------------
+{
+  const values = [0, -0, 1, -1, 0.0005, -0.0005, 12.345, 1234.5678, -98765.4321, 1e6 + 0.555, 0.1 + 0.2, 346.6666666];
+  let compared = 0;
+  for (const [type, decimals] of [['weight', 2], ['weight', 0], ['gmd', 3], ['number', 3], ['integer', 0], ['number', 1], ['money', 2], ['percentage', 1]]) {
+    for (const value of values) {
+      const rounded = Math.round((value + Number.EPSILON * Math.sign(value)) * 10 ** decimals) / 10 ** decimals;
+      const options = { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
+      const before = type === 'money' ? rounded.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', ...options }) : `${rounded.toLocaleString('pt-BR', options)}${type === 'percentage' ? ' %' : ''}`;
+      assert.equal(formatCell({ type, decimals }, value, 'print'), before, `${type}/${decimals} ${value}: mesmo texto`);
+      compared += 1;
+    }
+  }
+  results.push({ caso: 'formatador guardado', comparados: compared });
 }
 
 await resetDb();
