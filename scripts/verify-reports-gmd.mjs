@@ -232,10 +232,9 @@ const docSaidas = buildReportDocument(saidasAnalitico);
 const morteRow = documentRows(docSaidas).find((row) => row.type === 'DATA' && row.cells.some((cell) => cell.text.includes('203')));
 assert.equal(morteRow.cells.find((cell) => cell.key === 'gmd').text, MAK_MISSING, 'Saídas: morte sem peso = "-"');
 assert.equal(docSaidas.footer.gmd, 'GMD de 2 de 3 cab.', 'Saídas: "GMD de 2 de 3 cab."');
-for (const [id, viewId] of [['saidas', 'por-motivo'], ['embarques.romaneio', 'analitico'], ['embarques.romaneio', 'romaneio-lista']]) {
-  const definition = getReportDefinition(id);
-  const view = getReportView(definition, viewId);
-  if (view.mode === 'DETALHADO') assert.ok(['dias', 'ganho', 'gmd'].every((key) => view.columnChoices.available.includes(key)), `${id} › ${view.label}: Dias, Ganho e GMD em "Colunas"`);
+for (const [id, viewId] of [['saidas', 'analitico'], ['saidas', 'mortes'], ['embarques.romaneio', 'analitico'], ['embarques.romaneio', 'romaneio-lista']]) {
+  const view = getReportView(getReportDefinition(id), viewId);
+  assert.ok(['dias', 'ganho', 'gmd'].every((key) => view.columnChoices.available.includes(key)), `${id} › ${view.label}: Dias, Ganho e GMD em "Colunas"`);
 }
 assert.ok(!getReportView(SAIDAS, 'mortes').columns.includes('gmd'), 'controle: Mortes (Lista) não ganhou GMD no padrão');
 ok('A1-colunas-saida');
