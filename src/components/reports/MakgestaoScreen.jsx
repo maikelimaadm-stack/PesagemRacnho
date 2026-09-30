@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowLeft, FileJson, FileSpreadsheet, FileText, FolderOpen, MoreHorizontal, RefreshCw, Save, Settings, Trash2, Users } from "lucide-react";
+import { ArrowLeft, ChevronLeft, FileJson, FileSpreadsheet, FileText, FolderOpen, ListFilter, MoreHorizontal, RefreshCw, Save, Settings, Trash2, Users } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -47,28 +47,102 @@ function MakDateField({ id, label, value, onChange }) {
 // "fora de", vinda de um modelo ou da 1.4.0) aparece escrita na lista e continua até a pessoa marcar ou limpar.
 const checkedValues = (value) => (isFilterActive(value) && Array.isArray(value?.values) && value.values.length && !NEGATIVE_LIST.has(value.operator) ? value.values.map(String) : []);
 
+// E1F: condição de número/data do "Mais filtros…" (entre, a partir de, até, igual) — os operadores do motor.
+const CONDITIONS = Object.freeze({
+  number: Object.freeze([["between", "Entre"], ["greater_equal", "A partir de (≥)"], ["less_equal", "Até (≤)"], ["equals", "Igual a"]]),
+  date: Object.freeze([["between", "Entre"], ["on_or_after", "A partir de"], ["on_or_before", "Até"], ["equals", "No dia"]]),
+});
+// Lista longa (Animal, Comprador…): caixa de busca em cima.
+const SEARCH_FROM = 12;
+
+/** Quantos filtros o botão mostra: marcados; outra condição conta como 1. */
+export const filterCount = (value) => (isFilterActive(value) ? checkedValues(value).length || 1 : 0);
+
+function MakConditionEditor({ filterType, value, onChange }) {
+  const options = CONDITIONS[filterType];
+  const current = isFilterActive(value) && options.some(([id]) => id === value.operator) ? value : null;
+  const [operator, setOperator] = useState(current?.operator ?? "between");
+  const [from, setFrom] = useState(current ? String(current.value ?? "") : "");
+  const [to, setTo] = useState(current ? String(current.valueTo ?? "") : "");
+  const type = filterType === "date" ? "date" : "text";
+  const ready = String(from).trim() !== "" && (operator !== "between" || String(to).trim() !== "");
+  return (
+    <form className="rpt-mak-pop__cond" onSubmit={(event) => { event.preventDefault(); if (ready) onChange({ operator, value: from.trim(), valueTo: operator === "between" ? to.trim() : "", values: [] }); }}>
+      <select className="rpt-mak-pop__field" aria-label="Condição" value={operator} onChange={(event) => setOperator(event.target.value)}>
+        {options.map(([id, text]) => <option key={id} value={id}>{text}</option>)}
+      </select>
+      <div className="rpt-mak-pop__cond-values">
+        <input className="rpt-mak-pop__field" type={type} inputMode={filterType === "number" ? "decimal" : undefined} aria-label={operator === "between" ? "De" : "Valor"} placeholder={operator === "between" ? "De" : "Valor"} value={from} onChange={(event) => setFrom(event.target.value)} />
+        {operator === "between" ? <input className="rpt-mak-pop__field" type={type} inputMode={filterType === "number" ? "decimal" : undefined} aria-label="Até" placeholder="Até" value={to} onChange={(event) => setTo(event.target.value)} /> : null}
+      </div>
+      <div className="rpt-mak-pop__cond-actions">
+        {isFilterActive(value) ? <button type="button" className="rpt-mak-pop__link" onClick={() => onChange(null)}>Limpar</button> : <span />}
+        <button type="submit" className="rpt-mak-pop__apply" disabled={!ready}>Aplicar</button>
+      </div>
+    </form>
+  );
+}
+
 /**
- * Botão de contorno da linha de filtros ("Lotes (2)") com a lista de marcar do antigo (Popover w-64: título
- * em negrito e uma caixa por valor; marcar já filtra). O filtro vai pelo MESMO caminho das pílulas
- * (uiFilters → motor de filtros, lista "em"): só a aparência é do antigo.
+ * Conteúdo do filtro de uma coluna (E1D; E1F: o mesmo nos botões e no "Mais filtros…"): texto/lista = caixas
+ * de marcar (marcar já filtra — lista "em"); número/data = condição (entre, a partir de, até, igual). Opções
+ * podem vir como { value, label } (Sim/Não da coluna sim/não). Tudo pelo MESMO caminho (uiFilters → motor).
  */
-export function MakgestaoFilterButton({ label, value, filterType = "text", listOptions = NO_OPTIONS, onChange, narrow = false }) {
-  const [open, setOpen] = useState(false);
-  const active = isFilterActive(value);
+export function MakgestaoFilterList({ label, value, filterType = "text", listOptions = NO_OPTIONS, onChange, open = true }) {
+  const [term, setTerm] = useState("");
   const checked = checkedValues(value);
-  // Quantos marcados; outra condição conta como 1.
-  const count = active ? checked.length || 1 : 0;
-  const otherCondition = active && !checked.length;
-  // Coluna de número/data (só aparece aqui com filtro ativo vindo de modelo): sem lista, só a condição.
-  const listable = filterType === "text";
+  const otherCondition = isFilterActive(value) && !checked.length;
+  if (filterType === "number" || filterType === "date") {
+    return (
+      <div className="space-y-2">
+        <h4 className="mb-2 text-sm font-semibold">{label}</h4>
+        {otherCondition && !CONDITIONS[filterType].some(([id]) => id === value.operator) ? (
+          <div className="rpt-mak-pop__condition"><span>{describeFilter(value)}</span><button type="button" onClick={() => onChange(null)}>Limpar</button></div>
+        ) : null}
+        <MakConditionEditor filterType={filterType} value={value} onChange={onChange} />
+      </div>
+    );
+  }
   // Só com a lista aberta (as opções vêm da população da execução, em cache por execução). Valor marcado que
   // não existe mais no período continua visível (e desmarcável).
-  const list = open && listable ? (typeof listOptions === "function" ? listOptions() : listOptions).map(String) : NO_OPTIONS;
-  const options = open && listable ? [...list, ...checked.filter((item) => !list.includes(item))] : NO_OPTIONS;
+  const raw = open ? (typeof listOptions === "function" ? listOptions() : listOptions) : NO_OPTIONS;
+  const list = raw.map((item) => (item && typeof item === "object" ? { value: String(item.value), label: String(item.label ?? item.value) } : { value: String(item), label: String(item) }));
+  const all = open ? [...list, ...checked.filter((item) => !list.some((option) => option.value === item)).map((item) => ({ value: item, label: item }))] : NO_OPTIONS;
+  const needle = term.trim().toLocaleLowerCase("pt-BR");
+  const options = needle ? all.filter((option) => option.label.toLocaleLowerCase("pt-BR").includes(needle)) : all;
   const toggle = (option) => {
     const next = checked.includes(option) ? checked.filter((item) => item !== option) : [...checked, option];
     onChange(next.length ? { operator: "in", value: "", valueTo: "", values: next } : null);
   };
+  return (
+    <div className="space-y-2">
+      <h4 className="mb-2 text-sm font-semibold">{label}</h4>
+      {otherCondition ? (
+        <div className="rpt-mak-pop__condition">
+          <span>{describeFilter(value)}</span>
+          <button type="button" onClick={() => onChange(null)}>Limpar</button>
+        </div>
+      ) : null}
+      {all.length > SEARCH_FROM ? <input type="search" className="rpt-mak-pop__field rpt-mak-pop__search" aria-label={`Procurar em ${label}`} placeholder="Procurar…" value={term} onChange={(event) => setTerm(event.target.value)} /> : null}
+      {options.map((option) => (
+        <label key={option.value} className="rpt-mak-pop__item flex items-center space-x-2">
+          <Checkbox checked={checked.includes(option.value)} onCheckedChange={() => toggle(option.value)} />
+          <span className="cursor-pointer text-sm">{option.label}</span>
+        </label>
+      ))}
+      {!all.length ? <p className="text-xs text-slate-500">Nenhum valor no período.</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Botão de contorno da linha de filtros ("Lotes (2)") com a lista de marcar do antigo (Popover w-64: título
+ * em negrito e uma caixa por valor; marcar já filtra). O filtro vai pelo MESMO caminho das pílulas
+ * (uiFilters → motor de filtros, lista "em"): só a aparência é do antigo. E1F: número/data com a condição.
+ */
+export function MakgestaoFilterButton({ label, value, filterType = "text", listOptions = NO_OPTIONS, onChange, narrow = false }) {
+  const [open, setOpen] = useState(false);
+  const count = filterCount(value);
   const text = count ? `${label} (${count})` : label;
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -79,22 +153,60 @@ export function MakgestaoFilterButton({ label, value, filterType = "text", listO
       {/* Classes do antigo (PopoverContent w-64/w-48 max-h-96, space-y-2, h4 font-semibold text-sm, linhas
           flex items-center space-x-2 com Checkbox e label text-sm). */}
       <PopoverContent className={`rpt-mak-pop ${narrow ? "w-48" : "w-64"} max-h-96 overflow-auto border-[#e5e5e5] text-[#0a0a0a]`} aria-label={`Filtro ${label}`}>
-        <div className="space-y-2">
-          <h4 className="mb-2 text-sm font-semibold">{label}</h4>
-          {otherCondition ? (
-            <div className="rpt-mak-pop__condition">
-              <span>{describeFilter(value)}</span>
-              <button type="button" onClick={() => onChange(null)}>Limpar</button>
-            </div>
-          ) : null}
-          {options.map((option) => (
-            <label key={option} className="rpt-mak-pop__item flex items-center space-x-2">
-              <Checkbox checked={checked.includes(option)} onCheckedChange={() => toggle(option)} />
-              <span className="cursor-pointer text-sm">{option}</span>
-            </label>
-          ))}
-          {listable && !options.length ? <p className="text-xs text-slate-500">Nenhum valor no período.</p> : null}
-        </div>
+        {open ? <MakgestaoFilterList label={label} value={value} filterType={filterType} listOptions={listOptions} onChange={onChange} open={open} /> : null}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * E1F (item 3): "Mais filtros…" — todas as colunas filtráveis do relatório sem botão próprio
+ * (reportScreenModel.moreFilterColumnsOf). Escolher uma abre a MESMA lista de marcar/condição dos botões;
+ * filtrada, ela aparece também como botão com contador na linha (ReportView → extras).
+ * @param columns [{ id, label, filterType, listOptions, value }]; onChange(columnId, filtro|null)
+ */
+export function MakgestaoMoreFilters({ columns, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [selected, setSelected] = useState(null);
+  const [term, setTerm] = useState("");
+  const active = columns.filter((column) => isFilterActive(column.value)).length;
+  const current = selected ? columns.find((column) => column.id === selected) ?? null : null;
+  const needle = term.trim().toLocaleLowerCase("pt-BR");
+  const shown = needle ? columns.filter((column) => column.label.toLocaleLowerCase("pt-BR").includes(needle)) : columns;
+  if (!columns.length) return null;
+  return (
+    <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) { setSelected(null); setTerm(""); } }}>
+      <PopoverTrigger asChild>
+        <button type="button" className="rpt-mak-btn rpt-mak-btn--icon" aria-label={active ? `Mais filtros (${active} ligados)` : "Mais filtros"} title="Filtrar por outras colunas do relatório">
+          <ListFilter aria-hidden="true" />Mais filtros…{active ? ` (${active})` : ""}
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="rpt-mak-pop rpt-mak-more w-72 max-h-96 overflow-auto border-[#e5e5e5] text-[#0a0a0a]" aria-label="Mais filtros">
+        {current ? (
+          <div className="space-y-2">
+            <button type="button" className="rpt-mak-pop__link rpt-mak-more__back" onClick={() => setSelected(null)}><ChevronLeft aria-hidden="true" />Colunas</button>
+            <MakgestaoFilterList label={current.label} value={current.value} filterType={current.filterType} listOptions={current.listOptions} onChange={(value) => onChange(current.id, value)} />
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <h4 className="mb-2 text-sm font-semibold">Mais filtros</h4>
+            {columns.length > SEARCH_FROM ? <input type="search" className="rpt-mak-pop__field rpt-mak-pop__search" aria-label="Procurar coluna" placeholder="Procurar coluna…" value={term} onChange={(event) => setTerm(event.target.value)} /> : null}
+            <ul className="rpt-mak-more__list" role="list">
+              {shown.map((column) => {
+                const count = filterCount(column.value);
+                return (
+                  <li key={column.id}>
+                    <button type="button" className={`rpt-mak-more__item${count ? " is-on" : ""}`} data-column={column.id} onClick={() => setSelected(column.id)}>
+                      <span>{column.label}</span>
+                      {count ? <span className="rpt-mak-more__count">{count}</span> : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+            {!shown.length ? <p className="text-xs text-slate-500">Nenhuma coluna com esse nome.</p> : null}
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   );

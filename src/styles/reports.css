@@ -338,3 +338,46 @@ html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop { border-color: #30363d; back
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__item > button[role="checkbox"] { border-color: #adbac7; background: transparent; color: #0d1117; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__item > button[role="checkbox"][data-state="checked"] { background: #e6edf3; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__condition { border-color: #444c56; background: #0d1117; color: #adbac7; }
+
+/* E1F — cabeçalho interativo da folha (só na TELA do MAKGESTAO; a impressão não tem nada disto): título da
+   coluna abre o menu (SheetColumnMenu), a borda direita arrasta a largura (linha-guia enquanto arrasta). */
+.rpt-sheet-host--interactive { position: relative; }
+.rpt-sheet-host--interactive .rpt-sheet--screen th[data-col-key] { position: relative; }
+.rpt-sheet-host--interactive .sheet-col-btn { all: unset; cursor: pointer; color: inherit; font: inherit; text-align: inherit; display: inline; border-radius: 2px; }
+.rpt-sheet-host--interactive .sheet-col-btn:hover { text-decoration: underline; text-underline-offset: 2px; }
+.rpt-sheet-host--interactive .sheet-col-btn:focus-visible { outline: 1px solid #059669; outline-offset: 1px; }
+.rpt-sheet-host--interactive th[aria-sort="ascending"] .sheet-col-btn::after { content: " ▲"; font-size: .8em; }
+.rpt-sheet-host--interactive th[aria-sort="descending"] .sheet-col-btn::after { content: " ▼"; font-size: .8em; }
+.rpt-sheet-host--interactive .sheet-col-grip { position: absolute; top: 0; right: -4px; z-index: 2; width: 8px; height: 100%; cursor: col-resize; touch-action: none; }
+.rpt-sheet-host--interactive .sheet-col-grip::after { content: ""; position: absolute; top: 22%; bottom: 22%; left: 3px; width: 2px; border-radius: 1px; background: transparent; }
+.rpt-sheet-host--interactive th:hover .sheet-col-grip::after { background: #cbd5e1; }
+.rpt-sheet-host--interactive .sheet-col-grip:hover::after { background: #059669; }
+.rpt-col-guide { position: absolute; top: 0; bottom: 0; z-index: 5; width: 0; border-left: 2px dashed #059669; pointer-events: none; }
+.rpt-col-menu-anchor { position: absolute; display: block; }
+.rpt-col-menu { min-width: 220px; }
+.rpt-col-menu .rpt-col-menu__title { padding: 6px 8px 4px; color: #0a0a0a; font-size: 12px; font-weight: 700; }
+.rpt-col-menu .rpt-col-menu__hint { padding: 4px 8px; color: #64748b; font-size: 11px; font-weight: 500; }
+.rpt-col-menu .rpt-col-menu__text { flex: 1 1 auto; }
+.rpt-col-menu .rpt-col-menu__check { margin-left: auto; color: #059669; }
+.rpt-col-menu .rpt-col-menu__note { margin-left: auto; color: #94a3b8; font-size: 10px; }
+.rpt-col-menu--list { max-height: 320px; overflow-y: auto; }
+.rpt-col-menu [role="menuitemcheckbox"] { padding-left: 32px !important; }
+
+/* E1F — "Mais filtros…" e a condição de número/data (dentro do popover, fora do escopo .rpt-mak). */
+.rpt-mak-pop .rpt-mak-more__list { display: flex; flex-direction: column; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.rpt-mak-pop .rpt-mak-more__item { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 0; border-radius: 6px; background: transparent; color: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.rpt-mak-pop .rpt-mak-more__item:hover, .rpt-mak-pop .rpt-mak-more__item:focus-visible { background: #f5f5f5; outline: none; }
+.rpt-mak-pop .rpt-mak-more__item.is-on { font-weight: 600; }
+.rpt-mak-pop .rpt-mak-more__count { min-width: 18px; padding: 0 6px; border-radius: 9px; background: #059669; color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
+.rpt-mak-pop .rpt-mak-pop__link { display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none; color: #047857; font-size: 12px; font-weight: 600; cursor: pointer; }
+.rpt-mak-pop .rpt-mak-pop__link svg { width: 14px; height: 14px; }
+.rpt-mak-pop .rpt-mak-pop__field { box-sizing: border-box; width: 100%; height: 32px; padding: 4px 8px; border: 1px solid #e5e5e5; border-radius: 6px; background: #fff; color: inherit; font-size: 13px; }
+.rpt-mak-pop .rpt-mak-pop__field:focus { outline: none; box-shadow: 0 0 0 1px #0a0a0a; }
+.rpt-mak-pop .rpt-mak-pop__cond { display: flex; flex-direction: column; gap: 8px; }
+.rpt-mak-pop .rpt-mak-pop__cond-values { display: flex; gap: 6px; }
+.rpt-mak-pop .rpt-mak-pop__cond-actions { display: flex; align-items: center; justify-content: space-between; }
+.rpt-mak-pop .rpt-mak-pop__apply { height: 28px; padding: 0 12px; border: 1px solid #059669; border-radius: 6px; background: #059669; color: #fafafa; font-size: 12px; font-weight: 500; cursor: pointer; }
+.rpt-mak-pop .rpt-mak-pop__apply:disabled { opacity: .5; cursor: default; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-more__item:hover { background: #21262d; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__field { border-color: #30363d; background: #0d1117; color: #e6edf3; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-col-menu .rpt-col-menu__title { color: #e6edf3; }

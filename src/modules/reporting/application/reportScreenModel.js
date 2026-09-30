@@ -99,6 +99,21 @@ export function filterButtonsOf(definition, columns = []) {
     .filter(Boolean);
 }
 
+/**
+ * E1F (item 3): colunas do "Mais filtros…" — todas as filtráveis do relatório que o perfil vê e que NÃO têm
+ * botão próprio no cartão (nem são o campo Pesagem Anterior), em ordem alfabética. Cada uma abre a mesma
+ * lista de marcar (ou a condição, em número/data) dos botões; filtrada, vira botão com contador na linha.
+ * @param columns colunas que o perfil vê (viewModel.availableColumns ou as visíveis da definição)
+ * @returns {object[]} colunas da definição (com filterable/metricOnly/type)
+ */
+export function moreFilterColumnsOf(definition, columns = []) {
+  const seen = new Set(columns.map((column) => column.id));
+  const covered = new Set([...filterButtonsOf(definition, columns).map(({ column }) => column.id), PREVIOUS_COLUMN]);
+  return (definition?.columns ?? [])
+    .filter((column) => seen.has(column.id) && column.filterable !== false && !column.metricOnly && !covered.has(column.id))
+    .sort((a, b) => String(a.label).localeCompare(String(b.label), 'pt-BR', { sensitivity: 'base' }));
+}
+
 /** Filtros rápidos da definição que viram botões no cartão (Pesagens fica como a E1D: sem eles). */
 export const quickFiltersOf = (definition) => (isPesagensScreen(definition) ? [] : definition?.quickFilters ?? []);
 
