@@ -1,6 +1,6 @@
 # Checklist da release 1.4.0
 
-Versão 1.4.0 (E1 + E1B + E1C + E1D) · esquema Dexie 8 (sem mudança) · backup formato 3 · `signed=false` · branch
+Versão 1.4.0 (E1 + E1B + E1C + E1D + E1E) · esquema Dexie 8 (sem mudança) · backup formato 3 · `signed=false` · branch
 `program/e1-relatorios` (main só avança com autorização da responsável, depois do teste no instalador).
 
 ## Versão

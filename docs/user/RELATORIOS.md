@@ -9,40 +9,36 @@ notas existem só na folha.
 
 ## 1. Abrir
 
-1. No menu, clique em **Relatórios**.
-2. Aparece o **catálogo**. No topo ficam os seus **favoritos**; depois os relatórios separados por
-   assunto: Rebanho, Pesagens, Desempenho, Movimentação, Saídas, Comercial e Embarques.
-3. Clique no cartão. Para voltar, use o botão **Relatórios** no alto da tela.
+1. No menu, clique em **Relatórios**. Abre direto a tela no estilo do MAKGESTAO, no último relatório que
+   você usou (na primeira vez, em **Pesagens**).
+2. Para ver outro, escolha no campo **Relatório**, o primeiro do quadro de filtros. Os relatórios aparecem
+   separados por assunto: Rebanho, Pesagens, Desempenho, Movimentação, Saídas, Comercial, Embarques e, para
+   OPERADOR e CONSULTA, Controle. Só aparecem os que o seu perfil pode abrir.
+3. Cada relatório tem os seus **tipos**, no campo **Tipo Relatório** (item 5).
 
-Use a caixa **Procurar relatório ou modelo**. Ela também acha pelos nomes antigos: procurar "mortes"
-mostra **Saídas**; procurar "raça" mostra **Rebanho atual** e **Desempenho**.
+**Modelos salvos:** no menu **⋯** (ao lado de Imprimir) ficam **Abrir modelo** e **Salvar modelo**.
 
-| Aba | O que mostra |
-|---|---|
-| **Todos** | Favoritos no topo e os 12 relatórios que o seu perfil pode abrir |
-| **Favoritos** | Os que você marcou com a **estrela** (no cartão ou dentro do relatório) |
-| **Meus relatórios** | Modelos salvos: os seus pessoais e os compartilhados com a empresa |
-| **Recentes** | Os últimos relatórios e modelos que você abriu |
+O relatório **lembra como você o deixou** (tipo, período, filtros, orientação, colunas): ao voltar nele,
+abre do mesmo jeito. Isso vale só para o seu usuário. Links e modelos de versões anteriores continuam
+abrindo.
 
-O relatório **lembra como você o deixou** (tipo, período, agrupamento, filtros, orientação): ao voltar
-nele, abre do mesmo jeito. Isso vale só para o seu usuário; os modelos salvos (item 10) continuam iguais.
+## 2. Os relatórios
 
-## 2. Os 12 relatórios
-
-| Assunto | Relatório | Abre | Para que serve |
+| Assunto | Relatório | Abre em | Tipos |
 |---|---|---|---|
-| Rebanho | **Rebanho atual** | Resumido por lote | Cabeças, peso médio e peso total de hoje — por lote, categoria, raça, marca, sexo, faixa de peso |
-| Rebanho | **Ocupação de lotes** | Resumido por apartação | Animais de cada lote contra a capacidade |
+| Rebanho | **Rebanho atual** | Por Lote | Por Lote, Por Apartação/Lote, Por Apartação, Por Categoria, Por Raça, Por Marca, Por Sexo, Por Situação, Por Faixa de Peso, Analítico (Lista de Animais), Sem Pesagem Recente |
+| Rebanho | **Ocupação de lotes** | Por Apartação | Por Apartação, Por Apartação/Lote, Analítico |
 | Pesagens | **Pesagens** (Relatório de Pesagens Individuais) | Por Apartação (Resumo por Data) | Os 5 tipos do MAKGESTAO: Analítico, Sintético (Matriz), Por Apartação/Lote, Por Apartação (Resumo por Data) e Vendas |
-| Pesagens | **Fechamento do dia (imprimível)** | Detalhado | Conferência do dia, com as pendências da tela Fechamento do Dia |
-| Desempenho | **Desempenho** | Resumido por lote | Peso inicial e final, ganho e GMD do período |
-| Movimentação | **Movimentação de lotes** | Resumido por lote | Quem passou por cada lote, quantos dias ficou, quem mudou de lote |
-| Saídas | **Saídas** | Resumido por motivo | Vendas, abates, mortes, doações e transferências do período |
-| Comercial | **Vendas do período** | Detalhado | Vendas com peso, arrobas, preço da @ e valor |
-| Comercial | **Abates do período** | Detalhado | Abates com frigorífico, rendimento, arrobas e valor |
-| Comercial | **Compras do período** | Detalhado | Compras com valor por cabeça |
-| Embarques | **Romaneio de embarque** | Resumido por embarque › documento | Animais embarcados por documento |
-| Embarques | **Embarques: previsto × realizado** | Resumido por embarque | O que foi previsto contra o que saiu |
+| Pesagens | **Fechamento do dia** | Por Sessão (Lista) | Por Sessão (Lista), Resumo por Sessão, Por Apartação/Lote, Com Pendências, Analítico |
+| Desempenho | **Desempenho** | Por Lote | Por Lote, Por Apartação/Lote, Por Apartação, Por Categoria, Por Raça, Por Marca, Por Sexo, Por Faixa de Peso, Analítico (Animal por Animal), Perdendo Peso |
+| Movimentação | **Movimentação de lotes** | Por Lote | Por Lote, Por Apartação/Lote, Mudanças de Lote, Por Lote Anterior, Por Marca, Por Sexo, Analítico |
+| Saídas | **Saídas** | Por Motivo | Por Motivo, Por Lote, Por Categoria, Por Marca, Por Data, Mortes por Causa, Mortes por Lote, Mortes por Categoria, Analítico, Mortes (Lista) |
+| Comercial | **Comercial** (só ADMIN e GESTOR) | Vendas | **Vendas** (o relatório de venda do MAKGESTAO), **Abates** (por frigorífico) e **Compras** (por origem) |
+| Embarques | **Romaneio de embarque** | Por Embarque/Documento | Por Embarque/Documento, Por Embarque, Romaneio (Lista por Documento), Analítico |
+| Embarques | **Embarques: previsto × realizado** | Por Embarque | Por Embarque, Por Destino, Analítico |
+
+"Vendas do período", "Abates do período" e "Compras do período" viraram os tipos do **Comercial**: links,
+favoritos e modelos deles abrem o Comercial no tipo certo (a troca fica registrada na auditoria).
 
 ## 3. Resumido ou Detalhado
 
@@ -68,15 +64,17 @@ Sem nenhum agrupamento, a folha do Resumido mostra só o **Total geral** e a dic
 
 ## 4. A barra de filtros
 
-**Em Pesagens a tela é como a do MAKGESTAO:** no alto, "Relatório de Pesagens Individuais" e o botão verde
+**Todos os relatórios usam a tela do MAKGESTAO:** no alto, "Relatório de <nome>" e o botão verde
 **Imprimir** (com Excel, PDF e o menu ⋯ ao lado); no quadro de filtros, **Data Início**, **Data Fim**,
-**Orientação** (Retrato ou Paisagem), **Tipo Relatório**, **Ordenar Por** e **Pesagem Anterior**, e os botões
+**Orientação** (Retrato ou Paisagem), **Tipo Relatório**, **Ordenar Por** e **Pesagem Anterior** (nos relatórios de
+pesagem), depois do campo **Relatório**; nos relatórios sem período (Rebanho atual, Ocupação de lotes) aparece
+"Estado atual (hoje)" no lugar das datas. Os botões
 **Lotes, Apartações, Sexo, Raças, Era, Marcas, Status** e **Limpar Filtros** (o botão mostra quantos estão
 marcados, ex.: **Lotes (2)**). No Sintético aparecem **Linhas (Eixo Y)** e **Colunas (Eixo X)**; no Analítico,
 **Agrupar Por** e **Colunas**; em Vendas, **Mostrar Detalhes**. Abaixo do quadro vem sempre a folha, do jeito
 que sai na impressão.
 
-Nos outros relatórios a barra fica logo abaixo do nome do relatório:
+Referência dos campos (a Manutenção › aba Controle continua com a barra abaixo):
 
 | Campo | Para que serve |
 |---|---|

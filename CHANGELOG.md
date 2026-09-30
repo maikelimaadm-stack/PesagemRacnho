@@ -5,10 +5,28 @@ Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PAT
 
 ## [1.4.0] — 2026-09-25
 
-Etapas E1, E1B, os ajustes finais (E1C) e o relatório de pesagens igual ao MAKGESTAO (E1D) do Plano Mestre 2. Esquema Dexie **8** e backup **formato 3**,
+Etapas E1, E1B, os ajustes finais (E1C) e o relatório de pesagens igual ao MAKGESTAO (E1D) e todos os relatórios nesse estilo numa tela só (E1E) do
+Plano Mestre 2. Esquema Dexie **8** e backup **formato 3**,
 **sem mudança de esquema**. A única conversão é das preferências de relatório (favoritos, recentes e
 modelos salvos), feita ao abrir Relatórios, repetível e registrada na auditoria. Instalador de
 diagnóstico não assinado em `release-unsigned/`. Notas em `docs/release/1.4.0/RELEASE-NOTES.md`.
+
+### Added (E1E — todos os relatórios no estilo do MAKGESTAO, numa tela só)
+- **Tela única de Relatórios:** o menu abre direto a tela do MAKGESTAO no último relatório usado (na primeira
+  vez, Pesagens); o campo **Relatório** escolhe qual ver (Rebanho atual, Ocupação de lotes, Pesagens, Fechamento
+  do dia, Desempenho, Movimentação de lotes, Saídas, Comercial, Romaneio de embarque e Embarques: previsto ×
+  realizado). O catálogo em cartões saiu; modelos salvos pelo menu ⋯ (Abrir modelo / Salvar modelo). Links,
+  favoritos e modelos antigos continuam abrindo.
+- **Tipos em todos os relatórios**, no lugar do "Agrupar por" genérico (ex.: Rebanho atual por Lote, Apartação,
+  Categoria, Raça, Marca, Sexo, Situação, Faixa de Peso, Analítico e Sem Pesagem Recente), cada um com o seu
+  padrão; os antigos relatórios separados da 1.3.x viraram tipos.
+- **Comercial:** "Vendas do período", "Abates do período" e "Compras do período" viraram um relatório com os tipos
+  **Vendas** (o relatório de venda do MAKGESTAO), **Abates** (por frigorífico) e **Compras** (por origem), todos no
+  desenho do PDF da W3 (Métrica/Valor, totais por marca e por grupo, quadros com Mostrar Detalhes, TOTAL GERAL).
+  Os ids antigos continuam abrindo o tipo certo; modelos, favoritos e recentes são convertidos com auditoria.
+- **Folha no estilo do MAKGESTAO em todos os relatórios** (cabeçalho, título com a linha, unidades nas células,
+  totais em linha de texto, "-" no zero), com as contas do motor; Excel/CSV/JSON iguais.
+- Gates novos: `reports:tipos-todos`, `reports:comercial`, `reports:folha-makgestao-todos` e `reports:tela-unica`.
 
 ### Added (E1D — "Relatório de Pesagens Individuais" igual ao MAKGESTAO)
 - **Os 5 tipos do MAKGESTAO**, com os nomes e a ordem do antigo: **Analítico (Detalhado)**, **Sintético

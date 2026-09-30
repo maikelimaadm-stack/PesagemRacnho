@@ -43,6 +43,12 @@ Data: 25/09/2026 · Esquema Dexie 8 (sem mudança) · Backup formato 3 · Instal
 - **Tema escuro:** o texto digitado nas fichas de Cadastros voltou a aparecer.
 - **Configurações:** salvar com o "Rendimento de carcaça padrão" em branco voltou a funcionar.
 
+### Todos os relatórios no estilo do MAKGESTAO, numa tela só (E1E)
+- **Relatórios** abre direto a tela do MAKGESTAO; o campo **Relatório** escolhe qual ver, e cada um tem os seus
+  **tipos** (ex.: Rebanho atual Por Lote, Por Categoria, Por Raça…). A lista em cartões saiu.
+- **Comercial** com os tipos Vendas, Abates e Compras, no desenho do relatório de venda do MAKGESTAO.
+- A folha de todos os relatórios sai no estilo do MAKGESTAO.
+
 ### Relatório de Pesagens Individuais igual ao MAKGESTAO (E1D)
 - **Tela e folha como as do MAKGESTAO:** "Relatório de Pesagens Individuais" com o botão verde Imprimir,
   quadro com Data Início, Data Fim, Orientação, Tipo Relatório, Ordenar Por e Pesagem Anterior, e os botões
