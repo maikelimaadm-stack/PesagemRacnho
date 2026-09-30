@@ -10,10 +10,12 @@
 //   d) com 1 pesagem a legenda diz "—" (NEGATIVO: `null >= 0` da legenda antiga dava "+0,00 kg");
 //   e) eixo Y em kg, sem partir de 0, marcas "bonitas"; intervalos 90 dias / 6 meses / Tudo;
 //   f) o SVG sai sem preserveAspectRatio="none" (o defeito antigo), sem script, com uma marca por pesagem; a Ficha
-//      usa a curva nova, com as cores por token (tema escuro) e sem as cores fixas antigas.
+//      usa a curva nova, com as cores por token (tema escuro) e sem as cores fixas antigas;
+//   g) revisão: duas pesagens no MESMO dia caem no mesmo x (o mouse só alcança a primeira) — a dica mostra as duas
+//      (NEGATIVO: a dica antiga, só do ponto, escondia a segunda).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CURVE_RANGES, buildAnimalWeightCurve, curveCutoff, curveLegend } from '../src/modules/animals/domain/animalWeightCurve.js';
+import { CURVE_RANGES, buildAnimalWeightCurve, curveCutoff, curveLegend, curvePointTip } from '../src/modules/animals/domain/animalWeightCurve.js';
 import { chartGeometry, chartHoverTargets, dayNumber } from '../src/modules/reporting/domain/chartScale.js';
 import { chartTargetDrill } from '../src/modules/reporting/domain/reportCharts.js';
 import { renderChartSvg } from '../src/modules/reporting/infrastructure/exporters/chartSvg.js';
@@ -145,6 +147,27 @@ const entries = [
   for (const button of ["['90', '90 dias']", "['183', '6 meses']", "['all', 'Tudo']"]) assert.ok(ficha.includes(button), `Ficha: botão ${button}`);
   assert.ok(!ficha.includes('preserveAspectRatio="none"') && !ficha.includes('stroke="#40de63"'), 'NEGATIVO: sem o SVG antigo (índice, cor fixa)');
   results.push({ caso: 'svg e tela', marcas: 3 });
+}
+
+// g) mesmo dia: a dica mostra as duas pesagens
+{
+  const sameDay = [...entries.slice(0, 3), { ...animal, id: 'v2', tipo_manejo: 'Saída', motivo_saida: 'Venda', data_pesagem: '2026-04-11', peso: 404, created_date: '2026-04-11T15:00:00Z' }];
+  const curve = buildAnimalWeightCurve(sameDay);
+  const geometry = chartGeometry(curve, { width: 620, height: 220 });
+  const targets = chartHoverTargets(geometry);
+  const [m2, v2] = targets.slice(-2);
+  assert.equal(m2.anchor.x, v2.anchor.x, 'as duas pesagens do dia caem no mesmo x');
+  const tip = curvePointTip(curve, m2);
+  assert.equal(tip.title, '11/04/2026 · 2 pesagens no dia');
+  assert.ok(tip.lines.includes('Pesagem: 402,00 kg') && tip.lines.includes('Saída (Venda): 404,00 kg'), 'a dica traz as duas');
+  assert.ok(tip.lines.some((line) => line.includes('mesmo dia')), 'a 2ª do dia: GMD do trecho "—" (mesmo dia)');
+  assert.deepEqual(curvePointTip(curve, targets[0]), { title: '01/01/2026 · Cadastro', lines: ['Peso: 300,00 kg', 'Primeira pesagem com peso'] }, 'um ponto no dia: a dica dele');
+  // NEGATIVO: a dica antiga (só o ponto do alvo) não mostrava a venda de 404 kg ao passar o mouse no dia.
+  const oldTip = curve.series[0].points.find((point) => point.xKey === m2.xKey).detalhe;
+  assert.ok(!oldTip.some((line) => line.includes('404')), 'NEGATIVO: a dica de um ponto só escondia a 2ª pesagem do dia');
+  const ficha = readFileSync(new URL('../src/pages/FichaAnimal.jsx', import.meta.url), 'utf8');
+  assert.match(ficha, /describe={curvePointTip}/, 'a Ficha usa a dica do domínio');
+  results.push({ caso: 'mesmo dia', dica: tip.title });
 }
 
 console.log(JSON.stringify({ gate: 'animal:weight-curve:verify', ok: true, cases: results }, null, 2));

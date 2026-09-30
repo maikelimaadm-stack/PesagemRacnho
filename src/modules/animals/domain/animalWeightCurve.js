@@ -52,6 +52,20 @@ export function curveLegend(resumo) {
 }
 
 /**
+ * Revisão E1G — dica de um ponto da curva na Ficha (ChartPlot `describe`): data, evento, peso, dias, ganho e GMD do
+ * trecho. Duas pesagens no MESMO dia caem no mesmo x (o mouse só alcança a primeira): a dica mostra as duas.
+ * @returns {{ title: string, lines: string[] }}
+ */
+export function curvePointTip(curve, target) {
+  const points = curve?.series?.[0]?.points ?? [];
+  const point = points.find((item) => item.xKey === target?.xKey);
+  if (!point) return { title: target?.label ?? '', lines: [] };
+  const sameDay = points.filter((item) => item.x === point.x);
+  if (sameDay.length === 1) return { title: `${brDate(point.data)} · ${point.evento}`, lines: point.detalhe };
+  return { title: `${brDate(point.data)} · ${sameDay.length} pesagens no dia`, lines: sameDay.flatMap((item) => [`${item.evento}: ${item.text}`, ...item.detalhe.slice(1)]) };
+}
+
+/**
  * Curva de peso de UM animal.
  * @param entries todos os eventos do animal (Cadastro, Manejo, Saída — com ou sem peso)
  * @param {{ range?: '90'|'183'|'all' }} options

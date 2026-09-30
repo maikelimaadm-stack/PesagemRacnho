@@ -134,7 +134,7 @@ export default function ChartPlot({ chart, uid, height = CHART_SIZES.SCREEN.heig
               {(tip.rows ?? []).map((row) => (
                 <span key={row.key} className="rc-tip__row"><i className={`rc-key rc-key--line rc-${slotName(row.slot)}`} aria-hidden="true" /><span>{row.label}:</span> <b>{row.text}</b></span>
               ))}
-              {(tip.lines ?? []).map((line) => <span key={line} className="rc-tip__line">{line}</span>)}
+              {(tip.lines ?? []).map((line, index) => <span key={`${index}-${line}`} className="rc-tip__line">{line}</span>)}
               {drillPath ? <span className="rc-tip__hint">{CHART_DRILL_HINT}</span> : null}
             </div>
           ) : null}

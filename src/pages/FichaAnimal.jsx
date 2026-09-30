@@ -7,7 +7,7 @@ import { calculateCarcassTrade } from '@/modules/weighing/domain/commercialCalcu
 import { useAuth } from '@/components/auth/useAuth';
 import SanidadeAnimalCard from '@/components/sanidade/SanidadeAnimalCard';
 import { VIA_LABELS, listApplications } from '@/modules/sanity/application/sanityService';
-import { buildAnimalWeightCurve, curveLegend } from '@/modules/animals/domain/animalWeightCurve';
+import { buildAnimalWeightCurve, curveLegend, curvePointTip } from '@/modules/animals/domain/animalWeightCurve';
 import { CHART_SCREEN_CSS } from '@/modules/reporting/infrastructure/exporters/chartStyles';
 import ChartPlot from '@/components/reports/ChartPlot';
 import '@/styles/operational-insights.css';
@@ -28,11 +28,6 @@ const download = (name, content, type) => {
   URL.revokeObjectURL(url);
 };
 const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
-// E1G: dica de cada ponto da curva (data, evento, peso, dias, ganho e GMD do trecho — animalWeightCurve).
-const describeCurvePoint = (curve, target) => {
-  const point = curve.series[0].points.find((item) => item.xKey === target.xKey);
-  return point ? { title: `${dateBr(point.data)} · ${point.evento}`, lines: point.detalhe } : { title: target.label, lines: [] };
-};
 
 function buildProfiles(catalog) {
   const groups = new Map();
@@ -170,7 +165,7 @@ export default function FichaAnimal() {
       <div className="op-kpis">{kpis.map(([label, value, hint, accent]) => <div key={label} className={`op-kpi ${accent ? `op-kpi--${accent}` : ''}`}><span className="op-kpi__label">{label}</span><strong className="op-kpi__value">{value}</strong><span className="op-kpi__hint">{hint}</span></div>)}</div>
 
       <div className="op-grid-two">
-        <section className="op-card"><header className="op-card__header"><h2>Curva de peso</h2><div className="op-segmented">{[['90', '90 dias'], ['183', '6 meses'], ['all', 'Tudo']].map(([value, label]) => <button className={range === value ? 'is-active' : ''} type="button" key={value} onClick={() => setRange(value)}>{label}</button>)}</div></header><div className="op-chart op-curve rpt-charts-host"><style>{CHART_SCREEN_CSS}</style>{curve.vazio ? <div className="op-empty">{curve.textoVazio}</div> : <ChartPlot chart={curve} uid="curva-peso" height={220} describe={describeCurvePoint} label="Curva de peso do animal" />}<div className="op-chart-legend"><span><i />Peso com balança</span><span>{curveText.pesagens} · {curveText.dias} · <strong className={curveText.tone === 'neg' ? 'is-negative' : curveText.tone === 'pos' ? 'is-positive' : ''}>{curveText.ganho}</strong></span></div></div></section>
+        <section className="op-card"><header className="op-card__header"><h2>Curva de peso</h2><div className="op-segmented">{[['90', '90 dias'], ['183', '6 meses'], ['all', 'Tudo']].map(([value, label]) => <button className={range === value ? 'is-active' : ''} type="button" key={value} onClick={() => setRange(value)}>{label}</button>)}</div></header><div className="op-chart op-curve rpt-charts-host"><style>{CHART_SCREEN_CSS}</style>{curve.vazio ? <div className="op-empty">{curve.textoVazio}</div> : <ChartPlot chart={curve} uid="curva-peso" height={220} describe={curvePointTip} label="Curva de peso do animal" />}<div className="op-chart-legend"><span><i />Peso com balança</span><span>{curveText.pesagens} · {curveText.dias} · <strong className={curveText.tone === 'neg' ? 'is-negative' : curveText.tone === 'pos' ? 'is-positive' : ''}>{curveText.ganho}</strong></span></div></div></section>
         <section className="op-card"><header className="op-card__header"><h2>Linha do tempo</h2><span>{ni.format(events.length)} eventos</span></header><div className="op-timeline">{events.map((event, index) => <div className="op-event" key={`${event.date}-${index}`}><div className="op-event__rail"><span className="op-event__dot" style={{ background: event.color }} />{index < events.length - 1 && <span className="op-event__line" />}</div><div className="op-event__body"><strong>{event.title}</strong><time>{dateBr(event.date)}</time><span>{event.detail}</span></div></div>)}</div></section>
       </div>
 
