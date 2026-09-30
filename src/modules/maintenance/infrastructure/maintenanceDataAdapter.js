@@ -7,6 +7,7 @@
 // limpeza em dois níveis (ADR-032) e diagnóstico sem credenciais (ADR-035).
 import storage from '../../../storage/storageAdapter.js';
 import { describeVersions } from '../../../versioning/versionInfo.js';
+import { runSaidaDerivedBackfill } from '../../weighing/application/weighingDerivedBackfill.js';
 
 function files() {
   return window.pesagemApp?.files || null;
@@ -127,7 +128,11 @@ export async function dryRunRestoreBackup(backup) {
 }
 export async function applyRestoreBackup(backup) {
   const safety = await persistFullBackup({ reason: 'pre-restore', automatic: true });
-  return storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+  const result = await storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+  // E1G (1.4.2): backup de antes da 1.4.2 volta sem o marcador 'derivados-saida-v1' — o GMD das saídas com peso é
+  // recalculado já, sem esperar a próxima abertura (nunca lança; com o marcador, não faz nada).
+  await runSaidaDerivedBackfill();
+  return result;
 }
 
 // --- Versões, migração, limpeza em dois níveis, diagnóstico ---
@@ -145,7 +150,10 @@ export async function dryRunMigration() {
 }
 
 export async function resumeMigration({ onProgress } = {}) {
-  return storage.migration.runPendingBackfills({ files: files(), onProgress });
+  const result = await storage.migration.runPendingBackfills({ files: files(), onProgress });
+  // E1G (1.4.2): com a migração concluída, roda o passo de dados que a abertura adiou (escrita bloqueada).
+  if (result?.completed) await runSaidaDerivedBackfill();
+  return result;
 }
 
 export async function clearOperationalData() {
