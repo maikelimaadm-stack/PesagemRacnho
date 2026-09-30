@@ -25,6 +25,7 @@
 // deles e os demais (outros relatórios, Personalizado, aba Controle) com o resumo e a lista genéricos.
 import { PESAGENS_SHEET_HEADERS, PESAGENS_SHEET_LINES, PESAGENS_VIEW_IDS, PESAGENS_VIEWS } from '../definitions/pesagens.js';
 import { aggregateLabel, aggregateValueColumn, summaryMetricLabels } from './aggregateLabels.js';
+import { toFiniteNumber } from './aggregateEngine.js';
 import { describeFilter } from './filterEngine.js';
 import { compareGroupLabels, groupRows, NONE_GROUP_KEY } from './groupEngine.js';
 import { buildMatrix, isMatrixViewModel, MATRIX_TOTAL_LABEL, matrixCellLines, matrixValues } from './matrixLayout.js';
@@ -1094,6 +1095,60 @@ export function decideSheetLayout({ layout, columns, rows, style = SHEET_STYLES.
 }
 
 // ---------------------------------------------------------------------------
+// E1G (A3) — dias, ganho e GMD nunca somem da folha
+// ---------------------------------------------------------------------------
+
+// Definição completa da coluna (o view model só leva a forma pública, sem as marcas da definição).
+function definitionColumnOf(viewModel, columnId) {
+  if (!columnId || typeof viewModel.resolve !== 'function') return null;
+  return viewModel.resolve(columnId)?.column ?? null;
+}
+
+// Coluna de ganho: toda coluna do tipo GMD e as marcadas keepWhenEmpty (dias, ganho, ganho em @…).
+const isGainColumn = (definition) => Boolean(definition) && (definition.type === 'gmd' || definition.keepWhenEmpty === true);
+
+/**
+ * A coluna da folha fica mesmo vazia ("-")? Dado: a própria coluna de ganho; métrica do Resumido: feita sobre uma
+ * coluna de ganho (GMD médio/ponderado, ganho total/médio, dias médios). As demais vazias continuam saindo (E1C).
+ */
+function keepsWhenEmpty(viewModel, column) {
+  if (column.kind === 'data') return isGainColumn(definitionColumnOf(viewModel, column.column?.id ?? column.key));
+  if (column.kind === 'metric') return isGainColumn(definitionColumnOf(viewModel, column.metric?.spec?.columnId));
+  return false;
+}
+
+/**
+ * Cobertura do GMD da folha: animais da população com valor na coluna de GMD em uso (a primeira coluna/métrica de
+ * GMD da folha) contra os animais da população. Nota "GMD de N de M cab." só quando falta para alguém.
+ * @returns {null | { columnId: string, validos: number, total: number, texto: string|null }}
+ */
+export function gmdCoverageOf(viewModel, columns = [], matrix = null) {
+  const rows = viewModel.rows ?? [];
+  if (!rows.length || typeof viewModel.resolve !== 'function') return null;
+  const isGmd = (columnId) => definitionColumnOf(viewModel, columnId)?.type === 'gmd';
+  const fromColumns = columns.map((column) => {
+    if (column.kind === 'data') return isGmd(column.column?.id ?? column.key) ? column.column?.id ?? column.key : null;
+    if (column.kind === 'metric') return isGmd(column.metric?.spec?.columnId) ? column.metric.spec.columnId : null;
+    return null;
+  }).find(Boolean);
+  const columnId = fromColumns ?? (matrix?.metrics ?? []).map((metric) => metric.spec?.columnId).find(isGmd) ?? null;
+  const animalAccessor = viewModel.animalColumnId ? viewModel.resolve(viewModel.animalColumnId) : null;
+  if (!columnId || !animalAccessor) return null;
+  const gmdAccessor = viewModel.resolve(columnId);
+  const all = new Set();
+  const withGmd = new Set();
+  for (const row of rows) {
+    const key = animalAccessor.groupKeyOf(row);
+    if (key === null || key === undefined || key === '') continue;
+    all.add(key);
+    if (toFiniteNumber(gmdAccessor.valueOf(row)) !== null) withGmd.add(key);
+  }
+  if (!all.size) return null;
+  const missing = withGmd.size < all.size;
+  return { columnId, validos: withGmd.size, total: all.size, texto: missing ? `GMD de ${withGmd.size.toLocaleString('pt-BR')} de ${all.size.toLocaleString('pt-BR')} cab.` : null };
+}
+
+// ---------------------------------------------------------------------------
 // Documento
 // ---------------------------------------------------------------------------
 
@@ -1133,6 +1188,8 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const isEmptyColumn = (column) => {
     // Coluna da matriz nunca some: cada valor do eixo X existe porque há pesagem nele.
     if (!hasRows || keepEmpty || column.kind === 'label' || column.kind === 'matrix') return false;
+    // E1G (A3): dias, ganho e GMD nunca somem — sem valor aparecem "-", com a nota "GMD de N de M cab.".
+    if (keepsWhenEmpty(viewModel, column)) return false;
     if (summary) return metricIsEmpty(column, viewModel.totals);
     return (viewModel.rows ?? []).every((row) => formatCell(column.column, dataCellRaw(viewModel, column.column, row), 'print') === MISSING_SCREEN);
   };
@@ -1157,6 +1214,9 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     || (!summary && !mak && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@')));
   const divisor = viewModel.arrobaDivisor ?? 30;
   const omitted = viewModel.hiddenByPermission?.length ?? 0;
+  // E1G (A3): quantos animais têm GMD, quando falta para alguém (curto, no rodapé — não é nota longa).
+  // No desenho de venda sem "Mostrar Detalhes" não há tabela de colunas: sem GMD na folha, sem nota.
+  const gmdCoverage = hasRows ? gmdCoverageOf(viewModel, vendas && !showDetails ? [] : columns, matrix) : null;
 
   const emitted = formatEmittedAt(viewModel.generatedAt);
   const emitter = viewModel.emittedBy?.nome ?? viewModel.emittedBy?.id ?? '—';
@@ -1166,6 +1226,7 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const footer = {
     filtros: `Filtros: ${describeReportFilters(viewModel)}`,
     arroba: usesArroba ? `@ = peso vivo ÷ ${divisor}` : null,
+    gmd: gmdCoverage?.texto ?? null,
     omitidas: omitted ? `${omitted} coluna(s) omitida(s) pelo perfil de quem emitiu` : null,
     emitidoPor: `Emitido por ${emitter} em ${emitted}`,
   };
@@ -1198,6 +1259,8 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     emptyText: vendas?.emptyText ?? (!mak ? 'Nenhum registro para os filtros informados.'
       : viewModel.reportId === 'pesagens' ? `Nenhuma ${variant === 'vendas' ? 'venda' : 'pesagem'} encontrada com os filtros aplicados.` : MAK_EMPTY_TEXT),
     footer,
+    // E1G: cobertura do GMD da folha (null sem coluna/métrica de GMD em uso).
+    gmdCoverage,
     print,
     stats: body.stats,
     // E1D: eixos e legenda da matriz (null fora do Sintético (Matriz)); os valores de cada célula estão em cells[].raw.

@@ -204,7 +204,10 @@ const soCadastros = { tipo_manejo: { operator: 'in', values: ['Cadastro'] } };
 const cadastros = await run({ ...viewSelection(view, PESAGENS), filters: soCadastros });
 const cadDoc = buildReportDocument(cadastros);
 const hiddenKeys = cadDoc.hiddenColumns.map((column) => column.key);
-assert.ok(hiddenKeys.includes('gmd_medio'), 'só Cadastros (sem pesagem anterior), padrão do tipo: coluna GMD Médio oculta');
+// E1G (A3): dias, ganho e GMD nunca somem — só Cadastros (sem pesagem anterior), o GMD Médio fica na folha com "-" e
+// o rodapé diz "GMD de 0 de N cab."; as demais colunas vazias continuam saindo (Fêmeas só com machos, abaixo).
+assert.ok(!hiddenKeys.includes('gmd_medio') && cadDoc.columns.some((column) => column.key === 'gmd_medio'), 'só Cadastros (sem pesagem anterior), padrão do tipo: coluna GMD Médio continua na folha');
+assert.match(cadDoc.footer.gmd ?? '', /^GMD de 0 de \d+ cab\.$/, 'só Cadastros: rodapé "GMD de 0 de N cab."');
 const cadEscolha = buildReportDocument(await run({ ...FULL, filters: soCadastros }));
 for (const key of ['ganho_medio', 'ganho_total', 'dias_medios', 'gmd_medio']) assert.ok(cadEscolha.columns.some((column) => column.key === key) && !cadEscolha.hiddenColumns.length, `E1F: ${key} escolhida em "Colunas" continua na folha mesmo vazia`);
 // E1D item 8: a lista de colunas ocultas continua no documento (hiddenColumns), mas não vira nota na folha.

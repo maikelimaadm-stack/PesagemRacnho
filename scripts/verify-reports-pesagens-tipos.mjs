@@ -350,11 +350,13 @@ for (const html of [renderSheetBody(docFolha, { mode: 'fragment', interactive: t
   assert.ok(!text.includes('<ul class="sheet-notes">') && !text.includes('GMD calculado com') && !text.includes('Ausentes aparecem') && !text.includes('Uma linha por pesagem'), 'NEGATIVO: sem notas longas');
   const footer = text.slice(text.indexOf('<div class="sheet-footer">'), text.indexOf('</div>', text.indexOf('<div class="sheet-footer">')));
   const parts = [...footer.matchAll(/<span(?: class="[^"]*")?>([^<]*)<\/span>/g)].map(([, part]) => part);
-  assert.equal(parts.length, 4, `rodapé com 4 partes: ${parts.join(' | ')}`);
+  // E1G (A3): "GMD de N de M cab." quando falta GMD para algum animal (A3 só tem o Cadastro e a morte sem peso).
+  assert.equal(parts.length, 5, `rodapé com 5 partes: ${parts.join(' | ')}`);
   assert.equal(parts[0], 'Filtros: Sexo em Macho', 'filtros aplicados numa linha');
   assert.equal(parts[1], '@ = peso vivo ÷ 30', '@ = peso vivo ÷ N');
-  assert.match(parts[2], /^Emitido por Gil Gestor em \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/, 'emitido por + data/hora');
-  assert.equal(parts[3], 'Página X de Y na impressão', 'Página X de Y');
+  assert.equal(parts[2], 'GMD de 1 de 2 cab.', 'GMD de N de M cab.');
+  assert.match(parts[3], /^Emitido por Gil Gestor em \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/, 'emitido por + data/hora');
+  assert.equal(parts[4], 'Página X de Y na impressão', 'Página X de Y');
   assert.ok(!text.includes('Pesagens Individuais v') && !text.includes(`Emissão ${vmFolha.emissionId.slice(0, 8)}`), 'NEGATIVO: sem versão nem código da emissão');
 }
 assert.match(printFolha, /@bottom-right \{ content: "Página " counter\(page\) " de " counter\(pages\)/, 'impressão/PDF: "Página X de Y" na margem');

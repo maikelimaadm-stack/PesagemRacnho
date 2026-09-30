@@ -223,18 +223,19 @@ export const EVENT_COLUMNS = [
   defineColumn({ id: 'motorista_nome', label: 'Motorista', type: 'text', grains: EVENT_GRAINS }),
   defineColumn({ id: 'placa_carreta', label: 'Placa', type: 'text', grains: EVENT_GRAINS, defaultWidth: 108 }),
   defineColumn({ id: 'doc_qtd', label: 'Qtd doc (dia)', type: 'integer', grains: EVENT_GRAINS, aggregations: ['countValid', 'max'], description: 'Pesagens ligadas ao mesmo documento de embarque.' }),
-  // "Pesagem anterior" (filtro Todos/Com/Sem da E1B): data anterior preenchida. Só Manejo grava a
-  // pesagem anterior; Cadastro e Saída ficam sempre "Não".
+  // "Pesagem anterior" (filtro Todos/Com/Sem da E1B): data anterior preenchida. Manejo e (E1G) Saída com peso
+  // gravam a pesagem anterior; o Cadastro fica sempre "Não".
   defineColumn({
     id: 'tem_pesagem_anterior', label: 'Pesagem anterior', type: 'boolean', grains: EVENT_GRAINS, groupable: true, source: 'derivado',
     accessor: (row) => !isBlank(row.data_anterior), defaultWidth: 100,
   }),
   defineColumn({ id: 'data_anterior', label: 'Data anterior', type: 'date', grains: EVENT_GRAINS, defaultWidth: 108 }),
   defineColumn({ id: 'peso_anterior', label: 'Peso anterior', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, aggregations: ['countValid', 'avg', 'min', 'max'] }),
-  defineColumn({ id: 'dias', label: 'Dias', type: 'integer', grains: EVENT_GRAINS, defaultWidth: 82, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
-  defineColumn({ id: 'ganho', label: 'Ganho', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, defaultWidth: 100, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
+  // E1G (A3): dias, ganho e GMD nunca somem da folha (keepWhenEmpty; o GMD pelo tipo) — sem valor, "-".
+  defineColumn({ id: 'dias', label: 'Dias', type: 'integer', grains: EVENT_GRAINS, defaultWidth: 82, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
+  defineColumn({ id: 'ganho', label: 'Ganho', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, defaultWidth: 100, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({
-    id: 'ganho_arroba', label: 'Ganho em arrobas', unit: '@', type: 'number', decimals: 2, grains: EVENT_GRAINS, source: 'derivado',
+    id: 'ganho_arroba', label: 'Ganho em arrobas', unit: '@', type: 'number', decimals: 2, grains: EVENT_GRAINS, source: 'derivado', keepWhenEmpty: true,
     accessor: liveArrobaOf('ganho'), aggregations: ['countValid', 'sum', 'avg', 'min', 'max'],
     description: '@ de peso vivo do ganho: ganho ÷ divisor da arroba (só pesagens com pesagem anterior).',
   }),

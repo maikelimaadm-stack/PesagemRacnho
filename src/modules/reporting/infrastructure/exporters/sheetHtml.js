@@ -250,8 +250,9 @@ function renderMakContent(doc, options) {
 }
 
 // E1D item 8: filtros, @ (quando houver), colunas omitidas pelo perfil (quando houver) e quem emitiu/quando.
+// E1G: "GMD de N de M cab." quando falta GMD para algum animal da folha.
 function renderFooter(doc) {
-  const parts = [doc.footer.filtros, doc.footer.arroba, doc.footer.omitidas, doc.footer.emitidoPor].filter(Boolean);
+  const parts = [doc.footer.filtros, doc.footer.arroba, doc.footer.gmd, doc.footer.omitidas, doc.footer.emitidoPor].filter(Boolean);
   return `<div class="sheet-footer">${parts.map((part) => `<span>${escapeHtml(part)}</span>`).join('')}<span class="sheet-footer__pages">Página X de Y na impressão</span></div>`;
 }
 
