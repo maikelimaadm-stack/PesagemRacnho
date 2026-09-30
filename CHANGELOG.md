@@ -3,6 +3,15 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.4.1] — 2026-09-30
+
+A 1.4.0 com os pedidos de 30/09/2026 (E1F). Esquema Dexie **8** e backup **formato 3**, sem mudança. Notas em
+`docs/release/1.4.1/RELEASE-NOTES.md`.
+
+### Added (E1F)
+- Colunas Painel/Detalhes/Visíveis funcionando em todos os tipos; cabeçalho da folha interativo (ordenar,
+  calcular, agrupar, total, ocultar, adicionar coluna, redimensionar); "Mais filtros…"; "Novo relatório".
+
 ## [1.4.0] — 2026-09-25
 
 Etapas E1, E1B, os ajustes finais (E1C) e o relatório de pesagens igual ao MAKGESTAO (E1D) e todos os relatórios nesse estilo numa tela só (E1E) do
