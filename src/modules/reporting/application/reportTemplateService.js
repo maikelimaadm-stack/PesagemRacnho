@@ -41,6 +41,7 @@ import { REPORT_MODES, normalizeReportMode } from '../domain/reportDefinition.js
 import { canRunReport, canSeeColumn } from '../domain/reportPermissions.js';
 import { MAX_GROUP_LEVELS } from '../domain/groupEngine.js';
 import { isFilterActive, serializeFilters } from '../domain/filterEngine.js';
+import { clampWidth } from '../domain/headerActions.js';
 import { PERIOD_PRESETS } from '../domain/reportPeriod.js';
 import { getReportView } from '../domain/reportViews.js';
 import { isKnownSortChoice } from '../domain/sortChoices.js';
@@ -443,7 +444,8 @@ function sanitizeTemplateFor(template, role) {
     groups: (template.groups || []).filter((group) => visible(group.columnId)),
     sort: (template.sort || []).filter((item) => visible(item.columnId)),
     aggregates: (template.aggregates || []).filter((spec) => !spec.columnId || visible(spec.columnId)),
-    widths: Object.fromEntries(Object.entries(template.widths || {}).filter(([id]) => visible(id))),
+    // Chave que não é coluna (métrica/rótulo da folha — E1F) fica; coluna que o papel não vê sai.
+    widths: Object.fromEntries(Object.entries(template.widths || {}).filter(([id]) => !byId.has(id) || visible(id))),
   };
 }
 
@@ -486,8 +488,13 @@ export function normalizeTemplateConfig(definition, config = {}) {
       params[param.id] = config.params[param.id].map((band) => ({ label: String(band.label), min: band.min ?? null, max: band.max ?? null }));
     }
   }
+  // E1F: larguras do cabeçalho interativo — a chave é a da coluna da folha (id de coluna no Detalhado; métrica,
+  // "pair:<par>", "__label__", "x:<valor>" ou "__total__" no Resumido e na matriz), nos limites do cabeçalho.
   const widths = {};
-  for (const [id, width] of Object.entries(config.widths || {})) if (ids.has(id) && Number.isFinite(Number(width))) widths[id] = Math.max(60, Math.min(600, Number(width)));
+  for (const [id, width] of Object.entries(config.widths || {})) {
+    const clamped = clampWidth(width);
+    if (clamped !== null && id && id.length <= 160) widths[id] = clamped;
+  }
   // E1D: tipo explícito, eixos da matriz e opção fixa de "Ordenar por" (contrato §2). Ausentes = como antes.
   const typed = normalizeTypedConfig(definition, config);
   return {

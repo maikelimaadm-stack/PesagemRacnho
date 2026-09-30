@@ -132,10 +132,28 @@ function makCellClass(doc, cell) {
   return parts.join(' ');
 }
 
-function renderMakHeadRow(doc, { interactive, sort }) {
+/**
+ * E1F — cabeçalho interativo (só na TELA, com headerMenu): o <th> diz a chave e o tipo da coluna
+ * (data-col-key/data-col-kind), o título vira o botão do menu da coluna (data-col-menu — Ordenar, Calcular,
+ * Agrupar, Subtotal/Total, Ocultar, Adicionar) e a borda direita ganha o puxador de largura (data-col-grip).
+ * A coluna ordenada leva aria-sort. Valor do eixo X da matriz: só o puxador (não tem menu). A impressão e o
+ * PDF não passam headerMenu: a marcação deles não muda.
+ */
+export function renderHeaderCell(column, index, { cls, sort }) {
+  const key = escapeHtml(column.key);
+  const label = escapeHtml(column.label);
+  const sorted = sort?.key === column.key ? ` aria-sort="${sort.direction === 'desc' ? 'descending' : 'ascending'}"` : '';
+  const menu = !(column.kind === 'matrix' && !column.total);
+  const title = menu ? `<button type="button" class="sheet-col-btn" data-col-menu="${key}" aria-haspopup="menu" title="Opções da coluna ${label}">${label}</button>` : label;
+  const grip = `<span class="sheet-col-grip" data-col-grip="${key}" aria-hidden="true" title="Arraste para mudar a largura (duplo clique: automática)"></span>`;
+  return `<th data-col="${index}" data-key="${key}" data-col-key="${key}" data-col-kind="${escapeHtml(column.kind ?? 'data')}"${cls ? ` class="${cls}"` : ''}${sorted} scope="col">${title}${grip}</th>`;
+}
+
+function renderMakHeadRow(doc, { interactive, sort, headerMenu = false }) {
   const cells = doc.columns.map((column, index) => {
     const align = ALIGN_CLASS[column.align] ?? 'al-l';
     const cls = `${column.align === 'left' ? 'lbl ' : ''}${align}${column.total ? ' mk-tcol' : ''}`;
+    if (headerMenu) return renderHeaderCell(column, index, { cls, sort });
     let content = escapeHtml(column.label);
     if (interactive && column.kind === 'metric' && doc.layout === 'summary') {
       const state = sort?.key === column.key ? (sort.direction === 'desc' ? 'descending' : 'ascending') : 'none';
@@ -240,11 +258,12 @@ function renderFooter(doc) {
 /**
  * Marcação da folha inteira (cabeçalho que se repete, título e período, seções, total geral e rodapé).
  * @param doc documento de buildReportDocument
- * @param {{ mode?: 'fragment'|'print', interactive?: boolean, sort?: {key, direction}|null }} options
- *   fragment = dentro do app (tela); print = corpo do documento impresso/PDF.
+ * @param {{ mode?: 'fragment'|'print', interactive?: boolean, sort?: {key, direction}|null, headerMenu?: boolean }} options
+ *   fragment = dentro do app (tela); print = corpo do documento impresso/PDF. headerMenu (E1F, só na tela
+ *   do MAKGESTAO): cabeçalho interativo (renderHeaderCell) — ignorado na impressão.
  */
-export function renderSheetBody(doc, { mode = 'fragment', interactive = false, sort = null } = {}) {
-  const options = { interactive, sort };
+export function renderSheetBody(doc, { mode = 'fragment', interactive = false, sort = null, headerMenu = false } = {}) {
+  const options = { interactive, sort, headerMenu: headerMenu && mode !== 'print' };
   const header = renderSheetHeaderHtml(doc.header);
   // Abaixo do título só o período (E1D item 8), no lugar do antigo subtítulo — mesma marcação e estilo.
   const titleRow = `<div class="sheet-title-row"><h1 class="sheet-title">${escapeHtml(doc.title)}</h1><span class="sheet-title-side">${escapeHtml(doc.periodText)}</span></div>`;
@@ -252,7 +271,7 @@ export function renderSheetBody(doc, { mode = 'fragment', interactive = false, s
   let content;
   if (doc.empty) content = `<p class="sheet-empty">${escapeHtml(doc.emptyText ?? 'Nenhum registro para os filtros informados.')}</p>`;
   // E1D: "Vendas (Detalhado)" tem miolo próprio (o relatório de venda do MAKGESTAO — vendasHtml.js).
-  else if (doc.layout === 'vendas') content = renderVendasBody(doc);
+  else if (doc.layout === 'vendas') content = renderVendasBody(doc, options);
   else if (mak) content = renderMakContent(doc, options);
   else {
     content = [

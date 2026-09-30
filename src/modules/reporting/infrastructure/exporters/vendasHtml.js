@@ -6,7 +6,7 @@
 // para o miolo). Estilo em sheetStyles.js (bloco ".sheet-vendas", classes sv-* iguais nos três desenhos), copiado
 // das classes Tailwind do antigo.
 // escapeHtml vem de sheetHtml (que importa este arquivo): só é chamado na renderização, nunca ao carregar.
-import { escapeHtml } from './sheetHtml.js';
+import { escapeHtml, renderHeaderCell } from './sheetHtml.js';
 
 const ALIGN = Object.freeze({ left: 'sv-l', right: 'sv-r', center: 'sv-c' });
 
@@ -34,26 +34,33 @@ function renderTotais(block, id) {
 }
 
 // Tabela "Mostrar Detalhes" abaixo do cartão: as colunas do tipo (seletor "Colunas"), números à direita.
-function renderDetail(columns, rows) {
+// E1F: na tela, o cabeçalho interativo (menu e puxador — sheetHtml.renderHeaderCell); com largura escolhida
+// pela pessoa, as larguras da folha (doc.print) em colgroup, na tela, na impressão e no PDF.
+function renderDetail(columns, rows, { headerMenu = false, sort = null, widthPercents = null } = {}) {
   const body = rows.map((row) => `<tr data-row-id="${escapeHtml(row.id)}">${row.cells.map((cell) => `<td class="${cellClass({ align: cell.align, numeric: cell.align === 'right', emphasis: cell.emphasis })}" data-key="${escapeHtml(cell.key)}">${escapeHtml(cell.text)}</td>`).join('')}</tr>`);
-  return `<table class="sv-table sv-table--detail">${head(columns)}<tbody>${body.join('')}</tbody></table>`;
+  const thead = headerMenu ? `<thead><tr>${columns.map((column, index) => renderHeaderCell({ ...column, kind: 'data' }, index, { cls: ALIGN[column.align] ?? 'sv-l', sort })).join('')}</tr></thead>` : head(columns);
+  const fixed = widthPercents?.length === columns.length;
+  const colgroup = fixed ? `<colgroup>${widthPercents.map((percent) => `<col style="width:${percent}%">`).join('')}</colgroup>` : '';
+  return `<table class="sv-table sv-table--detail"${fixed ? ' style="table-layout: fixed"' : ''}>${colgroup}${thead}<tbody>${body.join('')}</tbody></table>`;
 }
 
 // Cartão do grupo: título "COMPRADOR: X" (FRIGORÍFICO/ORIGEM) e os totais em grade de 2 colunas ("Total: 90 animais").
-function renderGrupo(entry, detailColumns) {
+function renderGrupo(entry, detailColumns, options) {
   const totals = entry.totals.map((total) => `<div data-key="${escapeHtml(total.key)}"><strong>${escapeHtml(total.label)}:</strong> ${escapeHtml(total.display)}</div>`).join('');
   const card = `<div class="sv-card"><h3 class="sv-card__title">${escapeHtml(entry.title)}</h3><div class="sv-card__grid">${totals}</div></div>`;
-  const detail = entry.rows && detailColumns ? renderDetail(detailColumns, entry.rows) : '';
+  const detail = entry.rows && detailColumns ? renderDetail(detailColumns, entry.rows, options) : '';
   return `<div class="sv-comprador${detail ? ' sv-comprador--detalhes' : ''}" data-grupo="${escapeHtml(entry.id)}">${card}${detail}</div>`;
 }
 
 /**
  * Miolo da folha do relatório de venda (dentro de td.sheet-body). Todo texto passa por escapeHtml.
  * @param doc documento de buildReportDocument com layout "vendas" (doc.vendas = buildVendasBlocks)
+ * @param {{ headerMenu?: boolean, sort?: object|null }} options E1F: cabeçalho interativo da tabela de detalhe (só na tela)
  */
-export function renderVendasBody(doc) {
+export function renderVendasBody(doc, { headerMenu = false, sort = null } = {}) {
   const blocks = doc.vendas;
-  const grupos = blocks.grupos.items.map((entry) => renderGrupo(entry, blocks.grupos.detailColumns)).join('\n');
+  const detailOptions = { headerMenu, sort, widthPercents: doc.print?.userWidths?.length ? doc.print.widthPercents : null };
+  const grupos = blocks.grupos.items.map((entry) => renderGrupo(entry, blocks.grupos.detailColumns, detailOptions)).join('\n');
   return `<div class="sheet-vendas${blocks.showDetails ? ' sheet-vendas--detalhes' : ''}" data-sheet-layout="${escapeHtml(blocks.layout ?? 'vendas')}" data-show-details="${blocks.showDetails}">
 ${renderResumo(blocks.resumo)}
 ${renderTotais(blocks.porMarca, 'marca')}

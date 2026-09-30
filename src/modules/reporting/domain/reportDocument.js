@@ -23,7 +23,7 @@
 // Pesagens saem com a cara da folha do antigo (doc.style = 'makgestao' — seção "Folha no estilo do
 // MAKGESTAO" abaixo). E1E: TODOS os relatórios saem nesse estilo — os tipos de Pesagens com os desenhos
 // deles e os demais (outros relatórios, Personalizado, aba Controle) com o resumo e a lista genéricos.
-import { PESAGENS_SHEET_HEADERS, PESAGENS_SHEET_LINES, PESAGENS_VIEW_IDS } from '../definitions/pesagens.js';
+import { PESAGENS_SHEET_HEADERS, PESAGENS_SHEET_LINES, PESAGENS_VIEW_IDS, PESAGENS_VIEWS } from '../definitions/pesagens.js';
 import { aggregateLabel, aggregateValueColumn, summaryMetricLabels } from './aggregateLabels.js';
 import { describeFilter } from './filterEngine.js';
 import { compareGroupLabels, groupRows, NONE_GROUP_KEY } from './groupEngine.js';
@@ -461,7 +461,14 @@ function makLine(mak, items, source, { lead, layout, lotes = null, leafLevel = f
 function makLinesOf(viewModel, variant) {
   if (variant === 'resumo-data') return { lines: PESAGENS_SHEET_LINES['por-apartacao-data'], lineLayout: 'grid' };
   if (variant === 'apartacao-lote') return { lines: PESAGENS_SHEET_LINES['por-apartacao-lote'], lineLayout: 'grid' };
-  if (variant === 'analitico' || variant === 'vendas') return { lines: PESAGENS_SHEET_LINES[variant] };
+  if (variant === 'analitico') {
+    // E1F: total que a pessoa ligou pelo cabeçalho ("Calcular", "Subtotal/Total desta coluna") entra no fim da
+    // linha do antigo — os do próprio tipo continuam só os do antigo.
+    const base = PESAGENS_SHEET_LINES.analitico;
+    const extra = makExtraLineItems(viewModel, base.total);
+    return { lines: extra.length ? { subtotal: [...base.subtotal, ...extra], total: [...base.total, ...extra] } : base };
+  }
+  if (variant === 'vendas') return { lines: PESAGENS_SHEET_LINES[variant] };
   if (variant === MAK_GENERIC_VARIANTS.RESUMO) {
     const items = makGenericLineItems(viewModel, { groupCount: true });
     return { lines: items, lineLayout: items.length <= MAK_GRID_MAX_ITEMS ? 'grid' : 'flow' };
@@ -471,6 +478,25 @@ function makLinesOf(viewModel, variant) {
     return { lines: { subtotal: items, total: items } };
   }
   return { lines: null };
+}
+
+const sameSpec = (left, right) => left?.op === right?.op && (left?.columnId ?? null) === (right?.columnId ?? null);
+
+/**
+ * Totais além dos do tipo de Pesagens (E1F): os que não estão nos totais declarados do tipo nem nos itens fixos
+ * da linha do antigo — cada um vira um item "Soma de Peso: 12.345,0 kg" com o agregado do motor no nó.
+ */
+function makExtraLineItems(viewModel, fixedItems) {
+  const pool = PESAGENS_VIEWS.find((view) => view.id === viewModel.view?.id)?.aggregates ?? [];
+  const taken = [...pool, ...fixedItems.filter((item) => item.spec).map((item) => item.spec)];
+  return summaryMetrics(viewModel)
+    .filter((metric) => metric.spec && !taken.some((spec) => sameSpec(spec, metric.spec)))
+    .map((metric) => {
+      const column = metric.column ?? { type: 'integer' };
+      const count = COUNT_OPS.has(metric.spec.op);
+      const unit = column.type === 'gmd' ? 'kg/dia' : count || ['money', 'percentage'].includes(column.type) ? null : column.unit ?? null;
+      return { key: metric.key, label: makGenericLabel(metric.label, column, unit), spec: metric.spec, direct: true, count, unit };
+    });
 }
 
 /** Quantos grupos do nível folha (lotes) uma população tem — o mesmo motor de agrupamento (groupRows). */
@@ -1008,6 +1034,17 @@ function detailWidths(columns, widths = {}) {
 }
 
 /**
+ * E1F: largura escolhida arrastando a borda do título (state.widths[chave da coluna]) vale também no Resumido
+ * e na matriz — no lugar da estimada pelo conteúdo, só nas colunas que a pessoa mexeu.
+ */
+function withUserWidths(columns, widths, userWidths = {}) {
+  return columns.map((column, index) => {
+    const chosen = Number(userWidths?.[column.key]);
+    return Number.isFinite(chosen) && chosen > 0 ? chosen : widths[index];
+  });
+}
+
+/**
  * Orientação e tamanho: "auto" tenta retrato, depois paisagem, reduzindo a fonte (8,5 → 7,6 → 6,8 pt);
  * retrato/paisagem escolhidos pela pessoa só reduzem a fonte. Se nada couber, avisa (nunca corta coluna).
  */
@@ -1025,9 +1062,9 @@ export function decideSheetLayout({ layout, columns, rows, style = SHEET_STYLES.
       return { orientation: pageOrientation, sizeClass: sizeId, widths, totalWidth: Math.round(total), fits: total <= limit };
     }
     const limit = pageOrientation === 'landscape' ? SHEET_PAGE.LANDSCAPE_WIDTH_PX : SHEET_PAGE.PORTRAIT_WIDTH_PX;
-    let base = summaryWidths(columns, rows, factorOf(sizeId), style, { sizeId });
+    let base = withUserWidths(columns, summaryWidths(columns, rows, factorOf(sizeId), style, { sizeId }), userWidths);
     // Folha do MAKGESTAO com muitas colunas: o cabeçalho quebra entre palavras (como na E1B) antes de reduzir a fonte.
-    if (style === SHEET_STYLES.MAKGESTAO && base.reduce((sum, width) => sum + width, 0) > limit) base = summaryWidths(columns, rows, factorOf(sizeId), style, { oneLineHeader: false, sizeId });
+    if (style === SHEET_STYLES.MAKGESTAO && base.reduce((sum, width) => sum + width, 0) > limit) base = withUserWidths(columns, summaryWidths(columns, rows, factorOf(sizeId), style, { oneLineHeader: false, sizeId }), userWidths);
     const total = base.reduce((sum, width) => sum + width, 0);
     // Estilo MAKGESTAO: o subtotal não é linha da tabela (é texto abaixo dela) — nada a alargar.
     const widths = total <= limit && style !== SHEET_STYLES.MAKGESTAO ? growLabelIntoSlack(columns, rows, base, factorOf(sizeId), limit) : base;
@@ -1073,8 +1110,9 @@ export function sheetTitleOf(viewModel) {
 /**
  * @param viewModel resultado de runReport (Resumido → folha resumida; Detalhado → folha com linhas)
  * @param {{ header?: object|null, orientation?: 'auto'|'portrait'|'landscape', showEmptyColumns?: boolean,
- *   maxDataRows?: number, showDetails?: boolean }} options header = buildPropertyHeader(...) (ou null → só o
- *   nome do sistema); showDetails = "Mostrar Detalhes" do relatório de Vendas (E1D, layout "vendas")
+ *   maxDataRows?: number, showDetails?: boolean, widths?: object }} options header = buildPropertyHeader(...) (ou
+ *   null → só o nome do sistema); showDetails = "Mostrar Detalhes" do relatório de Vendas (E1D, layout "vendas");
+ *   widths = larguras escolhidas no cabeçalho ({ [chave da coluna]: px } — E1F: Detalhado, Resumido e matriz)
  */
 export function buildReportDocument(viewModel, { header = null, orientation = 'auto', showEmptyColumns = false, maxDataRows = Infinity, widths = {}, showDetails = false } = {}) {
   const summary = viewModel.mode === REPORT_MODES.RESUMIDO;
@@ -1105,6 +1143,8 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const bodyRows = allRows(body);
   // Vendas sem "Mostrar Detalhes" não tem tabela de colunas: os blocos cabem no retrato (como o PDF).
   const print = decideSheetLayout({ layout: summary ? 'summary' : 'detail', columns: vendas && !showDetails ? [] : columns, rows: bodyRows, style }, { orientation, widths });
+  // E1F: colunas com largura escolhida pela pessoa (o desenho de venda só usa colgroup quando há alguma).
+  print.userWidths = columns.filter((column) => Number(widths?.[column.key]) > 0).map((column) => column.key);
 
   // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
   // Sem linhas a folha é só "Nenhum registro…" (nenhuma coluna aparece): nada em @ para explicar.
