@@ -404,7 +404,7 @@ export async function runReport(definitionOrId, request = {}, actor) {
     reportId: definition.id,
     reportName: definition.title,
     // Nome no título da folha (E1C: Pesagens → "Pesagens Individuais"); os demais usam o próprio nome.
-    sheetTitle: definition.sheetTitle ?? definition.title,
+    sheetTitle: selection.view?.sheetTitle ?? definition.sheetTitle ?? definition.title,
     reportDefinitionVersion: definition.version,
     // Aberto por id antigo consolidado (favorito/modelo/link de antes da 1.4.0). A tela chama com o id
     // novo e a seleção já aplicada, e informa a visão em `request.presetId` só para rastreabilidade.

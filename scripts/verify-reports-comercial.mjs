@@ -302,7 +302,7 @@ assert.equal(textos(vendas15.resumo.rows).at(-1), folha(3000 + (450 / 15) * 300 
 assert.deepEqual(textos(buildReportDocument(await run('abates', {}, { arrobaDivisor: 15 })).vendas.resumo.rows), textos(blocosAbates.resumo.rows), 'Abates: o divisor da @ viva não muda nada (@ de carcaça gravada)');
 // Título da folha e rodapé.
 const docAbates = buildReportDocument(vms.abates);
-assert.equal(docAbates.title, 'Relatório de Vendas, Abates e Compras (Sintético)', 'título da folha');
+assert.equal(docAbates.title, 'Relatório de Abates (Sintético)', 'título da folha: o nome do tipo (view.sheetTitle)');
 assert.equal(docAbates.layout, 'vendas', 'miolo do relatório de venda (sheetHtml → vendasHtml)');
 // Rodapé "@ = peso vivo ÷ N" só onde há @ viva (Vendas); Abates usa a @ de carcaça gravada, Compras não tem @.
 assert.deepEqual(COMERCIAL_VIEW_IDS.map((view) => buildReportDocument(vms[view]).footer.arroba), ['@ = peso vivo ÷ 30', null, null], 'rodapé da @ viva só em Vendas');

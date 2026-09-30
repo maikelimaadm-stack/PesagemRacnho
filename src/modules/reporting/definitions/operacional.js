@@ -61,7 +61,7 @@ export const FECHAMENTO_VIEWS = Object.freeze([
 ]);
 
 export const FECHAMENTO_DIA = defineReport(eventBase({
-  id: 'controle.fechamento-dia', family: 'pesagens', title: 'Fechamento do dia (imprimível)', version: 2,
+  id: 'controle.fechamento-dia', family: 'pesagens', title: 'Fechamento do dia (imprimível)', sheetTitle: 'Fechamento do Dia', version: 2,
   description: 'Lançamentos de um dia agrupados por sessão, com pendências e totais — mesmas regras da tela Fechamento do Dia.',
   requires: ['reports.read', 'session.close'],
   params: [PERIOD('hoje')],

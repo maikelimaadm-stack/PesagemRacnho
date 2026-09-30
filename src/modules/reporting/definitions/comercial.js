@@ -41,7 +41,7 @@ export const COMPRAS_COLUMN_LABELS = Object.freeze({ valor_pago_cabeca: 'Valor/C
 export const COMERCIAL_VIEW_IDS = Object.freeze(['vendas', 'abates', 'compras']);
 export const COMERCIAL_DEFAULT_VIEW = 'vendas';
 const typeOf = (id, label, groupColumn, population, columns, available, aggregates, columnLabels) => ({
-  id, label, mode: DETALHADO, titleKind: 'Sintético', sheetLayout: id,
+  id, label, mode: DETALHADO, titleKind: 'Sintético', sheetLayout: id, sheetTitle: label,
   groups: [{ columnId: groupColumn }], population, columns: [...columns], aggregates,
   columnChoices: { available: [...available], defaults: [...columns] }, columnLabels,
 });

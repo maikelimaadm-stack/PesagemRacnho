@@ -103,7 +103,7 @@ function assertAggregateList(aggregates, byId, context, grain) {
 //                 por grupo e TOTAL GERAL. Detalhado, com população fixa e agrupado SÓ pela coluna do desenho
 //                 (SHEET_LAYOUT_GROUPS).
 const VIEW_KEYS = new Set(['id', 'label', 'description', 'groups', 'mode', 'aggregates', 'columns', 'sort', 'summarySort', 'filters',
-  'layout', 'matrix', 'population', 'groupChoices', 'columnChoices', 'columnLabels', 'titleKind', 'sheetLayout']);
+  'layout', 'matrix', 'population', 'groupChoices', 'columnChoices', 'columnLabels', 'titleKind', 'sheetLayout', 'sheetTitle']);
 const DIRECTIONS = new Set(['asc', 'desc']);
 export const VIEW_LAYOUTS = Object.freeze({ MATRIX: 'matrix' });
 export const TITLE_KINDS = Object.freeze(['Analítico', 'Sintético']);
@@ -169,6 +169,8 @@ function defineViewExtensions(view, spec, byId, where) {
     assertIds(Object.keys(view.columnLabels), byId, `${where} columnLabels`);
     for (const label of Object.values(view.columnLabels)) if (typeof label !== 'string' || !label.trim()) throw new Error(`${where}: rótulo vazio em columnLabels`);
   }
+  // E1E: nome do tipo no título da folha ('Relatório de Abates' no Comercial); sem ele, o da definição.
+  if (view.sheetTitle != null && (typeof view.sheetTitle !== 'string' || !view.sheetTitle.trim())) throw new Error(`${where}: sheetTitle deve ser texto não vazio`);
   if (view.titleKind != null && !TITLE_KINDS.includes(view.titleKind)) throw new Error(`${where}: titleKind inválido (${view.titleKind})`);
   if (view.sheetLayout != null) {
     const groupColumn = SHEET_LAYOUT_GROUPS[view.sheetLayout];

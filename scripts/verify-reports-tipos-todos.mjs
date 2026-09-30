@@ -178,7 +178,8 @@ for (const definition of CATALOGO) {
     const where = `${definition.id}/${view.id}`;
     const selection = viewSelection(view, definition);
     const vm = await run(definition, selection);
-    assert.deepEqual(vm.view, { id: view.id, label: view.label, layout: null, titleKind: view.titleKind }, `${where}: executa no tipo`);
+    // (vm.view também leva sheetLayout — o desenho de venda do Comercial; aqui só o que o tipo declara.)
+    assert.deepEqual({ id: vm.view?.id, label: vm.view?.label, layout: vm.view?.layout, titleKind: vm.view?.titleKind }, { id: view.id, label: view.label, layout: null, titleKind: view.titleKind }, `${where}: executa no tipo`);
     assert.equal(vm.mode, view.mode, `${where}: modo do tipo`);
     assert.deepEqual(vm.groups.map((group) => group.columnId), view.groups.map((group) => group.columnId), `${where}: agrupamento do tipo`);
     const expectedMetrics = view.columnChoices ? view.columnChoices.defaults : view.aggregates.map((spec) => spec.id);

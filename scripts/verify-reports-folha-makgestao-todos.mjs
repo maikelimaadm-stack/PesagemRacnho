@@ -270,7 +270,9 @@ for (const definition of definitions) {
   assert.ok(doc.empty && doc.style === 'makgestao', `${definition.id}: folha vazia do MAKGESTAO`);
   assert.ok(html.includes(`<p class="sheet-empty">${doc.emptyText}</p>`), `${definition.id}: só o aviso (${doc.emptyText})`);
   assert.ok(!html.includes('<table class="sheet-table') && !html.includes('class="mk-line') && !html.includes('sheet-vendas'), `${definition.id}: vazia sem tabela e sem total`);
-  if (definition.id !== 'pesagens') assert.equal(doc.emptyText, MAK_EMPTY_TEXT, `${definition.id}: "${MAK_EMPTY_TEXT}"`);
+  // O desenho de venda (Comercial) leva o texto do tipo ("Nenhuma venda/abate/compra encontrada…"); os outros, o genérico.
+  if (doc.layout === 'vendas') assert.match(doc.emptyText, /^Nenhuma (venda|abate|compra) encontrada com os filtros aplicados\.$/, `${definition.id}: texto do tipo`);
+  else if (definition.id !== 'pesagens') assert.equal(doc.emptyText, MAK_EMPTY_TEXT, `${definition.id}: "${MAK_EMPTY_TEXT}"`);
   assert.equal(doc.footer.arroba, null, `${definition.id}: vazia não explica @`);
   empties += 1;
 }
