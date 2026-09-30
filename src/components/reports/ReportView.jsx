@@ -20,6 +20,7 @@ import { leaveViewPatch, screenFixedFilters, screenModePatch, templatePayload, v
 import { applyColumnKeys, columnKeysOf, getReportView, listReportViews, parseSortChoice, resolveViewId } from "@/modules/reporting/domain/reportViews";
 import { applySortChoice, sortChoiceForColumn, sortChoiceForMetric } from "@/modules/reporting/domain/sortChoices";
 import { hasTypeColumns, typeColumnOptions } from "@/modules/reporting/domain/typeColumns";
+import { applyHeaderAction, headerMenuOf } from "@/modules/reporting/domain/headerActions";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
 import { buildInitialReportState, typedViewSelection } from "@/modules/reporting/application/reportInitialState";
@@ -29,17 +30,19 @@ import { exportPdf, printReport } from "@/modules/reporting/application/reportPr
 import { loadReportHeader } from "@/modules/catalog/application/propertyHeaderService";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { deleteTemplate, favoriteKey, getFavorites, listTemplates, recordRecent, saveReportViewState, saveTemplate, saveTypeColumnPrefs, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
-import { PREVIOUS_COLUMN, filterButtonsOf, integerParamsOf, isPesagensScreen, quickFiltersOf } from "@/modules/reporting/application/reportScreenModel";
+import { PREVIOUS_COLUMN, filterButtonsOf, integerParamsOf, isPesagensScreen, moreFilterColumnsOf, quickFiltersOf } from "@/modules/reporting/application/reportScreenModel";
 import AnalyticGroupButtons from "./AnalyticGroupButtons";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportFilterBar from "./ReportFilterBar";
 import MatrixAxisControls from "./MatrixAxisControls";
-import { MakgestaoColumnsButton, MakgestaoFilterButton, MakgestaoFilterCard, MakgestaoTopBar, makOrientation } from "./MakgestaoScreen";
+import { MakgestaoColumnsButton, MakgestaoFilterButton, MakgestaoFilterCard, MakgestaoMoreFilters, MakgestaoTopBar, makOrientation } from "./MakgestaoScreen";
 import ReportSheetView from "./ReportSheetView";
 import ReportTable from "./ReportTable";
 import { pillFilterType, pillOptions, toDisplayFilters, toServiceFilters, useCan } from "./reportUi";
 
 const NO_GROUP = "__nenhum__";
+// Coluna sim/não no "Mais filtros…": o motor compara o valor (true/false); a lista mostra Sim/Não.
+const BOOLEAN_OPTIONS = Object.freeze([{ value: "true", label: "Sim" }, { value: "false", label: "Não" }]);
 const CUSTOM_GROUP = "__personalizado__";
 // Botões de filtro (E1B §3, linha 2; Pesagens: a lista da E1D), Pesagem Anterior, parâmetros e filtros
 // rápidos de cada relatório: application/reportScreenModel.js (o gate reports:tela-unica confere).
@@ -314,6 +317,29 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     else update({ columns: next });
   };
 
+  // E1F (item 2): cabeçalho interativo da folha — o menu de cada coluna e o que cada escolha muda saem de
+  // domain/headerActions (o mesmo código do gate reports:cabecalho-interativo). A escolha de "Colunas" do tipo
+  // (Ocultar/Adicionar num tipo com seletor) fica gravada por tipo e usuário, como no diálogo.
+  const saveTypeKeys = ({ viewId: typeId, keys }) => {
+    setTypeColumns((current) => {
+      const next = { ...current };
+      if (keys.length) next[typeId] = [...keys];
+      else delete next[typeId];
+      return next;
+    });
+    if (allowPreferences) saveTypeColumnPrefs(definition.id, typeId, keys, actor).catch(() => {});
+  };
+  const headerContext = { definition, viewModel, state, role: actor.role };
+  const headerMenu = viewModel ? {
+    menuFor: (docColumn, layout) => headerMenuOf(headerContext, docColumn, layout),
+    onAction: (docColumn, action) => {
+      const result = applyHeaderAction(headerContext, docColumn, action);
+      if (!result) return;
+      update(result.patch);
+      if (result.typeKeys) saveTypeKeys(result.typeKeys);
+    },
+  } : null;
+
   // E1D: controles próprios do tipo atual, no encaixe typeControls da barra (C: botões do Analítico).
   // Trocam só os grupos — o tipo continua (update sem mexer em view); o detalhe de grupo sai.
   const typeControls = currentView?.layout === VIEW_LAYOUTS.MATRIX ? (
@@ -332,6 +358,13 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     [fixedSortChoices, summaryMode, state.groups, columnOf, metricsForSort, visibleColumns],
   );
   const sortValue = fixedSortChoices ? (state.sortChoice ?? "custom") : currentSortValue({ summaryMode, state, definition, options: sortOptions });
+  // E1F: coluna ordenada na folha do MAKGESTAO (seta no título): métrica/rótulo no Resumido; 1ª ordem no Detalhado.
+  const makSheetSort = useMemo(() => {
+    if (!viewModel) return null;
+    if (viewModel.mode === REPORT_MODES.RESUMIDO) return fixedSortChoices ? viewModel.summarySort : state.summarySort;
+    const first = viewModel.sort?.[0];
+    return first ? { key: first.columnId, direction: first.direction } : null;
+  }, [viewModel, fixedSortChoices, state.summarySort]);
   // Níveis como a opção atual os mostra (ex.: "Data (Mais Antiga)" inverte a data): o "Personalizado" de um
   // clique em cabeçalho parte do que a pessoa está vendo. Mesma função pura que o serviço usa.
   const shownGroups = () => (state.sortChoice
@@ -493,6 +526,11 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     ...(summaryMode || makScreen ? [] : visibleColumns.filter((column) => !coveredIds.has(column.id))),
     ...available.filter((column) => !coveredIds.has(column.id) && isFilterActive(state.uiFilters[column.id]) && (summaryMode || makScreen || !visibleColumns.some((item) => item.id === column.id))),
   ];
+  // E1F (item 3): "Mais filtros…" — as filtráveis sem botão próprio; sim/não marca "Sim"/"Não" (valor true/false).
+  const listOptionsOf = (column) => (column.type === "boolean" ? () => BOOLEAN_OPTIONS : () => pillOptions(viewModel, column));
+  const moreFilters = makScreen ? moreFilterColumnsOf(definition, available).map((column) => ({
+    id: column.id, label: column.label, filterType: pillFilterType(column), listOptions: listOptionsOf(column), value: state.uiFilters[column.id] || null,
+  })) : [];
   const hasActiveFilters = Object.values(state.uiFilters).some(isFilterActive) || Boolean(state.search);
   const lockedEntries = Object.entries(viewModel?.lockedFilters ?? {});
   const drillParts = viewModel?.drill ?? [];
@@ -634,6 +672,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
               {quickFiltersOf(definition).map((quick) => (
                 <button key={quick.id} type="button" className={`rpt-mak-btn${quickActive(quick) ? " is-on" : ""}`} aria-pressed={quickActive(quick)} onClick={() => toggleQuick(quick)}>{quick.label}</button>
               ))}
+              <MakgestaoMoreFilters columns={moreFilters} onChange={onFilter} />
             </>
           )}
           columnsButton={columnsInCard ? makColumns : null}
@@ -641,7 +680,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           extras={(
             <>
               {extraColumns.map((column) => (
-                <MakgestaoFilterButton key={column.id} label={column.label} value={state.uiFilters[column.id] || null} filterType={pillFilterType(column)} listOptions={() => pillOptions(viewModel, column)} onChange={(value) => onFilter(column.id, value)} />
+                <MakgestaoFilterButton key={column.id} label={column.label} value={state.uiFilters[column.id] || null} filterType={pillFilterType(column)} listOptions={listOptionsOf(column)} onChange={(value) => onFilter(column.id, value)} />
               ))}
               {state.search ? (
                 <span className="rpt-mak-chip" title="Pesquisa do modelo">
@@ -692,9 +731,11 @@ export default function ReportView({ reportId, presetId = null, template, savedS
               orientation={sheetOrientation}
               showEmptyColumns={state.showEmptyColumns}
               showDetails={state.showDetails === true}
-              sort={viewModel.mode === REPORT_MODES.RESUMIDO ? (fixedSortChoices ? viewModel.summarySort : state.summarySort) : null}
+              widths={state.widths}
+              sort={makSheetSort}
               onDrill={viewModel.mode === REPORT_MODES.RESUMIDO ? onDrill : null}
               onSort={viewModel.mode === REPORT_MODES.RESUMIDO ? onSheetSort : null}
+              headerMenu={headerMenu}
             />
           ) : <div className="rpt-empty">{loading ? "Calculando o relatório…" : "—"}</div>}
         </div>

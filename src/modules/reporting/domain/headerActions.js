@@ -271,12 +271,14 @@ function totalOption(ctx, docColumn, layout) {
   if (!column || column.metricOnly || !canSeeColumn(column, ctx.role)) return null;
   const op = defaultTotalOp(column);
   if (!op) return null;
-  return { op, active: aggregatesOf(ctx).some((spec) => spec.columnId === column.id) };
+  // Ligado = a conta padrão da coluna já está nos totais (a média do tipo, ex. Peso Médio, não conta: é outra conta).
+  return { op, active: aggregatesOf(ctx).some((spec) => sameSpec(spec, specFor(op, column.id))) };
 }
 
 function applyTotal(ctx, docColumn, option) {
   const current = aggregatesOf(ctx);
-  const aggregates = option.active ? current.filter((spec) => spec.columnId !== docColumn.key) : [...current, specFor(option.op, docColumn.key)];
+  const spec = specFor(option.op, docColumn.key);
+  const aggregates = option.active ? current.filter((item) => !sameSpec(item, spec)) : [...current, spec];
   return { aggregates, summarySort: keepSummarySort(ctx.state, aggregates) };
 }
 

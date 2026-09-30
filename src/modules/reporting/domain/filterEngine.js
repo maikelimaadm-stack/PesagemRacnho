@@ -33,6 +33,8 @@ export const OPERATOR_LABELS = Object.freeze({
 export function describeFilter(filter, column = null) {
   if (!filter || typeof filter !== 'object') return String(filter ?? '');
   const optionLabel = (value) => {
+    // Sim/não marcado na lista ("Mais filtros…", E1F): o valor é true/false, o texto é Sim/Não.
+    if (column?.type === 'boolean' && ['true', 'false'].includes(String(value))) return String(value) === 'true' ? 'Sim' : 'Não';
     if (filter.match === 'label' || !Array.isArray(column?.options)) return value;
     const option = column.options.find((item) => String(item.value ?? item.id) === String(value));
     return option ? option.label : value;

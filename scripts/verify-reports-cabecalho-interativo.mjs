@@ -27,6 +27,7 @@ import { applyHeaderAction, clampWidth, headerMenuOf, HEADER_WIDTH, isEmptyHeade
 import { buildReportDocument, documentRows, DOC_ROW_TYPES } from '../src/modules/reporting/domain/reportDocument.js';
 import { computeAggregates, aggregateSpecId } from '../src/modules/reporting/domain/reportAggregates.js';
 import { canSeeColumn } from '../src/modules/reporting/domain/reportPermissions.js';
+import { describeFilter } from '../src/modules/reporting/domain/filterEngine.js';
 import { screenFixedFilters } from '../src/modules/reporting/domain/reportScreenState.js';
 import { columnKeysOf, getReportView } from '../src/modules/reporting/domain/reportViews.js';
 import { renderSheetBody } from '../src/modules/reporting/infrastructure/exporters/sheetHtml.js';
@@ -335,8 +336,14 @@ const addGeneric = headerMenuOf(ctx, metricColumn, doc.layout).add;
 assert.ok(addGeneric.length > 0, `${generic.id}: há totais para adicionar`);
 step = act(ctx, metricColumn, { type: 'add', add: addGeneric[0].key, layout: doc.layout });
 assert.equal(step.typeKeys, null, 'fora do tipo: nada a gravar por tipo');
+const added = step.state.aggregates.filter((spec) => !state.aggregates.some((item) => aggregateSpecId(item) === aggregateSpecId(spec)));
+assert.ok(added.length >= 1, `${generic.id}: um total a mais`);
 vm = await run(generic, step.state);
-assert.ok(vm.aggregates.length === state.aggregates.length + (addGeneric[0].key.includes('faixa') ? 2 : 1) || vm.aggregates.length > state.aggregates.length, `${generic.id}: total adicionado vale no motor`);
+for (const spec of added) {
+  const id = aggregateSpecId(spec);
+  assert.ok(vm.aggregates.some((item) => item.id === id), `${generic.id}: ${id} vale no motor`);
+  assert.ok(close(vm.totals[id]?.value ?? null, computeAggregates(vm.rows, [spec], vm.resolve)[id].value ?? null), `${generic.id}: ${id} = motor sobre a população`);
+}
 step = act(ctx, metricColumn, { type: 'hide', layout: doc.layout });
 assert.ok(!step.state.aggregates.some((spec) => aggregateSpecId(spec) === metricColumn.key), `${generic.id}: métrica oculta`);
 ok(`Personalizado genérico (${generic.id})`);
@@ -465,6 +472,11 @@ const pesoFiltro = await run(PESAGENS, { ...state, uiFilters: { peso: { operator
 assert.ok(pesoFiltro.rows.length > 0 && pesoFiltro.rows.every((row) => row.peso >= 300 && row.peso <= 400), 'Peso entre 300 e 400 (condição de número)');
 const dataFiltro = await run(PESAGENS, { ...state, uiFilters: { data_pesagem: { operator: 'on_or_after', value: '2026-09-01', valueTo: '', values: [] } } });
 assert.ok(dataFiltro.rows.length > 0 && dataFiltro.rows.every((row) => String(row.data_pesagem) >= '2026-09-01'), 'Data a partir de 01/09 (condição de data)');
+// Coluna sim/não marcada na lista: valor true/false no motor, "Sim"/"Não" no texto (rodapé da folha).
+const booleanColumn = PESAGENS.columns.find((column) => column.type === 'boolean' && column.id !== PREVIOUS_COLUMN) ?? PESAGENS.columns.find((column) => column.id === PREVIOUS_COLUMN);
+const simFiltro = await run(PESAGENS, { ...state, uiFilters: { [booleanColumn.id]: { operator: 'in', value: '', valueTo: '', values: ['true'] } } });
+assert.ok(simFiltro.rows.every((row) => simFiltro.resolve(booleanColumn.id).valueOf(row) === true), `${booleanColumn.label} = Sim filtra pelo valor`);
+assert.equal(describeFilter({ operator: 'in', values: ['true'] }, booleanColumn), 'em Sim', 'rodapé diz "Sim", não "true"');
 ok('Mais filtros');
 
 console.log(`reports:cabecalho-interativo:verify OK (${checks} blocos)`);
