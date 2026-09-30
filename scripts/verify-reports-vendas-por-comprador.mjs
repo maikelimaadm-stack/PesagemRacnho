@@ -111,10 +111,10 @@ const venda = (id, animal, extra) => ({ id, animal_id: animal, numero_animal: an
     ['HR2', '2', '939,00', '469,50', '15,65', 'R$ 383,00', 'R$ 11.987,90'],
     ['ZF', '88', '40.029,00', '454,88', '15,16', 'R$ 383,00', 'R$ 511.036,90'],
   ], 'PDF: TOTAIS POR MARCA igual ao papel');
-  assert.deepEqual(pdf.porComprador.columns.map((column) => column.label), ['Comprador', 'Qtd', 'Peso Total (kg)', 'Valor Total']);
-  assert.deepEqual(pdf.porComprador.rows.map((row) => [row.label, ...textos(row.cells)]), [['W3', '90', '40.968,00', 'R$ 523.024,80']], 'PDF: TOTAIS POR COMPRADOR igual ao papel');
-  assert.equal(pdf.compradores.title, 'VENDAS POR COMPRADOR (DETALHADO)');
-  assert.deepEqual(pdf.compradores.items.map((item) => [item.title, ...item.totals.map((total) => `${total.label}: ${spaces(total.display)}`)]), [
+  assert.deepEqual(pdf.porGrupo.columns.map((column) => column.label), ['Comprador', 'Qtd', 'Peso Total (kg)', 'Valor Total']);
+  assert.deepEqual(pdf.porGrupo.rows.map((row) => [row.label, ...textos(row.cells)]), [['W3', '90', '40.968,00', 'R$ 523.024,80']], 'PDF: TOTAIS POR COMPRADOR igual ao papel');
+  assert.equal(pdf.grupos.title, 'VENDAS POR COMPRADOR (DETALHADO)');
+  assert.deepEqual(pdf.grupos.items.map((item) => [item.title, ...item.totals.map((total) => `${total.label}: ${spaces(total.display)}`)]), [
     ['COMPRADOR: W3', 'Total: 90 animais', 'Peso Médio: 455,20 kg', 'Peso Total: 40.968,00 kg', 'Média (@): 15,17', 'Valor Total: R$ 523.024,80'],
   ], 'PDF: cartão do comprador igual ao papel');
   assert.equal(spaces(pdf.totalGeral.text), 'TOTAL GERAL: 90 animais | Peso Total: 40.968,00 kg | Peso Médio: 455,20 kg | Média (@): 15,17 | Valor Total: R$ 523.024,80', 'PDF: TOTAL GERAL igual ao papel');
@@ -130,7 +130,7 @@ const venda = (id, animal, extra) => ({ id, animal_id: animal, numero_animal: an
     venda('x2', 'B1', { comprador: 'Frigo Sul', marca: 'ALFA', peso: 330, valor_venda_total: 4950 }),
     venda('x3', 'B2', { comprador: 'Frigo Sul', marca: 'ALFA', peso: null, valor_venda_total: 1000 }),
   ]));
-  const [frigo] = blocos.porComprador.rows;
+  const [frigo] = blocos.porGrupo.rows;
   assert.equal(frigo.cells[0].value, 2, 'animais distintos por comprador (o antigo contava 3 linhas)');
   assert.equal(blocos.porMarca.rows[0].cells[0].value, 2, 'animais distintos por marca');
   near(frigo.cells[1].value, 630, 'peso total só com peso');
@@ -412,10 +412,10 @@ assert.deepEqual(blocos.porMarca.rows.map((row) => [row.label, ...textosDe(row.c
   ['BETA', '2', '610,00', '305,00', '10,17', 'R$ 294,59', 'R$ 6.190,00'],
   [NONE_GROUP_LABEL, '3', '1.290,00', '430,00', '14,33', 'R$ 300,00', 'R$ 19.350,00'],
 ], 'TOTAIS POR MARCA: os números (ALFA: v13 sem valor fica fora da soma e da média do Valor @)');
-assert.deepEqual(blocos.porComprador.rows.map((row) => [row.label, ...textosDe(row.cells)]), conta30.compradores.map((grupo) => [grupo.chave, String(grupo.animais_vendidos), folha(grupo.peso_total, 2), folha(grupo.valor_total, 2, true)]), 'TOTAIS POR COMPRADOR à mão');
-assert.deepEqual(textosDe(blocos.porComprador.rows[0].cells), ['2', '780,00', 'R$ 9.940,00'], 'Agropecuária: 6.750 digitado + 3.190 pela @');
-assert.deepEqual(blocos.compradores.items.map((item) => item.title), COMPRADORES.map((comprador) => `COMPRADOR: ${comprador.toLocaleUpperCase('pt-BR')}`), 'um cartão por comprador, "Não informado" por último');
-blocos.compradores.items.forEach((item, index) => {
+assert.deepEqual(blocos.porGrupo.rows.map((row) => [row.label, ...textosDe(row.cells)]), conta30.compradores.map((grupo) => [grupo.chave, String(grupo.animais_vendidos), folha(grupo.peso_total, 2), folha(grupo.valor_total, 2, true)]), 'TOTAIS POR COMPRADOR à mão');
+assert.deepEqual(textosDe(blocos.porGrupo.rows[0].cells), ['2', '780,00', 'R$ 9.940,00'], 'Agropecuária: 6.750 digitado + 3.190 pela @');
+assert.deepEqual(blocos.grupos.items.map((item) => item.title), COMPRADORES.map((comprador) => `COMPRADOR: ${comprador.toLocaleUpperCase('pt-BR')}`), 'um cartão por comprador, "Não informado" por último');
+blocos.grupos.items.forEach((item, index) => {
   const grupo = conta30.compradores[index];
   assert.deepEqual(item.totals.map((total) => `${total.label}: ${spaces(total.display)}`), [
     `Total: ${grupo.animais_vendidos} ${grupo.animais_vendidos === 1 ? 'animal' : 'animais'}`, `Peso Médio: ${folha(grupo.peso_medio, 2)} kg`, `Peso Total: ${folha(grupo.peso_total, 2)} kg`,
@@ -427,7 +427,7 @@ assert.equal(spaces(blocos.totalGeral.text), 'TOTAL GERAL: 7 animais | Peso Tota
 // Média valor da arroba: ponderada pela Qtd @ (R$ 298,29), não a média simples do antigo (R$ 298,00).
 assert.notEqual(spaces(blocos.resumo.rows[4].text), `R$ ${br(conta30.geral.media_simples_antigo, 2)}`, 'NEGATIVO: não é a média simples do antigo');
 // Zeca Gado: v12 (digitado, sem Valor @) + v13 (sem nada) → valor 6.300 e Média valor da arroba "-".
-near(blocos.compradores.items[2].totals.at(-1).value, 6300, 'Zeca Gado: só o que tem valor');
+near(blocos.grupos.items[2].totals.at(-1).value, 6300, 'Zeca Gado: só o que tem valor');
 // ÷ 15: a @ viva e a conta do valor mudam; a média ponderada do preço não (o divisor cancela).
 const doc15 = buildReportDocument(vm15);
 assert.deepEqual(textosDe(doc15.vendas.resumo.rows), linhaFolha(esperado(15).geral), 'Métrica | Valor ÷ 15 à mão');
@@ -437,13 +437,13 @@ assert.ok(JSON.stringify(doc15.footer).includes('@ = peso vivo ÷ 15'), 'rodapé
 // "Mostrar Detalhes": a tabela de vendas de cada comprador abaixo do cartão (na ordem das linhas do view model).
 const docDetalhes = buildReportDocument(vm, { showDetails: true });
 assert.equal(docDetalhes.vendas.showDetails, true);
-assert.deepEqual(docDetalhes.vendas.compradores.detailColumns.map((column) => column.label), HEADERS, 'tabela de detalhe com as colunas do tipo');
-assert.deepEqual(docDetalhes.vendas.compradores.items.map((item) => item.rows.map((row) => row.id)), vm.tree.map((node) => node.rows.map((row) => row.id)), 'as vendas de cada comprador, na ordem do "Ordenar por"');
-assert.equal(docDetalhes.vendas.compradores.items.reduce((soma, item) => soma + item.rows.length, 0), vm.rowCount, 'com detalhes: todas as vendas');
+assert.deepEqual(docDetalhes.vendas.grupos.detailColumns.map((column) => column.label), HEADERS, 'tabela de detalhe com as colunas do tipo');
+assert.deepEqual(docDetalhes.vendas.grupos.items.map((item) => item.rows.map((row) => row.id)), vm.tree.map((node) => node.rows.map((row) => row.id)), 'as vendas de cada comprador, na ordem do "Ordenar por"');
+assert.equal(docDetalhes.vendas.grupos.items.reduce((soma, item) => soma + item.rows.length, 0), vm.rowCount, 'com detalhes: todas as vendas');
 assert.equal(docDetalhes.stats.dataRows, vm.rowCount);
-const detalheV6 = docDetalhes.vendas.compradores.items[0].rows.find((row) => row.id === 'v6');
+const detalheV6 = docDetalhes.vendas.grupos.items[0].rows.find((row) => row.id === 'v6');
 assert.deepEqual(detalheV6.cells.map((cell) => spaces(cell.text)), ['Agropecuária Boa Vista', '07/09/2026', '606', '330', '11,00', 'R$ 290,00', 'R$ 3.190,00'], 'v6 no detalhe (peso sem casas, como o antigo)');
-const detalheV13 = docDetalhes.vendas.compradores.items[2].rows.find((row) => row.id === 'v13');
+const detalheV13 = docDetalhes.vendas.grupos.items[2].rows.find((row) => row.id === 'v13');
 assert.deepEqual(detalheV13.cells.slice(-2).map((cell) => cell.text), [VENDAS_MISSING, VENDAS_MISSING], 'v13: Valor @ e Valor Total "-"');
 const htmlSem = renderSheetBody(doc, { mode: 'print' });
 const htmlCom = renderSheetBody(docDetalhes, { mode: 'print' });
@@ -493,8 +493,8 @@ const linhasTotais = planilha.filter((row) => row.kind === XLSX_VENDAS_KINDS.ROW
 const daFolha = [
   ...blocos.resumo.rows.map((row) => [row.label, numberOf(row.text)]),
   ...blocos.porMarca.rows.map((row) => [row.label, ...row.cells.map((cell) => numberOf(cell.text))]),
-  ...blocos.porComprador.rows.map((row) => [row.label, ...row.cells.map((cell) => numberOf(cell.text))]),
-  ...blocos.compradores.items.map((item) => [`Total ${item.label}`, ...item.totals.map((total) => numberOf(total.text))]),
+  ...blocos.porGrupo.rows.map((row) => [row.label, ...row.cells.map((cell) => numberOf(cell.text))]),
+  ...blocos.grupos.items.map((item) => [`Total ${item.label}`, ...item.totals.map((total) => numberOf(total.text))]),
   ['TOTAL GERAL', ...blocos.totalGeral.items.map((total) => numberOf(total.text))],
 ];
 assert.deepEqual(linhasTotais, daFolha, 'paridade folha × XLSX: cada total da folha é o mesmo número na planilha');
@@ -505,7 +505,7 @@ assert.equal(dadosPlanilha.length, vm.rowCount, 'XLSX: sempre com as vendas (o "
 assert.deepEqual(valoresDe(dadosPlanilha.find((row) => row.cells[2][0] === '606')), ['Agropecuária Boa Vista', '07/09/2026', '606', 330, 11, 290, 3190], 'XLSX: v6 com os números');
 assert.deepEqual(valoresDe(dadosPlanilha.find((row) => row.cells[2][0] === '1313')).slice(-2), [null, null], 'XLSX: v13 sem valor (célula vazia, não 0)');
 // Detalhe folha × XLSX: o mesmo número (a folha mostra o peso sem casas, como o antigo).
-docDetalhes.vendas.compradores.items.flatMap((item) => item.rows).forEach((row, index) => {
+docDetalhes.vendas.grupos.items.flatMap((item) => item.rows).forEach((row, index) => {
   const xl = valoresDe(dadosPlanilha[index]);
   row.cells.forEach((cell, col) => {
     const naFolha = HEADERS[col] === 'Peso (kg)' ? roundTo(xl[col], 0) : xl[col];
@@ -574,10 +574,10 @@ const semValorAlgum = (viewModel, where) => {
   assert.deepEqual(v.resumo.rows.map((row) => row.label), ['Animais vendidos', 'Peso total (kg)', 'Peso médio (kg)', 'Média (@)'], `${where}: Métrica | Valor sem Média valor da arroba e Valor total`);
   assert.deepEqual(textosDe(v.resumo.rows), ['7', '2.750,00', '392,86', '13,10'], `${where}: os outros números continuam`);
   assert.deepEqual(v.porMarca.columns.map((column) => column.label), ['Marca', 'Qtd', 'Peso Total (kg)', 'Peso Médio (kg)', 'Média (@)'], `${where}: TOTAIS POR MARCA sem Média Valor @ e Valor Total`);
-  assert.deepEqual(v.porComprador.columns.map((column) => column.label), ['Comprador', 'Qtd', 'Peso Total (kg)'], `${where}: TOTAIS POR COMPRADOR sem Valor Total`);
-  assert.ok(v.compradores.items.every((item) => item.totals.map((total) => total.label).join('|') === 'Total|Peso Médio|Peso Total|Média (@)'), `${where}: cartão sem Valor Total`);
+  assert.deepEqual(v.porGrupo.columns.map((column) => column.label), ['Comprador', 'Qtd', 'Peso Total (kg)'], `${where}: TOTAIS POR COMPRADOR sem Valor Total`);
+  assert.ok(v.grupos.items.every((item) => item.totals.map((total) => total.label).join('|') === 'Total|Peso Médio|Peso Total|Média (@)'), `${where}: cartão sem Valor Total`);
   assert.ok(!v.totalGeral.text.includes('Valor'), `${where}: TOTAL GERAL sem valor`);
-  assert.deepEqual(v.compradores.detailColumns.map((column) => column.label), HEADERS.slice(0, 5), `${where}: detalhe sem Valor @ e Valor Total`);
+  assert.deepEqual(v.grupos.detailColumns.map((column) => column.label), HEADERS.slice(0, 5), `${where}: detalhe sem Valor @ e Valor Total`);
   const texto = JSON.stringify(v);
   for (const proibido of ['R$', 'Valor Total', 'Valor total', 'Média valor', 'Média Valor', '32.290', '298,29']) assert.ok(!texto.includes(proibido), `${where}: folha sem "${proibido}"`);
   assert.match(papel.footer.omitidas ?? '', /2 coluna\(s\) omitida\(s\) pelo perfil/, `${where}: rodapé avisa as colunas omitidas`);
@@ -671,7 +671,7 @@ console.log(JSON.stringify({
   ok: true,
   vendas: vm.rowCount,
   pdf: 'Métrica | Valor, TOTAIS POR MARCA/COMPRADOR, cartão e TOTAL GERAL iguais ao PDF (90 animais, 40.968 kg, R$ 523.024,80)',
-  compradores: blocos.porComprador.rows.map((row) => `${row.label} (${row.cells[0].text})`),
+  compradores: blocos.porGrupo.rows.map((row) => `${row.label} (${row.cells[0].text})`),
   totalGeral: spaces(blocos.totalGeral.text),
   mediaValorArroba: { ponderada: spaces(blocos.resumo.rows[4].text), simplesDoAntigo: `R$ ${br(conta30.geral.media_simples_antigo, 2)}` },
   xlsx: `${planilha.length} linhas, ${dadosPlanilha.length} vendas`,

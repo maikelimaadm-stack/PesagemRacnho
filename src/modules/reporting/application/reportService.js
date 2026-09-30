@@ -77,7 +77,8 @@ function mergeAliasSelection(alias, selection = {}, params = {}) {
   if (!alias) return selection;
   const preset = aliasSelection(alias, params);
   const merged = { ...selection };
-  for (const key of ['columns', 'groups', 'filters', 'sort', 'aggregates', 'mode']) {
+  // E1E: `view` = alias que virou tipo (comercial.vendas → Comercial › Vendas).
+  for (const key of ['view', 'columns', 'groups', 'filters', 'sort', 'aggregates', 'mode']) {
     if (merged[key] === undefined && preset[key] !== undefined) merged[key] = preset[key];
   }
   // A chamada trouxe filtros próprios: as condições que eram do relatório antigo (motivo = Morte,
@@ -418,7 +419,7 @@ export async function runReport(definitionOrId, request = {}, actor) {
     mode: selection.mode,
     summarySort: selection.summarySort,
     // E1D: tipo explícito (null = Personalizado), eixos da matriz e opção fixa de "Ordenar por".
-    view: selection.view ? { id: selection.view.id, label: selection.view.label, layout: selection.view.layout ?? null, titleKind: selection.view.titleKind ?? null } : null,
+    view: selection.view ? { id: selection.view.id, label: selection.view.label, layout: selection.view.layout ?? null, titleKind: selection.view.titleKind ?? null, sheetLayout: selection.view.sheetLayout ?? null } : null,
     matrix: selection.matrix,
     sortChoice: selection.sortChoice,
     summaryRows,

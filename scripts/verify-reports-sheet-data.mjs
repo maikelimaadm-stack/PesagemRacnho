@@ -326,7 +326,7 @@ const vendasFolha = await run(viewSelection('vendas', PESAGENS), { arrobaDivisor
 assert.equal(vendasFolha.mode, 'DETALHADO', 'Vendas é Detalhado');
 assert.equal(buildReportDocument(vendasFolha).title, 'Relatório de Pesagens Individuais (Sintético)', 'Vendas (Detalhado): título "(Sintético)", como no MAKGESTAO');
 // E1D: a folha de Vendas é o relatório de venda do antigo (layout "vendas", blocos conferidos em reports:vendas-por-comprador).
-assert.deepEqual([buildReportDocument(vendasFolha).layout, buildReportDocument(vendasFolha).vendas.porComprador.title], ['vendas', 'TOTAIS POR COMPRADOR'], 'Vendas: folha no layout do relatório de venda');
+assert.deepEqual([buildReportDocument(vendasFolha).layout, buildReportDocument(vendasFolha).vendas.porGrupo.title], ['vendas', 'TOTAIS POR COMPRADOR'], 'Vendas: folha no layout do relatório de venda');
 assert.equal(buildReportDocument(await run(viewSelection('analitico', PESAGENS), { arrobaDivisor: 30 })).title, 'Relatório de Pesagens Individuais (Analítico)', 'Analítico: título "(Analítico)"');
 assert.equal(apData.reportName, 'Pesagens', 'o nome do relatório (cartão, arquivo, manifesto) continua "Pesagens"');
 const rebanhoFolha = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: viewSelection('padrao', REBANHO) }, ADMIN);

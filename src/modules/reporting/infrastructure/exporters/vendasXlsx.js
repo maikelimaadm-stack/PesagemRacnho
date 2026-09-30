@@ -1,34 +1,34 @@
-// "Vendas (Detalhado)" no XLSX (E1D): os MESMOS blocos da folha (domain/vendasLayout — buildVendasBlocks) numa
-// planilha, na ordem da folha: Métrica | Valor, TOTAIS POR MARCA, TOTAIS POR COMPRADOR e VENDAS POR COMPRADOR
-// (DETALHADO) — no Excel sempre com as vendas de cada comprador (o "Mostrar Detalhes" é só da folha) — e o
-// TOTAL GERAL. Números como números (kg/@/R$ com 2 casas, Qtd inteiro); nenhuma conta aqui. O CSV e o JSON de
-// Vendas continuam o Detalhado (uma linha por venda, subtotal por comprador e total geral).
+// Relatório de venda no XLSX (E1D "Vendas (Detalhado)"; E1E também Comercial › Abates e Compras): os MESMOS blocos
+// da folha (domain/vendasLayout — buildVendasBlocks) numa planilha, na ordem da folha: Métrica | Valor, TOTAIS POR
+// MARCA, TOTAIS POR <grupo> e o bloco DETALHADO — no Excel sempre com os lançamentos de cada grupo (o "Mostrar
+// Detalhes" é só da folha) — e o TOTAL GERAL. Números como números (kg/@/R$ com 2 casas, Qtd inteiro); nenhuma conta
+// aqui. O CSV e o JSON continuam o Detalhado (uma linha por lançamento, subtotal por grupo e total geral).
 import { formatCell } from '../../domain/reportFormatting.js';
 import { buildVendasBlocks, VENDAS_FORMATS } from '../../domain/vendasLayout.js';
 
 // Cabeçalho do cartão/TOTAL GERAL na planilha: na folha a unidade vai no valor ("455,20 kg"); aqui, no cabeçalho.
-const headerOf = (total, animais) => (total.key === 'animais_vendidos' ? animais : total.unit === 'kg' ? `${total.label} (kg)` : total.label);
+const headerOf = (total, animais) => (total.unit === 'animais' ? animais : total.unit === 'kg' ? `${total.label} (kg)` : total.label);
 
 export const XLSX_VENDAS_KINDS = Object.freeze({
   TITLE: 'VENDAS_TITLE', // título do bloco ("TOTAIS POR MARCA", "COMPRADOR: W3")
   HEADER: 'VENDAS_HEADER',
-  ROW: 'VENDAS_ROW', // linha de total (Métrica, marca, comprador, cartão do comprador)
-  DATA: 'VENDAS_DATA', // uma venda
+  ROW: 'VENDAS_ROW', // linha de total (Métrica, marca, grupo, cartão do grupo)
+  DATA: 'VENDAS_DATA', // um lançamento (venda, abate ou compra)
   TOTAL: 'VENDAS_TOTAL', // TOTAL GERAL
   BLANK: 'BLANK',
 });
 
 /**
- * Linhas da planilha de Vendas.
- * @param viewModel resultado de runReport com o tipo "vendas"
+ * Linhas da planilha do relatório de venda.
+ * @param viewModel resultado de runReport com uma visão de sheetLayout (vendas, abates ou compras)
  * @param {{ STYLE: object, numberStyle: Function, metaRows: Function }} kit estilos e cabeçalho do xlsxExporter
  *   (os mesmos das outras planilhas)
  * @returns {{ rows, width, dataHeaders: string[], freeze: { rows: number, cols: number } }}
  */
 export function buildVendasSheetRows(viewModel, { STYLE, numberStyle, metaRows }) {
   const blocks = buildVendasBlocks(viewModel, { showDetails: true });
-  const detailColumns = blocks.compradores.detailColumns ?? [];
-  const rows = metaRows(viewModel, { grouping: 'Comprador · Vendas (Detalhado)' });
+  const detailColumns = blocks.grupos.detailColumns ?? [];
+  const rows = metaRows(viewModel, { grouping: `${blocks.groupLabel} · ${viewModel.view?.label ?? 'Vendas (Detalhado)'}` });
   const blank = () => rows.push({ kind: XLSX_VENDAS_KINDS.BLANK, cells: [] });
   // O título transborda para as células vazias ao lado: não entra na medida da largura da coluna A.
   const title = (text) => rows.push({ kind: XLSX_VENDAS_KINDS.TITLE, overflow: true, cells: [[text, STYLE.group]] });
@@ -43,17 +43,17 @@ export function buildVendasSheetRows(viewModel, { STYLE, numberStyle, metaRows }
 
   header(blocks.resumo.columns.map((column) => column.label));
   for (const row of blocks.resumo.rows) rows.push({ kind: XLSX_VENDAS_KINDS.ROW, key: row.key, cells: [[row.label, STYLE.text], number(row.key, row.value, STYLE.text)] });
-  for (const block of [blocks.porMarca, blocks.porComprador]) {
+  for (const block of [blocks.porMarca, blocks.porGrupo]) {
     blank();
     title(block.title);
     header(block.columns.map((column) => column.label));
     for (const row of block.rows) totalsRow(row.label, row.cells);
   }
   blank();
-  title(blocks.compradores.title);
-  for (const entry of blocks.compradores.items) {
+  title(blocks.grupos.title);
+  for (const entry of blocks.grupos.items) {
     title(entry.title);
-    // Cartão do comprador: os totais dele numa linha (Total = animais distintos).
+    // Cartão do grupo: os totais dele numa linha (Total = animais distintos).
     header(['', ...entry.totals.map((total) => headerOf(total, 'Total (animais)'))]);
     totalsRow(`Total ${entry.label}`, entry.totals, XLSX_VENDAS_KINDS.ROW, STYLE.subtotal);
     header(detailColumns.map((column) => column.label));
