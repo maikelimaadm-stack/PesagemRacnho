@@ -137,9 +137,11 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   const [currentTemplate, setCurrentTemplate] = useState(template ?? null);
   const [printPrompt, setPrintPrompt] = useState(null);
   const [header, setHeader] = useState(null);
-  // E1E: modelos deste relatório para "Abrir modelo" (menu ⋯); null = a tela não abre modelos.
+  // Modelos deste relatório (nomes já usados no "Novo relatório"); null = ainda não carregou.
   const [templates, setTemplates] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // E1F: saída pendente (trocar de relatório/voltar) enquanto a pergunta "Salvar as alterações?" está aberta.
+  const [pendingLeave, setPendingLeave] = useState(null);
   // E1F ("Meus relatórios"): retrato do relatório do usuário de quando abriu ou foi salvo — a tela diferente
   // dele mostra "Salvar alterações" (o último estado nunca grava no modelo). Diálogos Salvar como… / Renomear.
   const [savedSnapshot, setSavedSnapshot] = useState(() => (template ? reportSnapshot(definition, state, actor.role) : null));
@@ -512,6 +514,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   const editableTemplate = allowPreferences && canEditReport(currentTemplate, actor);
   const currentSnapshot = useMemo(() => (currentTemplate && savedSnapshot ? reportSnapshot(definition, state, actor.role) : null), [currentTemplate, savedSnapshot, definition, state, actor.role]);
   const unsaved = Boolean(currentSnapshot) && currentSnapshot !== savedSnapshot;
+  // Devolve true quando gravou (a pergunta "Salvar e sair" só sai depois de salvar de fato).
   const saveChanges = async () => {
     setSavingChanges(true);
     try {
@@ -521,12 +524,19 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       toast.success(`“${saved.name}” salvo.`);
       onTemplatesChanged?.();
       loadTemplates();
+      return true;
     } catch (err) {
       toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode alterar este relatório." : err.message);
+      return false;
     } finally {
       setSavingChanges(false);
     }
   };
+  // E1F: trocar de relatório ou voltar com alteração não salva num relatório do usuário pergunta antes.
+  const guardLeave = (action) => (action ? (...args) => {
+    if (editableTemplate && unsaved) setPendingLeave(() => () => action(...args));
+    else action(...args);
+  } : action);
   const saveAsReport = async ({ name, scope }) => {
     setSavingChanges(true);
     try {
@@ -634,6 +644,20 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       ) : null}
       <ReportGroupingDialog open={dialog === "groups"} onOpenChange={(open) => !open && setDialog(null)} columns={available} groups={state.groups} onApply={setGroups} />
       <ReportTotalsDialog open={dialog === "totals"} onOpenChange={(open) => !open && setDialog(null)} columns={available} aggregates={state.aggregates} animalColumnId={definition.animalColumnId} onApply={(aggregates) => update({ aggregates, summarySort: aggregates.some((spec) => spec.id === state.summarySort?.key) ? state.summarySort : null })} />
+      {/* E1F: sair de um relatório do usuário com alteração não salva (trocar de relatório ou voltar) pergunta antes. */}
+      <Dialog open={Boolean(pendingLeave)} onOpenChange={(open) => !open && setPendingLeave(null)}>
+        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact rpt-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-sm">{`Salvar as alterações em “${currentTemplate?.name ?? ""}”?`}</DialogTitle>
+            <DialogDescription>Você mudou este relatório e ainda não salvou. Sem salvar, ele volta como estava.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPendingLeave(null)}>Cancelar</Button>
+            <Button type="button" variant="outline" onClick={() => { const go = pendingLeave; setPendingLeave(null); go?.(); }}>Sair sem salvar</Button>
+            <Button type="button" className="emp-toolbar-btn-save" disabled={savingChanges} onClick={async () => { const go = pendingLeave; if (await saveChanges()) { setPendingLeave(null); go?.(); } }}>Salvar e sair</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact rpt-dialog">
           <DialogHeader>
@@ -719,7 +743,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           deleteLabel="Excluir relatório…"
           loading={loading}
           backLabel={backLabel}
-          onBack={onBack}
+          onBack={guardLeave(onBack)}
           canExport={can("reports.export")}
           disabled={!viewModel || loading}
           onPrint={() => emitDocument("print")}
@@ -728,9 +752,6 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           onCsv={() => exportAs("csv")}
           onJson={() => exportAs("json")}
           menuLabel={summaryMode ? "Mesma tabela resumida da folha" : "Mesma população e totais da folha"}
-          templates={onOpenTemplate ? templates : null}
-          currentTemplateId={currentTemplate?.id ?? null}
-          onOpenTemplate={onOpenTemplate}
           onSaveTemplate={allowPreferences ? () => setDialog("save") : null}
           onDeleteTemplate={canDeleteTemplate ? () => setConfirmDelete(true) : null}
           onRefresh={() => execute({ reload: true })}
@@ -738,7 +759,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           onToggleEmptyColumns={() => update({ showEmptyColumns: !state.showEmptyColumns })}
         />
         <MakgestaoFilterCard
-          report={reportOptions && onSelectReport ? { value: selectorValue(definition.id, currentTemplate), options: withTemplateOption(reportOptions, currentTemplate), onChange: onSelectReport } : null}
+          report={reportOptions && onSelectReport ? { value: selectorValue(definition.id, currentTemplate), options: withTemplateOption(reportOptions, currentTemplate), onChange: guardLeave(onSelectReport) } : null}
           period={period}
           resolvedPeriod={viewModel?.period ?? null}
           onPeriod={periodParam ? setPeriod : null}

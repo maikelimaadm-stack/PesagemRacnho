@@ -216,7 +216,7 @@ check('ReportView.jsx: tela do MAKGESTAO para todos em Relatórios; Manutenção
   // E1F: título pelo customReports.reportTitle ("Relatório de <sheetTitle ?? title>"; relatório do usuário, o nome dele).
   assert.match(view, /title=\{reportTitle\(definition, currentTemplate\)\}/, 'título "Relatório de <nome>"');
   assert.match(read('src/modules/reporting/application/customReports.js'), /export const reportTitle = \(definition, template = null\) => `Relatório de \$\{template\?\.name \|\| definition\.sheetTitle \|\| definition\.title\}`;/, 'título: nome do relatório (sheetTitle ?? title)');
-  assert.match(view, /report=\{reportOptions && onSelectReport \? \{ value: selectorValue\(definition\.id, currentTemplate\), options: withTemplateOption\(reportOptions, currentTemplate\), onChange: onSelectReport \} : null\}/, 'campo Relatório no cartão');
+  assert.match(view, /report=\{reportOptions && onSelectReport \? \{ value: selectorValue\(definition\.id, currentTemplate\), options: withTemplateOption\(reportOptions, currentTemplate\), onChange: guardLeave\(onSelectReport\) \} : null\}/, 'campo Relatório no cartão (com a pergunta "Salvar as alterações?")');
   assert.match(view, /const buttonColumns = filterButtonsOf\(definition, available\);/, 'botões de filtro pelo reportScreenModel');
   assert.match(view, /params=\{integerParamsOf\(definition\)\.map/, 'parâmetros inteiros no cartão');
   assert.match(view, /quickFiltersOf\(definition\)\.map/, 'filtros rápidos no cartão');
@@ -233,7 +233,9 @@ check('MakgestaoScreen.jsx: campo Relatório, estado atual, ⋯ Abrir/Salvar mod
   assert.match(screen, /aria-label="Relatório"/, 'campo "Relatório"');
   assert.match(screen, /\{report \? <ReportSelect \{\.\.\.report\} \/> : null\}\s*\{onPeriod \?/, '"Relatório" é o primeiro campo da grade');
   assert.ok(screen.includes('Estado atual (hoje)'), 'sem período: "Estado atual (hoje)"');
-  assert.ok(screen.includes('Abrir modelo') && screen.includes('Salvar modelo…'), '⋯: Abrir modelo e Salvar modelo');
+  // E1F: os relatórios salvos abrem pelo campo "Relatório" (Meus relatórios); o ⋯ só salva.
+  assert.ok(screen.includes('Salvar como meu relatório…'), '⋯: Salvar como meu relatório');
+  assert.ok(!/DropdownMenuSubTrigger[^\n]*Abrir modelo/.test(screen), 'NEGATIVO: sem "Abrir modelo" repetido no ⋯');
   assert.match(screen, /\{onBack \? \(/, 'voltar só quando há para onde');
 });
 

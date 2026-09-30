@@ -13,6 +13,9 @@ com os pedidos de 30/09/2026 (E1F). O número mudou para não confundir com os i
 - **Mais filtros…:** filtre por qualquer coluna do relatório.
 - **Novo relatório:** no campo "Relatório", "➕ Novo relatório…" cria um relatório seu (nome, base e quem vê);
   ele aparece em "Meus relatórios", com "Salvar alterações", "Renomear" e "Excluir".
+- Saiu de um relatório seu sem salvar? O programa pergunta **"Salvar as alterações?"**.
+- O Excel, o CSV e o PDF de um relatório seu saem com o nome dele.
+- Menu ⋯ mais limpo: sem o "Abrir modelo" repetido (os seus relatórios abrem pelo campo "Relatório").
 
 ## Atualização
 - Da 1.3.x ou de uma 1.4.0 de teste: faça o backup, feche o programa e rode o **Setup 1.4.1** por cima. Nada

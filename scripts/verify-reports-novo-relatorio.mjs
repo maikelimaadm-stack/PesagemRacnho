@@ -360,7 +360,28 @@ await check('tela: seletor com Meus relatórios, diálogo Novo relatório, Salva
   assert.match(view, /onSaveChanges=\{editableTemplate && unsaved \? saveChanges : null\}/, '"Salvar alterações" só com alteração e permissão');
   assert.match(view, /const tracksViewState = allowPreferences && !template && !preset;/, 'NEGATIVO: com relatório do usuário aberto, o último estado não grava');
   assert.match(view, /value: selectorValue\(definition\.id, currentTemplate\)/, 'campo "Relatório" mostra o relatório do usuário');
+  // Sair com alteração não salva pergunta antes (voltar e trocar de relatório), e "Salvar e sair" só sai se gravou.
+  assert.match(view, /onBack=\{guardLeave\(onBack\)\}/, 'voltar pergunta "Salvar as alterações?"');
+  assert.match(view, /onChange: guardLeave\(onSelectReport\)/, 'trocar de relatório pergunta "Salvar as alterações?"');
+  assert.match(view, /if \(editableTemplate && unsaved\) setPendingLeave/, 'só pergunta com alteração não salva e permissão');
+  assert.match(view, /if \(await saveChanges\(\)\) \{ setPendingLeave\(null\); go\?\.\(\); \}/, '"Salvar e sair" só sai depois de gravar');
 });
+
+// E1F: o relatório do usuário sai com o nome dele no arquivo e no Excel (título e aba); sem nome, o da base.
+{
+  const { exportFileName } = await import('../src/modules/reporting/application/reportExportService.js');
+  const { buildXlsx, unzipStored } = await import('../src/modules/reporting/infrastructure/exporters/xlsxExporter.js');
+  const nomeado = await runReport('pesagens', { today: TODAY, sheetTitle: 'Pesagem por Marca' }, ADMIN);
+  assert.equal(nomeado.exportName, 'Pesagem por Marca', 'view model leva o nome do relatório do usuário');
+  assert.match(exportFileName(nomeado, 'xlsx'), /^pesagem-por-marca_\d{8}-\d{6}_[0-9a-f-]{8}\.xlsx$/, 'arquivo com o nome do relatório do usuário');
+  const files = unzipStored(buildXlsx(nomeado, {}));
+  assert.ok(files['xl/workbook.xml'].includes('name="Pesagem por Marca"'), 'aba do Excel com o nome');
+  assert.ok(files['xl/worksheets/sheet1.xml'].includes('Pesagem por Marca'), 'título do Excel com o nome');
+  const base = await runReport('pesagens', { today: TODAY }, ADMIN);
+  assert.equal(base.exportName, null, 'NEGATIVO: sem relatório do usuário, sem nome próprio');
+  assert.match(exportFileName(base, 'xlsx'), /^pesagens_/, 'NEGATIVO: a base sai com o nome dela');
+  checks.push('nome do relatório do usuário no arquivo e no Excel');
+}
 
 await resetDb();
 console.log(JSON.stringify({ gate: 'reports:novo-relatorio:verify', ok: true, created, checks }, null, 2));

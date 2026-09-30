@@ -17,6 +17,13 @@ A 1.4.0 com os pedidos de 30/09/2026 (E1F). Esquema Dexie **8** e backup **forma
 - **Novo relatório:** "➕ Novo relatório…" no campo Relatório (nome, base, quem vê) cria um relatório seu — um
   modelo, sem esquema novo — que aparece em "Meus relatórios", com "Salvar alterações", "Salvar como…",
   "Renomear" e "Excluir"; título da folha com o nome dele; nunca amplia permissão.
+- **Relatório do usuário:** ao trocar de relatório ou voltar com alterações não salvas, a pergunta "Salvar as
+  alterações?" (Salvar e sair / Sair sem salvar / Cancelar); Excel, CSV e PDF saem com o nome dele (arquivo,
+  aba e título).
+
+### Changed (E1F)
+- Menu ⋯: sai o "Abrir modelo" (repetido — os relatórios salvos abrem pelo campo Relatório, em "Meus
+  relatórios"); "Salvar modelo…" passa a se chamar "Salvar como meu relatório…".
 - Gates novos: `reports:colunas-todas` (2.159 combinações relatório × tipo × opção de Colunas),
   `reports:cabecalho-interativo` e `reports:novo-relatorio`.
 

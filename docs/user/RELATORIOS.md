@@ -16,7 +16,8 @@ notas existem só na folha.
    OPERADOR e CONSULTA, Controle. Só aparecem os que o seu perfil pode abrir.
 3. Cada relatório tem os seus **tipos**, no campo **Tipo Relatório** (item 5).
 
-**Modelos salvos:** no menu **⋯** (ao lado de Imprimir) ficam **Abrir modelo** e **Salvar modelo**.
+**Relatórios salvos:** no menu **⋯** (ao lado de Imprimir) fica **Salvar como meu relatório…**. Os relatórios
+que você salvou abrem pelo próprio campo **Relatório**, no grupo **Meus relatórios**.
 
 O relatório **lembra como você o deixou** (tipo, período, filtros, orientação, colunas): ao voltar nele,
 abre do mesmo jeito. Isso vale só para o seu usuário. Links e modelos de versões anteriores continuam
@@ -72,6 +73,11 @@ Ele abre como um relatório ("Relatório de Pesagem por Marca"). Ajuste pelo tí
 Tipo Relatório. Quando houver mudança, aparece **Salvar alterações** ao lado de Imprimir. No menu ⋯ ficam **Salvar
 como…**, **Renomear** e **Excluir**. Os seus relatórios aparecem no campo **Relatório**, no grupo **Meus
 relatórios**. Um relatório seu nunca mostra mais do que o seu perfil pode ver.
+
+Se você mudou um relatório seu e tenta trocar de relatório ou voltar sem salvar, o programa pergunta
+**Salvar as alterações?** — **Salvar e sair**, **Sair sem salvar** (volta como estava) ou **Cancelar**.
+O Excel, o CSV e o PDF de um relatório seu saem com o nome dele (ex.: `pesagem-por-marca_….xlsx`, e a aba
+e o título do Excel "Pesagem por Marca").
 
 ## 3. Resumido ou Detalhado
 
@@ -279,7 +285,7 @@ Como ler:
 
 ## 10. Salvar modelo
 
-Botão **Salvar modelo** (disquete): guarda colunas, filtros, período, agrupamento, totais, **Resumido ou
+**Salvar como meu relatório…** (menu ⋯, disquete; abre a janela "Salvar modelo"): guarda colunas, filtros, período, agrupamento, totais, **Resumido ou
 Detalhado** e a ordem do Resumido — **nunca os dados**.
 
 | Visibilidade | Quem vê | Quem pode criar |

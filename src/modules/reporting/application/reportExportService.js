@@ -26,7 +26,8 @@ function slug(text) {
 
 export function exportFileName(viewModel, extension) {
   const stamp = String(viewModel.generatedAt).replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
-  return `${slug(viewModel.reportName)}_${stamp}_${String(viewModel.emissionId).slice(0, 8)}.${extension}`;
+  // E1F: relatório do usuário sai com o nome dele ("pesagem-por-marca_…"); os outros, com o da base.
+  return `${slug(viewModel.exportName ?? viewModel.reportName)}_${stamp}_${String(viewModel.emissionId).slice(0, 8)}.${extension}`;
 }
 
 /** Manifesto da emissão (sem sha256 — preenchido depois de gerar o conteúdo). */

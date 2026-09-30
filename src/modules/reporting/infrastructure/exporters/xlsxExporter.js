@@ -78,7 +78,7 @@ function metaRows(viewModel, { grouping: groupingText = null } = {}) {
   const grouping = viewModel.groups.length ? viewModel.groups.map((group) => group.label).join(' › ') : 'Sem agrupamento';
   const mode = viewModel.mode === 'RESUMIDO' ? ' · Resumido (uma linha por grupo)' : ' · Detalhado';
   return [
-    { kind: 'TITLE', cells: [[viewModel.reportName, STYLE.title]] },
+    { kind: 'TITLE', cells: [[viewModel.exportName ?? viewModel.reportName, STYLE.title]] },
     { kind: 'META', cells: [['Período', STYLE.meta], [viewModel.period ? describePeriod(viewModel.period) : 'Estado atual', null]] },
     { kind: 'META', cells: [['Filtros', STYLE.meta], [describeFilters(viewModel), null]] },
     { kind: 'META', cells: [['Agrupado por', STYLE.meta], [groupingText ?? `${grouping}${mode}`, null]] },
@@ -269,7 +269,7 @@ function workbookFiles(viewModel, manifest) {
     '_rels/.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`,
     'xl/workbook.xml': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escapeXml(sanitizeSheetName(viewModel.reportName))}" sheetId="1" r:id="rId1"/><sheet name="Manifesto" sheetId="2" r:id="rId2"/></sheets></workbook>`,
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escapeXml(sanitizeSheetName(viewModel.exportName ?? viewModel.reportName))}" sheetId="1" r:id="rId1"/><sheet name="Manifesto" sheetId="2" r:id="rId2"/></sheets></workbook>`,
     'xl/_rels/workbook.xml.rels': `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`,
     'xl/styles.xml': STYLES_XML,

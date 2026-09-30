@@ -214,9 +214,9 @@ export function MakgestaoMoreFilters({ columns, onChange }) {
 
 /**
  * Topo do antigo (L509–518): título grande + "Análise e impressão" à esquerda; à direita o Imprimir verde.
- * Discretos ao lado dele: Excel, PDF e o menu "⋯" (CSV, JSON, Abrir/Salvar modelo, Atualizar, colunas vazias).
- * @param templates E1E: modelos deste relatório para "Abrir modelo" (null = sem modelos nesta tela, ex.
- *   fora de Relatórios); onOpenTemplate(modelo). onDeleteTemplate: só com o modelo aberto e permissão.
+ * Discretos ao lado dele: Excel, PDF e o menu "⋯" (CSV, JSON, Salvar como meu relatório, Atualizar, colunas vazias).
+ * Os relatórios salvos abrem pelo campo "Relatório" ("Meus relatórios"). onDeleteTemplate: só com o relatório
+ * salvo aberto e permissão.
  * E1F (relatório do usuário aberto — "Meus relatórios"): baseNote = "base · quem vê" no subtítulo;
  *   onSaveChanges = "Salvar alterações" ao lado do Imprimir (só com alteração não salva e permissão); no ⋯,
  *   onSaveAs "Salvar como…" (no lugar de "Salvar modelo…"), onRename "Renomear…" e o Excluir (deleteLabel).
@@ -224,7 +224,7 @@ export function MakgestaoMoreFilters({ columns, onChange }) {
 export function MakgestaoTopBar({
   title, templateName = null, loading = false, backLabel = "Relatórios", onBack = null,
   canExport, disabled, onPrint, onExcel, onPdf, onCsv, onJson, menuLabel,
-  templates = null, currentTemplateId = null, onOpenTemplate = null, onSaveTemplate = null, onDeleteTemplate = null,
+  onSaveTemplate = null, onDeleteTemplate = null,
   baseNote = null, onSaveChanges = null, savingChanges = false, onSaveAs = null, onRename = null, deleteLabel = null,
   onRefresh, showEmptyColumns, onToggleEmptyColumns,
 }) {
@@ -269,21 +269,9 @@ export function MakgestaoTopBar({
                 <DropdownMenuSeparator />
               </>
             ) : null}
-            {templates && onOpenTemplate ? (
-              <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="text-xs"><FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />Abrir modelo</DropdownMenuSubTrigger>
-                <DropdownMenuSubContent className="rpt-mak-menu rpt-mak-menu--templates">
-                  {templates.length ? templates.map((template) => (
-                    <DropdownMenuItem key={template.id} className="text-xs" disabled={template.id === currentTemplateId} onClick={() => onOpenTemplate(template)}>
-                      {template.scope === "SHARED" ? <Users className="h-3.5 w-3.5" aria-hidden="true" /> : <FileText className="h-3.5 w-3.5" aria-hidden="true" />}
-                      {template.name}
-                    </DropdownMenuItem>
-                  )) : <DropdownMenuItem className="text-xs" disabled>Nenhum modelo salvo deste relatório</DropdownMenuItem>}
-                </DropdownMenuSubContent>
-              </DropdownMenuSub>
-            ) : null}
+            {/* E1F: os relatórios salvos abrem pelo campo "Relatório" (grupo "Meus relatórios") — sem "Abrir modelo" repetido aqui. */}
             {onSaveAs ? <DropdownMenuItem className="text-xs" onClick={onSaveAs}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar como…</DropdownMenuItem>
-              : onSaveTemplate ? <DropdownMenuItem className="text-xs" onClick={onSaveTemplate}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar modelo…</DropdownMenuItem> : null}
+              : onSaveTemplate ? <DropdownMenuItem className="text-xs" onClick={onSaveTemplate}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar como meu relatório…</DropdownMenuItem> : null}
             {onRename ? <DropdownMenuItem className="text-xs" onClick={onRename}><PencilLine className="h-3.5 w-3.5" aria-hidden="true" />Renomear…</DropdownMenuItem> : null}
             {onDeleteTemplate ? <DropdownMenuItem className="text-xs" onClick={onDeleteTemplate}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />{deleteLabel ?? <>Excluir modelo “{templateName}”…</>}</DropdownMenuItem> : null}
             <DropdownMenuSeparator />

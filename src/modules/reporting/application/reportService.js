@@ -421,6 +421,8 @@ export async function runReport(definitionOrId, request = {}, actor) {
     // Nome no título da folha (E1C: Pesagens → "Pesagens Individuais"); os demais usam o próprio nome.
     // E1F: relatório do usuário (modelo aberto) → o nome dele ("Relatório de <nome>"), pedido pela tela.
     sheetTitle: requestedSheetTitle(request.sheetTitle) ?? selection.view?.sheetTitle ?? definition.sheetTitle ?? definition.title,
+    // E1F: nome do relatório do usuário ("Meus relatórios") no arquivo e no título do Excel/CSV/PDF; null = o da base.
+    exportName: requestedSheetTitle(request.sheetTitle),
     reportDefinitionVersion: definition.version,
     // Aberto por id antigo consolidado (favorito/modelo/link de antes da 1.4.0). A tela chama com o id
     // novo e a seleção já aplicada, e informa a visão em `request.presetId` só para rastreabilidade.
