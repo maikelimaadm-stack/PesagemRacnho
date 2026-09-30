@@ -157,7 +157,7 @@ assert.ok(mesmo.stats.strategy.endsWith('+reuse'), 'mesmo divisor: reaproveita (
 checkArroba(mesmo, 15, 'reuse com o mesmo divisor');
 
 // ---- 4. Machos/Fêmeas, animais com pesagem anterior, filtro Pesagem anterior ----
-// A1 macho (L1), A2 fêmea (L2), A3 macho (L1), A4 fêmea (sem lote); com anterior: A1 (e2, e3) e A2 (e5).
+// A1 macho (L1), A2 fêmea (L2), A3 macho (L1), A4 fêmea (sem lote); com anterior: A1 (e2, e3) e A2 (e5, e6).
 const contagens = await run({ mode: 'RESUMIDO', groups: [{ columnId: 'nome_lote' }], aggregates: [...SHEET_TOTALS, { id: 'n_anterior', columnId: 'animais_com_anterior', op: 'countDistinct' }] }, { arrobaDivisor: 30 });
 const sexo = Object.fromEntries(contagens.summaryRows.map((row) => [row.label, [value(row, 'machos'), value(row, 'femeas'), value(row, 'n_anterior'), value(row, 'qtd')]]));
 assert.deepEqual(sexo, { 'Lote 01': [2, 0, 1, 2], 'Lote 02': [0, 1, 1, 1], 'Não informado': [0, 1, 0, 1] }, 'Machos, Fêmeas, com anterior e Qtd por lote (0 onde não há)');
@@ -172,7 +172,8 @@ const com = await run({ mode: 'DETALHADO', groups: [], filters: { tem_pesagem_an
 const sem = await run({ mode: 'DETALHADO', groups: [], filters: { tem_pesagem_anterior: { operator: 'equals', value: false } } });
 const preenchida = await run({ mode: 'DETALHADO', groups: [], filters: { data_anterior: { operator: 'not_empty' } } });
 const vazia = await run({ mode: 'DETALHADO', groups: [], filters: { data_anterior: { operator: 'empty' } } });
-assert.deepEqual(ids(com), ['e2', 'e3', 'e5'], 'Com pesagem anterior: e2, e3, e5');
+// E1G: a saída de venda com peso (e6) também grava a pesagem anterior.
+assert.deepEqual(ids(com), ['e2', 'e3', 'e5', 'e6'], 'Com pesagem anterior: e2, e3, e5 e a saída com peso e6');
 assert.deepEqual(ids(com), ids(preenchida), 'sim = data anterior preenchida');
 assert.deepEqual(ids(sem), ids(vazia), 'não = data anterior vazia');
 assert.equal(ids(com).length + ids(sem).length, detalhe.rowCount, 'sim + não = população');
@@ -384,11 +385,12 @@ assert.deepEqual(porLote30.metricLabels.qtd, 'Qtd', 'vm.metricLabels');
 const cells = Object.fromEntries(layout30.rows.map((row) => [row.label, row.cells]));
 // Lote 01: 300, 330, 345, 410 (+ e8 sem peso) → médio 346,25; total 1385; ganho 30 + 15 em 20 + 20 dias.
 assert.deepEqual(cells['Lote 01'], ['Lote 01', '2', '300,0', '400,0', '300,0', '410,0', '346,3', '11,54', '1.385,0', '46,17', '22,5', '0,75', '45,0', '1,50', '20,0', '1,125', '2', '0'], 'Lote 01: kg 1 casa, @ 2, GMD 3');
-// Lote 02: 250, 260, 280 → médio 263,33; total 790; ganho 10 em 10 dias.
-assert.deepEqual(cells['Lote 02'], ['Lote 02', '1', '200,0', '300,0', '250,0', '280,0', '263,3', '8,78', '790,0', '26,33', '10,0', '0,33', '10,0', '0,33', '10,0', '1,000', '0', '1'], 'Lote 02');
+// Lote 02: 250, 260, 280 → médio 263,33; total 790; ganho 10 em 10 dias e (E1G) 20 em 21 dias na saída com peso.
+assert.deepEqual(cells['Lote 02'], ['Lote 02', '1', '200,0', '300,0', '250,0', '280,0', '263,3', '8,78', '790,0', '26,33', '15,0', '0,50', '30,0', '1,00', '15,5', '0,968', '0', '1'], 'Lote 02');
 assert.deepEqual(cells['Não informado'], ['Não informado', '1', '—', '—', '200,0', '200,0', '200,0', '6,67', '200,0', '6,67', '—', '—', '—', '—', '—', '—', '0', '1'], 'sem lote: faixa e GMD "—" (nunca 0,000)');
 // Faixa exigida é do lote: no Total geral fica vazia (não é a faixa de nenhum lote).
-assert.deepEqual(cells['Total geral'], ['Total geral', '4', '', '', '200,0', '410,0', '296,9', '9,90', '2.375,0', '79,17', '18,3', '0,61', '55,0', '1,83', '16,7', '1,100', '2', '2'], 'Total geral recalculado sobre a população');
+// E1G: ganhos 30, 15, 10 e 20 (saída com peso) em 20, 20, 10 e 21 dias → GMD 75/71, o mesmo do Desempenho.
+assert.deepEqual(cells['Total geral'], ['Total geral', '4', '', '', '200,0', '410,0', '296,9', '9,90', '2.375,0', '79,17', '18,8', '0,63', '75,0', '2,50', '17,8', '1,056', '2', '2'], 'Total geral recalculado sobre a população');
 const layout15 = buildSummaryLayout(porLote15, 'screen');
 assert.equal(layout15.rows.at(-1).cells[layout15.headers.indexOf('Total (@)')], '158,33', 'divisor 15: Total (@) = 2.375 ÷ 15');
 const metrics = Object.fromEntries(summaryMetrics(porLote30).map((metric) => [metric.key, metric.column]));

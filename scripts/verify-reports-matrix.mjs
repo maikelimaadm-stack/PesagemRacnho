@@ -164,16 +164,16 @@ function checkMatrix(name, vm, expected) {
 }
 
 // 2×2 — Sexo × Mês (ago–set/2026): Macho = A1 (300, 330 +30/20 d, 345 +15/20 d) + A3 (410, saída sem peso);
-// Fêmea = A2 (250, 260 +10/10 d, saída 280) + A4 (200, sem anterior).
+// Fêmea = A2 (250, 260 +10/10 d, saída 280 +20/21 d — E1G: a saída com peso tem GMD) + A4 (200, sem anterior).
 const vm22 = await run(AGO_SET, { matrix: { eixoY: 'sexo', eixoX: 'mes' } });
 assert.deepEqual(vm22.groups.map((level) => level.columnId), ['sexo', 'mes_pesagem'], '2×2: grupos = [eixo Y, eixo X]');
 const case22 = checkMatrix('2×2 Sexo × Mês', vm22, {
   rows: ['Fêmea', 'Macho'],
   columns: ['ago/2026', 'set/2026'],
   cells: {
-    Fêmea: { 'ago/2026': [1, 255, 1], 'set/2026': [2, 240, null], TOTAL: [2, 247.5, 1] },
+    Fêmea: { 'ago/2026': [1, 255, 1], 'set/2026': [2, 240, 20 / 21], TOTAL: [2, 247.5, 30 / 31] },
     Macho: { 'ago/2026': [2, 1040 / 3, 1.5], 'set/2026': [2, 345, 0.75], TOTAL: [2, 346.25, 45 / 40] },
-    TOTAL: { 'ago/2026': [3, 310, 40 / 30], 'set/2026': [4, 275, 0.75], TOTAL: [4, 296.875, 55 / 50] },
+    TOTAL: { 'ago/2026': [3, 310, 40 / 30], 'set/2026': [4, 275, 35 / 41], TOTAL: [4, 296.875, 75 / 71] },
   },
 });
 {
@@ -189,30 +189,30 @@ const case22 = checkMatrix('2×2 Sexo × Mês', vm22, {
   // GMD ponderado: coluna ago/2026 = (10 + 30) ÷ (10 + 20) = 1,333 — a média simples dos GMD daria 1,25.
   close(case22.matrix.totalRow.cells[0].aggregates.gmd_medio.value, 40 / 30, '2×2: GMD ponderado da coluna ago/2026');
   assert.ok(Math.abs(case22.matrix.totalRow.cells[0].aggregates.gmd_medio.value - 1.25) > 0.05, '2×2: GMD não é a média simples');
-  // GMD sem pesagem anterior: "—" na folha (nunca "0,000") e célula vazia no XLSX.
+  // E1G: a venda da A2 (260 → 280 em 21 d) dá GMD à Fêmea × set/2026 (o "-" do ausente é conferido no 3×4).
   const femeaSet = case22.docRows[0].cells[2];
-  // E1D visual: kg inteiro e "-" no ausente, como a célula do antigo (os números continuam os do motor, em raw).
-  assert.deepEqual(femeaSet.lines, ['2', '240 kg', '-'], '2×2: Fêmea × set/2026 = 2 / 240 kg / -');
+  // E1D visual: kg inteiro e 3 casas no GMD, como a célula do antigo (os números continuam os do motor, em raw).
+  assert.deepEqual(femeaSet.lines, ['2', '240 kg', '0,952'], '2×2: Fêmea × set/2026 = 2 / 240 kg / 0,952');
   assert.deepEqual(case22.docRows[1].cells[1].lines, ['2', '347 kg', '1,500'], '2×2: Macho × ago/2026 = 2 / 347 kg (346,67) / 1,500');
-  assert.deepEqual(case22.docRows[2].cells[3].lines, ['4', '297 kg', '1,100'], '2×2: canto = 4 / 297 kg (296,875) / 1,100');
+  assert.deepEqual(case22.docRows[2].cells[3].lines, ['4', '297 kg', '1,056'], '2×2: canto = 4 / 297 kg (296,875) / 1,056');
   results.push({ caso: '2×2 Sexo × Mês', celulas: case22.cells });
 }
 
 // 3×4 — Lote × Mês (dez/2025–set/2026), conferido à mão (Σ kg ÷ n; Σ ganho ÷ Σ dias só com anterior):
 //   Lote 01 = A7 (250; 262 +12/30) + A5 (215 +15/20; 236 +21/30) + A1 + A3 → 4 cabeças, 2.348 kg ÷ 8, 93 ÷ 120;
-//   Lote 02 = A5 (200) + A2 (250; 260 +10/10; saída 280) → 2 cabeças, 990 ÷ 4, 10 ÷ 10;
+//   Lote 02 = A5 (200) + A2 (250; 260 +10/10; saída 280 +20/21) → 2 cabeças, 990 ÷ 4, 30 ÷ 31 (E1G);
 //   Não informado = A6 (180) + A4 (200) → sem anterior: GMD "—";
 //   dez/2025 = A5 (Lote 02 e Lote 01) + A7 → 2 cabeças (a soma da coluna daria 3); canto = 7 cabeças (a soma da
-//   coluna TOTAL daria 8), 3.718 kg ÷ 14, 103 ÷ 130.
+//   coluna TOTAL daria 8), 3.718 kg ÷ 14, 123 ÷ 151.
 const vm34 = await run(DEZ_SET, { matrix: { eixoY: 'lote', eixoX: 'mes' } });
 const case34 = checkMatrix('3×4 Lote × Mês', vm34, {
   rows: ['Lote 01', 'Lote 02', 'Não informado'],
   columns: ['dez/2025', 'jan/2026', 'ago/2026', 'set/2026'],
   cells: {
     'Lote 01': { 'dez/2025': [2, 232.5, 0.75], 'jan/2026': [2, 249, 33 / 60], 'ago/2026': [2, 1040 / 3, 1.5], 'set/2026': [2, 345, 0.75], TOTAL: [4, 293.5, 93 / 120] },
-    'Lote 02': { 'dez/2025': [1, 200, null], 'jan/2026': null, 'ago/2026': [1, 255, 1], 'set/2026': [1, 280, null], TOTAL: [2, 247.5, 1] },
+    'Lote 02': { 'dez/2025': [1, 200, null], 'jan/2026': null, 'ago/2026': [1, 255, 1], 'set/2026': [1, 280, 20 / 21], TOTAL: [2, 247.5, 30 / 31] },
     'Não informado': { 'dez/2025': null, 'jan/2026': [1, 180, null], 'ago/2026': null, 'set/2026': [1, 200, null], TOTAL: [2, 190, null] },
-    TOTAL: { 'dez/2025': [2, 665 / 3, 0.75], 'jan/2026': [3, 226, 33 / 60], 'ago/2026': [3, 310, 40 / 30], 'set/2026': [4, 275, 0.75], TOTAL: [7, 3718 / 14, 103 / 130] },
+    TOTAL: { 'dez/2025': [2, 665 / 3, 0.75], 'jan/2026': [3, 226, 33 / 60], 'ago/2026': [3, 310, 40 / 30], 'set/2026': [4, 275, 35 / 41], TOTAL: [7, 3718 / 14, 123 / 151] },
   },
 });
 {
@@ -223,6 +223,8 @@ const case34 = checkMatrix('3×4 Lote × Mês', vm34, {
   const lote01 = case34.matrix.rows[0];
   const meanOfCells = lote01.cells.reduce((sum, node) => sum + node.aggregates.gmd_medio.value, 0) / lote01.cells.length;
   assert.ok(Math.abs(meanOfCells - lote01.total.aggregates.gmd_medio.value) > 0.05, '3×4: GMD do TOTAL do Lote 01 = 93 ÷ 120 (0,775), não média das células (0,8875)');
+  // GMD sem pesagem anterior: "-" na folha (nunca "0,000"): Não informado × set/2026 (A4, só o Cadastro).
+  assert.deepEqual(case34.docRows[2].cells[4].lines, ['1', '200 kg', '-'], '3×4: Não informado × set/2026 = 1 / 200 kg / -');
   results.push({ caso: '3×4 Lote × Mês', celulas: case34.cells });
 }
 
@@ -245,17 +247,17 @@ const case34 = checkMatrix('3×4 Lote × Mês', vm34, {
     },
   });
   filteredCases.push(['filtro Sexo = Macho', vmMacho]);
-  // "Pesagem anterior: Com" (só pesagens com anterior — a Saída não tem): A5 215 (dez), A7 262 e A5 236 (jan),
-  //   A1 330 (ago, Lote 01), A2 260 (ago, Lote 02), A1 345 (set). TOTAL do Lote 01 = 3 cabeças, 1.388 ÷ 5 kg;
-  //   ago/2026 = 2 cabeças, 590 ÷ 2, 40 ÷ 30; canto = 4 cabeças, 1.648 ÷ 6, 103 ÷ 130.
+  // "Pesagem anterior: Com" (pesagens com anterior — E1G: a saída com peso também): A5 215 (dez), A7 262 e A5 236 (jan),
+  //   A1 330 (ago, Lote 01), A2 260 (ago, Lote 02), A1 345 e a venda da A2 280 (set). TOTAL do Lote 01 = 3 cabeças,
+  //   1.388 ÷ 5 kg; ago/2026 = 2 cabeças, 590 ÷ 2, 40 ÷ 30; canto = 4 cabeças, 1.928 ÷ 7, 123 ÷ 151.
   const vmCom = await run(DEZ_SET, { matrix: { eixoY: 'lote', eixoX: 'mes' }, filters: { tem_pesagem_anterior: { operator: 'equals', value: true } } });
   checkMatrix('Pesagem anterior: Com', vmCom, {
     rows: ['Lote 01', 'Lote 02'],
     columns: ['dez/2025', 'jan/2026', 'ago/2026', 'set/2026'],
     cells: {
       'Lote 01': { 'dez/2025': [1, 215, 0.75], 'jan/2026': [2, 249, 33 / 60], 'ago/2026': [1, 330, 1.5], 'set/2026': [1, 345, 0.75], TOTAL: [3, 1388 / 5, 93 / 120] },
-      'Lote 02': { 'dez/2025': null, 'jan/2026': null, 'ago/2026': [1, 260, 1], 'set/2026': null, TOTAL: [1, 260, 1] },
-      TOTAL: { 'dez/2025': [1, 215, 0.75], 'jan/2026': [2, 249, 33 / 60], 'ago/2026': [2, 295, 40 / 30], 'set/2026': [1, 345, 0.75], TOTAL: [4, 1648 / 6, 103 / 130] },
+      'Lote 02': { 'dez/2025': null, 'jan/2026': null, 'ago/2026': [1, 260, 1], 'set/2026': [1, 280, 20 / 21], TOTAL: [1, 270, 30 / 31] },
+      TOTAL: { 'dez/2025': [1, 215, 0.75], 'jan/2026': [2, 249, 33 / 60], 'ago/2026': [2, 295, 40 / 30], 'set/2026': [2, 312.5, 35 / 41], TOTAL: [4, 1928 / 7, 123 / 151] },
     },
   });
   filteredCases.push(['Pesagem anterior: Com', vmCom]);
@@ -344,8 +346,8 @@ const caseSameName = checkMatrix('lotes de mesmo nome', vmSameName, {
   const byMetric = async (key, direction) => buildMatrix(await run(DEZ_SET, { matrix: { eixoY: 'lote', eixoX: 'mes' }, summarySort: { key, direction } })).rows.map((row) => row.label);
   assert.deepEqual(await byMetric('peso_medio', 'desc'), ['Lote 01', 'Lote 02', 'Não informado'], 'Peso (Maior): 293,5 › 247,5 › "Não informado" no fim');
   assert.deepEqual(await byMetric('peso_medio', 'asc'), ['Lote 02', 'Lote 01', 'Não informado'], 'Peso (Menor): 247,5 › 293,5 › "Não informado" no fim (mesmo com 190)');
-  assert.deepEqual(await byMetric('gmd_medio', 'desc'), ['Lote 02', 'Lote 01', 'Não informado'], 'GMD (Maior): 1,000 › 0,775 › sem GMD no fim');
-  assert.deepEqual(await byMetric('gmd_medio', 'asc'), ['Lote 01', 'Lote 02', 'Não informado'], 'GMD (Menor): 0,775 › 1,000 › sem GMD no fim');
+  assert.deepEqual(await byMetric('gmd_medio', 'desc'), ['Lote 02', 'Lote 01', 'Não informado'], 'GMD (Maior): 0,968 › 0,775 › sem GMD no fim');
+  assert.deepEqual(await byMetric('gmd_medio', 'asc'), ['Lote 01', 'Lote 02', 'Não informado'], 'GMD (Menor): 0,775 › 0,968 › sem GMD no fim');
   // As colunas não mudam com a ordem das linhas.
   assert.deepEqual(buildMatrix(await run(DEZ_SET, { matrix: { eixoY: 'lote', eixoX: 'mes' }, summarySort: { key: 'peso_medio', direction: 'asc' } })).columns.map((column) => column.label), months, 'ordem das linhas não mexe nas colunas');
   results.push({ caso: 'ordem', meses: months, linhasRaca: racaMes.rows.map((row) => row.label) });
@@ -484,7 +486,7 @@ function assertMatrixCellTexts(name, doc) {
   assertMatrixCellTexts('3×4', doc);
   assert.deepEqual(rows[0].cells[1].lines, ['2', '233 kg', '0,750'], 'folha: Lote 01 × dez/2025 (232,5 kg)');
   assert.deepEqual(rows[1].cells[2].lines, [], 'folha: Lote 02 × jan/2026 vazio');
-  assert.deepEqual(rows[3].cells[5].lines, ['7', '266 kg', '0,792'], 'folha: canto (265,57 kg)');
+  assert.deepEqual(rows[3].cells[5].lines, ['7', '266 kg', '0,815'], 'folha: canto (265,57 kg; E1G: GMD 123 ÷ 151 com a venda da A2)');
   // Negativos: o ganho negativo (B1) sai "-0,500" com o sinal, alinhado sob a coluna do seu lote.
   const negDoc = caseSameName.doc;
   assert.equal(assertMatrixCellTexts('ganho negativo', negDoc), 2, 'ganho negativo: 2 células com GMD negativo (Macho e TOTAL × Lote 01 · Engorda)');
@@ -668,14 +670,14 @@ for (const [name, vm] of xlsxCases) {
   results.push({ caso: `XLSX ${name}`, celulasComparadas: compared });
 }
 {
-  // Números conferidos à mão também no arquivo: Lote 01 × dez/2025 = 2 / 232,5 / 0,750; canto = 7 / 265,6 / 0,792.
+  // Números conferidos à mão também no arquivo: Lote 01 × dez/2025 = 2 / 232,5 / 0,750; canto = 7 / 265,6 / 0,815 (E1G).
   const { rows } = keptXlsx['3×4 Lote × Mês'];
   const pick = (row, first) => [row.cells[first].value, row.cells[first + 1].value, row.cells[first + 2].value];
   const body = rows.slice(HEADER_ROW + 1);
   assert.deepEqual(pick(body[0], 1), [2, 232.5, 0.75], 'XLSX: Lote 01 × dez/2025');
   assert.deepEqual(pick(body[1], 4), [null, null, null], 'XLSX: Lote 02 × jan/2026 vazio');
   assert.deepEqual(pick(body[1], 1), [1, 200, null], 'XLSX: Lote 02 × dez/2025 com GMD vazio (sem anterior)');
-  assert.deepEqual(pick(body[3], 13), [7, 265.6, 0.792], 'XLSX: canto');
+  assert.deepEqual(pick(body[3], 13), [7, 265.6, 0.815], 'XLSX: canto');
   // Lotes de mesmo nome: cabeçalhos distintos (com a apartação) e o ganho negativo como número negativo.
   const same = keptXlsx['lotes de mesmo nome (ganho negativo)'].rows;
   assert.deepEqual(same[HEADER_ROW - 1].cells.map((cell) => cell.value).filter(Boolean), ['Sexo', 'Lote 01 · Engorda', 'Lote 01 · Recria', 'TOTAL'], 'XLSX: lotes de mesmo nome com a apartação no cabeçalho');

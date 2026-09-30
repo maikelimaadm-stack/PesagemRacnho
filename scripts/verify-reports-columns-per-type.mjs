@@ -213,14 +213,15 @@ assert.equal(definition.defaultSortChoice, 'data_desc', 'padrão: Data (Mais Rec
 assert.deepEqual(Object.keys(SORT_CHOICE_RULES), PESAGENS_SORT_CHOICES.map((choice) => choice.id), 'cada opção tem regra');
 
 // Analítico (Detalhado, sem grupo): ordem REAL das linhas.
-const NULOS_GMD = ['x8', 'x3', 'e9', 'x9', 'e6', 'e8', 'x6', 'e7', 'e4', 'x4', 'x1', 'e1'];
+// E1G: as saídas com peso (x3 5,0; x8 2,5; e6 0,952) têm GMD contra a pesagem anterior e saem dos "sem GMD".
+const NULOS_GMD = ['e9', 'x9', 'e8', 'x6', 'e7', 'e4', 'x4', 'x1', 'e1'];
 const ANALITICO_ORDENS = {
   data_desc: ['x8', 'x3', 'e9', 'x5', 'x9', 'x7', 'x2', 'e3', 'e6', 'e8', 'x6', 'e2', 'e5', 'e7', 'e4', 'x4', 'x1', 'e1'],
   data_asc: ['x4', 'x1', 'e1', 'e4', 'e7', 'e5', 'x6', 'e2', 'e8', 'e6', 'x5', 'x9', 'x7', 'x2', 'e3', 'x8', 'x3', 'e9'],
   peso_desc: ['e7', 'x9', 'x8', 'x7', 'e3', 'x3', 'e2', 'x2', 'x6', 'e1', 'e6', 'x1', 'e5', 'x5', 'e4', 'x4', 'e9', 'e8'],
   peso_asc: ['e9', 'x4', 'x5', 'e4', 'e5', 'e6', 'x1', 'e1', 'x6', 'x2', 'x3', 'e2', 'e3', 'x7', 'x8', 'x9', 'e7', 'e8'],
-  gmd_desc: ['x7', 'e2', 'x2', 'e5', 'e3', 'x5', ...NULOS_GMD],
-  gmd_asc: ['x5', 'e3', 'x2', 'e5', 'e2', 'x7', ...NULOS_GMD],
+  gmd_desc: ['x3', 'x8', 'x7', 'e2', 'x2', 'e5', 'e6', 'e3', 'x5', ...NULOS_GMD],
+  gmd_asc: ['x5', 'e3', 'e6', 'x2', 'e5', 'e2', 'x7', 'x8', 'x3', ...NULOS_GMD],
   animal_asc: ['x5', 'x4', 'x9', 'x8', 'x7', 'x6', 'x3', 'x2', 'x1', 'e3', 'e2', 'e1', 'e6', 'e5', 'e4', 'e8', 'e7', 'e9'],
   lote_asc: ['x8', 'x7', 'e3', 'e8', 'x6', 'e2', 'e7', 'e1', 'x3', 'x5', 'x2', 'e6', 'e5', 'e4', 'x4', 'x1', 'x9', 'e9'],
 };
@@ -240,7 +241,7 @@ assert.deepEqual(analiticoLote.tree.map((node) => node.label), ['Lote 01', 'Lote
 assert.deepEqual(analiticoLote.tree[0].rows.map((row) => row.id), ['x8', 'x7', 'x6', 'e3', 'e2', 'e1', 'e8', 'e7'], 'Lote 01: linhas por Animal (A-Z), data mais recente');
 const analiticoLoteGmd = await run({ view: 'analitico', groups: [{ columnId: 'nome_lote' }], sortChoice: 'gmd_desc' });
 assert.deepEqual(analiticoLoteGmd.tree.map((node) => node.label), ['Lote 01', 'Lote 02', 'Lote 03', 'Não informado'], 'a opção não reordena os grupos do Detalhado');
-assert.deepEqual(analiticoLoteGmd.tree[1].rows.map((row) => row.id), ['x2', 'e5', 'x5', 'x3', 'e6', 'e4', 'x4', 'x1'], 'Lote 02: GMD (Maior), sem GMD por último');
+assert.deepEqual(analiticoLoteGmd.tree[1].rows.map((row) => row.id), ['x3', 'x2', 'e5', 'e6', 'x5', 'e4', 'x4', 'x1'], 'Lote 02: GMD (Maior), sem GMD por último');
 
 // Vendas (Detalhado): por comprador (ordem natural), a opção ordena as vendas dentro de cada comprador.
 const VENDAS_ORDENS = { data_desc: ['x3', 'e6'], data_asc: ['e6', 'x3'], peso_desc: ['x3', 'e6'], peso_asc: ['e6', 'x3'], animal_asc: ['x3', 'e6'] };
@@ -257,7 +258,8 @@ const RESUMO_DATA = {
   data_asc: { datas: [...DATAS].reverse(), dia10: ['Lote 01', 'Lote 02', 'Lote 03'], dia12: ['Lote 01', 'Lote 02'], summarySort: null },
   peso_desc: { datas: DATAS, dia10: ['Lote 03', 'Lote 01', 'Lote 02'], dia12: ['Lote 01', 'Lote 02'], summarySort: { key: 'peso_medio', direction: 'desc', columnId: 'nome_lote' } },
   peso_asc: { datas: DATAS, dia10: ['Lote 02', 'Lote 01', 'Lote 03'], dia12: ['Lote 02', 'Lote 01'], summarySort: { key: 'peso_medio', direction: 'asc', columnId: 'nome_lote' } },
-  gmd_desc: { datas: DATAS, dia10: ['Lote 01', 'Lote 02', 'Lote 03'], dia12: ['Lote 01', 'Lote 02'], summarySort: { key: 'gmd_medio', direction: 'desc', columnId: 'nome_lote' } },
+  // E1G: em 12/09 as duas vendas têm GMD (Lote 02 x3 5,0; Lote 01 x8 2,5) — o GMD ordena os lotes do dia.
+  gmd_desc: { datas: DATAS, dia10: ['Lote 01', 'Lote 02', 'Lote 03'], dia12: ['Lote 02', 'Lote 01'], summarySort: { key: 'gmd_medio', direction: 'desc', columnId: 'nome_lote' } },
   gmd_asc: { datas: DATAS, dia10: ['Lote 02', 'Lote 01', 'Lote 03'], dia12: ['Lote 01', 'Lote 02'], summarySort: { key: 'gmd_medio', direction: 'asc', columnId: 'nome_lote' } },
   animal_asc: { datas: DATAS, dia10: ['Lote 01', 'Lote 02', 'Lote 03'], dia12: ['Lote 01', 'Lote 02'], summarySort: null },
   lote_asc: { datas: DATAS, dia10: ['Lote 01', 'Lote 02', 'Lote 03'], dia12: ['Lote 01', 'Lote 02'], summarySort: null },
@@ -269,7 +271,7 @@ for (const [choice, expected] of Object.entries(RESUMO_DATA)) {
   const engorda = child(tree, 'Engorda');
   assert.deepEqual(labels(engorda), expected.datas, `Resumo por Data ${choice}: ordem das datas`);
   assert.deepEqual(labels(child(engorda, '2026-09-10')), expected.dia10, `Resumo por Data ${choice}: lotes de 10/09 (GMD ausente por último)`);
-  assert.deepEqual(labels(child(engorda, '2026-09-12')), expected.dia12, `Resumo por Data ${choice}: lotes de 12/09 (os dois sem GMD: ordem natural)`);
+  assert.deepEqual(labels(child(engorda, '2026-09-12')), expected.dia12, `Resumo por Data ${choice}: lotes de 12/09 (as duas vendas com GMD: ordem pelo GMD; sem GMD, ordem natural)`);
   assert.deepEqual(plain(vm.summarySort), expected.summarySort, `Resumo por Data ${choice}: métrica equivalente só no nível Lote`);
   // A folha segue a mesma ordem (seções, tabela de cada data e o TOTAL POR LOTE).
   const doc = buildReportDocument(vm, { showEmptyColumns: true });
@@ -280,7 +282,7 @@ for (const [choice, expected] of Object.entries(RESUMO_DATA)) {
 }
 const totalPorLote = (vm) => buildReportDocument(vm, { showEmptyColumns: true }).sections[0].leafTotal.rows.filter((row) => row.type === 'LEAF_TOTAL').map((row) => row.cells[0].text);
 assert.deepEqual(totalPorLote(await run({ view: 'por-apartacao-data', sortChoice: 'peso_desc' })), ['Lote 03', 'Lote 01', 'Lote 02'], 'TOTAL POR LOTE pelo peso médio (400; 342,86; 276,25)');
-assert.deepEqual(totalPorLote(await run({ view: 'por-apartacao-data', sortChoice: 'gmd_asc' })), ['Lote 02', 'Lote 01', 'Lote 03'], 'TOTAL POR LOTE pelo GMD (0,667; 1,417; —)');
+assert.deepEqual(totalPorLote(await run({ view: 'por-apartacao-data', sortChoice: 'gmd_asc' })), ['Lote 02', 'Lote 01', 'Lote 03'], 'TOTAL POR LOTE pelo GMD (0,796; 1,452; — — E1G: com as saídas com peso)');
 
 // Por Apartação/Lote: sem nível de data — "Data" = ordem natural; peso/GMD como acima.
 const APARTACAO_LOTE = {
@@ -428,26 +430,27 @@ const lote01 = porLote.tree[0];
 assert.deepEqual(porLote.aggregates.map((spec) => spec.id), ['animais', 'peso_medio', 'gmd_medio'], 'subtotal do Analítico: animais, peso médio, GMD médio');
 assert.equal(lote01.aggregates.animais.value, 3, 'Lote 01: 3 animais distintos em 8 pesagens');
 close(lote01.aggregates.peso_medio.value, 2400 / 7, 'Lote 01: peso médio');
-close(lote01.aggregates.gmd_medio.value, 85 / 60, 'Lote 01: GMD ponderado (nunca média simples dos GMD)');
+// E1G: a venda x8 (350 → 355 em 2 d) entra no GMD do Lote 01: (85 + 5) ÷ (60 + 2).
+close(lote01.aggregates.gmd_medio.value, 90 / 62, 'Lote 01: GMD ponderado (nunca média simples dos GMD)');
 assert.equal(porLote.totals.animais.value, 8, 'Total geral: 8 animais (recalculado, não soma)');
 // E1D visual: na folha (cara do MAKGESTAO) o grupo é o próprio valor ("LOTE 01") e o subtotal é a linha de
-// texto do antigo — "Subtotal: 3 animais | Peso Médio: 342,9 kg | GMD Médio: 1,417 kg/dia" — com os números do
+// texto do antigo — "Subtotal: 3 animais | Peso Médio: 342,9 kg | GMD Médio: 1,452 kg/dia" — com os números do
 // motor (animais distintos, GMD ponderado); o TOTAL GERAL leva também o Ganho Total, como o antigo.
 const folhaPorLote = buildReportDocument(porLote, { showEmptyColumns: true });
 assert.deepEqual(folhaPorLote.sections.map((section) => section.title), ['LOTE 01', 'LOTE 02', 'LOTE 03', 'NÃO INFORMADO'], 'folha: título do grupo = o valor, como no antigo');
 const linhas = documentRows(folhaPorLote).filter((row) => row.line);
 assert.deepEqual(linhas.map((row) => row.line.items[0].label), ['Subtotal', 'Subtotal', 'Subtotal', 'Subtotal', 'TOTAL GERAL'], 'folha: subtotal por grupo + TOTAL GERAL');
-assert.deepEqual(linhas[0].line.items.map((item) => item.text), ['3 animais', '342,9 kg', '1,417 kg/dia'], 'folha: Lote 01');
+assert.deepEqual(linhas[0].line.items.map((item) => item.text), ['3 animais', '342,9 kg', '1,452 kg/dia'], 'folha: Lote 01');
 assert.deepEqual(linhas[0].line.items.map((item) => item.raw), [lote01.aggregates.animais.value, lote01.aggregates.peso_medio.value, lote01.aggregates.gmd_medio.value], 'folha: Lote 01 = motor (animais distintos, GMD ponderado)');
 assert.deepEqual(linhas[2].line.items.map((item) => item.text), ['1 animal', '400,0 kg', '-'], 'folha: Lote 03 sem GMD = "-"');
 assert.equal(linhas.at(-1).line.items[0].raw, porLote.totals.animais.value, 'folha: TOTAL GERAL = animais distintos da população (8), não soma');
 assert.equal(linhas.at(-1).line.items.at(-1).label, 'Ganho Total', 'folha: TOTAL GERAL com o Ganho Total do antigo');
 const csvSub = buildReportLines(porLote, 'csv').lines.filter((line) => line.type === 'SUBTOTAL' && line.group === 'Lote 01');
-assert.deepEqual(csvSub.map((line) => line.value), ['3', '342,9', '1,417'], 'CSV: subtotal do Lote 01');
+assert.deepEqual(csvSub.map((line) => line.value), ['3', '342,9', '1,452'], 'CSV: subtotal do Lote 01');
 const xlsxSub = buildSheetRows(porLote).rows.filter((row) => row.kind === 'SUBTOTAL' && row.cells[1][0] === 'Lote 01').map((row) => row.cells[3][0]);
 assert.equal(xlsxSub.length, 3, 'XLSX: 3 linhas de subtotal do Lote 01');
 // Número de verdade, com as casas da folha (kg agregado com 1 casa, GMD com 3) — como os demais totais do XLSX.
-assert.deepEqual(xlsxSub, [3, 342.9, 1.417], 'XLSX: animais, peso médio e GMD ponderado do Lote 01 (números)');
+assert.deepEqual(xlsxSub, [3, 342.9, 1.452], 'XLSX: animais, peso médio e GMD ponderado do Lote 01 (números)');
 
 await resetDb();
 console.log(JSON.stringify({

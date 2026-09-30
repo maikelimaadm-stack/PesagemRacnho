@@ -4,7 +4,7 @@ import {
   validateUiPayload,
 } from '../domain/weighingMapper.js';
 import * as weighingDataAdapter from '../infrastructure/weighingDataAdapter.js';
-import { animalIdentityKey, recalculateWeightSeries } from '../domain/weighingSeries.js';
+import { animalIdentityKey, receivesWeightGain, recalculateWeightSeries } from '../domain/weighingSeries.js';
 import { calculateWeightGain } from '../domain/weighingCalculations.js';
 import { getCurrentActor, hasActorProvider } from '../../../storage/indexedDb/auditActor.js';
 import { authorize, can, forbiddenError } from '../../auth/domain/permissionService.js';
@@ -83,7 +83,8 @@ export async function createEntry(rawPayload) {
     const existingSeries = animalId
       ? await weighingDataAdapter.listAllEntries({ animalId })
       : [];
-    const derived = uiPayload.tipo_manejo === 'Manejo'
+    // E1G: Manejo e Saída com peso (venda/abate) ganham os derivados contra a pesagem anterior; Cadastro não.
+    const derived = receivesWeightGain(uiPayload.tipo_manejo)
       ? calculateWeightGain({
         history: existingSeries,
         date: uiPayload.data_pesagem,
