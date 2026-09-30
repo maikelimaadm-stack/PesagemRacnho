@@ -56,7 +56,7 @@ export default function NewReportDialog({
           <DialogTitle className="flex items-center gap-2 text-sm"><Icon className="h-4 w-4" aria-hidden="true" />{texts.title}</DialogTitle>
           <DialogDescription>{texts.description}</DialogDescription>
         </DialogHeader>
-        <form className="rpt-dialog__form" onSubmit={(event) => { event.preventDefault(); submit(); }}>
+        <form className="rpt-dialog__form d17b-standard-dialog__body" onSubmit={(event) => { event.preventDefault(); submit(); }}>
           <Label htmlFor="rpt-new-report-name">Nome</Label>
           <Input
             id="rpt-new-report-name"
