@@ -13,6 +13,8 @@ const safeId = (value) => String(value ?? 'rc').toLowerCase().replace(/[^a-z0-9-
 const attr = (value) => escapeHtml(value);
 // <title> por marca só com poucas marcas (centenas de datas não viram centenas de <title>).
 const MAX_MARK_TITLES = 80;
+// Paisagem: tabela de dados com mais colunas que isto não cabe na metade da página (515 px).
+export const WIDE_TABLE_COLUMNS = 8;
 
 function textEl(cls, x, y, anchor, text, title = null) {
   const hint = title && title !== text ? `<title>${escapeHtml(title)}</title>` : '';
@@ -55,7 +57,8 @@ export function renderChartSvg(chart, geometry = chartGeometry(chart), { uid = `
   if (g.zero) out.push(`<line class="rc-zero" x1="${g.zero.x1}" y1="${g.zero.y1}" x2="${g.zero.x2}" y2="${g.zero.y2}" stroke="#94a3b8"/>`);
   if (g.referencia) {
     const ref = g.referencia;
-    out.push(`<g class="rc-ref-g"><line class="rc-ref" x1="${ref.x1}" y1="${ref.y1}" x2="${ref.x2}" y2="${ref.y2}" stroke="#334155" stroke-dasharray="4 3"/>${textEl('rc-ref-label', ref.label.x, ref.label.y, ref.label.anchor, ref.label.text)}</g>`);
+    // E1G etapa 2: só a linha aqui; o rótulo da referência vai com os outros rótulos, por cima das linhas (legível).
+    out.push(`<g class="rc-ref-g"><line class="rc-ref" x1="${ref.x1}" y1="${ref.y1}" x2="${ref.x2}" y2="${ref.y2}" stroke="#334155" stroke-dasharray="4 3"/></g>`);
   }
   const marks = [];
   const markCount = g.bars.length + g.dumbbells.length + g.lines.reduce((sum, line) => sum + line.markers.length, 0);
@@ -77,6 +80,7 @@ export function renderChartSvg(chart, geometry = chartGeometry(chart), { uid = `
   out.push(`<g class="rc-marks">${marks.join('')}</g>`);
   // Rótulos: categorias à esquerda, valor em toda barra, fim de cada linha (com linha-guia quando saiu do lugar).
   const labels = [
+    ...(g.referencia ? [textEl('rc-ref-label', g.referencia.label.x, g.referencia.label.y, g.referencia.label.anchor, g.referencia.label.text)] : []),
     ...g.categoryLabels.map((label) => textEl('rc-cat', label.x, label.y, label.anchor, label.text, label.full)),
     ...g.bars.filter((bar) => bar.label?.text).map((bar) => textEl('rc-value', bar.label.x, bar.label.y, bar.label.anchor, bar.label.text)),
     ...g.dumbbells.filter((item) => item.label?.text).map((item) => textEl('rc-value', item.label.x, item.label.y, item.label.anchor, item.label.text)),
@@ -109,10 +113,10 @@ export function renderChartTable(chart) {
  * a tabela de dados.
  * @param {{ width?: number, height?: number, uid?: string, table?: boolean }} options
  */
-export function renderChartCard(chart, { width = CHART_SIZES.PORTRAIT.width, height = CHART_SIZES.PORTRAIT.height, uid, table = true } = {}) {
+export function renderChartCard(chart, { width = CHART_SIZES.PORTRAIT.width, height = CHART_SIZES.PORTRAIT.height, uid, table = true, wide = false } = {}) {
   const geometry = chartGeometry(chart, { width, height });
   return [
-    `<figure class="rc-card" data-chart-id="${attr(chart.id)}" data-kind="${attr(chart.kind)}">`,
+    `<figure class="rc-card${wide ? ' rc-card--wide' : ''}" data-chart-id="${attr(chart.id)}" data-kind="${attr(chart.kind)}">`,
     `<figcaption class="rc-card__head"><span class="rc-card__title">${escapeHtml(chart.title)}</span>${chart.subtitle ? `<span class="rc-card__sub">${escapeHtml(chart.subtitle)}</span>` : ''}</figcaption>`,
     renderChartSvg(chart, geometry, { uid }),
     renderChartLegend(chart),
@@ -133,8 +137,11 @@ export function renderChartCard(chart, { width = CHART_SIZES.PORTRAIT.width, hei
 export function renderChartsBlock(charts = [], { orientation = 'portrait', mode = 'print', breakAfter = true, table = true } = {}) {
   const size = orientation === 'landscape' ? CHART_SIZES.LANDSCAPE : CHART_SIZES.PORTRAIT;
   const classes = ['rc-block', `rc-block--${mode === 'screen' ? 'screen' : 'print'}`, `rc-block--${orientation === 'landscape' ? 'landscape' : 'portrait'}`, breakAfter ? 'rc-break' : ''].filter(Boolean).join(' ');
+  // E1G etapa 2: em paisagem, o gráfico com tabela de dados larga (mais de WIDE_TABLE_COLUMNS colunas — ex.: um ano
+  // de meses) ocupa a linha inteira; na metade da página a tabela vazava do cartão.
+  const wideOf = (chart) => orientation === 'landscape' && table && (chart.tabela?.cabecalho?.length ?? 0) > WIDE_TABLE_COLUMNS;
   const cards = charts.length
-    ? `<div class="rc-cards">\n${charts.map((chart, index) => renderChartCard(chart, { ...size, uid: `rc-${index}`, table })).join('\n')}\n</div>`
+    ? `<div class="rc-cards">\n${charts.map((chart, index) => renderChartCard(chart, { ...(wideOf(chart) ? CHART_SIZES.LANDSCAPE_WIDE : size), uid: `rc-${index}`, table, wide: wideOf(chart) })).join('\n')}\n</div>`
     : '<p class="rc-none">Este relatório não tem gráficos.</p>';
   return `<section class="${classes}" data-charts="${charts.length}">\n<h2 class="rc-block__title">Gráficos</h2>\n${cards}\n</section>`;
 }

@@ -274,8 +274,10 @@ números em folha, CSV, XLSX e JSON), `reports:sheet-xlsx-parity:verify` (bloco 
   documento é exatamente o de antes.
 - **SVG inline** (`exporters/chartSvg.js`): nunca `<img src=data:…>`, sem `<script>`, sem `foreignObject`, sem
   `href`; todo texto por `escapeHtml`; ids gerados (`rc-<n>`). A CSP do documento não muda. Retrato: 718 × 260,
-  um por linha; paisagem: 515 × 230, grade 2 × 2. No papel não há hover: rótulo de valor em toda barra, rótulo no
-  fim das linhas e a tabela de dados embaixo de cada gráfico. Cores só por tokens `--rc-*`; a impressão usa
+  um por linha; paisagem: 515 × 230, grade 2 × 2 (o gráfico cuja tabela de dados tem mais de 8 colunas — ex.: um
+  ano de meses — ocupa a linha inteira, 1047 px, para a tabela não vazar do cartão). No papel não há hover: rótulo
+  de valor em toda barra, rótulo no fim das linhas (por cima das linhas, com contorno claro) e a tabela de dados
+  embaixo de cada gráfico. Cores só por tokens `--rc-*`; a impressão usa
   sempre os tokens CLAROS (`CHART_CSS` não tem regra de tema escuro).
 - **Permissão**: imprimir/exportar os gráficos passa pelo mesmo `assertCanExport`, com as colunas dos gráficos
   (`chartColumnIds`); a definição recusa coluna sensível em gráfico (`defineCharts`).
@@ -285,7 +287,10 @@ números em folha, CSV, XLSX e JSON), `reports:sheet-xlsx-parity:verify` (bloco 
   `chartsConfig` o arquivo não muda. O gráfico nativo do Excel (DrawingML) fica para depois. CSV e JSON não mudam.
 
 Gates: `reports:charts:verify` (números × folha, "Demais", cores, histogramas, halteres, validação),
-`reports:charts-print:verify` (documento, CSP, escape, tamanhos, tema claro, manifesto, permissão, XLSX).
+`reports:charts-print:verify` (documento, CSP, escape, tamanhos, tema claro, manifesto, permissão, XLSX),
+`reports:charts-state:verify` (vista "Folha | Gráficos" e gráficos no estado da tela, nos modelos e no último
+estado; a configuração da tela chega ao PDF e ao Excel; "Imprimir só os gráficos"/"PDF só dos gráficos" no menu ⋯).
+Na tela, Imprimir/PDF na vista Gráficos saem "gráficos + folha" e o Excel leva a aba Gráficos; na vista Folha, como antes.
 
 ## 10. Segurança do IPC (`electron/ipc/reportIpc.cjs`)
 

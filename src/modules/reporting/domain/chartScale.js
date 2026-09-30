@@ -16,11 +16,15 @@ export const CHART_SIZES = Object.freeze({
   PORTRAIT: Object.freeze({ width: 718, height: 260 }),
   // Paisagem: grade 2×2, (1047 − 16 de espaço) ÷ 2.
   LANDSCAPE: Object.freeze({ width: 515, height: 230 }),
+  // E1G etapa 2: cartão de paisagem com tabela de dados larga (muitos meses) ocupa a linha inteira da página.
+  LANDSCAPE_WIDE: Object.freeze({ width: 1047, height: 230 }),
   SCREEN: Object.freeze({ width: 560, height: 280 }),
 });
 const BAR_MAX = 24;
 const BAR_RADIUS = 4;
 const ROW_STEP = 28;
+// E1G etapa 2: altura de cada grupo nas barras horizontais e halteres (a camada de hover da tela usa a mesma).
+export const CHART_ROW_STEP = ROW_STEP;
 const LABEL_GAP = 12;
 // Barras horizontais e halteres: a altura vem do número de grupos (28 px cada; no mínimo 3), não do cartão.
 const HORIZONTAL_MIN_ROWS = 3;
@@ -391,6 +395,45 @@ function barGeometry(chart, W) {
     hover: { mode: 'mark', columns: [] },
   };
 }
+
+/**
+ * E1G etapa 2 — alvos da camada de hover/foco da TELA, tirados da MESMA geometria que desenha o SVG (a dica cai
+ * exatamente sobre o que foi desenhado):
+ *   linha → uma faixa vertical por x (cruz vertical que encosta no x mais próximo; a dica lista as séries);
+ *   barras/halteres → a linha inteira do grupo; colunas/histograma → a coluna na altura toda da área.
+ * @returns {{ kind: 'x'|'mark', index, key?, xKey, label?, hit: {x,y,w,h}, mark?: {x,y,w,h}, anchor: {x,y},
+ *   items?, tooltip?, drill? }[]}
+ */
+export function chartHoverTargets(geometry) {
+  const g = geometry;
+  if (!g || g.empty) return [];
+  const { plot } = g;
+  if (g.hover?.mode === 'x') {
+    const columns = g.hover.columns ?? [];
+    return columns.map((column, index) => {
+      const left = index === 0 ? plot.x : (columns[index - 1].x + column.x) / 2;
+      const right = index === columns.length - 1 ? plot.x + plot.w : (column.x + columns[index + 1].x) / 2;
+      return { kind: 'x', index, xKey: column.xKey, label: column.xLabel, hit: { x: round1(left), y: plot.y, w: round1(right - left), h: plot.h }, anchor: { x: column.x, y: plot.y }, items: column.items };
+    });
+  }
+  if (g.kind === 'barras') {
+    return g.bars.map((bar, index) => ({
+      kind: 'mark', index, key: bar.key, xKey: bar.xKey, hit: { x: 0, y: round1(bar.y + bar.h / 2 - ROW_STEP / 2), w: g.width, h: ROW_STEP },
+      mark: { x: bar.x, y: bar.y, w: bar.w, h: bar.h }, anchor: { x: round1(bar.value < 0 ? bar.x : bar.x + bar.w), y: bar.y }, tooltip: bar.tooltip, drill: bar.drill ?? null,
+    }));
+  }
+  if (g.kind === 'halteres') {
+    return g.dumbbells.map((item, index) => ({
+      kind: 'mark', index, key: 'final', xKey: item.xKey, hit: { x: 0, y: round1(item.y - ROW_STEP / 2), w: g.width, h: ROW_STEP },
+      mark: { x: Math.min(item.x1, item.x2) - 6, y: item.y - 7, w: Math.abs(item.x2 - item.x1) + 12, h: 14 }, anchor: { x: Math.max(item.x1, item.x2), y: item.y - 6 }, tooltip: item.tooltip, drill: item.drill ?? null,
+    }));
+  }
+  return g.bars.map((bar, index) => ({
+    kind: 'mark', index, key: bar.key, xKey: bar.xKey, hit: { x: round1(bar.x - 1), y: plot.y, w: round1(bar.w + 2), h: plot.h },
+    mark: { x: bar.x, y: bar.y, w: bar.w, h: bar.h }, anchor: { x: round1(bar.x + bar.w / 2), y: bar.value < 0 ? round1(yOfBase(g)) : bar.y }, tooltip: bar.tooltip, drill: bar.drill ?? null,
+  }));
+}
+const yOfBase = (g) => g.zero?.y1 ?? g.plot.y + g.plot.h;
 
 // Halteres: por grupo, peso inicial (cinza) ligado ao final (cor), numa escala só em kg.
 function dumbbellGeometry(chart, W) {

@@ -47,6 +47,7 @@ const CHART_RULES = `
 .rc-block__title { margin: 0 0 6px; font-size: 1.1667em; font-weight: 700; }
 .rc-cards { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
 .rc-block--landscape .rc-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.rc-block--landscape .rc-card--wide { grid-column: 1 / -1; }
 .rc-card { margin: 0; min-width: 0; break-inside: avoid; page-break-inside: avoid; }
 .rc-card__head { display: block; margin: 0 0 4px; }
 .rc-card__title { display: block; font-weight: 700; font-size: 1.0833em; }
@@ -55,6 +56,7 @@ const CHART_RULES = `
 .rc-svg text { fill: var(--rc-text); font-size: 10px; }
 .rc-svg .rc-tick, .rc-svg .rc-axis-title { fill: var(--rc-muted); }
 .rc-svg .rc-value { font-size: 9px; }
+.rc-svg :is(.rc-value, .rc-direct, .rc-ref-label, .rc-cat) { paint-order: stroke; stroke: var(--rc-surface); stroke-width: 3px; stroke-linejoin: round; }
 .rc-svg .rc-empty { fill: var(--rc-muted); font-size: 11px; }
 .rc-svg .rc-grid { stroke: var(--rc-grid); stroke-width: 1; }
 .rc-svg .rc-zero { stroke: var(--rc-axis); stroke-width: 1; }
@@ -91,8 +93,30 @@ export const CHART_CSS = `
 .rc-block--print.rc-break { break-after: page; page-break-after: always; }
 ${CHART_RULES}`;
 
+// E1G etapa 2 — camada de hover/foco da TELA (components/reports/ChartPlot): cruz vertical, anel nos pontos, faixa
+// da barra sob o mouse e a dica. Só tokens (segue o tema); nunca vai para a impressão.
+const hoverRings = CHART_SLOT_NAMES.map((name) => `.rc-hover__ring.rc-${name} { stroke: var(--rc-${name}); }`).join('\n');
+const CHART_HOVER_RULES = `
+.rc-plot { position: relative; line-height: 0; }
+.rc-hover { position: absolute; left: 0; top: 0; max-width: 100%; height: auto; overflow: visible; }
+.rc-hit { fill: transparent; pointer-events: all; outline: none; }
+.rc-hit.is-drill { cursor: pointer; }
+.rc-hit:focus-visible { stroke: var(--rc-text); stroke-width: 1.5; stroke-dasharray: 3 2; }
+.rc-hover__cross line { stroke: var(--rc-muted); stroke-width: 1; }
+.rc-hover__ring { fill: none; stroke-width: 2; pointer-events: none; }
+${hoverRings}
+.rc-hover__band { fill: var(--rc-text); opacity: .07; pointer-events: none; }
+.rc-tip { position: absolute; z-index: 6; box-sizing: border-box; min-width: 140px; max-width: 300px; padding: 6px 9px; border: 1px solid var(--rc-grid); border-radius: 6px; background: var(--rc-surface); color: var(--rc-text); box-shadow: 0 4px 14px rgb(0 0 0 / .14); font-size: 12px; line-height: 17px; pointer-events: none; }
+.rc-tip__title { display: flex; align-items: center; gap: 6px; margin: 0 0 2px; font-weight: 700; }
+.rc-tip__row, .rc-tip__line { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+.rc-tip__row b { font-weight: 600; font-variant-numeric: tabular-nums; }
+.rc-tip__hint { display: block; margin-top: 3px; color: var(--rc-muted); font-size: 11px; }
+.rc-tip .rc-key { flex: 0 0 auto; }
+`;
+
 /** Tela: os mesmos gráficos sobre o fundo do app, seguindo o tema (claro/escuro). */
 export const CHART_SCREEN_CSS = `
 .rpt-charts-host { ${tokenVars(CHART_TOKENS.light)} }
 html.dark .rpt-charts-host, html.tema-escuro .rpt-charts-host, html.escuro .rpt-charts-host { ${tokenVars(CHART_TOKENS.dark)} }
-${CHART_RULES}`;
+${CHART_RULES}
+${CHART_HOVER_RULES}`;

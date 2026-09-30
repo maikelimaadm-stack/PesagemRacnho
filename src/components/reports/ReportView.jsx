@@ -21,6 +21,7 @@ import { applyColumnKeys, columnKeysOf, getReportView, listReportViews, parseSor
 import { applySortChoice, sortChoiceForColumn, sortChoiceForMetric } from "@/modules/reporting/domain/sortChoices";
 import { hasTypeColumns, typeColumnOptions } from "@/modules/reporting/domain/typeColumns";
 import { applyHeaderAction, headerMenuOf } from "@/modules/reporting/domain/headerActions";
+import { CHART_DISPLAYS, chartConfigToggleSeries, chartConfigWith, chartsOf, displayOf } from "@/modules/reporting/domain/reportCharts";
 import { getReportDefinition } from "@/modules/reporting/definitions/reportCatalog";
 import { getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
 import { buildInitialReportState, typedViewSelection } from "@/modules/reporting/application/reportInitialState";
@@ -37,7 +38,8 @@ import NewReportDialog from "./NewReportDialog";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportFilterBar from "./ReportFilterBar";
 import MatrixAxisControls from "./MatrixAxisControls";
-import { MakgestaoColumnsButton, MakgestaoFilterButton, MakgestaoFilterCard, MakgestaoMoreFilters, MakgestaoTopBar, makOrientation } from "./MakgestaoScreen";
+import { MakgestaoColumnsButton, MakgestaoDisplaySwitch, MakgestaoFilterButton, MakgestaoFilterCard, MakgestaoMoreFilters, MakgestaoTopBar, makOrientation } from "./MakgestaoScreen";
+import ReportChartsView from "./ReportChartsView";
 import ReportSheetView from "./ReportSheetView";
 import ReportTable from "./ReportTable";
 import { pillFilterType, pillOptions, toDisplayFilters, toServiceFilters, useCan } from "./reportUi";
@@ -228,6 +230,15 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   );
   const columnOf = useCallback((columnId) => available.find((column) => column.id === columnId) ?? null, [available]);
   const summaryMode = (viewModel?.mode ?? state.mode) === REPORT_MODES.RESUMIDO;
+  // E1G: vista "Folha | Gráficos" — só na tela do MAKGESTAO e nos relatórios com gráficos que o perfil vê. Trocar de
+  // vista ou mexer num gráfico NÃO roda o relatório de novo (display/charts ficam fora do execute): os gráficos são
+  // calculados sobre o view model já carregado, só com a vista Gráficos aberta.
+  const chartsAvailable = useMemo(() => makScreen && chartsOf(definition, actor.role).length > 0, [makScreen, definition, actor.role]);
+  const display = chartsAvailable ? displayOf(definition, state.display, actor.role) : CHART_DISPLAYS.FOLHA;
+  const showCharts = display === CHART_DISPLAYS.GRAFICOS;
+  const setDisplay = (next) => update({ display: next, chartDrill: false });
+  const setChartOption = (chartId, key, value) => setState((current) => ({ ...current, charts: chartConfigWith(definition, current.charts, chartId, key, value, viewModel) }));
+  const toggleChartSeries = (chartId, seriesKey) => setState((current) => ({ ...current, charts: chartConfigToggleSeries(current.charts, chartId, seriesKey) }));
 
   // Último estado do usuário: grava (com espera curta) como a pessoa deixou. Só quando o relatório foi
   // aberto "puro" — aberto por modelo ou por visão antiga, quem guarda é o modelo/visão (e as condições
@@ -448,10 +459,15 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   };
   // Clique num grupo da folha do Resumido (ou num título de seção): Detalhado só daquele grupo (recorte
   // exato pela chave). A folha do Detalhado ("Ver como folha") não repassa o clique: é só leitura.
-  const onDrill = (path) => update({
+  const drillPatch = (path) => ({
     mode: REPORT_MODES.DETALHADO,
     drill: path.map((part) => ({ columnId: part.columnId, key: part.key, label: formatGroupLabel(definition.columns.find((column) => column.id === part.columnId), part.label, "screen", part.key === NONE_GROUP_KEY) })),
   });
+  const onDrill = (path) => update({ ...drillPatch(path), chartDrill: false });
+  // E1G: clique numa barra/ponto do gráfico abre a FOLHA no detalhe daquele grupo (mesmo recorte do clique na folha);
+  // o × da pílula "Detalhe" volta aos gráficos.
+  const onChartDrill = (path) => update({ ...drillPatch(path), display: CHART_DISPLAYS.FOLHA, chartDrill: true });
+  const leaveDrill = () => update({ drill: [], mode: REPORT_MODES.RESUMIDO, ...(state.chartDrill ? { display: CHART_DISPLAYS.GRAFICOS, chartDrill: false } : {}) });
 
   // Pesagem anterior (Todos/Com/Sem): filtro comum na coluna "tem pesagem anterior", pelo mesmo motor.
   const previousColumn = columnOf(PREVIOUS_COLUMN);
@@ -462,9 +478,11 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   const exportAs = async (format) => {
     if (!viewModel) return;
     try {
-      const result = await emitReport(viewModel, format, actor);
+      // E1G: na vista Gráficos o Excel leva também a aba "Gráficos" (os mesmos números da tela); CSV/JSON não mudam.
+      const withCharts = format === "xlsx" && showCharts;
+      const result = await emitReport(viewModel, format, actor, withCharts ? { chartsConfig: state.charts } : undefined);
       if (result.canceled) return;
-      toast.success(`${format.toUpperCase()} gerado: ${result.written.location}`, { description: `SHA-256 ${result.manifest.sha256.slice(0, 16)}… · ${viewModel.mode === REPORT_MODES.RESUMIDO ? `Resumido · ${viewModel.summaryRows.length} grupo(s)` : `${result.manifest.recordCount} registros`}` });
+      toast.success(`${format.toUpperCase()} gerado: ${result.written.location}`, { description: `SHA-256 ${result.manifest.sha256.slice(0, 16)}… · ${viewModel.mode === REPORT_MODES.RESUMIDO ? `Resumido · ${viewModel.summaryRows.length} grupo(s)` : `${result.manifest.recordCount} registros`}${withCharts ? " · com a aba Gráficos" : ""}` });
     } catch (err) {
       toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode exportar este relatório." : `Falha ao exportar: ${err.message}`);
     }
@@ -475,12 +493,16 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   const emitDocument = async (kind, overrides = {}) => {
     if (!viewModel) return;
     // showDetails: "Mostrar Detalhes" de Vendas — a impressão e o PDF saem como a folha da tela.
-    const options = { orientation: overrides.orientation ?? sheetOrientation, widths: state.widths, header, showEmptyColumns: state.showEmptyColumns, showDetails: state.showDetails === true, acceptTooWide: overrides.acceptTooWide ?? false };
+    // E1G: na vista Gráficos sai "gráficos + folha" (gráficos antes, folha em página nova); chartsOnly = "só os
+    // gráficos" (menu ⋯). Os gráficos são calculados na emissão pela MESMA função da tela, sobre o MESMO view model.
+    const chartOptions = showCharts ? { chartsConfig: state.charts, chartsOnly: overrides.chartsOnly === true } : {};
+    const options = { orientation: overrides.orientation ?? sheetOrientation, widths: state.widths, header, showEmptyColumns: state.showEmptyColumns, showDetails: state.showDetails === true, acceptTooWide: overrides.acceptTooWide ?? false, ...chartOptions };
     try {
       const result = kind === "pdf" ? await exportPdf(viewModel, actor, options) : await printReport(viewModel, actor, options);
       if (result.blocked) { setPrintPrompt({ kind, layout: result.layout }); return; }
       setPrintPrompt(null);
-      if (kind === "pdf" && result.path) toast.success(`PDF gerado: ${result.path}`, { description: `SHA-256 ${result.sha256.slice(0, 16)}… · ${result.layout.orientation === "landscape" ? "paisagem" : "retrato"}` });
+      const content = showCharts ? (chartOptions.chartsOnly ? " · só os gráficos" : " · gráficos + folha") : "";
+      if (kind === "pdf" && result.path) toast.success(`PDF gerado: ${result.path}`, { description: `SHA-256 ${result.sha256.slice(0, 16)}… · ${result.layout.orientation === "landscape" ? "paisagem" : "retrato"}${content}` });
       if (kind === "pdf" && result.fallback) toast.info("Sem o aplicativo desktop: use “Salvar como PDF” na janela de impressão.");
     } catch (err) {
       toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode imprimir ou exportar este relatório." : `Falha na emissão: ${err.message}`);
@@ -751,6 +773,9 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           onPdf={() => emitDocument("pdf")}
           onCsv={() => exportAs("csv")}
           onJson={() => exportAs("json")}
+          chartsView={showCharts}
+          onPrintCharts={showCharts ? () => emitDocument("print", { chartsOnly: true }) : null}
+          onPdfCharts={showCharts ? () => emitDocument("pdf", { chartsOnly: true }) : null}
           menuLabel={summaryMode ? "Mesma tabela resumida da folha" : "Mesma população e totais da folha"}
           onSaveTemplate={allowPreferences ? () => setDialog("save") : null}
           onDeleteTemplate={canDeleteTemplate ? () => setConfirmDelete(true) : null}
@@ -811,7 +836,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
               <span className="rpt-drill-pill" title="Detalhe de um grupo da folha">
                 <SearchCheck className="h-3 w-3" aria-hidden="true" />
                 Detalhe: {drillParts.map((part) => `${part.columnLabel}: ${part.label}`).join(" › ")}
-                <button type="button" aria-label="Voltar à folha do tipo" title="Voltar à folha do tipo" onClick={() => update({ drill: [], mode: REPORT_MODES.RESUMIDO })}><X className="h-3 w-3" aria-hidden="true" /></button>
+                <button type="button" aria-label={state.chartDrill ? "Voltar aos gráficos" : "Voltar à folha do tipo"} title={state.chartDrill ? "Voltar aos gráficos" : "Voltar à folha do tipo"} onClick={leaveDrill}><X className="h-3 w-3" aria-hidden="true" /></button>
               </span>
             ) : null}
             {lockedEntries.map(([columnId, filter]) => (
@@ -822,21 +847,33 @@ export default function ReportView({ reportId, presetId = null, template, savedS
             {makNotes}
           </div>
         ) : null}
-        <div className="rpt-mak__paper">
+        <div className={`rpt-mak__paper${showCharts ? " rpt-mak__paper--charts" : ""}`}>
           {/* "Colunas Painel/Detalhes" fora da folha (não sai na impressão), no canto da área do papel — a barra
-              print:hidden do antigo ficava dentro da área de impressão. */}
-          {vendasTools || (makColumns && !columnsInCard) ? (
-            <div className="rpt-mak__sheet-tools" role="group" aria-label="Colunas da folha">
-              {vendasTools ? (
+              print:hidden do antigo ficava dentro da área de impressão. E1G: o alternador "Folha | Gráficos" fica à
+              esquerda nesta faixa (só nos relatórios com gráficos); na vista Gráficos as ferramentas da folha somem. */}
+          {chartsAvailable || vendasTools || (makColumns && !columnsInCard) ? (
+            <div className={`rpt-mak__sheet-tools${showCharts ? " rpt-mak__sheet-tools--charts" : ""}`} role="group" aria-label={chartsAvailable ? "Vista e colunas da folha" : "Colunas da folha"}>
+              {chartsAvailable ? <MakgestaoDisplaySwitch value={display} onChange={setDisplay} /> : null}
+              {vendasTools && !showCharts ? (
                 <button type="button" className={`rpt-mak-btn rpt-mak-btn--icon${state.showDetails ? " is-pressed" : ""}`} aria-pressed={state.showDetails === true} onClick={() => update({ showDetails: !state.showDetails })}>
                   {state.showDetails ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
                   {state.showDetails ? "Ocultar Detalhes" : "Mostrar Detalhes"}
                 </button>
               ) : null}
-              {makColumns && !columnsInCard && !hideColumnsButton ? <MakgestaoColumnsButton {...makColumns} /> : null}
+              {makColumns && !columnsInCard && !hideColumnsButton && !showCharts ? <MakgestaoColumnsButton {...makColumns} /> : null}
             </div>
           ) : null}
-          {viewModel ? (
+          {viewModel && showCharts ? (
+            <ReportChartsView
+              viewModel={viewModel}
+              definition={definition}
+              config={state.charts}
+              role={actor.role}
+              onOption={setChartOption}
+              onToggleSeries={toggleChartSeries}
+              onDrill={onChartDrill}
+            />
+          ) : viewModel ? (
             <ReportSheetView
               viewModel={viewModel}
               header={header}

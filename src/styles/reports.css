@@ -386,3 +386,56 @@ html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__condition { bor
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-more__item:hover { background: #21262d; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__field { border-color: #30363d; background: #0d1117; color: #e6edf3; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-col-menu .rpt-col-menu__title { color: #e6edf3; }
+
+/* E1G — vista "Gráficos" (ReportChartsView): cartões sobre o fundo do app, seguindo o tema; o SVG, a legenda, a
+   dica e a tabela usam os tokens --rc-* (chartStyles.CHART_SCREEN_CSS, trocados no tema escuro). A folha continua
+   papel branco; na vista Gráficos a área do papel fica transparente e o alternador sobe para o canto de cima. */
+.rpt-mak__paper--charts { min-height: 0; background: transparent; }
+.rpt-mak__paper--charts .rpt-mak__sheet-tools { top: 0; right: 0; }
+.rpt-mak-switch { display: inline-flex; }
+html body #root .rpt-mak .rpt-mak-switch .rpt-mak-switch__btn:not(#rpt-none) { border-radius: 0 !important; }
+html body #root .rpt-mak .rpt-mak-switch .rpt-mak-switch__btn:first-child:not(#rpt-none) { border-radius: 6px 0 0 6px !important; }
+html body #root .rpt-mak .rpt-mak-switch .rpt-mak-switch__btn:last-child:not(#rpt-none) { margin-left: -1px; border-radius: 0 6px 6px 0 !important; }
+.rpt-charts { display: flex; flex-direction: column; gap: 10px; container-type: inline-size; }
+.rpt-charts__intro { display: flex; align-items: center; min-height: 32px; margin: 0; padding-right: 210px; color: #475569; font-size: 12px; line-height: 16px; }
+.rpt-charts__grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
+@container (min-width: 1200px) { .rpt-charts__grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.rpt-chart { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 0; padding: 14px 16px 12px; border: 1px solid #e5e5e5; border-radius: 12px; background: #fff; color: var(--rc-text); box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); }
+.rpt-chart__head { display: flex; flex-direction: column; gap: 2px; }
+.rpt-chart__title { color: var(--rc-text); font-size: 14px; font-weight: 700; line-height: 20px; }
+.rpt-chart__sub { color: var(--rc-muted); font-size: 12px; line-height: 16px; }
+.rpt-chart__controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; }
+.rpt-chart__ctl { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.rpt-chart__ctl-label { color: var(--rc-muted); font-size: 12px; font-weight: 500; }
+/* O rótulo do controle é <label> (acessível): vence a cor fixa de label do escopo de cadastros. */
+html body #root .rpt-mak label.rpt-chart__ctl-label:not(#rpt-none) { margin: 0; color: var(--rc-muted); font-size: 12px; font-weight: 500; }
+.rpt-chart__seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 6px; background: #f1f5f9; }
+html body #root .rpt-mak .rpt-chart__seg-btn:not(#rpt-none) { display: inline-flex; align-items: center; height: 24px; min-height: 24px; margin: 0; padding: 0 9px; border: 0; border-radius: 4px !important; background: transparent !important; color: #475569 !important; font-size: 12px !important; font-weight: 500 !important; line-height: 16px; box-shadow: none; cursor: pointer; }
+html body #root .rpt-mak .rpt-chart__seg-btn:not(#rpt-none):hover { color: #0f172a !important; }
+html body #root .rpt-mak .rpt-chart__seg-btn.is-on:not(#rpt-none) { background: #fff !important; color: #0f172a !important; box-shadow: 0 1px 2px 0 rgb(0 0 0 / .12); }
+html body #root .rpt-mak .rpt-chart__seg-btn:not(#rpt-none):focus-visible { outline: none; box-shadow: 0 0 0 1px #0a0a0a; }
+html body #root .rpt-mak select.rpt-chart__select:not(#rpt-none) { height: 28px; min-height: 28px; padding: 0 26px 0 8px !important; border: 1px solid #e5e5e5 !important; border-radius: 6px; background-color: #fff !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important; background-repeat: no-repeat; background-position: right 7px center; background-size: 14px 14px; color: #0a0a0a !important; font-size: 12px; color-scheme: light; cursor: pointer; appearance: none; -webkit-appearance: none; }
+html body #root .rpt-mak select.rpt-chart__select:not(#rpt-none):focus-visible { outline: none; box-shadow: 0 0 0 1px #0a0a0a; }
+.rpt-chart__empty { margin: 0; padding: 32px 12px; border: 1px dashed var(--rc-grid); border-radius: 8px; color: var(--rc-muted); font-size: 13px; line-height: 18px; text-align: center; }
+.rpt-chart__legend { margin: 0; }
+html body #root .rpt-mak .rpt-chart__legend-btn:not(#rpt-none) { display: inline-flex; align-items: center; gap: 5px; height: 22px; min-height: 22px; margin: 0; padding: 0 4px; border: 0; border-radius: 4px !important; background: transparent !important; color: var(--rc-text) !important; font-size: 12px !important; font-weight: 400 !important; box-shadow: none; cursor: pointer; }
+html body #root .rpt-mak .rpt-chart__legend-btn:not(#rpt-none):hover { text-decoration: underline; text-underline-offset: 3px; }
+html body #root .rpt-mak .rpt-chart__legend-btn:not(#rpt-none):focus-visible { outline: none; box-shadow: 0 0 0 1px var(--rc-text); }
+.rpt-chart__legend .rc-legend__item.is-off { text-decoration: none; }
+.rpt-chart__legend-btn.is-off { opacity: .5; text-decoration: line-through; }
+.rpt-chart .rc-semvalor, .rpt-chart .rc-notes { margin: 0; font-size: 12px; line-height: 16px; }
+.rpt-chart .rc-semvalor { color: var(--rc-text); }
+.rpt-chart__foot { display: flex; justify-content: flex-end; margin-top: auto; }
+.rpt-chart__table { overflow-x: auto; }
+.rpt-chart__table .rc-table { margin: 0; font-size: 12px; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-charts__intro { color: #8b949e; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-chart { border-color: #30363d; background: #161b22; box-shadow: none; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-chart__seg { background: #0d1117; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-chart__seg-btn:not(#rpt-none) { color: #adbac7 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-chart__seg-btn:not(#rpt-none):hover { color: #e6edf3 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-chart__seg-btn.is-on:not(#rpt-none) { background: #30363d !important; color: #e6edf3 !important; box-shadow: none; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak select.rpt-chart__select:not(#rpt-none) { border-color: #30363d !important; background-color: #0d1117 !important; color: #e6edf3 !important; color-scheme: dark; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(.rpt-chart__seg-btn, select.rpt-chart__select):not(#rpt-none):focus-visible { box-shadow: 0 0 0 1px #8b949e; }
+@media (max-width: 767px) {
+  .rpt-charts__intro { padding-right: 0; padding-top: 40px; }
+}
