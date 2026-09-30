@@ -305,19 +305,18 @@ for (const { row } of chipRows) {
 }
 assert.ok(!detailDoc.grandTotal.rows[0].chips.items.some((item) => item.label === 'Faixa exigida (kg)'), 'folha do Detalhado: sem faixa no Total geral');
 
-// Relatório sem visões declaradas: "Resumo por <agrupamento padrão>" + Analítico, e ambos executam.
+// E1E: todos os relatórios declaram os seus tipos (conferidos em reports:tipos-todos). Relatório SEM visões
+// declaradas (hoje só os da aba Controle da Manutenção): "Resumo por <agrupamento padrão>" + Analítico gerados.
 const rebanho = getReportDefinition('rebanho.atual');
-assert.equal(rebanho.views.length, 0, 'rebanho.atual não declara visões');
-const rebanhoViews = listReportViews(rebanho);
-assert.deepEqual(rebanhoViews.map((view) => [view.id, view.label, view.mode, view.groups.map((group) => group.columnId)]), [
-  ['padrao', 'Resumo por Lote atual', 'RESUMIDO', ['lote_atual']],
-  ['analitico', 'Analítico (uma linha por registro)', 'DETALHADO', []],
+assert.ok(rebanho.views.length > 0 && rebanho.defaultView === 'por-lote', 'E1E: rebanho.atual declara os tipos (padrão Por Lote)');
+const semTipos = getReportDefinition('controle.qualidade-dados');
+assert.equal(semTipos.views.length, 0, 'controle.qualidade-dados não declara visões');
+const geradas = listReportViews(semTipos);
+assert.deepEqual(geradas.map((view) => [view.id, view.mode, view.groups.map((group) => group.columnId)]), [
+  ['padrao', 'DETALHADO', ['gravidade', 'categoria_problema']],
+  ['analitico', 'DETALHADO', []],
 ], 'padrão + analítico gerados');
-for (const view of rebanhoViews) {
-  const vm = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: viewSelection(view, rebanho) }, ADMIN);
-  assert.equal(vm.mode, view.mode, `rebanho.atual ${view.id}: executa no modo da visão`);
-  assert.equal(matchView(rebanho, { groups: view.groups, mode: view.mode }), view.id);
-}
+for (const view of geradas) assert.equal(matchView(semTipos, { groups: view.groups, mode: view.mode }), view.id);
 // E1C (resposta 11): título da folha de Pesagens = "Pesagens Individuais"; os demais com o próprio nome.
 // E1D: com tipo, "(Analítico)" só no Analítico (Vendas, Detalhado, é "Sintético"); sem tipo, pelo modo.
 assert.equal(buildReportDocument(apData).title, 'Relatório de Pesagens Individuais (Sintético)', 'título da folha de Pesagens (tipo resumido)');
@@ -329,7 +328,7 @@ assert.equal(buildReportDocument(vendasFolha).title, 'Relatório de Pesagens Ind
 assert.deepEqual([buildReportDocument(vendasFolha).layout, buildReportDocument(vendasFolha).vendas.porComprador.title], ['vendas', 'TOTAIS POR COMPRADOR'], 'Vendas: folha no layout do relatório de venda');
 assert.equal(buildReportDocument(await run(viewSelection('analitico', PESAGENS), { arrobaDivisor: 30 })).title, 'Relatório de Pesagens Individuais (Analítico)', 'Analítico: título "(Analítico)"');
 assert.equal(apData.reportName, 'Pesagens', 'o nome do relatório (cartão, arquivo, manifesto) continua "Pesagens"');
-const rebanhoFolha = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: viewSelection('padrao', REBANHO) }, ADMIN);
+const rebanhoFolha = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: viewSelection('por-lote', REBANHO) }, ADMIN);
 assert.equal(buildReportDocument(rebanhoFolha).title, 'Relatório de Rebanho atual (Sintético)', 'outros relatórios com o próprio nome');
 const rebanhoCodigo = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: { mode: 'DETALHADO', groups: [], filters: REBANHO.defaultFilters } }, ADMIN);
 const rebanhoRotulo = await runReport('rebanho.atual', { today: TODAY, params: {}, selection: { mode: 'DETALHADO', groups: [], filters: { situacao: { ...shown.situacao, match: 'label' } } } }, ADMIN);

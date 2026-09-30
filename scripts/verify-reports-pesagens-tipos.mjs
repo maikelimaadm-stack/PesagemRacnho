@@ -76,10 +76,12 @@ assert.match(reference, /useState\("analitico"\)/, 'controle: o antigo abria no 
 // Título: o antigo usa "(Analítico)" só no analítico e "(Sintético)" em todos os outros.
 assert.match(reference, /Relatório de Pesagens Individuais \{tipoRelatorio === 'analitico' \? '\(Analítico\)' : '\(Sintético\)'\}/, 'regra do título no antigo');
 assert.deepEqual(views.map((view) => [view.id, view.titleKind]), [['analitico', 'Analítico'], ['sintetico-matriz', 'Sintético'], ['por-apartacao-lote', 'Sintético'], ['por-apartacao-data', 'Sintético'], ['vendas', 'Sintético']], 'titleKind de cada tipo');
-// Os outros relatórios não mudam de tipo (sem defaultView: padrão + analítico gerados).
-for (const definition of listReportDefinitions({ visibility: 'catalog' }).filter((item) => item.id !== 'pesagens')) {
-  assert.equal(definition.defaultView, null, `NEGATIVO: ${definition.id} sem tipo padrão`);
+// E1E: os outros relatórios do catálogo também declaram tipos com um padrão (conferidos em reports:tipos-todos);
+// os da aba Controle da Manutenção continuam sem (padrão + analítico gerados). Comercial: reports:comercial.
+for (const definition of listReportDefinitions({ visibility: 'catalog' }).filter((item) => item.id !== 'pesagens' && item.family !== 'comercial')) {
+  assert.ok(definition.defaultView && listReportViews(definition).every((view) => !view.generated), `E1E: ${definition.id} com tipos declarados e padrão`);
 }
+for (const definition of listReportDefinitions({ visibility: 'maintenance' })) assert.equal(definition.defaultView, null, `${definition.id} (Controle) sem tipo padrão`);
 ok('tipos');
 
 // ---------------------------------------------------------------------------
@@ -97,17 +99,17 @@ assert.equal(resolveViewId(PESAGENS, inicial), 'por-apartacao-data', 'o seletor 
 const vmInicial = await run(selectionOf(inicial));
 assert.equal(vmInicial.view?.id, 'por-apartacao-data', 'executa no tipo padrão');
 assert.deepEqual(vmInicial.groups.map((group) => group.columnId), ['nome_apartacao', 'data_pesagem', 'nome_lote'], 'Apartação › Data › Lote');
-// Os outros relatórios abrem como antes e executam (o id de tipo GERADO não vai ao serviço, que o recusa).
-for (const definition of listReportDefinitions({ visibility: 'catalog' })) {
+// Relatório sem tipo declarado (E1E: só os da aba Controle) abre como antes e executa (o id de tipo GERADO não
+// vai ao serviço, que o recusa).
+for (const definition of listReportDefinitions({ visibility: 'maintenance' })) {
   const { state } = buildInitialReportState(definition, { role: 'ADMIN' });
-  if (definition.defaultView) continue;
   assert.equal(state.view, null, `${definition.id}: sem tipo declarado → view null no estado`);
   assert.deepEqual(plain(state.groups), plain(definition.defaultGroups), `${definition.id}: agrupamento padrão da definição`);
   const vm = await runReport(definition.id, { today: TODAY, params: state.params, selection: selectionOf(state) }, ADMIN);
   assert.equal(vm.mode, definition.defaultMode, `${definition.id}: abre e executa`);
-  if (definition.defaultGroups.length) assert.equal(resolveViewId(definition, state), 'padrao', `${definition.id}: o seletor continua mostrando "Resumo por …"`);
+  if (definition.defaultGroups.length) assert.equal(resolveViewId(definition, state), 'padrao', `${definition.id}: o seletor continua mostrando o padrão gerado`);
 }
-await assert.rejects(() => runReport('rebanho.atual', { today: TODAY, params: {}, selection: { view: 'padrao' } }, ADMIN), /tipo de relatório desconhecido/, 'controle: o serviço recusa id de tipo gerado (por isso ele não pode ir no estado)');
+await assert.rejects(() => runReport('controle.qualidade-dados', { today: TODAY, params: {}, selection: { view: 'padrao' } }, ADMIN), /tipo de relatório desconhecido/, 'controle: o serviço recusa id de tipo gerado (por isso ele não pode ir no estado)');
 // Link/favorito de visão antiga da E1 (?r=pesagens.sessao): a seleção dela, "Personalizado", sem converter.
 for (const aliasId of ['pesagens.periodo', 'pesagens.sessao', 'pesagens.lote', 'pesagens.operador', 'pesagens.origem', 'movimentacao.entradas-saidas']) {
   const preset = getLegacyAlias(aliasId);

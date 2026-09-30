@@ -31,7 +31,7 @@ import { ensureStorageReady } from '../../../storage/indexedDb/db.js';
 import { can, forbiddenError } from '../../auth/domain/permissionService.js';
 import { getReportDefinition, resolveReportId } from '../definitions/reportCatalog.js';
 import { aliasSelection, getLegacyAlias } from '../definitions/legacyAliases.js';
-import { convertLegacyViewConfig } from '../definitions/legacyViews.js';
+import { convertLegacyViewConfig, typesByStructure } from '../definitions/legacyViews.js';
 import { REPORT_MODES, normalizeReportMode } from '../domain/reportDefinition.js';
 import { canRunReport, canSeeColumn } from '../domain/reportPermissions.js';
 import { MAX_GROUP_LEVELS } from '../domain/groupEngine.js';
@@ -500,6 +500,15 @@ export async function deleteTemplate(templateId, actor, { empresaId = 'local' } 
   return true;
 }
 
+/** Tipo de um modelo/último estado sem conversão: Pesagens (E1D) sem tipo = Personalizado; E1E, pela estrutura. */
+function typedTemplateOf(definition, config) {
+  if (!definition.defaultView) return config;
+  if (!typesByStructure(definition)) return config.view === undefined ? { ...config, view: null } : config;
+  if (config.view !== null || (Number(config.baseReportVersion) || 1) >= definition.version) return config;
+  const { view: _untyped, ...rest } = config;
+  return rest;
+}
+
 /**
  * Modelo salvo → seleção para runReport. Revalida contra a definição ATUAL e o papel de quem
  * abre: colunas/filtros removidos ou sem permissão saem com aviso (nunca amplia permissão).
@@ -513,8 +522,11 @@ export function templateToRequest(source, role) {
   // E1D: tipo da E1B que saiu → tipo novo mais próximo (em memória; gravar e auditar é com
   // migrateReportPreferences). Relatório de tipos fixos sem tipo e sem conversão → "Personalizado"
   // explícito: nunca vira um tipo só porque a estrutura coincide.
+  // E1E: nos relatórios cujos tipos são os antigos relatórios separados (legacyViews.typesByStructure), sem tipo
+  // gravado a tela reconhece o tipo pela estrutura — inclusive `view: null` gravado antes de o relatório ter
+  // tipos (baseReportVersion anterior à da definição: não era "Personalizado" escolhido, era "sem tipo").
   const conversion = convertLegacyViewConfig(definition, consolidated);
-  const template = conversion ? conversion.config : (definition.defaultView && consolidated.view === undefined ? { ...consolidated, view: null } : consolidated);
+  const template = conversion ? conversion.config : typedTemplateOf(definition, consolidated);
   const warnings = [];
   const known = new Map(definition.columns.map((column) => [column.id, column]));
   const visible = (id) => known.has(id) && canSeeColumn(known.get(id), role);

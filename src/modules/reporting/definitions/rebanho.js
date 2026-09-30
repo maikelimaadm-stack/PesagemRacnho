@@ -4,6 +4,7 @@
 import { defineReport } from '../domain/reportDefinition.js';
 import { GRAINS } from '../domain/reportGrain.js';
 import { ANIMAL_CURRENT_COLUMNS } from './columns/animalColumns.js';
+import { listaTipo, resumoTipo } from './tipos.js';
 
 export const ATIVOS = Object.freeze({ situacao: { operator: 'in', values: ['ATIVO'] } });
 
@@ -18,11 +19,47 @@ export const CURRENT_TOTALS = Object.freeze([
 
 export const INVENTORY_COLUMNS = Object.freeze(['animal', 'marca', 'sexo', 'raca', 'categoria', 'situacao', 'lote_atual', 'apartacao_atual', 'ultima_pesagem_data', 'ultimo_peso_kg', 'dias_sem_pesagem']);
 
+// E1E "Tipo Relatório" (definitions/tipos.js). Totais dos resumidos = os dos antigos "Rebanho por …"
+// (CURRENT_TOTALS), na ordem da folha: Cabeças | Menor | Maior | Peso médio | Peso total.
+export const HERD_TYPE_TOTALS = Object.freeze([CURRENT_TOTALS[0], CURRENT_TOTALS[3], CURRENT_TOTALS[4], CURRENT_TOTALS[2], CURRENT_TOTALS[1]]);
+// "Sem Pesagem Recente" = o antigo "Animais sem pesagem recente" (colunas, totais e ordem dele). Os 30 dias são
+// condição do tipo (população, com cadeado): para outro número, Analítico + filtro "Dias sem pesagem".
+export const SEM_PESAGEM_COLUMNS = Object.freeze(['animal', 'marca', 'sexo', 'categoria', 'lote_atual', 'ultima_pesagem_data', 'ultimo_peso_kg', 'dias_sem_pesagem']);
+export const SEM_PESAGEM_TOTALS = Object.freeze([
+  { id: 'animais', columnId: 'animal', op: 'countDistinct' },
+  { id: 'dias_medio', columnId: 'dias_sem_pesagem', op: 'avg' },
+  { id: 'dias_max', columnId: 'dias_sem_pesagem', op: 'max' },
+]);
+export const SEM_PESAGEM_POPULATION = Object.freeze({ dias_sem_pesagem: { operator: 'greater', value: '30' } });
+// Os tipos são do rebanho ATIVO (como os antigos): escolher um deles volta o filtro "só ativos"; "Por Situação"
+// (o antigo mostrava todas as situações) tira esse filtro — filtro vazio, que o serviço ignora.
+const TODAS_SITUACOES = Object.freeze({ situacao: { operator: 'in', values: [] } });
+const herd = (id, label, groups, extra = {}) => resumoTipo(id, label, groups, HERD_TYPE_TOTALS, { filters: ATIVOS, ...extra });
+export const REBANHO_DEFAULT_VIEW = 'por-lote';
+export const REBANHO_VIEWS = Object.freeze([
+  herd('por-lote', 'Por Lote', ['lote_atual']),
+  herd('por-apartacao-lote', 'Por Apartação/Lote', ['apartacao_atual', 'lote_atual']),
+  herd('por-apartacao', 'Por Apartação', ['apartacao_atual']),
+  herd('por-categoria', 'Por Categoria', ['categoria']),
+  herd('por-raca', 'Por Raça', ['raca']),
+  herd('por-marca', 'Por Marca', ['marca']),
+  herd('por-sexo', 'Por Sexo', ['sexo']),
+  herd('por-situacao', 'Por Situação', ['situacao'], { filters: TODAS_SITUACOES }),
+  herd('por-faixa-peso', 'Por Faixa de Peso', ['faixa_peso']),
+  // = o antigo "Inventário atual do rebanho".
+  listaTipo('analitico', 'Analítico (Lista de Animais)', { columns: INVENTORY_COLUMNS, aggregates: HERD_TYPE_TOTALS, sort: [{ columnId: 'animal', direction: 'asc' }], filters: ATIVOS }),
+  listaTipo('sem-pesagem-recente', 'Sem Pesagem Recente', {
+    columns: SEM_PESAGEM_COLUMNS, aggregates: SEM_PESAGEM_TOTALS, sort: [{ columnId: 'dias_sem_pesagem', direction: 'desc' }], filters: ATIVOS, population: SEM_PESAGEM_POPULATION,
+  }),
+]);
+
 export const REBANHO_ATUAL = defineReport({
   id: 'rebanho.atual',
   family: 'rebanho',
   grain: GRAINS.ANIMAL_CURRENT,
-  version: 1,
+  // 2 (E1E): ganhou os tipos. Estado/modelo gravado com a versão 1 e `view: null` é de quando não havia tipo
+  // declarado — abre no tipo que bate pela estrutura (reportTemplateService.templateToRequest).
+  version: 2,
   source: 'animals.current',
   requires: ['reports.read', 'animal.read'],
   title: 'Rebanho atual',
@@ -48,5 +85,7 @@ export const REBANHO_ATUAL = defineReport({
   quickFilters: [
     { id: 'sem-pesagem-30', label: 'Sem pesagem há mais de 30 dias', filters: { dias_sem_pesagem: { operator: 'greater', value: '30' } } },
   ],
+  views: REBANHO_VIEWS,
+  defaultView: REBANHO_DEFAULT_VIEW,
   notes: ['Estado ATUAL de cada animal (uma linha por animal). Peso atual = última pesagem com peso.'],
 });
