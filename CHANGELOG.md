@@ -9,8 +9,22 @@ A 1.4.0 com os pedidos de 30/09/2026 (E1F). Esquema Dexie **8** e backup **forma
 `docs/release/1.4.1/RELEASE-NOTES.md`.
 
 ### Added (E1F)
-- Colunas Painel/Detalhes/Visíveis funcionando em todos os tipos; cabeçalho da folha interativo (ordenar,
-  calcular, agrupar, total, ocultar, adicionar coluna, redimensionar); "Mais filtros…"; "Novo relatório".
+- **Cabeçalho da folha interativo** em todos os relatórios: clique no título de uma coluna para Ordenar,
+  Calcular (Soma, Média, Mínimo, Máximo, Contagem — só as da coluna, pelo motor), Agrupar por ela (até 3
+  níveis), pôr o Subtotal/Total dela, Ocultar ou Adicionar coluna; arraste a borda para mudar a largura (vale na
+  tela, na impressão e no PDF, e fica no último estado e nos modelos).
+- **Mais filtros…:** filtro por qualquer coluna do relatório, com a mesma lista de marcar e contador.
+- **Novo relatório:** "➕ Novo relatório…" no campo Relatório (nome, base, quem vê) cria um relatório seu — um
+  modelo, sem esquema novo — que aparece em "Meus relatórios", com "Salvar alterações", "Salvar como…",
+  "Renomear" e "Excluir"; título da folha com o nome dele; nunca amplia permissão.
+- Gates novos: `reports:colunas-todas` (2.159 combinações relatório × tipo × opção de Colunas),
+  `reports:cabecalho-interativo` e `reports:novo-relatorio`.
+
+### Fixed (E1F)
+- **Colunas Painel/Detalhes/Visíveis:** coluna marcada sumia da folha quando não tinha valor no período (agora
+  aparece com "-"; no padrão, coluna vazia continua escondida); os tipos lista (Analíticos, Mortes, Perdendo Peso,
+  Sem Pesagem Recente, listas do Romaneio) ganharam seletor próprio, e a escolha deixou de se perder ao trocar de
+  tipo; no Romaneio a contagem aparece como "Saídas".
 
 ## [1.4.0] — 2026-09-25
 

@@ -40,6 +40,39 @@ abrindo.
 "Vendas do período", "Abates do período" e "Compras do período" viraram os tipos do **Comercial**: links,
 favoritos e modelos deles abrem o Comercial no tipo certo (a troca fica registrada na auditoria).
 
+## 2A. Montar o relatório do seu jeito (1.4.1)
+
+**Pelo título da coluna, na folha:** clique no título de qualquer coluna para abrir o menu:
+
+| Opção | O que faz |
+|---|---|
+| **Ordenar** | Maior/menor primeiro (ou A-Z/Z-A) |
+| **Calcular** | Troca a conta da coluna: Soma, Média, Mínimo, Máximo ou Contagem (só as que fazem sentido para ela). No Analítico, liga a conta nos subtotais e no total |
+| **Agrupar por esta coluna** | Vira um nível de agrupamento (até 3), com subtotal |
+| **Subtotal/Total desta coluna** | Põe a conta padrão da coluna na linha de subtotal e no TOTAL GERAL |
+| **Ocultar coluna** | Tira a coluna da folha |
+| **Adicionar coluna…** | Põe outra coluna ou total do relatório |
+
+**Largura:** arraste a borda do título para alargar ou estreitar a coluna (duplo clique volta ao automático). A
+largura vale também na impressão e no PDF e fica guardada.
+
+**Mais filtros…:** no quadro de filtros, ao lado dos botões, lista todas as outras colunas do relatório (ex.:
+Motivo da saída, Comprador, Peso). Escolha uma, marque os valores ou a condição, e ela vira um botão com contador.
+
+**Colunas Painel / Colunas Detalhes / Colunas Visíveis:** marque, desmarque e arraste para mudar a ordem. Coluna
+marcada aparece sempre na folha, mesmo sem valor no período (com "-"). A escolha fica guardada para cada tipo e
+para o seu usuário.
+
+**Novo relatório:** no fim do campo **Relatório**, clique em **➕ Novo relatório…**:
+1. dê um **Nome** (ex.: "Pesagem por Marca");
+2. escolha a **Base** (Pesagens, Rebanho atual, Desempenho, Saídas, Comercial…);
+3. escolha **Quem vê**: "Só eu" ou "A empresa" (esta só para ADMIN e GESTOR).
+
+Ele abre como um relatório ("Relatório de Pesagem por Marca"). Ajuste pelo título das colunas, pelos filtros e pelo
+Tipo Relatório. Quando houver mudança, aparece **Salvar alterações** ao lado de Imprimir. No menu ⋯ ficam **Salvar
+como…**, **Renomear** e **Excluir**. Os seus relatórios aparecem no campo **Relatório**, no grupo **Meus
+relatórios**. Um relatório seu nunca mostra mais do que o seu perfil pode ver.
+
 ## 3. Resumido ou Detalhado
 
 No alto da tela há o botão **Resumido | Detalhado**:
