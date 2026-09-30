@@ -362,6 +362,22 @@ assert.match(stepConciliacao, /const numerosParecidos = avisoNumerosParecidos\(s
 assert.match(stepConciliacao, /data-testid="importacao-numeros-parecidos"/, '9: bloco do número parecido na análise');
 assert.match(stepConciliacao, /const cadastrosAntecipados = avisosCadastrosAntecipados\(summary\);/, '9: frases do Cadastro antecipado vêm do resumo');
 assert.match(stepConciliacao, /data-testid="importacao-cadastros-antecipados"/, '9: bloco do Cadastro antecipado na análise');
+// E1G (revisão): o mesmo número em duas marcas não pode gerar duas frases iguais (nem chave repetida
+// na lista da tela); a confirmação antes de gravar também lembra a troca.
+const doisMesmoNumero = avisosCadastrosAntecipados({ cadastrosAntecipados: [
+  { animal: '701 / ABC', numero: '701', cadastroGravado: '2026-09-29', novoCadastro: '2026-06-02' },
+  { animal: '701 / XYZ', numero: '701', cadastroGravado: '2026-09-29', novoCadastro: '2026-06-02' },
+  { animal: '702 / ABC', numero: '702', cadastroGravado: '2026-09-29', novoCadastro: '2026-06-03' },
+] });
+assert.deepEqual(doisMesmoNumero, [
+  'O Cadastro de 29/09/2026 do animal 701 / ABC passa a Manejo; o novo Cadastro é 02/06/2026.',
+  'O Cadastro de 29/09/2026 do animal 701 / XYZ passa a Manejo; o novo Cadastro é 02/06/2026.',
+  'O Cadastro de 29/09/2026 do animal 702 passa a Manejo; o novo Cadastro é 03/06/2026.',
+], 'NEGATIVO: mesmo número em marcas diferentes mostra a marca (frases distintas)');
+assert.match(stepConciliacao, /cadastrosAntecipados\.slice\(0, 12\)\.map\(\(frase, indice\) => <li key=\{`\$\{indice\}-\$\{frase\}`\}>/, '9: chave da lista não repete');
+const confirmDialog = readFileSync(fileURLToPath(new URL('../src/components/importacao/ConfirmarImportacaoDialog.jsx', import.meta.url)), 'utf8');
+assert.match(confirmDialog, /summary\?\.cadastrosAntecipados\?\.length/, '9: a confirmação lê o resumo do Cadastro antecipado');
+assert.match(confirmDialog, /data-testid="importacao-confirmar-antecipados"/, '9: a confirmação lembra que o Cadastro gravado passa a Manejo');
 
 await deleteDbForTests();
 console.log(JSON.stringify({

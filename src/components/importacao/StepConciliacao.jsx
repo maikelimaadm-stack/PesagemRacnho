@@ -99,7 +99,7 @@ export default function StepConciliacao({ plan, analisando, erro, onAnalisar, af
                 O histórico começa antes do Cadastro de {fmtInt(cadastrosAntecipados.length)} {cadastrosAntecipados.length === 1 ? 'animal' : 'animais'}:
               </strong>
               <ul className="importacao-list">
-                {cadastrosAntecipados.slice(0, 12).map((frase) => <li key={frase}>{frase}</li>)}
+                {cadastrosAntecipados.slice(0, 12).map((frase, indice) => <li key={`${indice}-${frase}`}>{frase}</li>)}
               </ul>
               {cadastrosAntecipados.length > 12 ? (
                 <span>Mostrando os 12 primeiros. A lista completa está na próxima etapa e no relatório. </span>

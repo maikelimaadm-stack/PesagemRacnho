@@ -220,9 +220,15 @@ const dataBR = (iso) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8,
  * antes dele ("O Cadastro de 29/09/2026 do animal 701 passa a Manejo; o novo Cadastro é 02/06/2026.").
  */
 export function avisosCadastrosAntecipados(summary) {
-  return (summary?.cadastrosAntecipados || []).map((item) => (
-    `O Cadastro de ${dataBR(item.cadastroGravado)} do animal ${item.numero ?? item.animal} passa a Manejo; o novo Cadastro é ${dataBR(item.novoCadastro)}.`
-  ));
+  const itens = summary?.cadastrosAntecipados || [];
+  // E1G (revisão): o mesmo número em marcas diferentes mostra a marca ("701 / ABC"), senão as
+  // frases saem iguais e não dá para saber de qual animal se trata.
+  const vezes = new Map();
+  for (const item of itens) vezes.set(item.numero, (vezes.get(item.numero) || 0) + 1);
+  return itens.map((item) => {
+    const animal = item.numero == null || vezes.get(item.numero) > 1 ? item.animal : item.numero;
+    return `O Cadastro de ${dataBR(item.cadastroGravado)} do animal ${animal} passa a Manejo; o novo Cadastro é ${dataBR(item.novoCadastro)}.`;
+  });
 }
 
 /** Campos obrigatórios do tipo que ainda não têm coluna ligada (mesma regra do motor). */
