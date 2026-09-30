@@ -3,7 +3,8 @@
 //   A — base vazia, Histórico conciliado: evento mais antigo = Cadastro, demais = Manejo, ordem
 //       do arquivo irrelevante, derivados recalculados, rastro (importacao_id/fingerprint/auditoria);
 //   B — animal existente com Cadastro: tudo vira Manejo; linha igual → JÁ EXISTE; retroativo
-//       recalcula o posterior; linha anterior ao Cadastro → CONFLITO (plano bloqueado, zero gravações);
+//       recalcula o posterior; linha anterior ao Cadastro → no Histórico antecipa o Cadastro
+//       (E1G), em Manejos continua CONFLITO (plano bloqueado, zero gravações);
 //   C — animal existente SEM Cadastro: Histórico/Cadastros → CONFLITO, Manejos → ERRO;
 //   D — ambiguidade 300/ABC × 300/XYZ sem marca no arquivo → AMBÍGUO, gravação recusada, zero gravações;
 //   E — identidade por identificador (RFID), por marca_id, por marca normalizada, animal_id
@@ -70,6 +71,8 @@ assert.deepEqual({ ...planA.summary, cadastrosMestresAusentes: undefined }, {
   categoriasNaoResolvidas: 0, seriesAfetadas: 2, eventosRecalculados: 0, cadastrosMestresNovos: 0,
   // E1G: linhas que casaram por número parecido ("01016 → 1016"); nenhuma neste arquivo.
   numerosParecidos: { linhas: 0, exemplos: [], outrosExemplos: 0 },
+  // E1G: Cadastros gravados que passariam a Manejo (histórico anterior ao Cadastro); nenhum aqui.
+  cadastrosAntecipados: [],
 }, 'A: resumo exato');
 assert.deepEqual([3, 5, 2, 4].map((line) => rowsA.get(line).eventType), ['Cadastro', 'Manejo', 'Manejo', 'Cadastro'], 'A: mais antigo = Cadastro, independente da ordem');
 assert.deepEqual(rowsA.get(5).derived, { data_anterior: '2026-01-10', peso_anterior: 180, dias: 30, ganho: 40, gmd: 1.333 });
@@ -124,14 +127,25 @@ const fileB = csv('Brinco;Marca;Data;Peso', '200;ABC;10/01/2026;200', '200;ABC;1
 const beforeB = await counts();
 const planB = await analyzeImport({ text: fileB, type: 'HISTORICO' });
 const rowsB = byLine(planB);
+// E1G (mudança INTENCIONAL): no Histórico, a linha anterior ao Cadastro gravado deixa de ser
+// CONFLITO — ela passa a ser o Cadastro e o Cadastro gravado vira Manejo (a gravação dessa troca
+// é coberta pelo gate import:identity:verify; aqui só a análise, e a linha é ignorada abaixo).
 assert.deepEqual([2, 3, 4].map((line) => [rowsB.get(line).status, rowsB.get(line).eventType]), [
-  [ROW_STATUS.JA_EXISTE, 'Cadastro'], [ROW_STATUS.NOVO, 'Manejo'], [ROW_STATUS.CONFLITO, 'Manejo'],
-], 'B: situação por linha');
-assert.equal(rowsB.get(4).messages[0], 'A data 2026-01-05 é anterior ao Cadastro do animal (2026-01-10).');
+  [ROW_STATUS.JA_EXISTE, 'Manejo'], [ROW_STATUS.NOVO, 'Manejo'], [ROW_STATUS.NOVO, 'Cadastro'],
+], 'B: situação por linha (Cadastro antecipado)');
+assert.equal(rowsB.get(4).messages[0], 'O Cadastro de 10/01/2026 do animal 200 passa a Manejo; o novo Cadastro é 05/01/2026.');
 assert.equal(rowsB.get(3).identity.animalId, b.animal_id);
-assert.equal(planB.summary.eventosRecalculados, 1, 'B: o Manejo de março será recalculado');
-assert.equal(planB.blocking, true);
-await rejects(applyImport(planB), 'IMPORT_BLOCKING');
+assert.equal(planB.summary.eventosRecalculados, 2, 'B: o Cadastro rebaixado e o Manejo de março serão recalculados');
+assert.deepEqual(planB.summary.cadastrosAntecipados, [{ animalId: b.animal_id, animal: '200 / ABC', numero: '200', cadastroGravado: '2026-01-10', novoCadastro: '2026-01-05', linha: 4 }]);
+assert.equal(planB.blocking, false);
+assert.deepEqual(await counts(), beforeB, 'B: análise não grava');
+// Os outros tipos continuam como antes: em Manejos a linha anterior ao Cadastro é CONFLITO.
+const planBManejos = await analyzeImport({ text: fileB, type: 'MANEJOS' });
+assert.equal(byLine(planBManejos).get(4).status, ROW_STATUS.CONFLITO, 'NEGATIVO: Manejos não antecipa o Cadastro');
+assert.equal(byLine(planBManejos).get(4).messages[0], 'A data 2026-01-05 é anterior ao Cadastro do animal (2026-01-10).');
+assert.deepEqual(planBManejos.summary.cadastrosAntecipados, []);
+assert.equal(planBManejos.blocking, true);
+await rejects(applyImport(planBManejos), 'IMPORT_BLOCKING');
 assert.deepEqual(await counts(), beforeB, 'B: plano bloqueante → zero gravações');
 const planB2 = await analyzeImport({ text: fileB, type: 'HISTORICO', rules: { ignoredLines: [4] } });
 assert.equal(byLine(planB2).get(4).status, ROW_STATUS.IGNORADA);
@@ -291,7 +305,7 @@ console.log(JSON.stringify({
   ok: true,
   cases: {
     A: 'base vazia: Cadastro = mais antigo, Manejos recalculados, rastro e auditoria',
-    B: 'animal com Cadastro: JÁ EXISTE, retroativo recalcula posterior, anterior ao Cadastro = CONFLITO',
+    B: 'animal com Cadastro: JÁ EXISTE, retroativo recalcula posterior, anterior ao Cadastro = Cadastro antecipado no Histórico e CONFLITO em Manejos',
     C: 'animal sem Cadastro: CONFLITO/ERRO sem gravação',
     D: 'ambiguidade sem marca: AMBÍGUO e zero gravações',
     E: 'identificador RFID, marca_id, marca normalizada, animal_id, SN, número reaproveitado',

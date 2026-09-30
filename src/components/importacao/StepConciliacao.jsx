@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { fmtDateBR, fmtInt } from '@/components/common/formatNumber';
 import AfericaoArquivo from './AfericaoArquivo';
-import { IMPORT_TYPES, animaisComVariasLinhas, avisoNumerosParecidos } from './importacaoModel';
+import { IMPORT_TYPES, animaisComVariasLinhas, avisoNumerosParecidos, avisosCadastrosAntecipados } from './importacaoModel';
 
 function Contagem({ label, valor, tom = '' }) {
   return (
@@ -20,6 +20,7 @@ export default function StepConciliacao({ plan, analisando, erro, onAnalisar, af
   const repetidos = plan ? animaisComVariasLinhas(plan) : { total: 0, grupos: [] };
   const ausentes = summary?.cadastrosMestresAusentes || [];
   const numerosParecidos = avisoNumerosParecidos(summary);
+  const cadastrosAntecipados = avisosCadastrosAntecipados(summary);
 
   return (
     <section className="importacao-step" aria-labelledby="importacao-step-conciliacao-titulo">
@@ -89,6 +90,21 @@ export default function StepConciliacao({ plan, analisando, erro, onAnalisar, af
                 {' '}É o mesmo número escrito de outro jeito (zeros à esquerda ou o “,0” que o Excel acrescenta).
                 As pesagens entram no animal já cadastrado e o número dele não muda.
               </span>
+            </div>
+          ) : null}
+
+          {cadastrosAntecipados.length ? (
+            <div className="importacao-alert importacao-alert--aviso" data-testid="importacao-cadastros-antecipados">
+              <strong>
+                O histórico começa antes do Cadastro de {fmtInt(cadastrosAntecipados.length)} {cadastrosAntecipados.length === 1 ? 'animal' : 'animais'}:
+              </strong>
+              <ul className="importacao-list">
+                {cadastrosAntecipados.slice(0, 12).map((frase) => <li key={frase}>{frase}</li>)}
+              </ul>
+              {cadastrosAntecipados.length > 12 ? (
+                <span>Mostrando os 12 primeiros. A lista completa está na próxima etapa e no relatório. </span>
+              ) : null}
+              <span>Ao importar, a troca é feita junto com as pesagens e o GMD de todas elas é calculado de novo.</span>
             </div>
           ) : null}
 

@@ -211,6 +211,19 @@ export function avisoNumerosParecidos(summary) {
   return `${inicio}: ${info.exemplos.join(', ')}${outros}.`;
 }
 
+// Data ISO do plano → dd/mm/aaaa (sem os formatadores da tela, para o gate rodar em Node).
+const dataBR = (iso) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '—');
+
+/**
+ * E1G: uma frase por animal cujo Cadastro gravado passa a Manejo porque o histórico começa
+ * antes dele ("O Cadastro de 29/09/2026 do animal 701 passa a Manejo; o novo Cadastro é 02/06/2026.").
+ */
+export function avisosCadastrosAntecipados(summary) {
+  return (summary?.cadastrosAntecipados || []).map((item) => (
+    `O Cadastro de ${dataBR(item.cadastroGravado)} do animal ${item.numero ?? item.animal} passa a Manejo; o novo Cadastro é ${dataBR(item.novoCadastro)}.`
+  ));
+}
+
 /** Campos obrigatórios do tipo que ainda não têm coluna ligada (mesma regra do motor). */
 export function camposObrigatoriosFaltando(campos, mapping, type) {
   const usados = new Set(Object.values(mapping || {}).filter(Boolean));
