@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import NewReportDialog from "@/components/reports/NewReportDialog";
 import ReportView from "@/components/reports/ReportView";
 import { useReportActor } from "@/components/reports/reportUi";
 import { resolveReportId } from "@/modules/reporting/definitions/reportCatalog";
 import { getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
 import { getRecents, getReportViewState, getTypeColumnPrefs, listTemplates } from "@/modules/reporting/application/reportTemplateService";
 import { initialReportId, reportSelectorOptions, withCurrentOption } from "@/modules/reporting/application/reportScreenModel";
+import { canShareReports, createCustomReport, newReportBases, parseReportOption, withMyReports } from "@/modules/reporting/application/customReports";
 import "@/styles/reports.css";
 
 // Relatórios: uma entrada no menu e uma tela só (E1E, decisão da responsável em 30/09/2026): abre direto no
@@ -20,6 +23,8 @@ import "@/styles/reports.css";
 // último estado > padrão do relatório; `&d=` (atalho do Fechamento) só troca o período.
 // E1D: a escolha de "Colunas" de cada tipo (por usuário) também é lida antes de montar — o relatório abre
 // no tipo padrão já com as colunas que a pessoa escolheu para ele.
+// E1F: "Meus relatórios" no seletor (modelos pessoais e da empresa; abrem com &m=) e "➕ Novo relatório…" (Nome,
+// Base e Quem vê → modelo com a seleção padrão da base). Um relatório do usuário só grava com "Salvar alterações".
 export default function Relatorios() {
   const actor = useReportActor();
   const location = useLocation();
@@ -42,6 +47,21 @@ export default function Relatorios() {
   const hasTypeColumns = Boolean(resolved?.definition?.views?.some((view) => view.columnChoices));
   // Campo "Relatório": o catálogo do perfil (+ o relatório aberto por link, se estiver fora dele).
   const options = useMemo(() => (actor ? reportSelectorOptions(actor) : []), [actor]);
+  // E1F: grupo "Meus relatórios" no fim do seletor (os modelos pessoais do usuário e os da empresa, de todas as
+  // bases que ele abre) e "➕ Novo relatório…". Relido ao abrir outro e quando a tela salva, renomeia ou exclui.
+  const [myTemplates, setMyTemplates] = useState([]);
+  const [templatesVersion, setTemplatesVersion] = useState(0);
+  const [newReportOpen, setNewReportOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const bases = useMemo(() => (actor ? newReportBases(actor) : []), [actor]);
+  useEffect(() => {
+    let alive = true;
+    if (!actor) return undefined;
+    listTemplates(actor)
+      .then((items) => { if (alive) setMyTemplates(items); })
+      .catch(() => { if (alive) setMyTemplates([]); });
+    return () => { alive = false; };
+  }, [actor, templatesVersion, templateId]);
 
   // Sem relatório na URL: último usado (ou Pesagens), trocando a URL (voltar do navegador não cai aqui de novo).
   useEffect(() => {
@@ -90,21 +110,63 @@ export default function Relatorios() {
   if (!actor || !resolved?.definition) return null;
   if (!templateReady || !savedReady || !typeColumnsReady) return null;
   const open = (id, chosen = null) => navigate(`/Relatorios?r=${encodeURIComponent(id)}${chosen ? `&m=${encodeURIComponent(chosen.id)}` : ""}`);
+  // Valor do seletor: relatório do catálogo (?r=), relatório do usuário (?r=<base>&m=<id>) ou "➕ Novo relatório…".
+  const select = (value) => {
+    const choice = parseReportOption(value);
+    if (choice.kind === "new") { setNewReportOpen(true); return; }
+    if (choice.kind === "template") {
+      const chosen = myTemplates.find((item) => item.id === choice.templateId);
+      if (chosen) open(chosen.baseReportId, chosen);
+      return;
+    }
+    open(choice.reportId);
+  };
+  // Novo relatório = modelo com a seleção padrão da base (customReports.createCustomReport) — abre em seguida.
+  const createReport = async ({ name, baseReportId, scope }) => {
+    setCreating(true);
+    try {
+      const saved = await createCustomReport({ baseReportId, name, scope }, actor);
+      setNewReportOpen(false);
+      setTemplatesVersion((version) => version + 1);
+      toast.success(`Relatório “${saved.name}” criado.`, { description: "Ajuste pelos filtros e pelo cabeçalho e use “Salvar alterações”." });
+      open(saved.baseReportId, saved);
+    } catch (err) {
+      toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode criar este relatório." : err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
   return (
-    <ReportView
-      key={`${resolved.definition.id}:${presetId ?? ""}:${templateId ?? ""}:${day ?? ""}`}
-      reportId={resolved.definition.id}
-      presetId={template ? null : presetId}
-      template={template}
-      savedState={template || presetId ? null : savedState}
-      typeColumnPrefs={typeColumns}
-      initialPeriod={day ? { preset: "personalizado", from: day, to: day } : null}
-      actor={actor}
-      onBack={null}
-      reportOptions={withCurrentOption(options, resolved.definition)}
-      // Trocar de relatório abre o outro com o último estado dele; abrir um modelo, o modelo (&m=).
-      onSelectReport={(id) => open(id)}
-      onOpenTemplate={(chosen) => open(resolved.definition.id, chosen)}
-    />
+    <>
+      <ReportView
+        key={`${resolved.definition.id}:${presetId ?? ""}:${templateId ?? ""}:${day ?? ""}`}
+        reportId={resolved.definition.id}
+        presetId={template ? null : presetId}
+        template={template}
+        savedState={template || presetId ? null : savedState}
+        typeColumnPrefs={typeColumns}
+        initialPeriod={day ? { preset: "personalizado", from: day, to: day } : null}
+        actor={actor}
+        onBack={null}
+        reportOptions={withMyReports(withCurrentOption(options, resolved.definition), myTemplates, actor)}
+        // Trocar de relatório abre o outro com o último estado dele; abrir um modelo, o modelo (&m=).
+        onSelectReport={select}
+        onOpenTemplate={(chosen) => open(resolved.definition.id, chosen)}
+        onTemplateSaved={(saved) => open(saved.baseReportId, saved)}
+        onTemplatesChanged={() => setTemplatesVersion((version) => version + 1)}
+      />
+      <NewReportDialog
+        open={newReportOpen}
+        mode="new"
+        onOpenChange={setNewReportOpen}
+        bases={bases}
+        baseReportId={bases.some((group) => group.items.some((item) => item.value === resolved.definition.id)) ? resolved.definition.id : null}
+        canShare={canShareReports(actor)}
+        templates={myTemplates}
+        actor={actor}
+        busy={creating}
+        onSubmit={createReport}
+      />
+    </>
   );
 }

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowLeft, FileJson, FileSpreadsheet, FileText, FolderOpen, MoreHorizontal, RefreshCw, Save, Settings, Trash2, Users } from "lucide-react";
+import { ArrowLeft, FileJson, FileSpreadsheet, FileText, FolderOpen, MoreHorizontal, PencilLine, RefreshCw, Save, Settings, Trash2, Users } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -105,11 +105,15 @@ export function MakgestaoFilterButton({ label, value, filterType = "text", listO
  * Discretos ao lado dele: Excel, PDF e o menu "⋯" (CSV, JSON, Abrir/Salvar modelo, Atualizar, colunas vazias).
  * @param templates E1E: modelos deste relatório para "Abrir modelo" (null = sem modelos nesta tela, ex.
  *   fora de Relatórios); onOpenTemplate(modelo). onDeleteTemplate: só com o modelo aberto e permissão.
+ * E1F (relatório do usuário aberto — "Meus relatórios"): baseNote = "base · quem vê" no subtítulo;
+ *   onSaveChanges = "Salvar alterações" ao lado do Imprimir (só com alteração não salva e permissão); no ⋯,
+ *   onSaveAs "Salvar como…" (no lugar de "Salvar modelo…"), onRename "Renomear…" e o Excluir (deleteLabel).
  */
 export function MakgestaoTopBar({
   title, templateName = null, loading = false, backLabel = "Relatórios", onBack = null,
   canExport, disabled, onPrint, onExcel, onPdf, onCsv, onJson, menuLabel,
   templates = null, currentTemplateId = null, onOpenTemplate = null, onSaveTemplate = null, onDeleteTemplate = null,
+  baseNote = null, onSaveChanges = null, savingChanges = false, onSaveAs = null, onRename = null, deleteLabel = null,
   onRefresh, showEmptyColumns, onToggleEmptyColumns,
 }) {
   return (
@@ -118,7 +122,7 @@ export function MakgestaoTopBar({
         <h1 className="rpt-mak__title">{title}</h1>
         <p className="rpt-mak__subtitle">
           Análise e impressão
-          {templateName ? <em> · modelo “{templateName}”</em> : null}
+          {baseNote ? <em> · {baseNote}</em> : templateName ? <em> · modelo “{templateName}”</em> : null}
           {loading ? <span className="rpt-mak__busy" aria-live="polite"> · Calculando…</span> : null}
         </p>
       </div>
@@ -166,13 +170,21 @@ export function MakgestaoTopBar({
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
             ) : null}
-            {onSaveTemplate ? <DropdownMenuItem className="text-xs" onClick={onSaveTemplate}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar modelo…</DropdownMenuItem> : null}
-            {onDeleteTemplate ? <DropdownMenuItem className="text-xs" onClick={onDeleteTemplate}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Excluir modelo “{templateName}”…</DropdownMenuItem> : null}
+            {onSaveAs ? <DropdownMenuItem className="text-xs" onClick={onSaveAs}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar como…</DropdownMenuItem>
+              : onSaveTemplate ? <DropdownMenuItem className="text-xs" onClick={onSaveTemplate}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar modelo…</DropdownMenuItem> : null}
+            {onRename ? <DropdownMenuItem className="text-xs" onClick={onRename}><PencilLine className="h-3.5 w-3.5" aria-hidden="true" />Renomear…</DropdownMenuItem> : null}
+            {onDeleteTemplate ? <DropdownMenuItem className="text-xs" onClick={onDeleteTemplate}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />{deleteLabel ?? <>Excluir modelo “{templateName}”…</>}</DropdownMenuItem> : null}
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-xs" onClick={onRefresh}><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Atualizar (reler os dados)</DropdownMenuItem>
             <DropdownMenuCheckboxItem className="text-xs" checked={showEmptyColumns} onCheckedChange={onToggleEmptyColumns}>Mostrar colunas vazias</DropdownMenuCheckboxItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* E1F: alteração não salva no relatório do usuário — só grava com este botão (o último estado não mexe nele). */}
+        {onSaveChanges ? (
+          <button type="button" className="rpt-mak-btn rpt-mak-btn--icon rpt-mak-save" disabled={savingChanges} onClick={onSaveChanges} title="Gravar o relatório como está na tela">
+            <Save aria-hidden="true" />{savingChanges ? "Salvando…" : "Salvar alterações"}
+          </button>
+        ) : null}
         {canExport ? (
           <button type="button" className="rpt-mak-print text-white" disabled={disabled} onClick={onPrint} title="Imprimir a folha (A4)">Imprimir</button>
         ) : null}
@@ -193,6 +205,8 @@ export function MakgestaoColumnsButton({ label, title, onClick }) {
 /**
  * E1E: campo "Relatório" (primeiro do cartão) — o catálogo do perfil agrupado por família, como a lista em
  * cartões da 1.4.0. Trocar abre o outro relatório (ReportView → Relatorios.jsx, ?r=<id>).
+ * E1F: no fim, o grupo "Meus relatórios" (relatórios do usuário, valor "m:<id>") e "➕ Novo relatório…"
+ * (application/customReports.js); o que cada valor abre, quem decide é Relatorios.jsx.
  */
 function ReportSelect({ value, options, onChange }) {
   const groups = [];
@@ -212,7 +226,8 @@ function ReportSelect({ value, options, onChange }) {
           {groups.map((group) => (
             <SelectGroup key={`${group.family}-${group.items[0].value}`}>
               <SelectLabel className="rpt-mak-report-list__family">{group.label}</SelectLabel>
-              {group.items.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+              {/* E1F: "Meus relatórios" — os da empresa com "(empresa)"; "➕ Novo relatório…" abre o diálogo. */}
+              {group.items.map((option) => <SelectItem key={option.value} value={option.value}>{option.shared ? `${option.label} (empresa)` : option.label}</SelectItem>)}
             </SelectGroup>
           ))}
         </SelectContent>

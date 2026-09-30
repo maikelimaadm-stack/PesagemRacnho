@@ -197,8 +197,10 @@ check('Relatorios.jsx: abre direto o ReportView (último usado; senão Pesagens)
   assert.ok(!/ReportCatalog/.test(page), 'sem o catálogo em cartões');
   assert.match(page, /getRecents\(actor\)[\s\S]{0,200}initialReportId\(recents, options\)[\s\S]{0,40}\{ replace: true \}/, 'sem ?r=: último usado (replace)');
   assert.match(page, /reportSelectorOptions\(actor\)/, 'opções do seletor pelo perfil');
-  assert.match(page, /reportOptions=\{withCurrentOption\(options, resolved\.definition\)\}/, 'passa as opções para a tela');
-  assert.match(page, /onSelectReport=\{\(id\) => open\(id\)\}/, 'trocar de relatório navega para ?r=<id>');
+  // E1F: + o grupo "Meus relatórios" e "➕ Novo relatório…" no fim (gate reports:novo-relatorio).
+  assert.match(page, /reportOptions=\{withMyReports\(withCurrentOption\(options, resolved\.definition\), myTemplates, actor\)\}/, 'passa as opções para a tela');
+  assert.match(page, /onSelectReport=\{select\}/, 'trocar de relatório: pelo valor do seletor');
+  assert.match(page, /const select = \(value\) => \{[\s\S]{0,400}open\(choice\.reportId\);/, 'relatório do catálogo navega para ?r=<id>');
   assert.match(page, /onOpenTemplate=\{\(chosen\) => open\(resolved\.definition\.id, chosen\)\}/, 'abrir modelo navega para &m=<modelo>');
   assert.match(page, /onBack=\{null\}/, 'sem "voltar" (a tela é a própria Relatórios)');
   assert.match(page, /getLegacyAlias\(viewParam\)/, 'links antigos (&v=) continuam');
@@ -211,8 +213,10 @@ check('Relatorios.jsx: abre direto o ReportView (último usado; senão Pesagens)
 check('ReportView.jsx: tela do MAKGESTAO para todos em Relatórios; Manutenção intacta', () => {
   const view = read('src/components/reports/ReportView.jsx');
   assert.match(view, /const makScreen = Boolean\(reportOptions\) \|\| isPesagensScreen\(definition\);/, 'tela do MAKGESTAO sempre que há o campo Relatório');
-  assert.match(view, /title=\{`Relatório de \$\{definition\.sheetTitle \?\? definition\.title\}`\}/, 'título "Relatório de <nome>"');
-  assert.match(view, /report=\{reportOptions && onSelectReport \? \{ value: definition\.id, options: reportOptions, onChange: onSelectReport \} : null\}/, 'campo Relatório no cartão');
+  // E1F: título pelo customReports.reportTitle ("Relatório de <sheetTitle ?? title>"; relatório do usuário, o nome dele).
+  assert.match(view, /title=\{reportTitle\(definition, currentTemplate\)\}/, 'título "Relatório de <nome>"');
+  assert.match(read('src/modules/reporting/application/customReports.js'), /export const reportTitle = \(definition, template = null\) => `Relatório de \$\{template\?\.name \|\| definition\.sheetTitle \|\| definition\.title\}`;/, 'título: nome do relatório (sheetTitle ?? title)');
+  assert.match(view, /report=\{reportOptions && onSelectReport \? \{ value: selectorValue\(definition\.id, currentTemplate\), options: withTemplateOption\(reportOptions, currentTemplate\), onChange: onSelectReport \} : null\}/, 'campo Relatório no cartão');
   assert.match(view, /const buttonColumns = filterButtonsOf\(definition, available\);/, 'botões de filtro pelo reportScreenModel');
   assert.match(view, /params=\{integerParamsOf\(definition\)\.map/, 'parâmetros inteiros no cartão');
   assert.match(view, /quickFiltersOf\(definition\)\.map/, 'filtros rápidos no cartão');
