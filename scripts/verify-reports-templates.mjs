@@ -167,7 +167,8 @@ const bruto = (await db.table('appSettings').get(chaveEstado)).value;
 bruto.reports.pesagens.fixedFilters = { tipo_manejo: { operator: 'in', values: ['Saída'], match: 'code' } };
 await db.table('appSettings').put({ key: chaveEstado, value: bruto });
 assert.equal((await getReportViewState('pesagens', OPERADOR)).selection.fixedFilters, undefined, 'NEGATIVO: condição fixa antiga não volta');
-assert.equal(await code(() => saveReportViewState('comercial.vendas', { ...estado, fixedFilters: {} }, OPERADOR)), 'AUTH_FORBIDDEN', 'NEGATIVO: relatório que o papel não abre');
+// E1E: Vendas do período virou tipo do Comercial (o id antigo é alias e não recebe último estado).
+assert.equal(await code(() => saveReportViewState('comercial', { ...estado, fixedFilters: {} }, OPERADOR)), 'AUTH_FORBIDDEN', 'NEGATIVO: relatório que o papel não abre');
 assert.equal(await getReportViewState('comercial.vendas', OPERADOR), null);
 
 // Persistência sobrevive a reabrir o banco

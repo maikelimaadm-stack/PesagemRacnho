@@ -1,8 +1,8 @@
-// Famílias PESAGENS (complementos), MOVIMENTAÇÃO, SAÍDAS, COMERCIAL (dados legados por evento) e
-// EMBARQUES (romaneio). E1 (1.4.0): "Movimentação de lotes" substitui mudanças e permanências; "Saídas"
+// Famílias PESAGENS (complementos), MOVIMENTAÇÃO, SAÍDAS e EMBARQUES (romaneio); COMERCIAL está em
+// comercial.js (E1E). E1 (1.4.0): "Movimentação de lotes" substitui mudanças e permanências; "Saídas"
 // substitui saídas por motivo e as quatro de mortes; "Pendências de pesagem" passou para a aba Controle
 // da Manutenção; o Fechamento do dia passou para a família Pesagens.
-import { DATA_CLASSIFICATION, REPORT_VISIBILITY, defineReport } from '../domain/reportDefinition.js';
+import { REPORT_VISIBILITY, defineReport } from '../domain/reportDefinition.js';
 import { GRAINS } from '../domain/reportGrain.js';
 import { EVENT_COLUMNS, RELATION_SEARCH_COLUMN_IDS } from './columns/eventColumns.js';
 import { LOT_COLUMNS, LOT_STAY_COLUMNS } from './columns/controlColumns.js';
@@ -199,43 +199,9 @@ export const SAIDAS = defineReport(exitBase({
   notes: [...MORTALITY_NOTES],
 }));
 
-// ---- Comercial (dados legados por evento) ----
-const commercialBase = (overrides) => exitBase({
-  family: 'comercial', requires: ['reports.read', 'weighing.read', 'commercial.values'], classification: DATA_CLASSIFICATION.LEGACY_EVENT,
-  notes: ['COMERCIAL — DADOS LEGADOS/POR EVENTO: valores e parceiros vêm do texto gravado em cada lançamento; não há vínculo canônico por parceiro nem operação comercial agregada.', 'Arrobas = carcaça ÷ 15 com o rendimento gravado no lançamento; sem rendimento, arrobas ausentes.'],
-  ...overrides,
-});
-
-export const COMERCIAL_VENDAS = defineReport(commercialBase({
-  id: 'comercial.vendas', title: 'Vendas do período',
-  description: 'Saídas por venda com peso, arrobas estimadas, preço por arroba e valor informado.',
-  metrics: ['Cabeças', 'Peso', 'Arrobas', 'Valor', 'Preço médio da @ (ponderado)'],
-  defaultColumns: ['data_pesagem', 'numero_animal', 'marca', 'sexo', 'peso', 'comprador', 'destino_venda', 'rendimento_carcaca', 'peso_carcaca_estimado', 'quantidade_arrobas', 'valor_arroba', 'valor_venda_total'],
-  lockedFilters: () => ({ motivo_saida: { operator: 'in', values: ['Venda'] } }),
-  quickGroups: ['comprador', 'destino_venda', 'data_pesagem', 'marca', 'embarque_nome'],
-  defaultAggregates: [{ id: 'cabecas', op: 'count' }, { id: 'peso_total', columnId: 'peso', op: 'sum' }, { id: 'arrobas', columnId: 'quantidade_arrobas', op: 'sum' }, { id: 'valor', columnId: 'valor_venda_total', op: 'sum' }, { id: 'preco_arroba', columnId: 'valor_arroba', op: 'weightedAvg' }],
-}));
-
-export const COMERCIAL_ABATES = defineReport(commercialBase({
-  id: 'comercial.abates', title: 'Abates do período',
-  description: 'Saídas por abate com frigorífico (texto), rendimento, arrobas, preço por arroba e valor.',
-  metrics: ['Cabeças', 'Arrobas', 'Valor', 'Preço médio da @ (ponderado)'],
-  defaultColumns: ['data_pesagem', 'numero_animal', 'marca', 'sexo', 'peso', 'frigorifico', 'rendimento_carcaca', 'peso_carcaca_estimado', 'quantidade_arrobas', 'valor_arroba_abate', 'valor_total_abate'],
-  lockedFilters: () => ({ motivo_saida: { operator: 'in', values: ['Abate'] } }),
-  quickGroups: ['frigorifico', 'data_pesagem', 'marca', 'embarque_nome'],
-  defaultAggregates: [{ id: 'cabecas', op: 'count' }, { id: 'peso_total', columnId: 'peso', op: 'sum' }, { id: 'arrobas', columnId: 'quantidade_arrobas', op: 'sum' }, { id: 'valor', columnId: 'valor_total_abate', op: 'sum' }, { id: 'preco_arroba', columnId: 'valor_arroba_abate', op: 'weightedAvg' }],
-}));
-
-export const COMERCIAL_COMPRAS = defineReport(commercialBase({
-  id: 'comercial.compras', title: 'Compras do período', grain: GRAINS.EVENT,
-  description: 'Cadastros com valor pago por cabeça informado, com origem/vendedor em texto.',
-  metrics: ['Cabeças', 'Valor total', 'Valor médio por cabeça'],
-  sourceOptions: { tipos: ['Cadastro'] },
-  defaultColumns: ['data_pesagem', 'numero_animal', 'marca', 'sexo', 'raca', 'peso', 'origem_animal', 'valor_pago_cabeca'],
-  lockedFilters: () => ({ valor_pago_cabeca: { operator: 'not_empty' } }),
-  quickGroups: ['origem_animal', 'data_pesagem', 'marca', 'raca'],
-  defaultAggregates: [{ id: 'cabecas', op: 'count' }, { id: 'peso_total', columnId: 'peso', op: 'sum' }, { id: 'valor', columnId: 'valor_pago_cabeca', op: 'sum' }, { id: 'valor_medio', columnId: 'valor_pago_cabeca', op: 'avg' }],
-}));
+// ---- Comercial ----
+// E1E: "Vendas do período", "Abates do período" e "Compras do período" viraram os tipos do relatório
+// "Comercial" (comercial.js); os ids antigos são aliases (legacyAliases.js).
 
 // ---- Embarques ----
 const ROMANEIO_COLUMNS = Object.freeze(['data_pesagem', 'numero_animal', 'marca', 'sexo', 'peso', 'nome_lote', 'nome_apartacao', 'motivo_saida', 'embarque_nome', 'documento_tipo', 'documento_numero', 'destino_venda', 'frigorifico']);

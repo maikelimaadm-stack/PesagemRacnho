@@ -97,11 +97,19 @@ function assertAggregateList(aggregates, byId, context, grain) {
 //                 Resumido, chaves de métrica (id da agregação, ou id do par "de–até" = as duas métricas);
 //   columnLabels  cabeçalho da coluna neste tipo ({ columnId: rótulo });
 //   titleKind     'Analítico' | 'Sintético' no título da folha (sem ele: pelo modo).
+// E1E (Comercial): a visão pode declarar também
+//   sheetLayout   'vendas' | 'abates' | 'compras' = a folha no desenho do relatório de venda do MAKGESTAO (PDF da
+//                 W3 — domain/vendasLayout): Métrica/Valor, totais por marca e pelo grupo do desenho, um cartão
+//                 por grupo e TOTAL GERAL. Detalhado, com população fixa e agrupado SÓ pela coluna do desenho
+//                 (SHEET_LAYOUT_GROUPS).
 const VIEW_KEYS = new Set(['id', 'label', 'description', 'groups', 'mode', 'aggregates', 'columns', 'sort', 'summarySort', 'filters',
-  'layout', 'matrix', 'population', 'groupChoices', 'columnChoices', 'columnLabels', 'titleKind']);
+  'layout', 'matrix', 'population', 'groupChoices', 'columnChoices', 'columnLabels', 'titleKind', 'sheetLayout']);
 const DIRECTIONS = new Set(['asc', 'desc']);
 export const VIEW_LAYOUTS = Object.freeze({ MATRIX: 'matrix' });
 export const TITLE_KINDS = Object.freeze(['Analítico', 'Sintético']);
+// Coluna que separa os cartões de cada desenho: Vendas por comprador, Abates por frigorífico, Compras por
+// origem (texto do lançamento — DADOS LEGADOS/POR EVENTO; na E5 viram parceiros).
+export const SHEET_LAYOUT_GROUPS = Object.freeze({ vendas: 'comprador', abates: 'frigorifico', compras: 'origem_animal' });
 
 /** Chaves de métrica de uma lista de totais: pares "de–até" viram uma chave só (o id do par). */
 export function metricKeysOf(aggregates = [], metricPairs = []) {
@@ -162,6 +170,14 @@ function defineViewExtensions(view, spec, byId, where) {
     for (const label of Object.values(view.columnLabels)) if (typeof label !== 'string' || !label.trim()) throw new Error(`${where}: rótulo vazio em columnLabels`);
   }
   if (view.titleKind != null && !TITLE_KINDS.includes(view.titleKind)) throw new Error(`${where}: titleKind inválido (${view.titleKind})`);
+  if (view.sheetLayout != null) {
+    const groupColumn = SHEET_LAYOUT_GROUPS[view.sheetLayout];
+    if (!groupColumn) throw new Error(`${where}: sheetLayout inválido (${view.sheetLayout})`);
+    if (view.layout != null) throw new Error(`${where}: sheetLayout não combina com layout`);
+    if (view.mode !== REPORT_MODES.DETALHADO) throw new Error(`${where}: o desenho de venda (sheetLayout) é do Detalhado`);
+    if (view.groups.map((group) => group.columnId).join('|') !== groupColumn) throw new Error(`${where}: sheetLayout "${view.sheetLayout}" agrupa só por ${groupColumn}`);
+    if (view.population == null) throw new Error(`${where}: sheetLayout exige population (os blocos somam uma população fixa)`);
+  }
 }
 
 /** Eixos da matriz (Sintético): { id, label, columnId } com coluna agrupável. */

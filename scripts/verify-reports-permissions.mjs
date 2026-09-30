@@ -41,7 +41,8 @@ for (const actor of [OPERADOR, CONSULTA]) {
 }
 for (const actor of [ADMIN, GESTOR]) {
   const catalogo = listReports(actor).filter((item) => item.available);
-  assert.equal(catalogo.length, 12, `${actor.role}: os 12 (controle fica na aba da Manutenção)`);
+  // E1E: Vendas, Abates e Compras do período viraram os tipos do Comercial (12 → 10).
+  assert.equal(catalogo.length, 10, `${actor.role}: os 10 (controle fica na aba da Manutenção)`);
   assert.ok(!catalogo.some((item) => item.family === 'controle'), `${actor.role}: nenhum relatório de controle no catálogo`);
   assert.ok(listReports(actor, { visibility: 'maintenance' }).some((item) => item.id === 'pesagens.pendencias' && item.available), `${actor.role}: Pendências na aba Controle`);
 }

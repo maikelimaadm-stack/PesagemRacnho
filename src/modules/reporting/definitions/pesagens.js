@@ -231,7 +231,7 @@ export const PESAGENS_VIEWS = Object.freeze([
     groups: [{ columnId: 'nome_apartacao' }, { columnId: 'data_pesagem', direction: 'desc' }, { columnId: 'nome_lote' }], aggregates: SHEET_TOTALS, columnChoices: SHEET_CHOICES,
   },
   {
-    id: 'vendas', label: 'Vendas (Detalhado)', mode: 'DETALHADO', titleKind: 'Sintético',
+    id: 'vendas', label: 'Vendas (Detalhado)', mode: 'DETALHADO', titleKind: 'Sintético', sheetLayout: 'vendas',
     groups: [{ columnId: 'comprador' }], population: VENDAS_POPULATION, columns: [...VENDAS_COLUMNS], aggregates: VENDAS_TOTALS,
     columnChoices: { available: [...VENDAS_AVAILABLE_COLUMNS], defaults: [...VENDAS_COLUMNS] }, columnLabels: VENDAS_COLUMN_LABELS,
   },

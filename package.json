@@ -91,6 +91,7 @@
     "reports:templates:verify": "node scripts/verify-reports-templates.mjs",
     "reports:permissions:verify": "node scripts/verify-reports-permissions.mjs",
     "reports:vendas-por-comprador:verify": "node scripts/verify-reports-vendas-por-comprador.mjs",
+    "reports:comercial:verify": "node scripts/verify-reports-comercial.mjs",
     "reports:csv-parity:verify": "node scripts/verify-reports-csv-parity.mjs",
     "reports:json-manifest:verify": "node scripts/verify-reports-json-manifest.mjs",
     "reports:sensitive-data:verify": "node scripts/verify-reports-sensitive-data.mjs",

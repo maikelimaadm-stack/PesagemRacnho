@@ -10,11 +10,16 @@
 //                  da fonte): um modelo salvo no relatório antigo não as guardava, então a migração do
 //                  modelo as acrescenta; filtros padrão (ex.: só ativos) já vinham no próprio modelo.
 //   legacyParams → parâmetros que deixaram de existir, traduzidos em filtro (> N).
+//   view         → (E1E) o relatório antigo virou um TIPO do novo (Vendas/Abates/Compras do período → Comercial ›
+//                  Vendas/Abates/Compras): abre nesse tipo, com a seleção dele; `legacy` guarda a seleção do
+//                  relatório antigo para converter modelo salvo nele com agrupamento próprio (Personalizado).
 import { REPORT_MODES } from '../domain/reportDefinition.js';
+import { viewSelection } from '../domain/reportViews.js';
 import { ATIVOS, CURRENT_TOTALS, INVENTORY_COLUMNS } from './rebanho.js';
 import { EVENT_TOTALS, PERIOD_EVENT_COLUMNS } from './pesagens.js';
 import { PERFORMANCE_COLUMNS, PERFORMANCE_TOTALS } from './desempenho.js';
 import { LOT_STAY_TOTALS, OPERATIONAL_EVENT_TOTALS } from './operacional.js';
+import { COMERCIAL } from './comercial.js';
 
 const { RESUMIDO, DETALHADO } = REPORT_MODES;
 const clone = (value) => JSON.parse(JSON.stringify(value));
@@ -30,6 +35,14 @@ const alias = (id, title, selection) => Object.freeze({
   mode: selection.mode ?? ((selection.groups ?? []).length ? RESUMIDO : DETALHADO),
   fixed: Object.freeze([...(selection.fixed ?? [])]),
   legacyParams: selection.legacyParams ?? null,
+});
+
+// E1E: relatório antigo que virou TIPO do relatório novo. A seleção do alias é a do tipo (agrupamento, modo, colunas,
+// totais e ordem); a população do relatório antigo é a condição fixa do tipo (view.population), então `fixed` fica vazio.
+const typedAlias = (definition, viewId, title, legacy) => Object.freeze({
+  ...alias(definition.id, title, viewSelection(viewId, definition)),
+  view: viewId,
+  legacy: Object.freeze(clone(legacy)),
 });
 
 const ANIMAL_ASC = [{ columnId: 'animal', direction: 'asc' }];
@@ -161,6 +174,23 @@ const entries = [
   ['saidas.mortes.causa', alias('saidas', 'Mortes por causa', { columns: DEATH_COLUMNS, groups: [{ columnId: 'causa_morte' }], filters: MORTES, fixed: ['motivo_saida'], sort: EVENT_SORT, aggregates: DEATH_TOTALS })],
   ['saidas.mortes.categoria', alias('saidas', 'Mortes por categoria', { columns: DEATH_COLUMNS, groups: [{ columnId: 'categoria' }], filters: MORTES, fixed: ['motivo_saida'], sort: EVENT_SORT, aggregates: DEATH_TOTALS })],
   ['saidas.mortes.lote', alias('saidas', 'Mortes por lote', { columns: DEATH_COLUMNS, groups: [{ columnId: 'nome_lote' }], filters: MORTES, fixed: ['motivo_saida'], sort: EVENT_SORT, aggregates: DEATH_TOTALS })],
+
+  // ---- Comercial (E1E) → comercial, no tipo. `legacy` = colunas, ordem e totais padrão do relatório antigo (1.3.x a E1D).
+  ['comercial.vendas', typedAlias(COMERCIAL, 'vendas', 'Vendas do período', {
+    columns: ['data_pesagem', 'numero_animal', 'marca', 'sexo', 'peso', 'comprador', 'destino_venda', 'rendimento_carcaca', 'peso_carcaca_estimado', 'quantidade_arrobas', 'valor_arroba', 'valor_venda_total'],
+    sort: EVENT_SORT,
+    aggregates: [{ id: 'cabecas', op: 'count' }, { id: 'peso_total', columnId: 'peso', op: 'sum' }, { id: 'arrobas', columnId: 'quantidade_arrobas', op: 'sum' }, { id: 'valor', columnId: 'valor_venda_total', op: 'sum' }, { id: 'preco_arroba', columnId: 'valor_arroba', op: 'weightedAvg' }],
+  })],
+  ['comercial.abates', typedAlias(COMERCIAL, 'abates', 'Abates do período', {
+    columns: ['data_pesagem', 'numero_animal', 'marca', 'sexo', 'peso', 'frigorifico', 'rendimento_carcaca', 'peso_carcaca_estimado', 'quantidade_arrobas', 'valor_arroba_abate', 'valor_total_abate'],
+    sort: EVENT_SORT,
+    aggregates: [{ id: 'cabecas', op: 'count' }, { id: 'peso_total', columnId: 'peso', op: 'sum' }, { id: 'arrobas', columnId: 'quantidade_arrobas', op: 'sum' }, { id: 'valor', columnId: 'valor_total_abate', op: 'sum' }, { id: 'preco_arroba', columnId: 'valor_arroba_abate', op: 'weightedAvg' }],
+  })],
+  ['comercial.compras', typedAlias(COMERCIAL, 'compras', 'Compras do período', {
+    columns: ['data_pesagem', 'numero_animal', 'marca', 'sexo', 'raca', 'peso', 'origem_animal', 'valor_pago_cabeca'],
+    sort: EVENT_SORT,
+    aggregates: [{ id: 'cabecas', op: 'count' }, { id: 'peso_total', columnId: 'peso', op: 'sum' }, { id: 'valor', columnId: 'valor_pago_cabeca', op: 'sum' }, { id: 'valor_medio', columnId: 'valor_pago_cabeca', op: 'avg' }],
+  })],
 ];
 
 export const LEGACY_REPORT_ALIASES = Object.freeze(Object.fromEntries(entries));
@@ -182,6 +212,8 @@ export function aliasSelection(aliasEntry, legacyParamValues = {}) {
     filters[columnId] = { operator: 'greater', value: String(value) };
   }
   return {
+    // E1E: alias que virou tipo leva o tipo explícito (o serviço aplica a população dele).
+    ...(aliasEntry.view ? { view: aliasEntry.view } : {}),
     ...(aliasEntry.columns ? { columns: [...aliasEntry.columns] } : {}),
     groups: clone(aliasEntry.groups),
     filters,

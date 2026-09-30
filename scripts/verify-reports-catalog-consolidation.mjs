@@ -20,19 +20,22 @@ import {
 const plain = (value) => JSON.parse(JSON.stringify(value));
 const EXPECTED_CATALOG = [
   'rebanho.atual', 'rebanho.ocupacao-lotes', 'pesagens', 'controle.fechamento-dia', 'desempenho', 'movimentacao.lotes', 'saidas',
-  'comercial.vendas', 'comercial.abates', 'comercial.compras', 'embarques.romaneio', 'embarques.previsto-realizado',
+  // E1E: Vendas, Abates e Compras do período viraram os tipos do Comercial (gate reports:comercial:verify).
+  'comercial', 'embarques.romaneio', 'embarques.previsto-realizado',
 ];
+// E1E: ids antigos que viraram TIPO do Comercial (alias com view; conferidos em reports:comercial:verify).
+const E1E_TYPED_IDS = ['comercial.vendas', 'comercial.abates', 'comercial.compras'];
 
 // ---- 1. Catálogo ----
 const catalog = listReportDefinitions();
-assert.deepEqual(catalog.map((d) => d.id), EXPECTED_CATALOG, '12 relatórios visíveis, nesta ordem');
+assert.deepEqual(catalog.map((d) => d.id), EXPECTED_CATALOG, '10 relatórios visíveis, nesta ordem');
 assert.deepEqual([...new Set(catalog.map((d) => d.family))], ['rebanho', 'pesagens', 'desempenho', 'movimentacao', 'saidas', 'comercial', 'embarques'], 'famílias do catálogo');
 assert.deepEqual(listReportDefinitions({ visibility: 'maintenance' }).map((d) => d.id).sort(), ['controle.auditoria', 'controle.backups', 'controle.qualidade-dados', 'pesagens.pendencias']);
 const hidden = listReportDefinitions({ visibility: 'hidden' });
 assert.equal(hidden.filter((d) => d.id.startsWith('cadastros.') && d.status !== 'blocked').length, 7, 'cadastros.* (7) fora da interface');
 assert.equal(hidden.filter((d) => d.status === 'blocked').length, 10, 'os 10 bloqueados fora da interface (backlog)');
-assert.equal(listAllReportDefinitions().length, 12 + 4 + 7 + 10, 'nada foi apagado: 33 definições + aliases');
-assert.equal(listReports(ADMIN).length, 12, 'ADMIN vê 12 no catálogo');
+assert.equal(listAllReportDefinitions().length, 10 + 4 + 7 + 10, 'nada foi apagado: 31 definições + aliases (E1E: 3 comerciais viraram 1)');
+assert.equal(listReports(ADMIN).length, 10, 'ADMIN vê 10 no catálogo');
 
 // ---- 2. Aliases: todo id antigo resolve e equivale ----
 const LEGACY_IDS = [
@@ -44,8 +47,8 @@ const LEGACY_IDS = [
   'movimentacao.mudancas-lote', 'movimentacao.permanencias-lote',
   'saidas.motivo', 'saidas.mortes', 'saidas.mortes.causa', 'saidas.mortes.categoria', 'saidas.mortes.lote',
 ];
-assert.deepEqual(Object.keys(LEGACY_REPORT_ALIASES).sort(), [...LEGACY_IDS].sort(), 'todos os ids antigos consolidados têm alias');
-assert.equal(catalog.length + 4 + LEGACY_IDS.length + 7 + 10, 66, '12 + 4 + 33 aliases + 7 cadastros + 10 bloqueados');
+assert.deepEqual(Object.keys(LEGACY_REPORT_ALIASES).sort(), [...LEGACY_IDS, ...E1E_TYPED_IDS].sort(), 'todos os ids antigos consolidados têm alias');
+assert.equal(catalog.length + 4 + LEGACY_IDS.length + E1E_TYPED_IDS.length + 7 + 10, 67, '10 + 4 + 33 + 3 aliases + 7 cadastros + 10 bloqueados');
 
 await seedReportFixture();
 const P = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
@@ -102,7 +105,7 @@ await put(`report-recents:local:${GESTOR.id}`, [{ reportId: 'saidas.mortes.causa
 const auditBefore = await dexie.table('auditoria').count();
 
 const favorites = await getFavorites(GESTOR);
-assert.deepEqual(favorites, ['rebanho.atual#rebanho.dimensao.raca', 'pesagens#pesagens.periodo', 'comercial.vendas', 'rebanho.atual#rebanho.inventario'], 'favoritos: id novo + visão do antigo');
+assert.deepEqual(favorites, ['rebanho.atual#rebanho.dimensao.raca', 'pesagens#pesagens.periodo', 'comercial#comercial.vendas', 'rebanho.atual#rebanho.inventario'], 'favoritos: id novo + visão do antigo');
 assert.deepEqual((await dexie.table('appSettings').get(`report-favorites:local:${GESTOR.id}`)).value, favorites, 'favoritos reescritos no banco');
 const recents = await getRecents(GESTOR);
 // Recente de modelo não leva presetId (o modelo convertido já tem a seleção): reabrir não duplica.
@@ -119,7 +122,8 @@ const semPesagem = stored.find((t) => t.id === 't-sem-pesagem');
 assert.deepEqual(semPesagem.filters.dias_sem_pesagem, { operator: 'greater', value: '60', match: 'code' }, 'parâmetro 60 dias vira filtro > 60');
 assert.equal(semPesagem.params.dias_sem_pesagem, undefined, 'parâmetro extinto removido');
 assert.equal(stored.find((t) => t.id === 't-individual').mode, 'DETALHADO', 'modelo sem grupo migra para Detalhado');
-assert.equal(stored.find((t) => t.id === 't-vendas').migratedFrom, undefined, 'modelo de relatório que continua existindo não muda');
+// E1E: "Vendas do período" virou o tipo Vendas do Comercial (auditoria própria — reports:comercial:verify).
+assert.deepEqual([stored.find((t) => t.id === 't-vendas').baseReportId, stored.find((t) => t.id === 't-vendas').view], ['comercial', 'vendas'], 'modelo de Vendas do período → Comercial › Vendas');
 const audits = (await dexie.table('auditoria').toArray()).filter((row) => row.origem === PREFERENCES_MIGRATION_ORIGIN);
 assert.equal(audits.length, 3 + 3 + 2, 'uma auditoria por item consolidado (3 modelos, 3 favoritos, 2 recentes)');
 assert.ok(audits.every((row) => row.acao === 'ATUALIZAR' && /^Relatório consolidado: /.test(row.resumo) && row.usuario_id === GESTOR.id), 'auditoria "relatório consolidado" com o usuário');
@@ -127,7 +131,8 @@ assert.ok(audits.every((row) => row.acao === 'ATUALIZAR' && /^Relatório consoli
 // Idempotente: segunda leitura não grava nem audita de novo
 const again = await migrateReportPreferences(GESTOR);
 assert.equal(again.migrated, 0, 'idempotente');
-assert.equal(await dexie.table('auditoria').count(), auditBefore + audits.length, 'nenhuma auditoria nova');
+// + as 2 da E1E (modelo e favorito de Vendas do período → Comercial › Vendas, origem própria).
+assert.equal(await dexie.table('auditoria').count(), auditBefore + audits.length + 2, 'nenhuma auditoria nova');
 
 // Nenhum modelo órfão: todos abrem e rodam
 for (const template of await listTemplates(GESTOR)) {
