@@ -368,6 +368,26 @@ assert.deepEqual([h1.peso_entrada, h1.data_entrada, h1.dias_entrada, h1.ganho_en
 const animaisCount = await db.table('animais').count();
 const animalSourceSrc = fs.readFileSync(new URL('../src/modules/reporting/infrastructure/reportSources/animalSource.js', import.meta.url), 'utf8');
 assert.ok(!/for \(const animal[^\n]*\) \{[^}]*await db\.table\('pesagens'\)/.test(animalSourceSrc), 'NEGATIVO: nenhuma consulta de pesagens por animal num laço');
+// Revisão E1G: mais de 64 datas de última pesagem (o rebanho atual inclui mortos e vendidos, com a última pesagem no
+// começo do histórico) — a leitura é SÓ das pesagens nessas datas, nunca o intervalo entre a mais antiga e a mais recente.
+for (let index = 0; index < 70; index += 1) {
+  const data = new Date(Date.UTC(2025, 0, 1 + index)).toISOString().slice(0, 10);
+  await weighingService.createEntry({ ...animal(`Q${index}`, `Q${index}`), id: `Q${index}-c`, tipo_manejo: 'Cadastro', data_pesagem: data, peso: 200 + index });
+  await weighingService.createEntry({ ...animal(`Q${index}`, `Q${index}`), id: `Q${index}-s`, tipo_manejo: 'Saída', motivo_saida: 'Morte', causa_morte: 'Raio', data_pesagem: '2025-12-01', peso: null });
+}
+const comQ = await run('rebanho.atual', viewSelection('analitico', REBANHO));
+const animaisQ = await db.table('animais').toArray();
+const ultimasDatas = new Set(animaisQ.map((row) => row.ultima_pesagem_data).filter(Boolean));
+const todasPesagens = await db.table('pesagens').toArray();
+const nasDatas = todasPesagens.filter((row) => ultimasDatas.has(row.data_pesagem)).length;
+const cadastrosQ = todasPesagens.filter((row) => row.tipo_pesagem === 'Cadastro').length;
+assert.ok(ultimasDatas.size > 64, `mais de 64 datas de última pesagem (${ultimasDatas.size})`);
+assert.equal(comQ.stats.rowsRead, animaisQ.length + cadastrosQ + nasDatas, 'A4: lê a projeção, os Cadastros e só as pesagens nas datas da última pesagem');
+const datasOrdenadas = [...ultimasDatas].sort();
+const noIntervalo = todasPesagens.filter((row) => row.data_pesagem >= datasOrdenadas[0] && row.data_pesagem <= datasOrdenadas.at(-1)).length;
+assert.ok(noIntervalo >= nasDatas + 29, `NEGATIVO: o intervalo entre a mais antiga e a mais recente (regra antiga) leria também as 29 pesagens de março do H1 (${noIntervalo} × ${nasDatas})`);
+const h1Q = comQ.rows.find((row) => row.animal_id === 'H1');
+assert.deepEqual([h1Q.peso_entrada, h1Q.ultimo_gmd], [200, Number((11 / 17).toFixed(3))], 'A4: com mais de 64 datas, o H1 continua com entrada e último GMD');
 // Função pura: sem pesagem posterior à entrada, nada de ganho; com a Saída como última pesagem, desde a entrada até ela.
 assert.deepEqual(currentGainOf({ ultima_pesagem_data: '2026-06-02', ultimo_peso_kg: 250 }, { entrada: { data: '2026-06-02', peso: 250 }, ultima: null }).gmd_entrada, null, 'pesado uma vez: sem GMD desde a entrada');
 close(currentGainOf({ ultima_pesagem_data: '2026-08-31', ultimo_peso_kg: 390 }, { entrada: { data: '2026-06-01', peso: 300 }, ultima: { gmd: 1, ganho: 30, dias: 30 } }).gmd_entrada, 90 / 91, 'vendido: desde a entrada até a venda');

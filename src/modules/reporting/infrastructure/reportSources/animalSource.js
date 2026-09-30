@@ -24,16 +24,28 @@ function resolveBands(params, categorias) {
   return custom && custom.length ? { bands: custom, origin: 'modelo' } : { bands: bandsFromCategories(categorias), origin: 'categorias' };
 }
 
-// Até quantas datas distintas de última pesagem a leitura vai por `anyOf` no índice de data; acima disso, pelo
-// intervalo entre a mais antiga e a mais recente (anyOf com muitas chaves é lento — ver readByKeys.js).
-export const LAST_DATES_ANY_OF_MAX = 64;
+/**
+ * E1G (A4): pesagens gravadas EXATAMENTE nas datas pedidas — uma consulta `equals` por data no índice `data_pesagem`,
+ * todas na mesma transação de leitura. Revisão E1G: nem `anyOf` (no fake-indexeddb, 8 datas na massa 36k = 2,3 s;
+ * 64 datas em paralelo por `equals` = 0,18 s) nem o intervalo entre a data mais antiga e a mais recente (o rebanho
+ * atual inclui vendidos e mortos: a última pesagem deles vai até o começo do histórico, e o intervalo virava a base
+ * inteira). Lê só as linhas dessas datas.
+ */
+export async function readWeighingsOnDates(db, dates) {
+  const unique = [...new Set((dates || []).filter(Boolean))];
+  if (!unique.length) return [];
+  const table = db.table('pesagens');
+  const parts = await db.transaction('r', table, () => Promise.all(unique.map((date) => table.where('data_pesagem').equals(date).toArray())));
+  return parts.flat();
+}
 
 /**
  * E1G (A4): entrada e última pesagem de cada animal do rebanho atual, SEM ler a base inteira e sem uma consulta por
  * animal — duas leituras pelo índice:
  *  - entrada: `tipo_pesagem` = Cadastro (uma linha por animal), o Cadastro com peso mais antigo na ordem canônica;
- *  - última: `data_pesagem` nas datas da última pesagem da projeção (`ultima_pesagem_data`); do animal naquela data,
- *    a última com peso na ordem canônica (como a projeção) — os derivados gravados nela (GMD, ganho, dias).
+ *  - última: `data_pesagem` nas datas da última pesagem da projeção (`ultima_pesagem_data`), uma consulta por data
+ *    (readWeighingsOnDates); do animal naquela data, a última com peso na ordem canônica (como a projeção) — os
+ *    derivados gravados nela (GMD, ganho, dias).
  * @returns {Promise<{ weighings: Map<string, { entrada: object|null, ultima: object|null }>, rowsRead: number }>}
  */
 export async function loadCurrentWeighings(db, animals) {
@@ -55,14 +67,8 @@ export async function loadCurrentWeighings(db, animals) {
     entry.entrada = { data: String(view.data_pesagem || '').slice(0, 10) || null, peso };
   }
   const lastDateOf = (animal) => (animal.ultima_pesagem_data ? String(animal.ultima_pesagem_data).slice(0, 10) : null);
-  const dates = [...new Set([...wanted.values()].map(lastDateOf).filter(Boolean))].sort();
-  let lastRows = [];
-  if (dates.length) {
-    const index = db.table('pesagens').where('data_pesagem');
-    lastRows = dates.length <= LAST_DATES_ANY_OF_MAX
-      ? await index.anyOf(dates).toArray()
-      : await index.between(dates[0], dates.at(-1), true, true).toArray();
-  }
+  // A data gravada na projeção (igual à da pesagem) e a data civil (aaaa-mm-dd) — registro antigo com hora também casa.
+  const lastRows = await readWeighingsOnDates(db, [...wanted.values()].flatMap((animal) => [animal.ultima_pesagem_data, lastDateOf(animal)]));
   for (const row of lastRows) {
     const animal = row.deleted_at ? null : wanted.get(row.animal_id);
     if (!animal || String(row.data_pesagem || '').slice(0, 10) !== lastDateOf(animal)) continue;
