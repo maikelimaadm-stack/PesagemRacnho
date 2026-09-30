@@ -13,9 +13,13 @@
 //       gravado vira Manejo na mesma transação (auditado), GMD calculado e visto no relatório;
 //   7 — negativos: Manejos continua CONFLITO; evento gravado anterior à nova data → CONFLITO;
 //       conflito na data mais antiga → ERRO; linha do novo Cadastro inválida → dependentes ERRO;
-//       plano velho recusado dentro da transação (zero gravações); sem a troca o GMD some.
+//       plano velho recusado dentro da transação (zero gravações); sem a troca o GMD some;
+//   8 — o GMD do histórico importado aparece no relatório Pesagens;
+//   9 — a tela de análise (StepConciliacao) mostra os dois avisos a partir do resumo.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { deleteDbForTests } from '../src/storage/indexedDb/db.js';
 import storage from '../src/storage/storageAdapter.js';
 import { setActorProvider } from '../src/storage/indexedDb/auditActor.js';
@@ -340,6 +344,15 @@ const reportRows1016 = report.rows.filter((row) => row.animal_id === a1016.anima
 assert.equal(reportRows1016.length, 4, '8: as pesagens do "01016" estão no animal 1016');
 assert.equal(new Set(reportRows1016.map((row) => row.numero_animal)).size, 1, '8: um número só no relatório');
 
+// ---------------------------------------------------------------------------
+// 9. A tela de análise mostra os dois avisos (texto vindo do resumo do motor)
+// ---------------------------------------------------------------------------
+const stepConciliacao = readFileSync(fileURLToPath(new URL('../src/components/importacao/StepConciliacao.jsx', import.meta.url)), 'utf8');
+assert.match(stepConciliacao, /const numerosParecidos = avisoNumerosParecidos\(summary\);/, '9: aviso de número parecido vem do resumo');
+assert.match(stepConciliacao, /data-testid="importacao-numeros-parecidos"/, '9: bloco do número parecido na análise');
+assert.match(stepConciliacao, /const cadastrosAntecipados = avisosCadastrosAntecipados\(summary\);/, '9: frases do Cadastro antecipado vêm do resumo');
+assert.match(stepConciliacao, /data-testid="importacao-cadastros-antecipados"/, '9: bloco do Cadastro antecipado na análise');
+
 await deleteDbForTests();
 console.log(JSON.stringify({
   gate: 'import:identity:verify',
@@ -351,6 +364,7 @@ console.log(JSON.stringify({
     manejos: '3 linhas casaram por número parecido, número gravado 1016, GMD recalculado, reimportação JÁ EXISTE',
     mesmoArquivo: '"007" e "7" = o mesmo animal novo; outra marca e números com letra separados',
     cadastroAntecipado: 'Cadastro de 29/09 vira Manejo com GMD, novo Cadastro 02/06, auditoria, Entrada e identificador ajustados, relatório com GMD',
+    tela: 'análise mostra "N linhas casaram … por número parecido" e "O Cadastro de … passa a Manejo"',
   },
   negativeTests: [
     'letras/decimais não viram número', 'identidade exata do app intacta', 'dois parecidos = AMBÍGUO', 'índice antigo não casa',
