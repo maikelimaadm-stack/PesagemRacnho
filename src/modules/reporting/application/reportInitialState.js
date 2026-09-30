@@ -7,6 +7,7 @@ import { aliasSelection } from '../definitions/legacyAliases.js';
 import { typesByStructure } from '../definitions/legacyViews.js';
 import { applyColumnKeys, filtersForDisplay, getReportView, resolveViewId, viewSelection } from '../domain/reportViews.js';
 import { legacySortChoice } from '../domain/sortChoices.js';
+import { DEFAULT_DISPLAY } from '../domain/reportCharts.js';
 import { templateToRequest } from './reportTemplateService.js';
 
 // Tipo explícito no estado da tela (contrato §3). Estado sem `view` ganha o tipo que bate pela estrutura
@@ -74,6 +75,9 @@ export function stateFromRequest(definition, request, extra = {}) {
     orientation: request.orientation ?? 'auto',
     showEmptyColumns: false,
     detailSheet: false,
+    // E1G: vista "Folha | Gráficos" e configuração dos gráficos (templateToRequest só traz o que difere do padrão).
+    display: request.display ?? DEFAULT_DISPLAY,
+    charts: request.charts ?? {},
     ...extra,
   });
 }
@@ -97,7 +101,7 @@ export function buildInitialReportState(definition, { template = null, preset = 
   }
   const params = {};
   for (const param of definition.params) if (param.default != null) params[param.id] = param.default;
-  const blank = { search: '', widths: {}, drill: [], orientation: 'auto', showEmptyColumns: false, detailSheet: false, fixedFilters: {} };
+  const blank = { search: '', widths: {}, drill: [], orientation: 'auto', showEmptyColumns: false, detailSheet: false, fixedFilters: {}, display: DEFAULT_DISPLAY, charts: {} };
   // E1D: relatório com tipo padrão (Pesagens → "Por Apartação (Resumo por Data)") abre nele, com as colunas
   // que a pessoa escolheu para esse tipo. E1E: relatório antigo que virou tipo (favorito/link de "Vendas do
   // período" → Comercial › Vendas) abre nesse tipo, do mesmo jeito.

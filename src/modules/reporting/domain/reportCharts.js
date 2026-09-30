@@ -33,6 +33,8 @@ const INTEGER = Object.freeze({ type: 'integer' });
 const intText = (value) => sheetNumberText(INTEGER, value);
 const cabText = (value) => (value == null ? '-' : `${intText(value)} cab.`);
 const brDate = (iso) => String(iso ?? '').slice(0, 10).split('-').reverse().join('/');
+// E1G etapa 2: gráfico de GMD sem nenhum valor diz o porquê (nunca um gráfico em branco calado).
+export const TEXTO_SEM_GMD = 'Sem GMD neste período: precisa de uma pesagem anterior.';
 
 function pluralOf(label) {
   const word = String(label ?? '').split(' (')[0].trim().toLowerCase();
@@ -240,7 +242,8 @@ function baseChart(viewModel, chart, options, extra) {
   // Legenda com 2 séries ou mais que aparecem (série sem nenhum valor fica só na tabela; a oculta continua,
   // para a pessoa ligar de volta).
   out.legenda = series.filter(inLegend).length >= 2;
-  out.vazio = !series.some((item) => item.points.some((point) => point.y != null));
+  // E1G etapa 2: o histograma sem nenhum animal contado também é vazio (colunas de 0 não dizem nada).
+  out.vazio = extra.vazio ?? !series.some((item) => item.points.some((point) => point.y != null));
   out.textoVazio = out.vazio ? (extra.textoVazio ?? 'Nenhum valor para mostrar com o período e os filtros aplicados.') : null;
   out.subtitle = [periodText(viewModel), extra.subtitle ?? chart.subtitle, out.cobertura?.texto].filter(Boolean).join(' · ');
   return out;
@@ -339,6 +342,7 @@ function buildTimeChart(viewModel, chart, options) {
     cobertura: cobertura ? coverageOf(prefix, valueOfNode({ aggregates: totals }, cobertura), valueOfNode({ aggregates: totals }, cab)) : null,
     notas: [...(nota ? [nota] : []), ...chart.notas],
     tabela: { cabecalho, linhas, valores, formatos: [null, ...categorias.map(() => valueColumn), valueColumn] },
+    ...(valueColumn.type === 'gmd' ? { textoVazio: TEXTO_SEM_GMD } : {}),
   });
 }
 
@@ -393,6 +397,7 @@ function buildBarChart(viewModel, chart, options) {
     cobertura: coverageOf(prefix, validOf({ aggregates: totals }), valueOfNode({ aggregates: totals }, cab)),
     semValor: semValorItems.length ? { texto: `${chart.semValor ?? `Sem ${prefix}`}: ${semValorItems.map((item) => `${item.label} (${cabText(item.cab)})`).join(', ')}`, itens: semValorItems } : null,
     tabela: { cabecalho: [dimension.label, withUnit(prefix, unit ? `(${unit})` : null), 'Cab.', `Com ${prefix}`], linhas, valores, formatos: [null, valueColumn, INTEGER, INTEGER] },
+    ...(valueColumn.type === 'gmd' ? { textoVazio: TEXTO_SEM_GMD } : {}),
   });
 }
 
@@ -423,7 +428,8 @@ function buildHistogram(viewModel, chart, options) {
   if (largura === 'categorias') {
     // Faixas das categorias = a coluna "Faixa de peso" do relatório (mesmo recorte do tipo "Por Faixa de Peso").
     const nodes = groupRows(items.map((item) => item.row), [{ columnId: 'faixa_peso' }], resolve).nodes;
-    bands = nodes.map((node) => ({ key: node.key, label: node.label, short: node.label.split(' (')[0], lo: null, hi: null }));
+    // E1G etapa 2: a faixa da categoria é um grupo da folha — o clique abre o detalhe dela (mesma chave).
+    bands = nodes.map((node) => ({ key: node.key, label: node.label, short: node.label.split(' (')[0], lo: null, hi: null, drill: node.path.map(({ columnId, key, label }) => ({ columnId, key, label })) }));
     counts = new Map(nodes.map((node) => [node.key, node.rowCount]));
   } else {
     bands = chart.faixasFixas ? chart.faixasFixas.map((band) => ({ ...band, short: band.short ?? band.label })) : faixasDePeso(items.map((item) => item.value), largura ?? 'auto', unit ?? '');
@@ -440,6 +446,7 @@ function buildHistogram(viewModel, chart, options) {
       barLabel: count ? intText(count) : '', rotulo: cabText(count), tooltip: `${band.label}: ${cabText(count)}`,
       faixa: band.lo != null || band.hi != null ? { columnId: chart.valorAnimal, lo: band.lo, hi: band.hi } : null,
       ...(band.tone ? { tone: band.tone } : {}),
+      ...(band.drill ? { drill: band.drill } : {}),
     };
   });
   const counted = points.reduce((sum, point) => sum + point.y, 0);
@@ -455,6 +462,8 @@ function buildHistogram(viewModel, chart, options) {
     total: { valor: counted, text: intText(counted), cab: counted },
     cobertura: coverageOf(prefix, items.length, animals),
     semValor: missingCount > 0 ? { texto: `${chart.semValor ?? `Sem ${prefix}`}: ${cabText(missingCount)}`, itens: [{ key: 'sem-valor', label: `Sem ${prefix}`, cab: missingCount }] } : null,
+    vazio: counted === 0,
+    textoVazio: valueColumn?.type === 'gmd' ? TEXTO_SEM_GMD : `Nenhum animal com ${prefix.toLowerCase()} ${viewModel.period ? 'no período e nos filtros aplicados' : 'nos filtros aplicados'}.`,
     tabela: {
       cabecalho: ['Faixa', 'Cab.'],
       linhas: [...points.map((point) => [point.xLabel, point.text]), ['Total', intText(counted)]],
@@ -540,6 +549,134 @@ export function buildReportCharts(viewModel, definition, config = {}, role = vie
   if (definition?.id && viewModel.reportId && definition.id !== viewModel.reportId) throw new Error(`gráficos: definição ${definition.id} não é a do view model (${viewModel.reportId})`);
   const { config: normalized } = normalizeChartConfig(definition, config);
   return chartsOf(definition, role).map((chart) => buildReportChart(viewModel, chart, chartOptionsOf(chart, normalized, viewModel)));
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// E1G etapa 2 — estado da tela: vista "Folha | Gráficos" e configuração dos gráficos (modelos, último estado)
+// ---------------------------------------------------------------------------------------------------------
+
+export const CHART_DISPLAYS = Object.freeze({ FOLHA: 'folha', GRAFICOS: 'graficos' });
+export const DEFAULT_DISPLAY = CHART_DISPLAYS.FOLHA;
+
+/** A vista que vale: "Gráficos" só num relatório com gráficos que o papel vê; qualquer outra coisa é a folha. */
+export function displayOf(definition, display, role = null) {
+  if (display !== CHART_DISPLAYS.GRAFICOS) return CHART_DISPLAYS.FOLHA;
+  return (role ? chartsOf(definition, role) : definition?.charts ?? []).length ? CHART_DISPLAYS.GRAFICOS : CHART_DISPLAYS.FOLHA;
+}
+
+/**
+ * display/charts de um modelo ou do último estado, SÓ quando diferentes do padrão (modelo sem gráficos guarda
+ * exatamente as chaves de antes — verify-reports-templates). Vista desconhecida, "Gráficos" num relatório sem
+ * gráficos, gráfico/opção desconhecidos: ficam fora, com aviso (quem grava decide se o aviso vira erro).
+ * @returns {{ values: { display?: 'graficos', charts?: object }, warnings: { code, message }[] }}
+ */
+export function chartsStateOf(definition, { display, charts } = {}) {
+  const warnings = [];
+  const values = {};
+  if (display != null && display !== '' && !Object.values(CHART_DISPLAYS).includes(display)) {
+    warnings.push({ code: 'CHART_DISPLAY_INVALID', message: `Vista "${display}" não existe: o relatório abre na folha` });
+  } else if (display === CHART_DISPLAYS.GRAFICOS) {
+    if (definition?.charts?.length) values.display = CHART_DISPLAYS.GRAFICOS;
+    else warnings.push({ code: 'CHART_DISPLAY_UNAVAILABLE', message: 'Este relatório não tem gráficos: ele abre na folha' });
+  }
+  const normalized = normalizeChartConfig(definition, charts);
+  warnings.push(...normalized.warnings);
+  if (Object.keys(normalized.config).length) values.charts = normalized.config;
+  return { values, warnings };
+}
+
+function withChartEntry(config, chartId, entry) {
+  const next = { ...(config ?? {}) };
+  if (entry && Object.keys(entry).length) next[chartId] = entry;
+  else delete next[chartId];
+  return next;
+}
+
+/**
+ * Configuração depois de uma escolha num controle do gráfico. A chave sai quando a escolha é a que o gráfico já
+ * usaria sem ela (padrão; "Série" que segue o 1º nível do tipo) — voltar ao padrão não deixa o relatório
+ * "alterado". Gráfico, controle ou opção desconhecidos: nada muda.
+ */
+export function chartConfigWith(definition, config, chartId, key, value, viewModel = null) {
+  const chart = definition?.charts?.find((item) => item.id === chartId);
+  const control = chart?.controls?.[key];
+  if (!control || !control.choices.some((choice) => choice.id === value)) return config ?? {};
+  const entry = { ...(config?.[chartId] ?? {}) };
+  delete entry[key];
+  const fallback = chartOptionsOf(chart, { [chartId]: entry }, viewModel)[key]?.id ?? null;
+  if (value !== fallback) entry[key] = value;
+  return withChartEntry(config, chartId, entry);
+}
+
+/** Legenda: esconde/mostra uma série (lista `oculto` do gráfico). */
+export function chartConfigToggleSeries(config, chartId, seriesKey) {
+  const entry = { ...(config?.[chartId] ?? {}) };
+  const hidden = new Set(Array.isArray(entry.oculto) ? entry.oculto.map(String) : []);
+  const key = String(seriesKey);
+  if (hidden.has(key)) hidden.delete(key);
+  else hidden.add(key);
+  if (hidden.size) entry.oculto = [...hidden];
+  else delete entry.oculto;
+  return withChartEntry(config, chartId, entry);
+}
+
+/**
+ * O mesmo gráfico com outras séries ocultas, SEM recalcular (a tela liga/desliga séries na legenda sem voltar ao
+ * motor; as cores não mudam — o slot é da entidade). Igual a buildReportChart com essas séries em `oculto`.
+ */
+export function withHiddenSeries(chart, oculto = []) {
+  const hidden = [...new Set((oculto ?? []).map(String))];
+  const series = chart.series.map((item) => ({ ...item, oculto: hidden.includes(item.key) }));
+  const { oculto: _previous, ...config } = chart.config ?? {};
+  return { ...chart, series, config: hidden.length ? { ...config, oculto: hidden } : config, legenda: series.filter(inLegend).length >= 2 };
+}
+
+/** Texto de um ponto na dica da tela: valor com unidade, cabeças e, no GMD, quantos têm GMD (texto da folha). */
+export function chartPointText(chart, point) {
+  if (!point) return '-';
+  const unit = chart.kind === CHART_KINDS.HISTOGRAMA ? null : chart.unit;
+  const parts = [withUnit(point.text, unit)];
+  if (chart.kind !== CHART_KINDS.HISTOGRAMA && point.cab != null) parts.push(cabText(point.cab));
+  if (unit === 'kg/dia' && point.cobertura?.validos != null && point.cobertura.validos !== point.cab) parts.push(`GMD de ${intText(point.cobertura.validos)}`);
+  return parts.join(' · ');
+}
+
+export const CHART_DRILL_HINT = 'Clique para ver na folha';
+const seriesByKey = (chart, key) => chart.series.find((series) => series.key === key) ?? null;
+const pointByX = (series, xKey) => series?.points.find((point) => point.xKey === xKey) ?? null;
+
+/**
+ * Dica da tela para um alvo da camada de hover (chartScale.chartHoverTargets), com os textos do domínio (os mesmos
+ * números da folha): linha → o x e uma linha por série visível; barra/coluna/faixa → o grupo e o valor.
+ * @returns {{ title: string|null, slot?: number|string|null, lines?: string[], rows?: { key, slot, label, text }[] }}
+ */
+export function chartTargetTip(chart, target) {
+  if (target.kind === 'x') {
+    const rows = (target.items ?? []).map((item) => ({ key: item.key, slot: item.slot, label: item.label, text: chartPointText(chart, pointByX(seriesByKey(chart, item.key), target.xKey)) }));
+    return { title: target.label, rows };
+  }
+  if (chart.kind === CHART_KINDS.HALTERES) {
+    const start = pointByX(chart.series[0], target.xKey);
+    const end = pointByX(chart.series[1], target.xKey);
+    return { title: end?.xLabel ?? target.xKey, lines: [`${start?.text ?? '-'} → ${end?.text ?? '-'}`, end?.rotulo ?? ''].filter(Boolean) };
+  }
+  const series = seriesByKey(chart, target.key);
+  const point = pointByX(series, target.xKey);
+  if (!point) return { title: null, lines: [target.tooltip] };
+  if (chart.kind === CHART_KINDS.BARRAS || chart.kind === CHART_KINDS.HISTOGRAMA) return { title: point.xLabel, lines: [point.rotulo ?? chartPointText(chart, point)] };
+  const multi = chart.series.filter((item) => !item.oculto).length > 1;
+  return { title: multi ? `${series.label} · ${point.xLabel}` : point.xLabel, slot: multi ? series.slot : null, lines: [chartPointText(chart, point)] };
+}
+
+/**
+ * Caminho do detalhe de um alvo (o MESMO recorte do clique na folha — onDrill): barra/coluna/haltere → o grupo;
+ * linha com uma série → o ponto (série × x); com várias → só o x. Sem caminho (faixa de peso, curva do animal) = null.
+ */
+export function chartTargetDrill(chart, target) {
+  if (target.kind !== 'x') return target.drill?.length ? target.drill : null;
+  const paths = (target.items ?? []).map((item) => pointByX(seriesByKey(chart, item.key), target.xKey)?.drill).filter((path) => path?.length);
+  if (!paths.length) return null;
+  return paths.length === 1 && (target.items ?? []).length === 1 ? paths[0] : paths[0].slice(-1);
 }
 
 /** Gráficos no manifesto da emissão: o que saiu (id, tipo, opções, séries e quantos pontos). */

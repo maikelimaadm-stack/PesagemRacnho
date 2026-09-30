@@ -64,7 +64,17 @@ export function templatePayload(definition, state, role) {
     search: state.search, period, params, widths: state.widths,
     orientation: state.orientation, mode: state.drill?.length ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
     view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
+    ...chartsPayload(state),
   };
+}
+
+/**
+ * E1G: vista "Folha | Gráficos" e configuração dos gráficos no modelo e no último estado (o serviço só grava o que
+ * difere do padrão). O detalhe aberto por um clique no gráfico é passageiro como o da folha: guarda a vista de
+ * onde ele saiu (Gráficos).
+ */
+export function chartsPayload(state = {}) {
+  return { display: state.drill?.length && state.chartDrill ? 'graficos' : state.display, charts: state.charts };
 }
 
 /**
@@ -83,5 +93,6 @@ export function viewStatePayload(definition, state, role) {
     widths: state.widths, orientation: state.orientation, mode: state.drill?.length ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
     showEmptyColumns: state.showEmptyColumns,
     view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
+    ...chartsPayload(state),
   };
 }
