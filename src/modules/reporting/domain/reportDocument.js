@@ -895,7 +895,7 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
   // Sem linhas a folha é só "Nenhum registro…" (nenhuma coluna aparece): nada em @ para explicar.
   const usesArroba = hasRows && (columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
-    || Boolean(matrix?.metrics.some((metric) => metric.column?.unit === '@')) || Boolean(vendas)
+    || Boolean(matrix?.metrics.some((metric) => metric.column?.unit === '@')) || Boolean(vendas?.liveArroba)
     || (mak && !vendas ? bodyRows.some((row) => row.line?.items.some((item) => item.arroba)) : false)
     || (!summary && !mak && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@')));
   const divisor = viewModel.arrobaDivisor ?? 30;
@@ -937,7 +937,8 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     screenNotice: body.truncated ? `Na tela aparecem ${body.truncated.shown.toLocaleString('pt-BR')} de ${body.truncated.total.toLocaleString('pt-BR')} linhas; a impressão e o PDF levam todas.` : null,
     empty: !hasRows,
     // Folha vazia: o texto do antigo nos tipos de Pesagens ("Nenhuma pesagem/venda encontrada…").
-    emptyText: mak ? `Nenhuma ${variant === 'vendas' ? 'venda' : 'pesagem'} encontrada com os filtros aplicados.` : 'Nenhum registro para os filtros informados.',
+    // E1E: o desenho de venda leva o texto do tipo (venda, abate, compra — doc.vendas.emptyText).
+    emptyText: vendas?.emptyText ?? (mak ? `Nenhuma ${variant === 'vendas' ? 'venda' : 'pesagem'} encontrada com os filtros aplicados.` : 'Nenhum registro para os filtros informados.'),
     footer,
     print,
     stats: body.stats,

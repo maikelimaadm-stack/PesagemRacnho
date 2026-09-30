@@ -304,6 +304,13 @@ assert.deepEqual(textos(buildReportDocument(await run('abates', {}, { arrobaDivi
 const docAbates = buildReportDocument(vms.abates);
 assert.equal(docAbates.title, 'Relatório de Vendas, Abates e Compras (Sintético)', 'título da folha');
 assert.equal(docAbates.layout, 'vendas', 'miolo do relatório de venda (sheetHtml → vendasHtml)');
+// Rodapé "@ = peso vivo ÷ N" só onde há @ viva (Vendas); Abates usa a @ de carcaça gravada, Compras não tem @.
+assert.deepEqual(COMERCIAL_VIEW_IDS.map((view) => buildReportDocument(vms[view]).footer.arroba), ['@ = peso vivo ÷ 30', null, null], 'rodapé da @ viva só em Vendas');
+// Folha vazia: o texto do tipo.
+const vazio = { params: { periodo: { preset: 'personalizado', from: '2020-01-01', to: '2020-01-02' } } };
+for (const [view, texto] of [['vendas', 'Nenhuma venda encontrada'], ['abates', 'Nenhum abate encontrado'], ['compras', 'Nenhuma compra encontrada']]) {
+  assert.ok(renderSheetBody(buildReportDocument(await run(view, {}, vazio)), { mode: 'print' }).includes(`${texto} com os filtros aplicados.`), `${view} vazio: "${texto}…"`);
+}
 const htmlAbates = spaces(renderSheetBody(buildReportDocument(vms.abates, { showDetails: true }), { mode: 'print' }));
 for (const trecho of ['data-sheet-layout="abates"', 'TOTAIS POR FRIGORÍFICO', 'ABATES POR FRIGORÍFICO (DETALHADO)', 'FRIGORÍFICO: FRIGO SUL', 'R$ 14.800,00', '<strong>Rendimento Médio:</strong>', 'class="sv-table sv-table--detail"']) assert.ok(htmlAbates.includes(trecho), `folha de Abates desenha "${trecho}"`);
 assert.deepEqual([blocosVendas.emptyText, blocosAbates.emptyText, blocosCompras.emptyText], ['Nenhuma venda encontrada com os filtros aplicados.', 'Nenhum abate encontrado com os filtros aplicados.', 'Nenhuma compra encontrada com os filtros aplicados.'], 'texto da folha vazia de cada tipo (doc.vendas.emptyText)');

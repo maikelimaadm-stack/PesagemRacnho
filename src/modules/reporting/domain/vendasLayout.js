@@ -203,7 +203,7 @@ function detailCell(viewModel, entry, row, emphasis) {
  * @param {{ showDetails?: boolean, columns?: object[] }} options showDetails = "Mostrar Detalhes" (os lançamentos de
  *   cada grupo abaixo do cartão); columns = colunas visíveis da folha (doc.columns) para o detalhe
  * @returns {{ layout: string, groupColumn: string, groupLabel: string, showDetails: boolean, hasValues: boolean,
- *   totals: string[], emptyText: string,
+ *   totals: string[], emptyText: string, liveArroba: boolean,
  *   resumo: { columns: object[], rows: object[] },
  *   porMarca: { title: string, columns: object[], rows: object[] },
  *   porGrupo: { title: string, columns: object[], rows: object[] },
@@ -246,6 +246,9 @@ export function buildVendasBlocks(viewModel, { showDetails = false, columns = nu
     hasValues: visible.has('valor_total'),
     totals: [...visible],
     emptyText: config.emptyText,
+    // A @ VIVA (peso ÷ divisor) só está no desenho de Vendas: o rodapé "@ = peso vivo ÷ N" só vale nele (Abates usa
+    // a @ de carcaça gravada; Compras não tem @).
+    liveArroba: config.totals.some((total) => total.columnId === 'peso_arroba'),
     resumo: {
       columns: [{ key: '__label__', label: 'Métrica', align: 'left' }, { key: '__value__', label: 'Valor', align: 'right' }],
       rows: itemsOf(blocks.resumo, totals, visible),
