@@ -15,8 +15,12 @@ for (const [scenario, budget] of Object.entries(budgets)) {
 // Período de 30 dias lê pelo índice: muito menos linhas que a base
 assert.ok(results.pesagens_30d.rowsRead < totalWeighings / 4, `30 dias leu ${results.pesagens_30d.rowsRead} de ${totalWeighings}`);
 assert.ok(results.pesagens_30d.rowsRead <= results.pesagens_365d.rowsRead, 'janela menor lê menos');
-// Estado atual não relê pesagens
-assert.ok(results.inventario_atual.rowsRead <= 20_000, 'inventário lê a projeção de animais');
+// Estado atual: a projeção de animais (12 mil na massa 36k) + — E1G (A4, Rebanho com entrada e Último GMD) — a entrada
+// (Cadastros) e a última pesagem de cada animal PELO ÍNDICE, nunca uma consulta por animal nem o histórico reconstruído.
+// Na massa sintética as últimas pesagens se espalham pelo ano: a leitura da última cobre quase todo o intervalo de datas,
+// então o teto é projeção + Cadastros + a base uma vez (antes da E1G: só a projeção, ≤ 20 mil).
+const ANIMAIS_36K = 12_000;
+assert.ok(results.inventario_atual.rowsRead <= 2 * ANIMAIS_36K + totalWeighings, `inventário lê a projeção, os Cadastros e a última pesagem pelo índice (${results.inventario_atual.rowsRead})`);
 // Fases separadas presentes
 for (const phase of ['query', 'transform', 'filter', 'sort', 'group', 'aggregate', 'render']) {
   assert.ok(results.pesagens_365d.phases[phase], `fase ${phase} medida`);

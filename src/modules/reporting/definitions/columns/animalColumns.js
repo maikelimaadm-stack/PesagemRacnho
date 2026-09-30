@@ -43,6 +43,22 @@ export const ANIMAL_CURRENT_COLUMNS = [
   defineColumn({ id: 'data_saida', label: 'Data da saída', type: 'date', grains: CURRENT, groupable: true }),
   defineColumn({ id: 'motivo_saida', label: 'Motivo da saída', type: 'text', grains: CURRENT, groupable: true }),
   defineColumn({ id: 'data_cadastro', label: 'Cadastrado em', type: 'date', grains: CURRENT }),
+  // E1G (A4): entrada = o Cadastro com peso; "desde a entrada" = da entrada até a última pesagem com peso (peso atual).
+  // Último GMD = o GMD gravado na última pesagem com peso (contra a pesagem anterior). Sem par, "-".
+  defineColumn({ id: 'peso_entrada', label: 'Peso de entrada', unit: 'kg', type: 'weight', grains: CURRENT, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
+  defineColumn({ id: 'data_entrada', label: 'Data de entrada', type: 'date', grains: CURRENT, groupable: true, defaultWidth: 108 }),
+  defineColumn({ id: 'ganho_entrada', label: 'Ganho desde a entrada', unit: 'kg', type: 'weight', grains: CURRENT, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
+  defineColumn({ id: 'dias_entrada', label: 'Dias desde a entrada', type: 'integer', grains: CURRENT, keepWhenEmpty: true, aggregations: ['countValid', 'avg', 'min', 'max'] }),
+  defineColumn({
+    id: 'gmd_entrada', label: 'GMD desde a entrada', unit: 'kg/dia', type: 'gmd', grains: CURRENT,
+    weighted: { gain: 'ganho_entrada', days: 'dias_entrada' }, aggregations: ['countValid', 'avg', 'min', 'max', 'weightedGmd'],
+    description: '(Peso atual − peso de entrada) ÷ dias entre a entrada e a última pesagem com peso.',
+  }),
+  defineColumn({
+    id: 'ultimo_gmd', label: 'Último GMD', unit: 'kg/dia', type: 'gmd', grains: CURRENT,
+    weighted: { gain: 'ultimo_ganho', days: 'ultimo_dias' }, aggregations: ['countValid', 'avg', 'min', 'max', 'weightedGmd'],
+    description: 'GMD da última pesagem com peso, contra a pesagem anterior (o mesmo do relatório Pesagens).',
+  }),
 ];
 
 export const ANIMAL_PERIOD_COLUMNS = [
