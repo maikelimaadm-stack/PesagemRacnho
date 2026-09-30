@@ -534,6 +534,23 @@ export function normalizeTypedConfig(definition, config = {}) {
   return out;
 }
 
+/**
+ * Nome já usado na mesma base e no mesmo escopo (compartilhado: por qualquer um; pessoal: pelo mesmo dono),
+ * sem diferença de maiúsculas. `exceptId`: o próprio modelo (edição/renomear).
+ */
+export function templateNameTaken(templates, { baseReportId, scope, ownerUserId, name, exceptId = null }) {
+  const wanted = String(name ?? '').trim().toLowerCase();
+  return (templates ?? []).some((template) => template.id !== exceptId && template.baseReportId === baseReportId && template.scope === scope
+    && (scope === TEMPLATE_SCOPES.SHARED || template.ownerUserId === ownerUserId) && String(template.name ?? '').toLowerCase() === wanted);
+}
+
+/** Pessoal: só o dono. Compartilhado: quem tem reports.templates.share. (Editar, renomear e excluir.) */
+export function canManageTemplate(template, actor) {
+  if (!template || !actor?.role) return false;
+  if (template.scope === TEMPLATE_SCOPES.SHARED) return can(actor.role, 'reports.templates.share');
+  return template.ownerUserId === actor.id;
+}
+
 /** Cria ou atualiza. PERSONAL: só o dono edita. SHARED: exige reports.templates.share. */
 export async function saveTemplate(input, actor, { empresaId = 'local', now = new Date().toISOString() } = {}) {
   requireActor(actor);
@@ -560,8 +577,7 @@ export async function saveTemplate(input, actor, { empresaId = 'local', now = ne
     const canEditShared = existing.scope === TEMPLATE_SCOPES.SHARED && can(actor.role, 'reports.templates.share');
     if (!ownsPersonal && !canEditShared) throw forbiddenError(actor.role, 'reports.templates.share');
   }
-  if (store.templates.some((template, index) => index !== existingIndex && template.baseReportId === definition.id && template.scope === scope
-    && (scope === TEMPLATE_SCOPES.SHARED || template.ownerUserId === actor.id) && template.name.toLowerCase() === name.toLowerCase())) {
+  if (templateNameTaken(store.templates, { baseReportId: definition.id, scope, ownerUserId: actor.id, name, exceptId: existingIndex >= 0 ? store.templates[existingIndex].id : null })) {
     throw templateError('Já existe um modelo com esse nome neste relatório');
   }
   const previous = existingIndex >= 0 ? store.templates[existingIndex] : null;
@@ -596,6 +612,32 @@ export async function deleteTemplate(templateId, actor, { empresaId = 'local' } 
   if (!ownsPersonal && !canShared) throw forbiddenError(actor.role, 'reports.templates.share');
   await writeAppSetting(templatesKey(empresaId), { version: TEMPLATE_VERSION, templates: templates.filter((item) => item.id !== templateId) });
   return true;
+}
+
+/**
+ * E1F ("Meus relatórios" › Renomear): troca SÓ o nome (a configuração gravada fica como está — nunca a tela
+ * atual sem "Salvar"). Mesmas regras de dono/escopo de saveTemplate e o mesmo nome único por base e escopo.
+ */
+export async function renameTemplate(templateId, name, actor, { empresaId = 'local', now = new Date().toISOString() } = {}) {
+  requireActor(actor);
+  const clean = String(name ?? '').trim();
+  if (!clean) throw templateError('Informe o nome do modelo');
+  if (clean.length > 80) throw templateError('Nome do modelo com mais de 80 caracteres');
+  const { templates } = await migrateReportPreferences(actor, { empresaId });
+  const index = templates.findIndex((item) => item.id === templateId);
+  if (index < 0) throw templateError('Modelo inexistente');
+  const template = templates[index];
+  const definition = getReportDefinition(template.baseReportId);
+  if (!definition || !canRunReport(definition, actor.role)) throw forbiddenError(actor.role, 'reports.read');
+  if (!canManageTemplate(template, actor)) throw forbiddenError(actor.role, 'reports.templates.share');
+  if (templateNameTaken(templates, { baseReportId: template.baseReportId, scope: template.scope, ownerUserId: template.ownerUserId, name: clean, exceptId: template.id })) {
+    throw templateError('Já existe um modelo com esse nome neste relatório');
+  }
+  const renamed = { ...template, name: clean, updatedAt: now, updatedBy: actor.id };
+  const next = [...templates];
+  next[index] = renamed;
+  await writeAppSetting(templatesKey(empresaId), { version: TEMPLATE_VERSION, templates: next });
+  return sanitizeTemplateFor(renamed, actor.role);
 }
 
 /** Tipo de um modelo/último estado sem conversão: Pesagens (E1D) sem tipo = Personalizado; E1E, pela estrutura. */

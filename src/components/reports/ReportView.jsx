@@ -29,9 +29,11 @@ import { emitReport } from "@/modules/reporting/application/reportExportService"
 import { exportPdf, printReport } from "@/modules/reporting/application/reportPrintService";
 import { loadReportHeader } from "@/modules/catalog/application/propertyHeaderService";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { deleteTemplate, favoriteKey, getFavorites, listTemplates, recordRecent, saveReportViewState, saveTemplate, saveTypeColumnPrefs, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
+import { deleteTemplate, favoriteKey, getFavorites, listTemplates, recordRecent, renameTemplate, saveReportViewState, saveTemplate, saveTypeColumnPrefs, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
 import { PREVIOUS_COLUMN, filterButtonsOf, integerParamsOf, isPesagensScreen, moreFilterColumnsOf, quickFiltersOf } from "@/modules/reporting/application/reportScreenModel";
+import { canEditReport, canShareReports, reportSnapshot, reportTitle, selectorValue, withTemplateOption } from "@/modules/reporting/application/customReports";
 import AnalyticGroupButtons from "./AnalyticGroupButtons";
+import NewReportDialog from "./NewReportDialog";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportFilterBar from "./ReportFilterBar";
 import MatrixAxisControls from "./MatrixAxisControls";
@@ -109,8 +111,10 @@ function currentSortValue({ summaryMode, state, definition, options }) {
  * @param reportOptions E1E (tela única): opções do campo "Relatório" (reportScreenModel.reportSelectorOptions)
  *   com onSelectReport(id); onOpenTemplate(modelo | null) abre um modelo do menu ⋯ (null = o relatório sem
  *   modelo, depois de excluir o aberto). Sem reportOptions (aba Controle da Manutenção), a tela da 1.4.0.
+ * @param onTemplatesChanged E1F: um relatório do usuário foi salvo, renomeado ou excluído (Relatorios.jsx relê
+ *   o grupo "Meus relatórios" do seletor). onTemplateSaved(modelo novo): abre o relatório recém-salvo.
  */
-export default function ReportView({ reportId, presetId = null, template, savedState = null, typeColumnPrefs = null, actor, onBack = null, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true, reportOptions = null, onSelectReport = null, onOpenTemplate = null }) {
+export default function ReportView({ reportId, presetId = null, template, savedState = null, typeColumnPrefs = null, actor, onBack = null, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true, reportOptions = null, onSelectReport = null, onOpenTemplate = null, onTemplatesChanged = null }) {
   const can = useCan();
   const definition = getReportDefinition(reportId);
   // E1E: em Relatórios (tela única, com o campo "Relatório") TODOS abrem na tela "como o MAKGESTAO"
@@ -136,6 +140,11 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   // E1E: modelos deste relatório para "Abrir modelo" (menu ⋯); null = a tela não abre modelos.
   const [templates, setTemplates] = useState(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // E1F ("Meus relatórios"): retrato do relatório do usuário de quando abriu ou foi salvo — a tela diferente
+  // dele mostra "Salvar alterações" (o último estado nunca grava no modelo). Diálogos Salvar como… / Renomear.
+  const [savedSnapshot, setSavedSnapshot] = useState(() => (template ? reportSnapshot(definition, state, actor.role) : null));
+  const [myDialog, setMyDialog] = useState(null);
+  const [savingChanges, setSavingChanges] = useState(false);
   const lastViewModel = useRef(null);
   const runSeq = useRef(0);
   const favKey = favoriteKey(definition.id, preset ? presetId : null);
@@ -155,6 +164,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
 
   const serviceFilters = useMemo(() => toServiceFilters(state.uiFilters, definition.columns), [state.uiFilters, definition]);
 
+  // E1F: relatório do usuário aberto — o nome dele no título da folha (impressão e PDF também).
+  const sheetTitle = currentTemplate?.name ?? null;
   // reload=false: mudou só seleção (filtro, coluna, grupo, total, modo) → reaproveita as linhas já
   // lidas se os parâmetros forem os mesmos. "Atualizar" sempre relê o banco.
   const execute = useCallback(async ({ reload = false } = {}) => {
@@ -173,6 +184,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
         reuse: reload ? null : lastViewModel.current,
         // Visão antiga (favorito/link de antes da 1.4.0): vai para o manifesto das emissões.
         presetId: preset && !template ? presetId : null,
+        sheetTitle,
       }, actor);
       if (seq !== runSeq.current) return;
       lastViewModel.current = result;
@@ -183,7 +195,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     } finally {
       if (seq === runSeq.current) setLoading(false);
     }
-  }, [definition.id, state.params, state.columns, serviceFilters, state.fixedFilters, state.typePopulation, state.groups, state.aggregates, state.sort, state.search, state.mode, state.summarySort, state.drill, state.view, state.matrix, state.sortChoice, actor, preset, presetId, template]);
+  }, [definition.id, state.params, state.columns, serviceFilters, state.fixedFilters, state.typePopulation, state.groups, state.aggregates, state.sort, state.search, state.mode, state.summarySort, state.drill, state.view, state.matrix, state.sortChoice, actor, preset, presetId, template, sheetTitle]);
 
   useEffect(() => {
     const timer = setTimeout(() => execute(), 200);
@@ -479,15 +491,69 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       const drilling = state.drill.length > 0;
       // E1D (Vendas): o modelo leva só o que o autor vê (Valor @ e Valor total ficam fora para CONSULTA/OPERADOR).
       const saved = await saveTemplate({ id, name, scope, ...templatePayload(definition, state, actor.role) }, actor);
+      const same = saved.id === currentTemplate?.id;
       setCurrentTemplate(saved);
+      if (same) setSavedSnapshot(reportSnapshot(definition, state, actor.role));
       setDialog(null);
       toast.success(`Modelo “${saved.name}” salvo (${saved.scope === "SHARED" ? "compartilhado" : "pessoal"}).`, drilling ? { description: "O detalhe do grupo não fica no modelo: ele abre no Resumido." } : undefined);
-      onTemplateSaved?.(saved);
+      onTemplatesChanged?.();
+      // E1F: o modelo novo é um relatório do usuário ("Meus relatórios"): a tela passa a ser ele.
+      if (!same) onTemplateSaved?.(saved);
       loadTemplates();
     } catch (err) {
       toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode salvar este modelo." : err.message);
     } finally {
       setSavingTemplate(false);
+    }
+  };
+
+  // E1F: relatório do usuário aberto — "Salvar alterações" (só quem pode editar: pessoal o dono, da empresa quem
+  // compartilha) quando a tela difere do que está salvo; Salvar como… (outro relatório) e Renomear (só o nome).
+  const editableTemplate = allowPreferences && canEditReport(currentTemplate, actor);
+  const currentSnapshot = useMemo(() => (currentTemplate && savedSnapshot ? reportSnapshot(definition, state, actor.role) : null), [currentTemplate, savedSnapshot, definition, state, actor.role]);
+  const unsaved = Boolean(currentSnapshot) && currentSnapshot !== savedSnapshot;
+  const saveChanges = async () => {
+    setSavingChanges(true);
+    try {
+      const saved = await saveTemplate({ id: currentTemplate.id, name: currentTemplate.name, scope: currentTemplate.scope, ...templatePayload(definition, state, actor.role) }, actor);
+      setCurrentTemplate(saved);
+      setSavedSnapshot(reportSnapshot(definition, state, actor.role));
+      toast.success(`“${saved.name}” salvo.`);
+      onTemplatesChanged?.();
+      loadTemplates();
+    } catch (err) {
+      toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode alterar este relatório." : err.message);
+    } finally {
+      setSavingChanges(false);
+    }
+  };
+  const saveAsReport = async ({ name, scope }) => {
+    setSavingChanges(true);
+    try {
+      const saved = await saveTemplate({ name, scope, ...templatePayload(definition, state, actor.role) }, actor);
+      setMyDialog(null);
+      toast.success(`Relatório “${saved.name}” criado.`);
+      onTemplatesChanged?.();
+      onOpenTemplate?.(saved);
+    } catch (err) {
+      toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode salvar este relatório." : err.message);
+    } finally {
+      setSavingChanges(false);
+    }
+  };
+  const renameReport = async ({ name }) => {
+    setSavingChanges(true);
+    try {
+      const renamed = await renameTemplate(currentTemplate.id, name, actor);
+      setCurrentTemplate(renamed);
+      setMyDialog(null);
+      toast.success(`Relatório renomeado para “${renamed.name}”.`);
+      onTemplatesChanged?.();
+      loadTemplates();
+    } catch (err) {
+      toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode renomear este relatório." : err.message);
+    } finally {
+      setSavingChanges(false);
     }
   };
 
@@ -499,10 +565,11 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     setConfirmDelete(false);
     try {
       await deleteTemplate(currentTemplate.id, actor);
-      toast.success(`Modelo “${currentTemplate.name}” excluído.`);
+      toast.success(`Relatório “${currentTemplate.name}” excluído.`);
+      onTemplatesChanged?.();
       onOpenTemplate(null);
     } catch (err) {
-      toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode excluir este modelo." : err.message);
+      toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode excluir este relatório." : err.message);
     }
   };
 
@@ -570,8 +637,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact rpt-dialog">
           <DialogHeader>
-            <DialogTitle className="text-sm">{currentTemplate?.scope === "SHARED" ? "Excluir o modelo para todos?" : "Excluir o modelo?"}</DialogTitle>
-            <DialogDescription>{currentTemplate ? `“${currentTemplate.name}” deixa de aparecer em “Abrir modelo”. O relatório continua.` : ""}</DialogDescription>
+            <DialogTitle className="text-sm">{currentTemplate?.scope === "SHARED" ? "Excluir o relatório da empresa para todos?" : "Excluir o relatório?"}</DialogTitle>
+            <DialogDescription>{currentTemplate ? `“${currentTemplate.name}” sai de “Meus relatórios”. A base (${definition.title}) continua.` : ""}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>Cancelar</Button>
@@ -579,6 +646,24 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {currentTemplate ? (
+        <NewReportDialog
+          open={Boolean(myDialog)}
+          mode={myDialog ?? "saveAs"}
+          onOpenChange={(open) => !open && setMyDialog(null)}
+          baseReportId={definition.id}
+          baseLabel={definition.title}
+          initialName={myDialog === "rename" ? currentTemplate.name : `${currentTemplate.name} (cópia)`.slice(0, 80)}
+          initialScope={myDialog === "rename" ? currentTemplate.scope : "PERSONAL"}
+          canShare={canShareReports(actor)}
+          templates={templates ?? []}
+          actor={actor}
+          ownerUserId={myDialog === "rename" ? currentTemplate.ownerUserId : actor.id}
+          exceptId={myDialog === "rename" ? currentTemplate.id : null}
+          busy={savingChanges}
+          onSubmit={myDialog === "rename" ? renameReport : saveAsReport}
+        />
+      ) : null}
       <ReportSaveTemplateDialog open={dialog === "save"} onOpenChange={(open) => !open && setDialog(null)} current={currentTemplate && (currentTemplate.ownerUserId === actor.id || can("reports.templates.share")) ? currentTemplate : null} canShare={can("reports.templates.share")} onSave={saveAsTemplate} busy={savingTemplate} />
       <Dialog open={Boolean(printPrompt)} onOpenChange={(open) => !open && setPrintPrompt(null)}>
         <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact rpt-dialog">
@@ -624,8 +709,14 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     return (
       <ModeloBase1PageContainer variant="report" className="rpt-mak" data-report={definition.id}>
         <MakgestaoTopBar
-          title={`Relatório de ${definition.sheetTitle ?? definition.title}`}
+          title={reportTitle(definition, currentTemplate)}
           templateName={currentTemplate?.name ?? (preset ? preset.title : null)}
+          baseNote={currentTemplate ? `base ${definition.title} · ${currentTemplate.scope === "SHARED" ? "a empresa vê" : "só você vê"}` : null}
+          onSaveChanges={editableTemplate && unsaved ? saveChanges : null}
+          savingChanges={savingChanges}
+          onSaveAs={allowPreferences && currentTemplate ? () => setMyDialog("saveAs") : null}
+          onRename={editableTemplate ? () => setMyDialog("rename") : null}
+          deleteLabel="Excluir relatório…"
           loading={loading}
           backLabel={backLabel}
           onBack={onBack}
@@ -647,7 +738,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           onToggleEmptyColumns={() => update({ showEmptyColumns: !state.showEmptyColumns })}
         />
         <MakgestaoFilterCard
-          report={reportOptions && onSelectReport ? { value: definition.id, options: reportOptions, onChange: onSelectReport } : null}
+          report={reportOptions && onSelectReport ? { value: selectorValue(definition.id, currentTemplate), options: withTemplateOption(reportOptions, currentTemplate), onChange: onSelectReport } : null}
           period={period}
           resolvedPeriod={viewModel?.period ?? null}
           onPeriod={periodParam ? setPeriod : null}
