@@ -40,8 +40,9 @@ export const CONCILIACAO_OPCOES = Object.freeze([
   Object.freeze({
     id: 'SIM',
     titulo: 'Sim — conciliar automaticamente (recomendado)',
-    texto: 'O sistema ordena as linhas por data: a pesagem mais antiga de cada animal novo vira Cadastro e as seguintes viram Manejo. Se o animal já existe no sistema, todas entram como Manejo.',
-    detalhe: 'A ordem das linhas no arquivo não importa — vale a data. Peso anterior, dias, ganho e GMD são sempre recalculados pelo sistema, mesmo que venham na planilha.',
+    // E1G: pesagem anterior ao Cadastro de um animal já cadastrado antecipa o Cadastro.
+    texto: 'O sistema ordena as linhas por data: a pesagem mais antiga de cada animal novo vira Cadastro e as seguintes viram Manejo. Se o animal já existe no sistema, todas entram como Manejo — a não ser que o arquivo traga pesagem mais antiga que o Cadastro dele: aí a mais antiga passa a ser o Cadastro e o Cadastro antigo vira Manejo.',
+    detalhe: 'A ordem das linhas no arquivo não importa — vale a data. O número do brinco escrito com zeros à esquerda ou com o ",0" do Excel (01016, 1016,0) é reconhecido como o mesmo animal. Peso anterior, dias, ganho e GMD são sempre recalculados pelo sistema, mesmo que venham na planilha.',
     tipo: IMPORT_TYPES.HISTORICO,
   }),
   Object.freeze({
