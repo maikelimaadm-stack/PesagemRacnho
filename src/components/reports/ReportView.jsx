@@ -16,7 +16,7 @@ import { REPORT_FAMILIES, REPORT_MODES, VIEW_LAYOUTS } from "@/modules/reporting
 import { SUMMARY_LABEL_SORT, formatGroupLabel, summaryMetrics } from "@/modules/reporting/domain/summaryLayout";
 import { NONE_GROUP_KEY } from "@/modules/reporting/domain/groupEngine";
 import { canSeeColumn } from "@/modules/reporting/domain/reportPermissions";
-import { leaveViewPatch, screenFixedFilters, screenModePatch, templatePayload, viewStatePayload } from "@/modules/reporting/domain/reportScreenState";
+import { chartDrillPatch, leaveDrillPatch, leaveViewPatch, screenFixedFilters, screenModePatch, templatePayload, viewStatePayload } from "@/modules/reporting/domain/reportScreenState";
 import { applyColumnKeys, columnKeysOf, getReportView, listReportViews, parseSortChoice, resolveViewId } from "@/modules/reporting/domain/reportViews";
 import { applySortChoice, sortChoiceForColumn, sortChoiceForMetric } from "@/modules/reporting/domain/sortChoices";
 import { hasTypeColumns, typeColumnOptions } from "@/modules/reporting/domain/typeColumns";
@@ -463,11 +463,12 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     mode: REPORT_MODES.DETALHADO,
     drill: path.map((part) => ({ columnId: part.columnId, key: part.key, label: formatGroupLabel(definition.columns.find((column) => column.id === part.columnId), part.label, "screen", part.key === NONE_GROUP_KEY) })),
   });
-  const onDrill = (path) => update({ ...drillPatch(path), chartDrill: false });
+  const onDrill = (path) => update({ ...drillPatch(path), chartDrill: false, drillBase: null });
   // E1G: clique numa barra/ponto do gráfico abre a FOLHA no detalhe daquele grupo (mesmo recorte do clique na folha);
-  // o × da pílula "Detalhe" volta aos gráficos.
-  const onChartDrill = (path) => update({ ...drillPatch(path), display: CHART_DISPLAYS.FOLHA, chartDrill: true });
-  const leaveDrill = () => update({ drill: [], mode: REPORT_MODES.RESUMIDO, ...(state.chartDrill ? { display: CHART_DISPLAYS.GRAFICOS, chartDrill: false } : {}) });
+  // o × da pílula "Detalhe" volta aos gráficos. Revisão: o caminho SOMA ao detalhe já aberto e o × volta ao modo e
+  // ao detalhe de antes (reportScreenState.chartDrillPatch/leaveDrillPatch — o Analítico continua Analítico).
+  const onChartDrill = (path) => update(chartDrillPatch(state, drillPatch(path).drill));
+  const leaveDrill = () => update(leaveDrillPatch(state));
 
   // Pesagem anterior (Todos/Com/Sem): filtro comum na coluna "tem pesagem anterior", pelo mesmo motor.
   const previousColumn = columnOf(PREVIOUS_COLUMN);

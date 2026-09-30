@@ -17,7 +17,11 @@
 //      textos da folha; o clique numa barra leva o caminho do grupo (onDrill);
 //   g) GMD vazio diz o porquê ("Sem GMD neste período: precisa de uma pesagem anterior") — nunca barra 0;
 //   h) a configuração da tela chega à impressão/PDF e ao Excel (a mesma buildReportCharts), e os itens do menu
-//      ("Imprimir só os gráficos", "PDF só dos gráficos") e o alternador estão na tela.
+//      ("Imprimir só os gráficos", "PDF só dos gráficos") e o alternador estão na tela;
+//   i) revisão: o clique no gráfico SOMA ao detalhe já aberto (NEGATIVO: trocar o detalhe abria as fêmeas de todos
+//      os lotes); o × volta ao modo e ao detalhe de antes — Analítico continua Detalhado e "Salvar alterações" não
+//      acende (NEGATIVO: o × antigo, "Resumido sem detalhe", acendia); "Demais" de um grupo só abre aquele grupo
+//      (NEGATIVO: o caminho antigo só tinha o mês); todas as séries escondidas dizem isso (não "nenhum valor").
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ADMIN, CONSULTA, OPERADOR, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
@@ -29,7 +33,13 @@ import { preparePrint } from '../src/modules/reporting/application/reportPrintSe
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
 import { getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { PESAGENS } from '../src/modules/reporting/definitions/pesagens.js';
-import { templatePayload, viewStatePayload } from '../src/modules/reporting/domain/reportScreenState.js';
+import { chartDrillPatch, leaveDrillPatch, restingMode, templatePayload, viewStatePayload } from '../src/modules/reporting/domain/reportScreenState.js';
+import { DESEMPENHO } from '../src/modules/reporting/definitions/desempenho.js';
+import { typedViewSelection } from '../src/modules/reporting/application/reportInitialState.js';
+import { getReportView } from '../src/modules/reporting/domain/reportViews.js';
+import { createColumnResolver } from '../src/modules/reporting/domain/reportDefinition.js';
+import { groupRows } from '../src/modules/reporting/domain/groupEngine.js';
+import { TEXTO_TODAS_ESCONDIDAS, renderChartSvg } from '../src/modules/reporting/infrastructure/exporters/chartSvg.js';
 import {
   CHART_DISPLAYS, CHART_DRILL_HINT, TEXTO_SEM_GMD, buildReportChart, buildReportCharts, chartConfigToggleSeries, chartConfigWith, chartOptionsOf, chartTargetDrill,
   chartTargetTip, chartsOf, chartsStateOf, displayOf, normalizeChartConfig, withHiddenSeries,
@@ -271,6 +281,81 @@ const vm = await runReport('pesagens', { today: TODAY, params: { periodo: PERIOD
   assert.match(css, /@container \(min-width: 1200px\) \{ \.rpt-charts__grid \{ grid-template-columns: repeat\(2, minmax\(0, 1fr\)\); \} \}/, '2 colunas com a área ≥ 1200 px');
   assert.match(css, /html:is\(\.dark, \.tema-escuro, \.escuro\) \.rpt-chart \{/, 'cartões no tema escuro');
   results.push({ caso: 'impressão, Excel e tela', pdf: print.manifest.charts.length, xlsx: true });
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// i) revisão: detalhe aberto pelo gráfico (soma ao detalhe, volta ao modo de antes), "Demais" de um só, séries ocultas
+// ---------------------------------------------------------------------------------------------------------
+{
+  // Soma ao detalhe já aberto: folha no Lote 02 → "Gráficos" → barra "Fêmea" do GMD por sexo.
+  const lote02 = [{ columnId: 'nome_lote', key: 'L2', label: 'Lote 02' }];
+  const drilled = { ...opened, display: 'graficos', drill: lote02, mode: 'DETALHADO', chartDrill: false, drillBase: null };
+  const drilledVm = await runReport('pesagens', { today: TODAY, params: { periodo: PERIODO }, selection: { view: opened.view, groups: opened.groups, drill: lote02, mode: 'DETALHADO' } }, OPERADOR);
+  const porSexo = buildReportCharts(drilledVm, PESAGENS, { 'gmd-por-grupo': { serie: 'sexo' } }, 'OPERADOR').find((chart) => chart.id === 'gmd-por-grupo');
+  const femea = porSexo.series[0].points.find((point) => point.xKey === 'F');
+  assert.deepEqual(femea.drill.map((part) => part.columnId), ['sexo'], 'o caminho do gráfico é relativo às linhas que ele mostra');
+  const patch = chartDrillPatch(drilled, femea.drill);
+  assert.deepEqual(patch.drill.map((part) => `${part.columnId}=${part.key}`), ['nome_lote=L2', 'sexo=F'], 'o clique no gráfico SOMA ao detalhe aberto');
+  const rowsOf = async (drill) => (await runReport('pesagens', { today: TODAY, params: { periodo: PERIODO }, selection: { view: opened.view, groups: opened.groups, drill, mode: 'DETALHADO' } }, OPERADOR)).rows.map((row) => row.animal_id);
+  const merged = [...new Set(await rowsOf(patch.drill))];
+  const replaced = [...new Set(await rowsOf(femea.drill))];
+  assert.deepEqual(merged, ['A2'], 'folha: só as fêmeas do Lote 02');
+  assert.ok(replaced.includes('A4') && !merged.includes('A4'), 'NEGATIVO: trocar o detalhe pelo caminho do gráfico abria as fêmeas de todos os lotes (A4, sem lote)');
+  const back = leaveDrillPatch({ ...drilled, ...patch });
+  assert.deepEqual([back.drill, back.mode, back.display, back.chartDrill], [lote02, 'DETALHADO', 'graficos', false], 'o × volta aos gráficos do Lote 02');
+  assert.deepEqual(leaveDrillPatch({ ...drilled, ...back }), { drill: [], mode: 'RESUMIDO', drillBase: null }, 'o × seguinte sai do detalhe da folha, como antes (Resumido)');
+  assert.equal(restingMode({ ...drilled, ...patch }), 'RESUMIDO', 'o modelo guarda o Resumido de onde o detalhe da folha saiu');
+
+  // Tipo Detalhado (Desempenho › Analítico): o × volta ao Detalhado e nada conta como alteração.
+  const analitico = getReportView(DESEMPENHO, 'analitico');
+  const selection = typedViewSelection(DESEMPENHO, analitico, {});
+  const init = defaultState(DESEMPENHO);
+  const base = { ...init, view: selection.view, groups: selection.groups, mode: selection.mode, columns: selection.columns ?? init.columns, aggregates: selection.aggregates ?? init.aggregates, display: 'graficos' };
+  assert.equal(base.mode, 'DETALHADO');
+  const baseline = reportSnapshot(DESEMPENHO, base, 'ADMIN');
+  const lote01 = [{ columnId: 'lote', key: 'L1', label: 'Lote 01' }];
+  const during = { ...base, ...chartDrillPatch(base, lote01) };
+  assert.deepEqual([during.mode, during.display, during.chartDrill], ['DETALHADO', 'folha', true]);
+  assert.equal(isReportChanged(baseline, DESEMPENHO, during, 'ADMIN'), false, 'no detalhe aberto pelo gráfico: sem alteração');
+  assert.equal(templatePayload(DESEMPENHO, during, 'ADMIN').mode, 'DETALHADO', 'o modelo guarda o modo de onde o detalhe saiu');
+  assert.equal(viewStatePayload(DESEMPENHO, during, 'ADMIN').mode, 'DETALHADO', 'o último estado também');
+  const after = { ...during, ...leaveDrillPatch(during) };
+  assert.deepEqual([after.drill, after.mode, after.display], [[], 'DETALHADO', 'graficos'], 'o × volta ao Analítico, na vista Gráficos');
+  assert.equal(isReportChanged(baseline, DESEMPENHO, after, 'ADMIN'), false, 'e "Salvar alterações" continua apagado');
+  const oldLeave = { ...during, drill: [], mode: 'RESUMIDO', display: 'graficos', chartDrill: false, drillBase: null };
+  assert.equal(isReportChanged(baseline, DESEMPENHO, oldLeave, 'ADMIN'), true, 'NEGATIVO: o × antigo (Resumido sem detalhe) acendia "Salvar alterações" no Analítico');
+  assert.equal(isReportChanged(baseline, DESEMPENHO, { ...during, drillBase: null }, 'ADMIN'), true, 'NEGATIVO: sem lembrar o modo de antes, o detalhe acendia "Salvar alterações"');
+  const view = read('src/components/reports/ReportView.jsx');
+  assert.match(view, /const onChartDrill = \(path\) => update\(chartDrillPatch\(state, drillPatch\(path\)\.drill\)\);/, 'a tela usa chartDrillPatch no clique do gráfico');
+  assert.match(view, /const leaveDrill = \(\) => update\(leaveDrillPatch\(state\)\);/, 'e leaveDrillPatch no ×');
+  assert.match(view, /const onDrill = \(path\) => update\(\{ \.\.\.drillPatch\(path\), chartDrill: false, drillBase: null \}\);/, 'o clique na folha continua como antes (volta ao Resumido)');
+
+  // "Demais" de um grupo só (8 lotes → 7 + o 8º em cinza): o ponto abre aquele lote naquele mês.
+  const resolve = createColumnResolver(PESAGENS.columns);
+  const rows = [];
+  for (let lote = 1; lote <= 8; lote += 1) {
+    for (let animal = 1; animal <= 10 - lote; animal += 1) rows.push({ id: `r${lote}-${animal}`, animal_id: `A${lote}-${animal}`, numero_animal: `${lote}${animal}`, lote_id: `L${lote}`, nome_lote: `Lote 0${lote}`, data_pesagem: '2026-08-10', tipo_manejo: 'Manejo', peso: 200 + lote * 10 + animal * 3, dias: 10, ganho: lote, gmd: lote / 10, arroba_divisor: 30 });
+  }
+  const synthetic = { reportId: 'pesagens', rows, population: rows, resolve, groups: [], period: { from: '2026-08-01', to: '2026-08-31' }, arrobaDivisor: 30, animalColumnId: 'numero_animal' };
+  const line = buildReportCharts(synthetic, PESAGENS, { 'evolucao-peso': { serie: 'lote', eixo: 'mes' } }, 'ADMIN').find((chart) => chart.id === 'evolucao-peso');
+  const oitavo = line.series.at(-1);
+  assert.deepEqual([oitavo.key, oitavo.label, oitavo.slot], ['L8', 'Lote 08', 'demais'], '8º lote em cinza, com o próprio nome');
+  const only = withHiddenSeries(line, line.series.slice(0, -1).map((series) => series.key));
+  const click = chartTargetDrill(only, chartHoverTargets(chartGeometry(only, { width: 560, height: 280 }))[0]);
+  assert.deepEqual(click.map((part) => `${part.columnId}=${part.key}`), ['nome_lote=L8', 'mes_pesagem=2026-08'], 'clique no Lote 08 = o Lote 08 naquele mês');
+  const matches = (path) => rows.filter((row) => path.every((part) => String(resolve(part.columnId).groupKeyOf(row)) === part.key)).length;
+  assert.equal(matches(click), rows.filter((row) => row.lote_id === 'L8').length, 'a folha abre só as pesagens do Lote 08');
+  const oldPath = groupRows(rows.filter((row) => row.lote_id === 'L8'), [{ columnId: 'mes_pesagem' }], resolve).nodes[0].path;
+  assert.ok(matches(oldPath) > matches(click), 'NEGATIVO: o caminho antigo (só o mês) abria as pesagens de todos os lotes');
+  assert.equal(oitavo.points[0].text, line.tabela.linhas[7][1], 'o ponto e a tabela têm o mesmo número');
+
+  // Todas as séries escondidas: o gráfico diz isso (não "nenhum valor").
+  const allHidden = withHiddenSeries(line, line.series.map((series) => series.key));
+  const svg = renderChartSvg(allHidden, chartGeometry(allHidden, { width: 560, height: 280 }));
+  assert.ok(svg.includes(TEXTO_TODAS_ESCONDIDAS) && !svg.includes('Nenhum valor'), 'todas escondidas: aviso próprio');
+  const vazio = buildReportCharts({ ...vm, rows: vm.rows.filter((row) => row.tipo_manejo === 'Cadastro') }, PESAGENS, {}, 'OPERADOR').find((chart) => chart.id === 'gmd-por-grupo');
+  assert.ok(renderChartSvg(vazio).includes(TEXTO_SEM_GMD), 'sem valor de verdade: continua o porquê');
+  results.push({ caso: 'revisão', somaDetalhe: patch.drill.length, voltaAoModo: after.mode, demaisDeUm: click.length });
 }
 
 await resetDb();

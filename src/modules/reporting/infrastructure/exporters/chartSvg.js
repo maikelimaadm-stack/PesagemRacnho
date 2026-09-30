@@ -15,6 +15,8 @@ const attr = (value) => escapeHtml(value);
 const MAX_MARK_TITLES = 80;
 // Paisagem: tabela de dados com mais colunas que isto não cabe na metade da página (515 px).
 export const WIDE_TABLE_COLUMNS = 8;
+// Revisão E1G: gráfico com valores e todas as séries desligadas na legenda.
+export const TEXTO_TODAS_ESCONDIDAS = 'Todas as séries estão escondidas: ligue uma na legenda.';
 
 function textEl(cls, x, y, anchor, text, title = null) {
   const hint = title && title !== text ? `<title>${escapeHtml(title)}</title>` : '';
@@ -35,7 +37,9 @@ export function renderChartSvg(chart, geometry = chartGeometry(chart), { uid = `
   out.push(`<svg class="rc-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${g.width} ${g.height}" width="${g.width}" height="${g.height}" role="img" aria-labelledby="${id}-t ${id}-d" data-kind="${attr(chart.kind)}">`);
   out.push(`<title id="${id}-t">${escapeHtml(chart.title)}</title><desc id="${id}-d">${escapeHtml(description)}</desc>`);
   if (g.empty) {
-    out.push(textEl('rc-empty', Math.round(g.width / 2), Math.round(g.height / 2), 'middle', chart.textoVazio ?? 'Nenhum valor para mostrar.'));
+    // Revisão E1G: com valores, mas todas as séries escondidas na legenda — dizer isso, não "nenhum valor".
+    const allHidden = !chart.vazio && (chart.series ?? []).some((series) => series.oculto);
+    out.push(textEl('rc-empty', Math.round(g.width / 2), Math.round(g.height / 2), 'middle', allHidden ? TEXTO_TODAS_ESCONDIDAS : chart.textoVazio ?? 'Nenhum valor para mostrar.'));
     out.push('</svg>');
     return out.join('');
   }

@@ -286,13 +286,15 @@ function buildTimeChart(viewModel, chart, options) {
     for (const node of kept) entries.push({ key: node.key, label: node.label, node, children: node.children, drill: true });
     if (rest.length) {
       // "Demais": o motor sobre a UNIÃO das linhas dos grupos que sobraram (nunca a média das médias).
+      // Revisão E1G: sobrando UM grupo só, os pontos são os dele (caminho série × eixo) — o clique abre a folha
+      // daquele grupo naquele x, e não o x de todos os grupos.
       const union = rest.flatMap((node) => node.rows);
       entries.push({
         key: rest.length === 1 ? rest[0].key : DEMAIS_KEY,
         label: rest.length === 1 ? rest[0].label : `Demais (${rest.length} ${pluralOf(serie.label)})`,
         demais: true, members: rest.map((node) => node.key), drill: rest.length === 1,
-        node: { aggregates: computeAggregates(union, specs, resolve) },
-        children: groupRows(union, [{ columnId: eixo.columnId }], resolve, { aggregates: specs }).nodes,
+        node: rest.length === 1 ? rest[0] : { aggregates: computeAggregates(union, specs, resolve) },
+        children: rest.length === 1 ? rest[0].children : groupRows(union, [{ columnId: eixo.columnId }], resolve, { aggregates: specs }).nodes,
       });
     }
     if (missing) entries.push({ key: missing.key, label: missing.label, missing: true, node: missing, children: missing.children, drill: true });

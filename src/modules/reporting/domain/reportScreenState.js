@@ -62,10 +62,48 @@ export function templatePayload(definition, state, role) {
     baseReportId: definition.id,
     columns: visible.columns, filters: state.uiFilters, fixedFilters: screenFixedFilters(state), groups: state.groups, aggregates: visible.aggregates, sort: state.sort,
     search: state.search, period, params, widths: state.widths,
-    orientation: state.orientation, mode: state.drill?.length ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
+    orientation: state.orientation, mode: restingMode(state), summarySort: state.summarySort,
     view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
     ...chartsPayload(state),
   };
+}
+
+/**
+ * Revisão E1G — detalhe aberto por um clique no GRÁFICO. O caminho do gráfico é relativo às linhas que ele mostra:
+ * com um detalhe já aberto (clique na folha e depois "Gráficos"), ele SOMA ao detalhe (senão "Macho" dentro do
+ * Lote 01 abriria todos os machos). Guarda de onde saiu (modo e detalhe) em `drillBase`: o × volta exatamente para
+ * lá — no Analítico (Detalhado) continua Detalhado, e "Salvar alterações" não acende à toa.
+ * @param path partes do caminho já com rótulo ({ columnId, key, label })
+ */
+export function chartDrillPatch(state = {}, path = []) {
+  const current = state.drill ?? [];
+  const drill = [...current.filter((part) => !path.some((item) => item.columnId === part.columnId)), ...path];
+  return {
+    drill, mode: REPORT_MODES.DETALHADO, display: 'folha', chartDrill: true,
+    drillBase: { mode: state.mode ?? REPORT_MODES.RESUMIDO, drill: current, base: current.length ? state.drillBase ?? null : null },
+  };
+}
+
+/**
+ * Revisão E1G — o × da pílula "Detalhe": volta para onde o detalhe saiu (drillBase; do gráfico, também à vista
+ * Gráficos). Sem drillBase (clique na folha do Resumido), como antes: sem detalhe, no Resumido.
+ */
+export function leaveDrillPatch(state = {}) {
+  const base = state.drill?.length ? state.drillBase ?? null : null;
+  const back = state.chartDrill ? { display: 'graficos', chartDrill: false } : {};
+  if (!base) return { drill: [], mode: REPORT_MODES.RESUMIDO, drillBase: null, ...back };
+  return { drill: base.drill ?? [], mode: base.mode ?? REPORT_MODES.RESUMIDO, drillBase: base.base ?? null, ...back };
+}
+
+/**
+ * Modo que o modelo e o último estado guardam: o detalhe de um grupo é passageiro — vale o modo de onde ele saiu
+ * (o Resumido, no clique na folha; o modo anterior, no clique no gráfico).
+ */
+export function restingMode(state = {}) {
+  if (!state.drill?.length) return state.mode;
+  let base = state.drillBase ?? null;
+  while (base?.drill?.length) base = base.base ?? null;
+  return base?.mode ?? REPORT_MODES.RESUMIDO;
 }
 
 /**
@@ -90,7 +128,7 @@ export function viewStatePayload(definition, state, role) {
   return {
     columns: visible.columns, filters: { ...(state.uiFilters ?? {}), ...inherited }, groups: state.groups, aggregates: visible.aggregates,
     sort: state.sort, search: state.search, period, params,
-    widths: state.widths, orientation: state.orientation, mode: state.drill?.length ? REPORT_MODES.RESUMIDO : state.mode, summarySort: state.summarySort,
+    widths: state.widths, orientation: state.orientation, mode: restingMode(state), summarySort: state.summarySort,
     showEmptyColumns: state.showEmptyColumns,
     view: state.view, matrix: state.matrix, sortChoice: state.sortChoice,
     ...chartsPayload(state),
