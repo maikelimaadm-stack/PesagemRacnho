@@ -52,7 +52,7 @@ export function typeColumnDefaults(definition, view, role) {
 
 /**
  * Opções do seletor "Colunas" do tipo, na ordem de columnChoices.available: { key, label, default }.
- * Detalhado: cabeçalho da coluna no tipo (columnLabels) ou o da coluna com unidade ("Peso (kg)").
+ * Detalhado: cabeçalho da coluna no tipo (columnLabels) ou o da coluna, com a unidade ("Peso (kg)").
  * Resumido: rótulo de curral da folha ("Qtd", "Média (@)", "Faixa exigida (kg)").
  */
 export function typeColumnOptions(definition, view, role) {
@@ -60,7 +60,11 @@ export function typeColumnOptions(definition, view, role) {
   const defaults = view.columnChoices.defaults;
   const keys = view.columnChoices.available.filter((key) => typeColumnKeyVisible(definition, view, key, role));
   if (view.mode === REPORT_MODES.DETALHADO) {
-    return keys.map((key) => ({ key, label: view.columnLabels?.[key] ?? headerLabel(columnOf(definition, key)), default: defaults.includes(key) }));
+    // E1F: o cabeçalho do tipo (columnLabels) com a unidade, como a grade/XLSX/CSV ("Rendimento (%)", não "Rendimento").
+    return keys.map((key) => {
+      const column = columnOf(definition, key);
+      return { key, label: headerLabel({ ...column, label: view.columnLabels?.[key] ?? column.label }), default: defaults.includes(key) };
+    });
   }
   const pool = view.aggregates ?? definition.defaultAggregates ?? [];
   const labels = summaryMetricLabels(pool, definition.columns ?? [], { grain: definition.grain, animalColumnId: definition.animalColumnId ?? null, metricLabels: definition.metricLabels ?? null });
