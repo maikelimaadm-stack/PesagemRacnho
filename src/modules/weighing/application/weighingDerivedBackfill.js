@@ -6,6 +6,8 @@
 // - marcador em configurações (appSettings['derivados-saida-v1'], status CONCLUIDO): com ele, não roda mais;
 // - só as séries (animais) que têm Saída com peso, pela MESMA função do lançamento e da edição
 //   (recalculateWeightSeriesForKeys → recalculateWeightSeries): só os 5 campos derivados mudam — idempotente;
+// - revisão E1G: regrava SÓ as pesagens cujos derivados mudaram (onlyChanged) — em geral a própria Saída; o histórico
+//   dos animais vendidos não é reescrito, e a espera em "Preparando o sistema…" fica proporcional às saídas;
 // - registrado na auditoria como ação do sistema (sem usuário) quando alguma série foi recalculada.
 import storage from '../../../storage/storageAdapter.js';
 import { storageRecordToViewModel } from '../domain/weighingMapper.js';
@@ -70,7 +72,7 @@ export async function runSaidaDerivedBackfill({ log = console } = {}) {
   const tentativas = (Number(previous?.tentativas) || 0) + 1;
   try {
     const { keys, saidas, semGmd } = await seriesWithWeighedExit(db);
-    const regravadas = keys.size ? await recalculateWeightSeriesForKeys(keys) : 0;
+    const regravadas = keys.size ? await recalculateWeightSeriesForKeys(keys, { onlyChanged: true }) : 0;
     const finishedAt = nowIso();
     const marker = {
       status: SAIDA_DERIVED_STATUS.CONCLUIDO,
@@ -81,7 +83,7 @@ export async function runSaidaDerivedBackfill({ log = console } = {}) {
       saidas_com_peso: saidas,
       saidas_sem_gmd_antes: semGmd,
       animais: keys.size,
-      pesagens_conferidas: regravadas,
+      pesagens_regravadas: regravadas,
       tentativas,
     };
     await db.transaction('rw', db.table('appSettings'), db.table('auditoria'), async () => {
@@ -93,7 +95,7 @@ export async function runSaidaDerivedBackfill({ log = console } = {}) {
           entidade_id: SAIDA_DERIVED_MARKER_KEY,
           acao: 'ATUALIZAR',
           origem: SAIDA_DERIVED_ORIGIN,
-          resumo: `Recálculo automático (1.4.2): ganho e GMD das saídas com peso — ${saidas} saída(s) de ${keys.size} animal(is); ${regravadas} pesagem(ns) conferida(s), só data/peso anterior, dias, ganho e GMD.`,
+          resumo: `Recálculo automático (1.4.2): ganho e GMD das saídas com peso — ${saidas} saída(s) de ${keys.size} animal(is); ${regravadas} pesagem(ns) regravada(s), só data/peso anterior, dias, ganho e GMD.`,
           campos_alterados: [...SAIDA_DERIVED_FIELDS],
           // Ação do sistema: sem usuário (a Trilha de auditoria mostra "Sistema").
           usuario_id: null,
@@ -102,7 +104,7 @@ export async function runSaidaDerivedBackfill({ log = console } = {}) {
         });
       }
     });
-    log?.info?.(`[dados] recálculo do GMD das saídas concluído: ${saidas} saída(s) com peso, ${keys.size} animal(is), ${regravadas} pesagem(ns) conferida(s).`);
+    log?.info?.(`[dados] recálculo do GMD das saídas concluído: ${saidas} saída(s) com peso, ${keys.size} animal(is), ${regravadas} pesagem(ns) regravada(s).`);
     return { ran: true, completed: true, marker };
   } catch (err) {
     const error = { code: err?.code || 'SAIDA_DERIVED_FAILED', message: err?.message || String(err) };

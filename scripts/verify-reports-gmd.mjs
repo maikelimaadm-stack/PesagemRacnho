@@ -195,6 +195,24 @@ await db.table('appSettings').delete(SAIDA_DERIVED_MARKER_KEY);
 const terceira = await runSaidaDerivedBackfill({ log: null });
 assert.equal(terceira.completed, true);
 assert.deepEqual(await snapshot(), depois1, 'rodar 2x não muda nenhum derivado (idempotente)');
+// Revisão E1G: o recálculo único regrava SÓ as pesagens cujos derivados mudam (as 2 saídas), não o histórico inteiro
+// dos animais vendidos (Cadastro e Manejo ficam intocados, nem o updated_at muda).
+const linhasDe = async (ids) => Object.fromEntries((await db.table('pesagens').toArray()).filter((row) => ids.includes(row.id)).map((row) => [row.id, row]));
+const SERIE_VENDIDOS = ['V1-c', 'V1-m', 'V1-s', 'V2-c', 'V2-s'];
+for (const row of Object.values(await linhasDe(['V1-s', 'V2-s']))) {
+  await db.table('pesagens').update(row.localId, { ...Object.fromEntries(DERIVED.map((key) => [key, null])), legacy_payload: { ...row.legacy_payload, ...Object.fromEntries(DERIVED.map((key) => [key, null])) } });
+}
+await db.table('appSettings').delete(SAIDA_DERIVED_MARKER_KEY);
+const antesSo = await linhasDe(SERIE_VENDIDOS);
+const soMudadas = await runSaidaDerivedBackfill({ log: null });
+const depoisSo = await linhasDe(SERIE_VENDIDOS);
+assert.equal(soMudadas.marker.pesagens_regravadas, 2, 'recálculo único: só as 2 saídas regravadas');
+assert.deepEqual(['V1-c', 'V1-m', 'V2-c'].map((id) => depoisSo[id].updated_at === antesSo[id].updated_at), [true, true, true], 'recálculo único: Cadastro e Manejo dos vendidos intocados');
+assert.deepEqual(['V1-s', 'V2-s'].map((id) => derivedOf(depoisSo[id].legacy_payload)), [derivedOf(depois1.find(([id]) => id === 'V1-s')[2]), derivedOf(depois1.find(([id]) => id === 'V2-s')[2])], 'recálculo único: as saídas voltam com o GMD');
+const chavesVendidos = new Set(['id:V1', 'id:V2']);
+assert.equal(await weighingService.recalculateWeightSeriesForKeys(chavesVendidos, { onlyChanged: true }), 0, 'onlyChanged: nada mudou, nada regravado');
+// NEGATIVO: o recálculo da série inteira (o de antes da revisão) regrava as 5 pesagens dos 2 vendidos.
+assert.equal(await weighingService.recalculateWeightSeriesForKeys(chavesVendidos), SERIE_VENDIDOS.length, 'NEGATIVO: sem onlyChanged regrava as 5 pesagens');
 // Banco novo (nada a recalcular): marca concluído sem auditoria.
 const dbSrc = fs.readFileSync(new URL('../src/api/db.js', import.meta.url), 'utf8');
 assert.match(dbSrc, /import \{ runSaidaDerivedBackfill \} from '\.\.\/modules\/weighing\/application\/weighingDerivedBackfill\.js'/, 'abertura: bootstrapLocalDb importa o passo de dados');
