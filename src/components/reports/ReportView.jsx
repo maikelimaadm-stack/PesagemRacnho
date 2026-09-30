@@ -28,33 +28,21 @@ import { emitReport } from "@/modules/reporting/application/reportExportService"
 import { exportPdf, printReport } from "@/modules/reporting/application/reportPrintService";
 import { loadReportHeader } from "@/modules/catalog/application/propertyHeaderService";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { favoriteKey, getFavorites, recordRecent, saveReportViewState, saveTemplate, saveTypeColumnPrefs, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
+import { deleteTemplate, favoriteKey, getFavorites, listTemplates, recordRecent, saveReportViewState, saveTemplate, saveTypeColumnPrefs, toggleFavorite } from "@/modules/reporting/application/reportTemplateService";
+import { PREVIOUS_COLUMN, filterButtonsOf, integerParamsOf, isPesagensScreen, quickFiltersOf } from "@/modules/reporting/application/reportScreenModel";
 import AnalyticGroupButtons from "./AnalyticGroupButtons";
 import { ReportGroupingDialog, ReportSaveTemplateDialog, ReportTotalsDialog } from "./ReportDialogs";
 import ReportFilterBar from "./ReportFilterBar";
 import MatrixAxisControls from "./MatrixAxisControls";
-import { MAK_FILTER_BUTTONS, MakgestaoColumnsButton, MakgestaoFilterButton, MakgestaoFilterCard, MakgestaoTopBar, isMakgestaoScreen, makOrientation } from "./MakgestaoScreen";
+import { MakgestaoColumnsButton, MakgestaoFilterButton, MakgestaoFilterCard, MakgestaoTopBar, makOrientation } from "./MakgestaoScreen";
 import ReportSheetView from "./ReportSheetView";
 import ReportTable from "./ReportTable";
 import { pillFilterType, pillOptions, toDisplayFilters, toServiceFilters, useCan } from "./reportUi";
 
 const NO_GROUP = "__nenhum__";
 const CUSTOM_GROUP = "__personalizado__";
-const PREVIOUS_COLUMN = "tem_pesagem_anterior";
-
-// Botões de filtro padrão (E1B §3, linha 2): o primeiro id que o relatório tiver. Proprietário só aparece
-// quando existir a coluna (hoje não existe nas pesagens: fica para a E3).
-const FILTER_BUTTONS = Object.freeze([
-  { label: "Lotes", ids: ["nome_lote", "lote", "lote_atual"] },
-  { label: "Apartações", ids: ["nome_apartacao", "apartacao", "apartacao_atual"] },
-  { label: "Sexo", ids: ["sexo"] },
-  { label: "Raças", ids: ["raca"] },
-  { label: "Era", ids: ["era"] },
-  { label: "Marcas", ids: ["marca"] },
-  { label: "Proprietário", ids: ["proprietario"] },
-  { label: "Categoria", ids: ["categoria"] },
-  { label: "Status", ids: ["situacao_atual", "situacao"] },
-]);
+// Botões de filtro (E1B §3, linha 2; Pesagens: a lista da E1D), Pesagem Anterior, parâmetros e filtros
+// rápidos de cada relatório: application/reportScreenModel.js (o gate reports:tela-unica confere).
 
 // Estado inicial (E1D): application/reportInitialState — o mesmo código que o gate reports:pesagens-tipos
 // confere em Node (modelo > visão antiga > último estado > tipo padrão do relatório, este com a escolha de
@@ -115,12 +103,16 @@ function currentSortValue({ summaryMode, state, definition, options }) {
  * @param savedState último estado do usuário (Relatorios.jsx lê antes de montar) ou null.
  * @param typeColumnPrefs E1D: escolha de "Colunas" de cada tipo para o usuário ({ [viewId]: [chave] }, de
  *   getTypeColumnPrefs — Relatorios.jsx lê antes de montar) ou null.
+ * @param reportOptions E1E (tela única): opções do campo "Relatório" (reportScreenModel.reportSelectorOptions)
+ *   com onSelectReport(id); onOpenTemplate(modelo | null) abre um modelo do menu ⋯ (null = o relatório sem
+ *   modelo, depois de excluir o aberto). Sem reportOptions (aba Controle da Manutenção), a tela da 1.4.0.
  */
-export default function ReportView({ reportId, presetId = null, template, savedState = null, typeColumnPrefs = null, actor, onBack, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true }) {
+export default function ReportView({ reportId, presetId = null, template, savedState = null, typeColumnPrefs = null, actor, onBack = null, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true, reportOptions = null, onSelectReport = null, onOpenTemplate = null }) {
   const can = useCan();
   const definition = getReportDefinition(reportId);
-  // E1D (visual): Pesagens abre na tela "como o MAKGESTAO" (MakgestaoScreen); os outros, na da 1.4.0.
-  const makScreen = isMakgestaoScreen(definition);
+  // E1E: em Relatórios (tela única, com o campo "Relatório") TODOS abrem na tela "como o MAKGESTAO"
+  // (MakgestaoScreen); a aba Controle da Manutenção continua com a da 1.4.0.
+  const makScreen = Boolean(reportOptions) || isPesagensScreen(definition);
   const preset = presetId ? getLegacyAlias(presetId) : null;
   // E1D: escolha de colunas por tipo (vale nesta tela ao trocar de tipo; gravada por usuário ao aplicar).
   const [typeColumns, setTypeColumns] = useState(() => (allowPreferences && typeColumnPrefs ? { ...typeColumnPrefs } : {}));
@@ -138,6 +130,9 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   const [currentTemplate, setCurrentTemplate] = useState(template ?? null);
   const [printPrompt, setPrintPrompt] = useState(null);
   const [header, setHeader] = useState(null);
+  // E1E: modelos deste relatório para "Abrir modelo" (menu ⋯); null = a tela não abre modelos.
+  const [templates, setTemplates] = useState(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const lastViewModel = useRef(null);
   const runSeq = useRef(0);
   const favKey = favoriteKey(definition.id, preset ? presetId : null);
@@ -148,6 +143,12 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     recordRecent(definition.id, actor, { templateId: template?.id ?? null, presetId: preset ? presetId : null }).catch(() => {});
     getFavorites(actor).then((keys) => setFavorite(keys.includes(favKey))).catch(() => {});
   }, [definition.id, template?.id, presetId, preset, favKey, actor, allowPreferences]);
+
+  const loadTemplates = useCallback(() => {
+    if (!allowPreferences || !onOpenTemplate) return;
+    listTemplates(actor, { reportId: definition.id }).then(setTemplates).catch(() => setTemplates([]));
+  }, [allowPreferences, onOpenTemplate, actor, definition.id]);
+  useEffect(() => { loadTemplates(); }, [loadTemplates]);
 
   const serviceFilters = useMemo(() => toServiceFilters(state.uiFilters, definition.columns), [state.uiFilters, definition]);
 
@@ -449,6 +450,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       setDialog(null);
       toast.success(`Modelo “${saved.name}” salvo (${saved.scope === "SHARED" ? "compartilhado" : "pessoal"}).`, drilling ? { description: "O detalhe do grupo não fica no modelo: ele abre no Resumido." } : undefined);
       onTemplateSaved?.(saved);
+      loadTemplates();
     } catch (err) {
       toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode salvar este modelo." : err.message);
     } finally {
@@ -456,12 +458,24 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     }
   };
 
+  // E1E: excluir o modelo aberto (menu ⋯) — pessoal só o dono; compartilhado com reports.templates.share
+  // (o serviço confere). Depois abre o relatório sem modelo.
+  const canDeleteTemplate = Boolean(allowPreferences && onOpenTemplate && currentTemplate?.id
+    && (currentTemplate.scope === "SHARED" ? can("reports.templates.share") : currentTemplate.ownerUserId === actor.id));
+  const removeTemplate = async () => {
+    setConfirmDelete(false);
+    try {
+      await deleteTemplate(currentTemplate.id, actor);
+      toast.success(`Modelo “${currentTemplate.name}” excluído.`);
+      onOpenTemplate(null);
+    } catch (err) {
+      toast.error(err.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode excluir este modelo." : err.message);
+    }
+  };
+
   // Linha 2: botões padrão (com contador), depois os demais filtros ativos e, no Detalhado, as colunas
   // visíveis — um filtro nunca fica invisível e o caminho é um só (uiFilters → motor de filtros).
-  const buttonColumns = (makScreen ? MAK_FILTER_BUTTONS : FILTER_BUTTONS).map((button) => {
-    const column = button.ids.map((id) => columnOf(id)).find(Boolean);
-    return column ? { button, column } : null;
-  }).filter(Boolean);
+  const buttonColumns = filterButtonsOf(definition, available);
   const coveredIds = new Set([...buttonColumns.map((item) => item.column.id), PREVIOUS_COLUMN]);
   const pill = (column, label, showCount = false) => (
     <MakFilterPill
@@ -515,6 +529,18 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       ) : null}
       <ReportGroupingDialog open={dialog === "groups"} onOpenChange={(open) => !open && setDialog(null)} columns={available} groups={state.groups} onApply={setGroups} />
       <ReportTotalsDialog open={dialog === "totals"} onOpenChange={(open) => !open && setDialog(null)} columns={available} aggregates={state.aggregates} animalColumnId={definition.animalColumnId} onApply={(aggregates) => update({ aggregates, summarySort: aggregates.some((spec) => spec.id === state.summarySort?.key) ? state.summarySort : null })} />
+      <Dialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact rpt-dialog">
+          <DialogHeader>
+            <DialogTitle className="text-sm">{currentTemplate?.scope === "SHARED" ? "Excluir o modelo para todos?" : "Excluir o modelo?"}</DialogTitle>
+            <DialogDescription>{currentTemplate ? `“${currentTemplate.name}” deixa de aparecer em “Abrir modelo”. O relatório continua.` : ""}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setConfirmDelete(false)}>Cancelar</Button>
+            <Button type="button" variant="destructive" onClick={removeTemplate}>Excluir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ReportSaveTemplateDialog open={dialog === "save"} onOpenChange={(open) => !open && setDialog(null)} current={currentTemplate && (currentTemplate.ownerUserId === actor.id || can("reports.templates.share")) ? currentTemplate : null} canShare={can("reports.templates.share")} onSave={saveAsTemplate} busy={savingTemplate} />
       <Dialog open={Boolean(printPrompt)} onOpenChange={(open) => !open && setPrintPrompt(null)}>
         <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact rpt-dialog">
@@ -549,7 +575,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     const columnsInCard = Boolean(makColumns && typeColumnsOn && currentView.groupChoices?.length);
     // Vendas (L1445–1466 do antigo): "Mostrar/Ocultar Detalhes" abre a lista de cada comprador; "Colunas
     // Detalhes" só aparece com ela aberta. Começa desligado, como no antigo.
-    const vendasTools = Boolean(currentView?.id === "vendas" && inTypeMode && !drillParts.length);
+    // E1E: vale em todo tipo com o desenho de venda (sheetLayout, Comercial: Vendas/Abates/Compras).
+    const vendasTools = Boolean((currentView?.sheetLayout || currentView?.id === "vendas") && inTypeMode && !drillParts.length);
     const hideColumnsButton = vendasTools && !state.showDetails;
     const makNotes = [
       ...(viewModel?.warnings ?? []).map((warning) => <div key={warning.code} className="rpt-warning" role="status"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />{warning.message}</div>),
@@ -572,12 +599,17 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           onCsv={() => exportAs("csv")}
           onJson={() => exportAs("json")}
           menuLabel={summaryMode ? "Mesma tabela resumida da folha" : "Mesma população e totais da folha"}
+          templates={onOpenTemplate ? templates : null}
+          currentTemplateId={currentTemplate?.id ?? null}
+          onOpenTemplate={onOpenTemplate}
           onSaveTemplate={allowPreferences ? () => setDialog("save") : null}
+          onDeleteTemplate={canDeleteTemplate ? () => setConfirmDelete(true) : null}
           onRefresh={() => execute({ reload: true })}
           showEmptyColumns={state.showEmptyColumns}
           onToggleEmptyColumns={() => update({ showEmptyColumns: !state.showEmptyColumns })}
         />
         <MakgestaoFilterCard
+          report={reportOptions && onSelectReport ? { value: definition.id, options: reportOptions, onChange: onSelectReport } : null}
           period={period}
           resolvedPeriod={viewModel?.period ?? null}
           onPeriod={periodParam ? setPeriod : null}
@@ -592,9 +624,18 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           sortValue={sortValue}
           onSort={applySort}
           previous={previousColumn ? { value: previousValue, onChange: setPrevious } : null}
-          filterButtons={buttonColumns.map(({ button, column }) => (
-            <MakgestaoFilterButton key={column.id} label={button.label} narrow={button.narrow} value={state.uiFilters[column.id] || null} filterType={pillFilterType(column)} listOptions={() => pillOptions(viewModel, column)} onChange={(value) => onFilter(column.id, value)} />
-          ))}
+          params={integerParamsOf(definition).map((param) => ({ id: param.id, label: param.label, min: param.min, value: state.params[param.id], onChange: (value) => update({ params: { ...state.params, [param.id]: value ?? param.default } }) }))}
+          filterButtons={(
+            <>
+              {buttonColumns.map(({ button, column }) => (
+                <MakgestaoFilterButton key={column.id} label={button.label} narrow={button.narrow} value={state.uiFilters[column.id] || null} filterType={pillFilterType(column)} listOptions={() => pillOptions(viewModel, column)} onChange={(value) => onFilter(column.id, value)} />
+              ))}
+              {/* E1E: filtros rápidos do relatório (ex.: "Somente mortes") como botões de ligar/desligar. */}
+              {quickFiltersOf(definition).map((quick) => (
+                <button key={quick.id} type="button" className={`rpt-mak-btn${quickActive(quick) ? " is-on" : ""}`} aria-pressed={quickActive(quick)} onClick={() => toggleQuick(quick)}>{quick.label}</button>
+              ))}
+            </>
+          )}
           columnsButton={columnsInCard ? makColumns : null}
           onClear={() => update({ uiFilters: {}, search: "" })}
           extras={(

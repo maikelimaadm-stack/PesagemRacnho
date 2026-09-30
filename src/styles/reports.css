@@ -198,12 +198,13 @@ html body #root .cadastro-emp-scope .rpt-sheet :is(button.sheet-drill, button.sh
 html body #root .cadastro-emp-scope .rpt-sheet button.sheet-drill:not(#rpt-none):hover,
 html body #root .cadastro-emp-scope .rpt-sheet button.sheet-drill:not(#rpt-none):focus-visible { color: #0f5132 !important; }
 
-/* ===== E1D (visual): tela "como o MAKGESTAO" — SÓ Pesagens (definition.screen "makgestao", MakgestaoScreen.jsx).
+/* ===== E1D (visual): tela "como o MAKGESTAO" (MakgestaoScreen.jsx). E1E: TODOS os relatórios de Relatórios (tela
+   única, campo "Relatório" primeiro na grade); só a aba Controle da Manutenção fica na tela da 1.4.0.
    Medidas das classes Tailwind do antigo (RelatorioPesagensIndividuais L509–757): página p-6 space-y-2 sobre
    slate-50; título text-xl bold slate-900; "Análise e impressão" text-xs slate-600; Imprimir h-8 text-xs
    emerald-600; cartão rounded-xl border shadow p-4 space-y-3; grade de 6 colunas gap-2; rótulo text-xs
    medium; campos h-8 text-xs rounded-md border shadow-sm; botões de contorno h-8 text-xs; Agrupar Por h-7
-   ligado em emerald-600. Os outros relatórios não têm .rpt-mak (continuam com a tela da 1.4.0).
+   ligado em emerald-600.
    A shell põe cor/tamanho com !important em botões e campos (.cadastro-emp-scope …): aqui a técnica
    `html body #root … :not(#rpt-none)` do projeto, só dentro de .rpt-mak. */
 .mb1-app-shell .mb1-operational-page.rpt-mak { display: flex; flex-direction: column; gap: 8px; padding: 24px; background: #f8fafc; color: #0f172a; }
@@ -236,13 +237,17 @@ html body #root .rpt-mak .rpt-mak-link:not(#rpt-none):hover { color: #0f172a !im
 
 /* Cartão de filtros (Card p-4 space-y-3). */
 .rpt-mak__card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid #e5e5e5; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); }
-.rpt-mak__grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
+/* E1E: grade de colunas de ~150px (o antigo tinha 6 fixas); "Relatório" e "Tipo Relatório" ocupam duas (nomes
+   longos). Pesagens cabe numa linha a partir de ~1500px; os relatórios com menos campos não esticam
+   (auto-fill), os com mais (Sintético: Linhas/Colunas) quebram a linha. */
+.rpt-mak__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.rpt-mak__grid > :is([data-field="relatorio"], [data-field="tipo"]) { grid-column: span 2; }
 .rpt-mak .rpt-bar-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 /* Rótulo (Label text-xs font-medium): no antigo o <label> é inline dentro do div.space-y-1, então a linha tem a
    altura do texto do corpo (16px/24px) com o rótulo de 12px na linha de base — 24px de linha, texto embaixo. */
 html body #root .rpt-mak .rpt-bar-field__label:not(#rpt-none) { display: block; box-sizing: border-box; height: 24px; margin: 0; padding: 6px 0 0; overflow: hidden; color: #0a0a0a; font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap; text-overflow: ellipsis; }
 /* Campos (Input/SelectTrigger h-8 text-xs): borda neutra, sombra leve, foco com anel escuro de 1px. */
-html body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none) {
+html body #root .rpt-mak :is(input.rpt-mak-input, span.rpt-mak-static, .rpt-bar-field__control):not(#rpt-none) {
   box-sizing: border-box; width: 100%; height: 32px !important; min-height: 32px !important; padding: 4px 12px !important; border: 1px solid #e5e5e5 !important; border-radius: 6px !important;
   background: transparent !important; color: #0a0a0a !important; font-family: inherit; font-size: 12px !important; font-weight: 400; line-height: 16px; box-shadow: 0 1px 2px 0 rgb(0 0 0 / .05) !important; outline: none;
 }
@@ -252,6 +257,12 @@ html body #root .rpt-mak .rpt-bar-field__control:not(#rpt-none) > svg { width: 1
 /* Input do antigo é "flex": o ícone do calendário fica logo depois da data (não na ponta do campo). */
 html body #root .rpt-mak input.rpt-mak-input:not(#rpt-none) { display: flex; align-items: center; }
 .rpt-mak input.rpt-mak-input { color-scheme: light; }
+/* Sem período (Rebanho atual, Ocupação): "Estado atual (hoje)" no lugar das datas, só leitura. */
+html body #root .rpt-mak span.rpt-mak-static:not(#rpt-none) { display: flex; align-items: center; overflow: hidden; background: #f8fafc !important; color: #475569 !important; white-space: nowrap; text-overflow: ellipsis; cursor: default; }
+/* Lista do campo "Relatório" (portal, fora de .rpt-mak): a lista inteira de uma vez quando cabe; título de cada família. */
+.rpt-mak-report-list.erp-select-menu { max-height: min(var(--radix-select-content-available-height, 384px), 640px); }
+.rpt-mak-report-list .rpt-mak-report-list__family { padding: 6px 8px 2px; color: #64748b; font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak-report-list .rpt-mak-report-list__family { color: #8b949e; }
 .rpt-mak input.rpt-mak-input::-webkit-calendar-picker-indicator { cursor: pointer; }
 
 /* Controles do tipo que ficam embaixo da grade: Agrupar Por do Analítico (L602–619). */
@@ -312,7 +323,7 @@ html:is(.dark, .tema-escuro, .escuro) .rpt-mak .rpt-mak__subtitle { color: #8b94
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak__subtitle em { color: #7ee2a8; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak__card { border-color: #30363d; background: #161b22; box-shadow: none; }
 html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-bar-field__label:not(#rpt-none) { color: #e6edf3; }
-html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none) { border-color: #30363d !important; background: #0d1117 !important; color: #e6edf3 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(input.rpt-mak-input, span.rpt-mak-static, .rpt-bar-field__control):not(#rpt-none) { border-color: #30363d !important; background: #0d1117 !important; color: #e6edf3 !important; }
 html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none):is(:focus, :focus-visible, [data-state="open"]) { box-shadow: 0 0 0 1px #8b949e !important; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak input.rpt-mak-input { color-scheme: dark; }
 html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-btn:not(#rpt-none) { border-color: #30363d; background: #161b22 !important; color: #e6edf3 !important; }

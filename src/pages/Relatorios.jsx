@@ -1,15 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import ReportCatalog from "@/components/reports/ReportCatalog";
 import ReportView from "@/components/reports/ReportView";
 import { useReportActor } from "@/components/reports/reportUi";
 import { resolveReportId } from "@/modules/reporting/definitions/reportCatalog";
 import { getLegacyAlias } from "@/modules/reporting/definitions/legacyAliases";
-import { getReportViewState, getTypeColumnPrefs, listTemplates } from "@/modules/reporting/application/reportTemplateService";
+import { getRecents, getReportViewState, getTypeColumnPrefs, listTemplates } from "@/modules/reporting/application/reportTemplateService";
+import { initialReportId, reportSelectorOptions, withCurrentOption } from "@/modules/reporting/application/reportScreenModel";
 import "@/styles/reports.css";
 
-// Relatórios: uma entrada no menu. Sem `?r=` mostra o catálogo; com `?r=<id>` (e `&m=<modelo>`)
-// abre o relatório. A URL leva só identificadores — nunca filtros ou dados.
+// Relatórios: uma entrada no menu e uma tela só (E1E, decisão da responsável em 30/09/2026): abre direto no
+// relatório, na tela do MAKGESTAO, e o campo "Relatório" do cartão troca de relatório (?r=<id>). Sem `?r=`
+// (ou id desconhecido) abre o último relatório usado; sem histórico, Pesagens. O catálogo em cartões saiu
+// da navegação; modelos abrem e salvam pelo menu ⋯ da tela. A URL leva só identificadores — nunca filtros
+// ou dados.
 // E1 (1.4.0): `?r=<id antigo>` (links e favoritos de antes da 1.4.0) abre o relatório novo com a
 // seleção do antigo; `&v=<id antigo>` faz o mesmo a partir do id novo (favorito "novo#antigo").
 // E1B: sem modelo e sem visão antiga, o relatório volta como a pessoa deixou (último estado por usuário),
@@ -36,8 +39,19 @@ export default function Relatorios() {
   const [savedReady, setSavedReady] = useState(false);
   const [typeColumns, setTypeColumns] = useState(null);
   const [typeColumnsReady, setTypeColumnsReady] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
   const hasTypeColumns = Boolean(resolved?.definition?.views?.some((view) => view.columnChoices));
+  // Campo "Relatório": o catálogo do perfil (+ o relatório aberto por link, se estiver fora dele).
+  const options = useMemo(() => (actor ? reportSelectorOptions(actor) : []), [actor]);
+
+  // Sem relatório na URL: último usado (ou Pesagens), trocando a URL (voltar do navegador não cai aqui de novo).
+  useEffect(() => {
+    if (!actor || reportId) return undefined;
+    let alive = true;
+    getRecents(actor)
+      .catch(() => [])
+      .then((recents) => { if (alive) navigate(`/Relatorios?r=${encodeURIComponent(initialReportId(recents, options))}`, { replace: true }); });
+    return () => { alive = false; };
+  }, [actor, reportId, options, navigate]);
 
   useEffect(() => {
     let alive = true;
@@ -73,25 +87,24 @@ export default function Relatorios() {
     return () => { alive = false; };
   }, [reportId, actor, hasTypeColumns]);
 
-  if (!actor) return null;
-  const open = ({ reportId: id, template: chosen, presetId: view }) => navigate(`/Relatorios?r=${encodeURIComponent(id)}${chosen ? `&m=${encodeURIComponent(chosen.id)}` : ""}${!chosen && view ? `&v=${encodeURIComponent(view)}` : ""}`);
-
-  if (resolved?.definition) {
-    if (!templateReady || !savedReady || !typeColumnsReady) return null;
-    return (
-      <ReportView
-        key={`${resolved.definition.id}:${presetId ?? ""}:${templateId ?? ""}:${day ?? ""}`}
-        reportId={resolved.definition.id}
-        presetId={template ? null : presetId}
-        template={template}
-        savedState={template || presetId ? null : savedState}
-        typeColumnPrefs={typeColumns}
-        initialPeriod={day ? { preset: "personalizado", from: day, to: day } : null}
-        actor={actor}
-        onBack={() => navigate("/Relatorios")}
-        onTemplateSaved={() => setRefreshKey((value) => value + 1)}
-      />
-    );
-  }
-  return <ReportCatalog actor={actor} onOpen={open} refreshKey={refreshKey} />;
+  if (!actor || !resolved?.definition) return null;
+  if (!templateReady || !savedReady || !typeColumnsReady) return null;
+  const open = (id, chosen = null) => navigate(`/Relatorios?r=${encodeURIComponent(id)}${chosen ? `&m=${encodeURIComponent(chosen.id)}` : ""}`);
+  return (
+    <ReportView
+      key={`${resolved.definition.id}:${presetId ?? ""}:${templateId ?? ""}:${day ?? ""}`}
+      reportId={resolved.definition.id}
+      presetId={template ? null : presetId}
+      template={template}
+      savedState={template || presetId ? null : savedState}
+      typeColumnPrefs={typeColumns}
+      initialPeriod={day ? { preset: "personalizado", from: day, to: day } : null}
+      actor={actor}
+      onBack={null}
+      reportOptions={withCurrentOption(options, resolved.definition)}
+      // Trocar de relatório abre o outro com o último estado dele; abrir um modelo, o modelo (&m=).
+      onSelectReport={(id) => open(id)}
+      onOpenTemplate={(chosen) => open(resolved.definition.id, chosen)}
+    />
+  );
 }
