@@ -36,13 +36,15 @@ export function isMissingIdentification(value) {
   return !normalizeIdentifierValue(value) || isSnIdentifier(value);
 }
 
-// Só dígitos, com zeros à esquerda opcionais e o sufixo decimal zerado que o Excel acrescenta.
-const NUMERIC_IDENTIFIER = /^0*(\d+?)(?:[.,]0+)?$/;
+// Só dígitos, com zeros à esquerda opcionais e o sufixo decimal zerado que o Excel acrescenta
+// (",0" ou ",00"). Três zeros depois do ponto/vírgula é separador de MILHAR ("1.000" = mil),
+// não decimal: fica fora, senão "1.000" casaria com o animal 1 (E1G, revisão).
+const NUMERIC_IDENTIFIER = /^0*(\d+?)(?:[.,]0{1,2})?$/;
 
 /**
  * E1G: chave numérica do brinco para a importação: "01016", "1016,0", "1016.0" → "1016";
- * "000" → "0". Número com letra, espaço ou decimal de verdade ("1016.5") → null (não é
- * número de brinco; casa só pelo valor exato).
+ * "000" → "0". Número com letra, espaço, decimal de verdade ("1016.5") ou milhar ("1.000",
+ * "10,000") → null (não é número de brinco; casa só pelo valor exato).
  */
 export function importNumberKey(value) {
   const match = NUMERIC_IDENTIFIER.exec(normalizeIdentifierValue(value));

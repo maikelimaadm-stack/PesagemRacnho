@@ -79,12 +79,19 @@ const rejects = async (promise, code) => {
 // ---------------------------------------------------------------------------
 // 1. Chave numérica pura
 // ---------------------------------------------------------------------------
-for (const [text, expected] of [['01016', '1016'], ['1016,0', '1016'], ['1016.0', '1016'], ['1016,00', '1016'], [' 01016 ', '1016'], ['007', '7'], ['7', '7'], ['000', '0'], ['0,0', '0'], ['1000', '1000'], ['0100', '100']]) {
+for (const [text, expected] of [['01016', '1016'], ['1016,0', '1016'], ['1016.0', '1016'], ['1016,00', '1016'], [' 01016 ', '1016'], ['007', '7'], ['7', '7'], ['000', '0'], ['0,0', '0'], ['1000', '1000'], ['0100', '100'], ['1,00', '1']]) {
   assert.equal(importNumberKey(text), expected, `chave numérica de "${text}"`);
 }
 for (const text of ['A01', '01A', 'A1', '1016.5', '1016,5', '1.016', '10 16', '1016.', 'SN', '', null]) {
   assert.equal(importNumberKey(text), null, `NEGATIVO: "${text}" não é brinco numérico`);
 }
+// E1G (revisão): três zeros depois do ponto/vírgula é separador de MILHAR ("1.000" = mil no Excel
+// em português), não o ",0" decimal. A regra anterior (/[.,]0+/) tirava o "milhar" e "1.000"
+// casava com o animal 1 — pesagem no animal errado.
+for (const text of ['1.000', '2.000', '10.000', '1,000', '1016,000']) {
+  assert.equal(importNumberKey(text), null, `NEGATIVO: "${text}" (milhar) não vira número parecido`);
+}
+assert.equal(/^0*(\d+?)(?:[.,]0+)?$/.exec('1.000')?.[1], '1', 'NEGATIVO: a regra anterior transformava "1.000" em "1"');
 assert.equal(importGroupingKey('A01'), 'A01', 'número com letra agrupa pelo valor exato');
 assert.notEqual(importGroupingKey('A01'), importGroupingKey('A1'), 'NEGATIVO: letras não perdem o zero');
 assert.equal(importGroupingKey('007'), importGroupingKey('7'), '"007" e "7" agrupam juntos');
@@ -101,6 +108,7 @@ const pureIndex = buildAnimalIdentityIndex({
     { id: 'p7', numero_animal: '7', marca: 'ABC', marca_id: 'm1' },
     { id: 'p007', numero_animal: '007', marca: 'ABC', marca_id: 'm1' },
     { id: 'pA1', numero_animal: 'A1', marca: 'ABC', marca_id: 'm1' },
+    { id: 'p1', numero_animal: '1', marca: 'ABC', marca_id: 'm1' },
   ],
   identifiers: [],
   marcas: [{ id: 'm1', nome: 'ABC' }],
@@ -118,6 +126,8 @@ const twoSimilar = resolveAnimalIdentity(pureIndex, { numero: '07', marcaId: 'm1
 assert.equal(twoSimilar.status, IDENTITY_STATUS.AMBIGUOUS, 'NEGATIVO: dois animais parecidos → AMBÍGUO, nunca "o último vence"');
 assert.equal(resolveAnimalIdentity(pureIndex, { numero: 'A01', marcaId: 'm1' }).status, IDENTITY_STATUS.NONE, 'NEGATIVO: "A01" não casa com "A1"');
 assert.equal(resolveAnimalIdentity(pureIndex, { numero: '01016', marcaNome: 'XYZ' }).status, IDENTITY_STATUS.NONE, 'NEGATIVO: número parecido de outra marca não casa');
+assert.equal(resolveAnimalIdentity(pureIndex, { numero: '1.000', marcaId: 'm1' }).status, IDENTITY_STATUS.NONE, 'NEGATIVO: "1.000" (mil) não casa com o animal 1');
+assert.equal(resolveAnimalIdentity(pureIndex, { numero: '1,0', marcaId: 'm1' }).animal.id, 'p1', '"1,0" do Excel casa com o animal 1');
 // Código antigo: índice sem os mapas numéricos → "01016" não achava o 1016.
 const oldIndex = { ...pureIndex, numeric: undefined };
 assert.equal(resolveAnimalIdentity(oldIndex, { numero: '01016', marcaId: 'm1' }).status, IDENTITY_STATUS.NONE, 'NEGATIVO: o índice antigo reprovaria (animal novo)');
@@ -367,7 +377,7 @@ console.log(JSON.stringify({
     tela: 'análise mostra "N linhas casaram … por número parecido" e "O Cadastro de … passa a Manejo"',
   },
   negativeTests: [
-    'letras/decimais não viram número', 'identidade exata do app intacta', 'dois parecidos = AMBÍGUO', 'índice antigo não casa',
+    'letras/decimais não viram número', 'milhar "1.000" não vira o animal 1', 'identidade exata do app intacta', 'dois parecidos = AMBÍGUO', 'índice antigo não casa',
     'A01 ≠ A1', 'marca diferente não casa', 'Manejos/Cadastros continuam CONFLITO', 'evento gravado anterior → CONFLITO',
     'conflito na data mais antiga → ERRO', 'novo Cadastro inválido → dependentes ERRO', 'plano velho recusado na transação', 'sem a troca o GMD some',
   ],
