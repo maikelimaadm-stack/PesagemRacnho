@@ -13,6 +13,7 @@ import {
   IMPORT_TYPE_LABELS,
   ROW_STATUS,
 } from '../../modules/import/domain/importConstants.js';
+import { importGroupingKey } from '../../modules/import/domain/animalIdentity.js';
 
 export { CATEGORY_MODES, DATE_FORMATS, DECIMAL_FORMATS, EXIT_REASONS, IMPORT_TYPES, IMPORT_TYPE_LABELS, ROW_STATUS };
 
@@ -160,7 +161,8 @@ export function afericaoDoArquivo(file, mapping) {
   const headerMarca = headerOfField(mapping, 'marca');
   const contagem = new Map();
   for (const row of file.rows) {
-    const numero = String(row.values?.[headerNumero] ?? '').trim().toUpperCase();
+    // E1G: mesma chave da importação — "007" e "7" contam como um animal só.
+    const numero = importGroupingKey(row.values?.[headerNumero]);
     if (!numero) continue;
     const marca = headerMarca ? String(row.values?.[headerMarca] ?? '').trim().toUpperCase() : '';
     const chave = `${numero}|${marca}`;
@@ -192,6 +194,21 @@ export function animaisComVariasLinhas(plan, { limite = 12 } = {}) {
   for (const grupo of repetidos) grupo.linhas.sort((a, b) => a.line - b.line);
   repetidos.sort((a, b) => b.linhas.length - a.linhas.length || String(a.label).localeCompare(String(b.label), 'pt-BR'));
   return { total: repetidos.length, grupos: repetidos.slice(0, limite) };
+}
+
+/**
+ * E1G: aviso das linhas que casaram com animais já cadastrados por número parecido
+ * ("12 linhas casaram com animais existentes por número parecido: 01016 → 1016").
+ * Só lê o resumo do plano; null quando não houve nenhuma.
+ */
+export function avisoNumerosParecidos(summary) {
+  const info = summary?.numerosParecidos;
+  if (!info?.linhas) return null;
+  const inicio = info.linhas === 1
+    ? '1 linha casou com um animal existente por número parecido'
+    : `${info.linhas} linhas casaram com animais existentes por número parecido`;
+  const outros = info.outrosExemplos ? ` e mais ${info.outrosExemplos}` : '';
+  return `${inicio}: ${info.exemplos.join(', ')}${outros}.`;
 }
 
 /** Campos obrigatórios do tipo que ainda não têm coluna ligada (mesma regra do motor). */

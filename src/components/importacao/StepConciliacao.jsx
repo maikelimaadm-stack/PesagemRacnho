@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { fmtDateBR, fmtInt } from '@/components/common/formatNumber';
 import AfericaoArquivo from './AfericaoArquivo';
-import { IMPORT_TYPES, animaisComVariasLinhas } from './importacaoModel';
+import { IMPORT_TYPES, animaisComVariasLinhas, avisoNumerosParecidos } from './importacaoModel';
 
 function Contagem({ label, valor, tom = '' }) {
   return (
@@ -19,6 +19,7 @@ export default function StepConciliacao({ plan, analisando, erro, onAnalisar, af
   const summary = plan?.summary;
   const repetidos = plan ? animaisComVariasLinhas(plan) : { total: 0, grupos: [] };
   const ausentes = summary?.cadastrosMestresAusentes || [];
+  const numerosParecidos = avisoNumerosParecidos(summary);
 
   return (
     <section className="importacao-step" aria-labelledby="importacao-step-conciliacao-titulo">
@@ -80,6 +81,16 @@ export default function StepConciliacao({ plan, analisando, erro, onAnalisar, af
             {type === IMPORT_TYPES.MESTRES ? <Contagem label="Cadastros mestres novos" valor={summary.cadastrosMestresNovos} tom="ok" /> : null}
             {type === IMPORT_TYPES.SANIDADE ? <Contagem label="Aplicações de sanidade" valor={summary.aplicacoes} tom="ok" /> : null}
           </div>
+
+          {numerosParecidos ? (
+            <div className="importacao-alert importacao-alert--info" data-testid="importacao-numeros-parecidos">
+              <strong>{numerosParecidos}</strong>
+              <span>
+                {' '}É o mesmo número escrito de outro jeito (zeros à esquerda ou o “,0” que o Excel acrescenta).
+                As pesagens entram no animal já cadastrado e o número dele não muda.
+              </span>
+            </div>
+          ) : null}
 
           {ausentes.length ? (
             <div className="importacao-alert importacao-alert--aviso">

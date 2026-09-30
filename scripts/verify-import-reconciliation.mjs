@@ -68,6 +68,8 @@ assert.deepEqual({ ...planA.summary, cadastrosMestresAusentes: undefined }, {
   linhasLidas: 4, novos: 4, animaisEncontrados: 0, animaisNovos: 2, cadastros: 2, manejos: 2, saidas: 0, jaExistem: 0, ignoradas: 0,
   duplicidades: 0, ambiguidades: 0, conflitos: 0, erros: 0, cadastrosMestresAusentes: undefined, categoriasAutomaticasResolvidas: 2,
   categoriasNaoResolvidas: 0, seriesAfetadas: 2, eventosRecalculados: 0, cadastrosMestresNovos: 0,
+  // E1G: linhas que casaram por número parecido ("01016 → 1016"); nenhuma neste arquivo.
+  numerosParecidos: { linhas: 0, exemplos: [], outrosExemplos: 0 },
 }, 'A: resumo exato');
 assert.deepEqual([3, 5, 2, 4].map((line) => rowsA.get(line).eventType), ['Cadastro', 'Manejo', 'Manejo', 'Cadastro'], 'A: mais antigo = Cadastro, independente da ordem');
 assert.deepEqual(rowsA.get(5).derived, { data_anterior: '2026-01-10', peso_anterior: 180, dias: 30, ganho: 40, gmd: 1.333 });

@@ -8,11 +8,14 @@
 //      (compareWeighingEvents), classifica, valida e recalcula peso anterior/dias/ganho/GMD
 //      com recalculateWeightSeries sobre a série mesclada. Derivados da planilha servem só
 //      para comparação ("planilha X, recalculado Y").
+// E1G: número de brinco parecido ("01016" → 1016) casa com o animal existente e agrupa as
+// linhas do mesmo animal novo ("007" e "7"); no Histórico, pesagem anterior ao Cadastro
+// gravado antecipa o Cadastro (a linha mais antiga vira Cadastro e o gravado vira Manejo).
 import { normalizeName } from '../../catalog/domain/normalize.js';
 import { eraOfCategory } from '../../operations/domain/categorySuggestion.js';
 import { validateUiPayload } from '../../weighing/domain/weighingMapper.js';
 import { compareWeighingEvents, recalculateWeightSeries } from '../../weighing/domain/weighingSeries.js';
-import { IDENTITY_STATUS, findIdentityCandidates, normalizeIdentifierValue, resolveAnimalIdentity } from './animalIdentity.js';
+import { IDENTITY_STATUS, findIdentityCandidates, importGroupingKey, normalizeIdentifierValue, resolveAnimalIdentity } from './animalIdentity.js';
 import { resolveImportCategory } from './importCategory.js';
 import { BLOCKING_STATUSES, CATEGORY_MODES, EVENT_TYPES, EXIT_REASONS_WITHOUT_WEIGHT, IMPORT_TYPES, ROW_STATUS } from './importConstants.js';
 import { invertMapping, listImportFields } from './importFields.js';
@@ -25,6 +28,8 @@ const MASTER_LABELS = Object.freeze({ marcas: 'Marca', racas: 'Raça', causasMor
 
 const fmtNumber = (value) => (value === null || value === undefined ? '—' : String(value).replace('.', ','));
 const rawText = (value) => (value === undefined || value === null || String(value).trim() === '' ? null : String(value).trim());
+// Data ISO → dd/mm/aaaa nas mensagens novas para a tela (E1G).
+const fmtDate = (iso) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : String(iso ?? '—'));
 
 // ---------------------------------------------------------------------------
 // Fase 1 — leitura e validação de campos
@@ -238,13 +243,19 @@ function resolveRowIdentity(row, type, context) {
     row.animal = animal;
     row.groupKey = `id:${animal.id}`;
     row.identity = { key: row.groupKey, animalId: String(animal.id), isNew: false, label: labelOf(animal.numero_animal, animal.marca), via: result.via };
-    const informed = normalizeIdentifierValue(row.input.numero);
-    if (result.via === 'animal_id' && informed && informed !== normalizeIdentifierValue(animal.numero_animal)) {
+    // E1G: casou só pelo número parecido — o número gravado do animal não muda.
+    if (result.similarNumber) {
+      row.identity.similarNumber = { informado: row.input.numero, cadastrado: animal.numero_animal };
+      row.messages.push(`Número ${row.input.numero} reconhecido como o animal ${animal.numero_animal} já cadastrado (o mesmo número sem os zeros à esquerda ou sem o ",0" do Excel); o número do animal não muda.`);
+    }
+    const informed = importGroupingKey(row.input.numero);
+    if (result.via === 'animal_id' && informed && informed !== importGroupingKey(animal.numero_animal)) {
       row.errors.push(`animal_id aponta para ${row.identity.label}, mas a linha informa a identificação ${row.input.numero}.`);
     }
     return;
   }
-  const numeroKey = normalizeIdentifierValue(row.input.numero);
+  // E1G: animal novo agrupa pela chave numérica ("007" e "7" = o mesmo animal).
+  const numeroKey = importGroupingKey(row.input.numero);
   const brandKey = row.marca?.row ? `id:${row.marca.row.id}` : row.marca?.unknownText ? `nome:${normalizeName(row.marca.unknownText)}` : 'sem-marca';
   row.identity = { key: `novo:${brandKey}|${numeroKey}`, animalId: null, isNew: false, label: labelOf(row.input.numero, marcaNome), via: result.via };
   if (result.status === IDENTITY_STATUS.INVALID || result.status === IDENTITY_STATUS.INELIGIBLE) {
@@ -615,6 +626,14 @@ export function buildImportPlan(prepared, context) {
     groups.set(row.groupKey, group);
   }
 
+  // E1G: animal novo com o número escrito de jeitos diferentes no arquivo ("007" e "7").
+  for (const group of groups.values()) {
+    if (!group.isNew) continue;
+    const numbers = [...new Set(group.rows.map((row) => normalizeIdentifierValue(row.input.numero)))];
+    if (numbers.length < 2) continue;
+    for (const row of group.rows) row.messages.push(`Os números ${numbers.join(', ')} foram tratados como o mesmo animal (zeros à esquerda ou ",0" do Excel).`);
+  }
+
   for (const group of groups.values()) {
     classifyGroup(group, type, work);
     for (const row of group.rows.filter((item) => item.status === ROW_STATUS.NOVO)) validateNewRow(row, group, type, work);
@@ -687,6 +706,19 @@ export function buildImportPlan(prepared, context) {
   return summarizePlan({ type, rules, fileErrors, planRows, animals, work });
 }
 
+const SIMILAR_NUMBER_EXAMPLES = 10;
+
+/** E1G: linhas que casaram com animal existente só pelo número parecido ("01016 → 1016"). */
+export function similarNumbersOf(planRows) {
+  const rows = planRows.filter((row) => row.status !== ROW_STATUS.IGNORADA && row.identity?.similarNumber);
+  const exemplos = [...new Set(rows.map((row) => `${row.identity.similarNumber.informado} → ${row.identity.similarNumber.cadastrado}`))];
+  return {
+    linhas: rows.length,
+    exemplos: exemplos.slice(0, SIMILAR_NUMBER_EXAMPLES),
+    outrosExemplos: Math.max(0, exemplos.length - SIMILAR_NUMBER_EXAMPLES),
+  };
+}
+
 export function summarizePlan({ type, rules, fileErrors, planRows, animals, work }) {
   const count = (status) => planRows.filter((row) => row.status === status).length;
   const novos = planRows.filter((row) => row.status === ROW_STATUS.NOVO);
@@ -710,6 +742,7 @@ export function summarizePlan({ type, rules, fileErrors, planRows, animals, work
     seriesAfetadas: work.counters.seriesAfetadas,
     eventosRecalculados: work.counters.eventosRecalculados,
     cadastrosMestresNovos: planRows.filter((row) => row.status === ROW_STATUS.NOVO && row.master).length,
+    numerosParecidos: similarNumbersOf(planRows),
   };
   const blocking = fileErrors.length > 0 || planRows.some((row) => BLOCKING_STATUSES.includes(row.status));
   return { type, rules, fileErrors, summary, rows: planRows, blocking, animals };
