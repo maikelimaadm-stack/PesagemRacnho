@@ -2,8 +2,9 @@
 // em marcação HTML — a mesma na tela (fragmento dentro do app), na impressão e no PDF (documento completo).
 // Todo texto passa por escapeHtml; o logo só entra se for data URL PNG/JPEG válido. Cada célula leva
 // data-col=<índice> igual ao do cabeçalho da sua coluna (base do gate de alinhamento).
-// E1D visual: documento com style 'makgestao' (os 5 tipos de Pesagens) sai com o desenho da folha do antigo
-// (seção abaixo); os demais continuam com o desenho da E1B.
+// E1D visual: documento com style 'makgestao' sai com o desenho da folha do antigo (seção abaixo). E1E: é o
+// estilo de todo relatório (os 5 desenhos de Pesagens e o resumo/lista genéricos); o desenho da E1B só sobra
+// para documento sem relatório.
 import { isAcceptedLogo } from '../../../catalog/domain/propertyHeader.js';
 import { renderVendasBody } from './vendasHtml.js';
 
@@ -112,7 +113,7 @@ function renderSection(doc, section, options) {
 }
 
 // ---------------------------------------------------------------------------
-// Folha no estilo do MAKGESTAO (E1D visual — doc.style = 'makgestao', só nos 5 tipos de Pesagens)
+// Folha no estilo do MAKGESTAO (E1D visual — doc.style = 'makgestao'; E1E: todos os relatórios)
 // ---------------------------------------------------------------------------
 // Mesma marcação de base (data-col/data-key em cada célula, cabeçalho e rodapé iguais); muda o desenho: as
 // linhas de total (row.line) saem como LINHA DE TEXTO abaixo da tabela ("Subtotal 02/06/2026: 103 animais …"),
@@ -164,17 +165,21 @@ function renderMakRow(doc, row, { interactive }) {
 
 /**
  * Linha de total em texto. grid = itens espalhados na largura (Resumo por Data, Por Apartação/Lote, quadro do
- * comprador): "<b>Subtotal 02/06/2026:</b> 103 animais"; box/right = uma frase com " | " (Analítico, TOTAL GERAL
- * de Vendas).
+ * comprador, resumo genérico com até 5 itens): "<b>Subtotal 02/06/2026:</b> 103 animais"; flow = o mesmo com
+ * " | " entre os itens, quebrando linha (resumo genérico com mais itens); box/right = uma frase com " | "
+ * (Analítico e lista genérica, TOTAL GERAL de Vendas).
  */
 export function renderMakLine(row) {
-  const { layout, items } = row.line;
+  const { layout, items, leadFit } = row.line;
   const attrs = `class="mk-line mk-line--${layout}" data-row-type="${row.type}" data-row-id="${escapeHtml(row.id)}"`;
   if (layout === 'grid') {
     const cells = items.map((item) => `<div class="mk-item" data-key="${escapeHtml(item.key)}"><strong>${escapeHtml(item.label)}:</strong> ${escapeHtml(item.text)}</div>`).join('');
-    return `<div ${attrs} style="grid-template-columns: repeat(${items.length}, minmax(0, 1fr))">${cells}</div>`;
+    // leadFit (resumo genérico): o rótulo "Subtotal <grupo>" não quebra; os demais itens dividem o resto.
+    const template = leadFit && items.length > 1 ? `max-content repeat(${items.length - 1}, minmax(0, 1fr))` : `repeat(${items.length}, minmax(0, 1fr))`;
+    return `<div ${attrs} style="grid-template-columns: ${template}">${cells}</div>`;
   }
-  const parts = items.map((item) => `<span class="mk-item" data-key="${escapeHtml(item.key)}">${escapeHtml(item.label)}: ${escapeHtml(item.text)}</span>`);
+  const label = (item) => (layout === 'flow' ? `<strong>${escapeHtml(item.label)}:</strong>` : `${escapeHtml(item.label)}:`);
+  const parts = items.map((item) => `<span class="mk-item" data-key="${escapeHtml(item.key)}">${label(item)} ${escapeHtml(item.text)}</span>`);
   return `<div ${attrs}>${parts.join('<span class="mk-sep"> | </span>')}</div>`;
 }
 
@@ -259,7 +264,7 @@ export function renderSheetBody(doc, { mode = 'fragment', interactive = false, s
   // Nenhuma nota na folha; só na tela, o aviso de linhas limitadas (a impressão leva todas).
   const notes = mode !== 'print' && doc.screenNotice ? `<ul class="sheet-notes"><li>${escapeHtml(doc.screenNotice)}</li></ul>` : '';
   const rootClass = `rpt-sheet rpt-sheet--${mode === 'print' ? 'print' : 'screen'} sheet--${doc.print.orientation} sheet-size-${doc.print.sizeClass}`;
-  // E1D visual: data-style/data-view escopam o CSS da folha do MAKGESTAO (só os 5 tipos de Pesagens).
+  // E1D visual: data-style/data-view escopam o CSS da folha do MAKGESTAO (data-view = o desenho do documento).
   const styleAttrs = mak ? ` data-style="makgestao" data-view="${escapeHtml(doc.variant)}"` : '';
   return `<div class="${rootClass}" data-orientation="${doc.print.orientation}" data-layout="${doc.layout}"${styleAttrs}>
 <table class="sheet-page">

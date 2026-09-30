@@ -284,9 +284,15 @@ const oneLevel = buildReportDocument(await run({ mode: 'RESUMIDO', groups: [{ co
 assert.ok(oneLevel.flat && oneLevel.sections.length === 0 && oneLevel.flat.rows.at(-1).type === DOC_ROW_TYPES.GRAND_TOTAL, '1 nível: tabela única com Total geral no fim');
 const twoLevels = buildReportDocument(await run({ mode: 'RESUMIDO', groups: [{ columnId: 'nome_apartacao' }, { columnId: 'nome_lote' }] }));
 assert.ok(twoLevels.sections.every((section) => section.table && section.table.rows.at(-1).type === DOC_ROW_TYPES.SUBTOTAL && !section.leafTotal), '2 níveis: seção com Subtotal, sem TOTAL POR');
-// E1D visual: o Personalizado (e os outros relatórios) continua na folha da E1B — subtotal na tabela, "—".
-assert.equal(twoLevels.style, 'e1b', 'Personalizado: folha da E1B');
-assert.ok(/<tr class="sheet-subtotal" data-row-type="SUBTOTAL"/.test(renderSheetBody(twoLevels, { mode: 'print' })) && !twoLevels.sections.some((section) => section.table.rows.some((row) => row.line)), 'Personalizado: subtotal continua linha da tabela');
+// E1E: o Personalizado (e os outros relatórios) sai na folha do MAKGESTAO com o resumo GENÉRICO — o subtotal
+// é linha de texto (os números continuam nas células do documento, as mesmas do XLSX) e a tabela continua
+// alinhada; o desenho da E1B não aparece mais.
+assert.equal(twoLevels.style, 'makgestao', 'Personalizado: folha do MAKGESTAO');
+assert.equal(twoLevels.variant, 'resumo', 'Personalizado: resumo genérico');
+const twoHtml = renderSheetBody(twoLevels, { mode: 'print' });
+assertTablesAligned(twoHtml);
+assert.ok(!/<tr class="sheet-subtotal" data-row-type="SUBTOTAL"/.test(twoHtml) && twoLevels.sections.every((section) => section.table.rows.at(-1).line), 'Personalizado: subtotal em linha de texto');
+assert.ok(twoHtml.includes('data-style="makgestao" data-view="resumo"'), 'Personalizado: CSS do resumo genérico');
 const zeroLevels = buildReportDocument(await run({ mode: 'RESUMIDO', groups: [] }));
 assert.ok(zeroLevels.grandTotal && zeroLevels.sections.length === 0 && !zeroLevels.flat, '0 nível: só o Total geral');
 const analitico = views.find((item) => item.id === 'analitico');

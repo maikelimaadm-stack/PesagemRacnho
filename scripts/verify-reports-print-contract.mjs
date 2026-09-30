@@ -74,8 +74,11 @@ for (const column of doc.columns) {
   const sheetColumn = column.column;
   assert.ok(html.includes(escapeHtml(formatCell(sheetColumn, cellRawValue(vm, sheetColumn, firstRow), 'print'))), `célula formatada igual à folha da tela: ${column.key}`);
 }
-assert.ok(/<td data-col="\d+" data-key="peso" class="num">/.test(html), 'números alinhados à direita (monoespaçados)');
-assert.ok(decode(html).includes('Peso (kg)') && decode(html).includes('GMD (kg/dia)'), 'unidades no cabeçalho');
+assert.ok(/<td data-col="\d+" data-key="peso" class="num al-r mk-mono[^"]*">/.test(html), 'números alinhados à direita (monoespaçados)');
+// E1E: folha do MAKGESTAO em todo relatório — a unidade vai em cada célula ("300,0 kg") e o cabeçalho fica
+// como o do antigo ("Peso", "GMD"), sem a unidade entre parênteses.
+assert.ok(/<th data-col="\d+" data-key="peso"[^>]*>Peso<\/th>/.test(html) && /<th data-col="\d+" data-key="gmd"[^>]*>GMD<\/th>/.test(html), 'cabeçalho no jeito do antigo');
+assert.ok(/<td data-col="\d+" data-key="peso"[^>]*>\d{1,3}(\.\d{3})*,\d kg<\/td>/.test(html) && !decode(html).includes('Peso (kg)'), 'unidade na célula (kg), não no cabeçalho');
 assert.equal(manifest.orientation, layout.orientation);
 // Tela = impressão: o mesmo renderizador (fragmento) com o mesmo texto
 const screen = renderSheetBody(buildReportDocument(vm, { header }), { mode: 'fragment' });
@@ -130,12 +133,17 @@ const leafCount = vmResumo.tree.reduce((total, node) => total + node.children.le
 assert.equal(resumoDoc.stats.groupRows, leafCount, 'uma linha por grupo do nível folha');
 assert.equal(resumoDoc.stats.subtotalRows, vmResumo.tree.length, 'um subtotal por seção');
 assert.equal(resumoDoc.stats.grandRows, 1, 'um Total geral');
-for (const text of ['Relatório de Desempenho (Sintético)', 'Período: 01/08/2026 a 15/09/2026', 'Total geral']) {
+for (const text of ['Relatório de Desempenho (Sintético)', 'Período: 01/08/2026 a 15/09/2026', 'TOTAL GERAL:']) {
   assert.ok(decode(resumoDoc.html).includes(text), `Resumido contém ${text}`);
 }
 // E1D item 8 vale para todos os relatórios (a folha é uma só): sem o subtítulo "Resumido · níveis".
 assert.ok(!decode(resumoDoc.html).includes('Resumido · Apartação'), 'NEGATIVO (E1D): Desempenho sem o subtítulo "Resumido · …"');
+// E1E: linha de grupo = células da tabela; Subtotal/TOTAL GERAL = linha de texto (cada item na folha).
 for (const row of documentRows(resumoDoc.document)) {
+  if (row.line) {
+    for (const item of row.line.items) assert.ok(resumoDoc.html.includes(escapeHtml(item.text)), `total do Resumido igual à folha da tela: ${item.label}: ${item.text}`);
+    continue;
+  }
   for (const cell of row.cells ?? []) if (cell.text) assert.ok(resumoDoc.html.includes(escapeHtml(cell.text)), `célula do Resumido igual à folha da tela: ${cell.text}`);
 }
 assert.equal((resumoDoc.html.match(/data-row-type="GROUP"/g) || []).length, leafCount);

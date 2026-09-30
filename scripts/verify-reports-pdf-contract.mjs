@@ -105,7 +105,8 @@ assert.ok(win.htmlAtPrint.includes('content: "Página " counter(page) " de " cou
 // (conferido acima: manifest.emissionId e sha256), não no papel.
 assert.ok(!win.htmlAtPrint.includes(vm.emissionId.slice(0, 8)) && !win.htmlAtPrint.includes('@bottom-left'), 'NEGATIVO (E1D): sem código da emissão na margem do PDF');
 assert.ok(/@page \{ size: A4 (portrait|landscape); margin: 10mm/.test(win.htmlAtPrint), 'A4 com margens de 10 mm');
-assert.ok(win.htmlAtPrint.includes('<table class="sheet-page">') && win.htmlAtPrint.includes('Total geral'), 'PDF renderiza a folha do mesmo view model');
+// E1E: a folha de todo relatório é a do MAKGESTAO (total geral em linha de texto, "TOTAL GERAL:").
+assert.ok(win.htmlAtPrint.includes('<table class="sheet-page">') && win.htmlAtPrint.includes('TOTAL GERAL:') &&win.htmlAtPrint.includes('data-style="makgestao"'), 'PDF renderiza a folha do mesmo view model');
 assert.ok(win.htmlAtPrint.includes("img-src data:"), 'CSP permite só o logo embutido');
 assert.equal(saveDialogResult.filters[0].extensions[0], 'pdf');
 

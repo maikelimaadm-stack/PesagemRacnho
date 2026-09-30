@@ -288,22 +288,25 @@ const apDetalhe = await run({ mode: 'DETALHADO', groups: APDATA_GROUPS, aggregat
 const subtotalFaixa = buildReportLines(apDetalhe, 'csv').lines.filter((line) => (line.type === 'SUBTOTAL' || line.type === 'GRAND_TOTAL') && faixaKeys.includes(line.spec?.id));
 assert.ok(subtotalFaixa.length > 0 && subtotalFaixa.every((line) => line.level === 3), 'Detalhado: faixa só no subtotal do lote');
 const detailDoc = buildReportDocument(apDetalhe, { orientation: 'landscape' });
-const chipRows = [];
-const walkDoc = (section) => { if (section.table) chipRows.push(...section.table.rows.filter((row) => row.chips).map((row) => ({ level: section.level, row }))); section.sections.forEach(walkDoc); };
+// E1E: a folha do Detalhado é a lista GENÉRICA do MAKGESTAO — o subtotal de cada grupo é a linha de texto
+// (row.line) com os totais do relatório; as regras dos itens continuam as da E1B.
+assert.equal(detailDoc.variant, 'lista', 'Personalizado Detalhado: lista genérica');
+const lineRows = [];
+const walkDoc = (section) => { if (section.table) lineRows.push(...section.table.rows.filter((row) => row.line).map((row) => ({ level: section.level, row }))); section.sections.forEach(walkDoc); };
 detailDoc.sections.forEach(walkDoc);
-assert.ok(chipRows.length > 0, 'folha do Detalhado tem subtotais');
-for (const { level, row } of chipRows) {
-  const labels = row.chips.items.map((item) => item.label);
-  assert.ok(!labels.some((label) => /Faixa (mínima|máxima)/.test(label)), 'folha do Detalhado: faixa num item só');
-  assert.equal(labels.includes('Faixa exigida (kg)'), level === 3, `folha do Detalhado: faixa só no subtotal do lote (nível ${level})`);
+assert.ok(lineRows.length > 0, 'folha do Detalhado tem subtotais');
+for (const { level, row } of lineRows) {
+  const labels = row.line.items.map((item) => item.label);
+  assert.ok(!labels.some((label) => /Faixa (mínima|máxima)/i.test(label)), 'folha do Detalhado: faixa num item só');
+  assert.equal(labels.includes('Faixa Exigida'), level === 3, `folha do Detalhado: faixa só no subtotal do lote (nível ${level})`);
 }
 assert.equal(detailDoc.footer.arroba, '@ = peso vivo ÷ 30', 'folha do Detalhado: totais em @ → rodapé explica o divisor');
-for (const { row } of chipRows) {
-  for (const item of row.chips.items.filter((chip) => chip.label === 'Machos' || chip.label === 'Fêmeas')) {
-    assert.notEqual(item.text, '0', `folha do Detalhado: contagem 0 de ${item.label} aparece "—", como no Resumido`);
+for (const { row } of lineRows) {
+  for (const item of row.line.items.filter((chip) => chip.label === 'Machos' || chip.label === 'Fêmeas')) {
+    assert.notEqual(item.text, '0', `folha do Detalhado: contagem 0 de ${item.label} aparece "-", como no Resumido`);
   }
 }
-assert.ok(!detailDoc.grandTotal.rows[0].chips.items.some((item) => item.label === 'Faixa exigida (kg)'), 'folha do Detalhado: sem faixa no Total geral');
+assert.ok(!detailDoc.grandTotal.rows[0].line.items.some((item) => item.label === 'Faixa Exigida'), 'folha do Detalhado: sem faixa no Total geral');
 
 // E1E: todos os relatórios declaram os seus tipos (conferidos em reports:tipos-todos). Relatório SEM visões
 // declaradas (hoje só os da aba Controle da Manutenção): "Resumo por <agrupamento padrão>" + Analítico gerados.
