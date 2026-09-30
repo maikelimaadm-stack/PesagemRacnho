@@ -36,8 +36,9 @@ const EVENT_FIELDS = Object.freeze({
   apartacao: field('apartacao', 'Apartação', ['apartacao', 'nomeapartacao']),
   lote: field('lote', 'Lote', ['lote', 'nomelote']),
   observacao: field('observacao', 'Observação', ['observacao', 'observacoes', 'obs']),
-  peso_anterior: field('peso_anterior', 'Peso anterior (comparação)', ['pesoanterior'], { derived: true }),
-  data_anterior: field('data_anterior', 'Data anterior (comparação)', ['dataanterior'], { derived: true }),
+  // E1G: cabeçalhos abreviados do MAKGESTAO antigo ("Dt.Ant.", "Dt. Anterior", "Data Ant.", "Peso Ant.").
+  peso_anterior: field('peso_anterior', 'Peso anterior (comparação)', ['pesoanterior', 'pesoant', 'pesoanteriorkg', 'pesoantkg'], { derived: true }),
+  data_anterior: field('data_anterior', 'Data anterior (comparação)', ['dataanterior', 'dataant', 'dtant', 'dtanterior'], { derived: true }),
   dias: field('dias', 'Dias (comparação)', ['dias', 'intervalo', 'diasintervalo'], { derived: true }),
   ganho: field('ganho', 'Ganho (comparação)', ['ganho', 'ganhokg', 'ganhopeso'], { derived: true }),
   gmd: field('gmd', 'GMD (comparação)', ['gmd', 'gmdkg', 'ganhomediodiario'], { derived: true }),
