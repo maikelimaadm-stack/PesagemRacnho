@@ -265,8 +265,9 @@ export function gmdDataIssues({ animais = [], pesagens = [], marcaNames = new Ma
     if (view?.tipo_manejo !== 'Manejo' || !isBlankValue(view.gmd)) continue;
     const date = String(view.data_pesagem || '').slice(0, 10);
     let motivo;
+    // Revisão E1G: motivos sem jargão técnico (nada de "animal_id") — o texto vai para a tela da responsável.
     if (measuredWeightOf(view) === null) motivo = 'pesagem sem peso';
-    else if (!view.animal_id) motivo = 'pesagem sem animal_id (registro legado): o histórico do animal não foi encontrado';
+    else if (!view.animal_id) motivo = 'registro antigo sem ligação com o cadastro do animal: o histórico dele não foi encontrado';
     else {
       const others = (byAnimal.get(view.animal_id) || []).filter((item) => item !== view && measuredWeightOf(item) !== null);
       if (others.some((item) => String(item.data_pesagem || '').slice(0, 10) < date)) motivo = 'há pesagem anterior, mas o GMD não foi gravado: edite a pesagem para recalcular';

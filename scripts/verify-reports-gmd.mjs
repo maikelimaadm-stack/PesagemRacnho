@@ -417,7 +417,9 @@ const semGmd = Object.fromEntries(porCategoria('Manejo sem GMD').map((row) => [r
 assert.deepEqual(Object.keys(semGmd).sort(), ['LEG-m', 'Z7-m', 'Z9-m'], 'A6: "Manejo sem GMD" = mesmo dia, GMD apagado e legado sem animal_id');
 assert.match(semGmd['Z7-m'], /mesma data da pesagem anterior/, 'A6: motivo — mesma data do Cadastro');
 assert.match(semGmd['Z9-m'], /há pesagem anterior, mas o GMD não foi gravado/, 'A6: motivo — série não recalculada');
-assert.match(semGmd['LEG-m'], /sem animal_id/, 'A6: motivo — registro legado');
+assert.match(semGmd['LEG-m'], /registro antigo sem ligação com o cadastro do animal/, 'A6: motivo — registro legado');
+// Revisão E1G: texto da tela sem jargão técnico.
+assert.ok(qualidade.rows.filter((row) => ['Animal com uma pesagem só', 'Manejo sem GMD', 'Números parecidos (zeros à esquerda)'].includes(row.categoria_problema)).every((row) => !/animal_id|legacy|null|undefined/.test(row.descricao)), 'A6: descrições sem jargão (animal_id, legacy, null)');
 assert.ok(!semGmd['B1-m'] && !semGmd['Z8-m'], 'NEGATIVO: manejo com GMD não é apontado');
 const parecidos = porCategoria('Números parecidos (zeros à esquerda)');
 assert.deepEqual(parecidos.map((row) => row.registro).sort(), ['Z7', 'Z8'], 'A6: "07" e "7" da marca ABC são parecidos');
