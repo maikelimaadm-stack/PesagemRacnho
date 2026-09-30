@@ -1,31 +1,19 @@
 import React, { useState } from "react";
-import { ArrowLeft, FileJson, FileSpreadsheet, FileText, MoreHorizontal, RefreshCw, Save, Settings } from "lucide-react";
+import { ArrowLeft, FileJson, FileSpreadsheet, FileText, FolderOpen, MoreHorizontal, RefreshCw, Save, Settings, Trash2, Users } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { describeFilter, isFilterActive } from "@/modules/reporting/domain/filterEngine";
 import { BarSelect, PREVIOUS_OPTIONS } from "./ReportFilterBar";
 
 // Tela "como o MAKGESTAO" (E1D visual, decisão da responsável: "igual ao MAKGESTAO no visual, com as contas
-// certas"): só no relatório que declara `screen: "makgestao"` (Pesagens — os 5 tipos do antigo). Os outros
-// relatórios continuam com a tela da 1.4.0. Copiado do antigo pelas classes (RelatorioPesagensIndividuais,
-// L509–757): título + "Análise e impressão" com o Imprimir verde; cartão de filtros com a grade de 6 campos
-// (rótulo em cima), os controles do tipo e a linha de botões de contorno; embaixo, sempre a folha. Só
-// SELEÇÃO — contas, filtros e ordem continuam no serviço (a tela manda o mesmo estado da 1.4.0).
-
-export const isMakgestaoScreen = (definition) => definition?.screen === "makgestao";
-
-// Botões da linha de filtros do antigo (L620–729), nesta ordem; sem Categoria e Proprietário (especificação
-// item 7). O primeiro id que o relatório tiver. `narrow`: lista w-48 do antigo (Sexo, Era, Status); as outras w-64.
-export const MAK_FILTER_BUTTONS = Object.freeze([
-  { label: "Lotes", ids: ["nome_lote", "lote", "lote_atual"] },
-  { label: "Apartações", ids: ["nome_apartacao", "apartacao", "apartacao_atual"] },
-  { label: "Sexo", ids: ["sexo"], narrow: true },
-  { label: "Raças", ids: ["raca"] },
-  { label: "Era", ids: ["era"], narrow: true },
-  { label: "Marcas", ids: ["marca"] },
-  { label: "Status", ids: ["situacao_atual", "situacao"], narrow: true },
-]);
+// certas"). E1E: vale para TODOS os relatórios de Relatórios (tela única, com o campo "Relatório"); só a aba
+// Controle da Manutenção continua com a tela da 1.4.0. Copiado do antigo pelas classes
+// (RelatorioPesagensIndividuais, L509–757): título + "Análise e impressão" com o Imprimir verde; cartão de
+// filtros com a grade de campos (rótulo em cima), os controles do tipo e a linha de botões de contorno;
+// embaixo, sempre a folha. Só SELEÇÃO — contas, filtros e ordem continuam no serviço. Quais campos e botões
+// cada relatório tem: application/reportScreenModel.js (o mesmo que o gate reports:tela-unica confere).
 
 // O antigo só tinha Retrato e Paisagem (padrão Paisagem, L141): "Automática" da 1.4.0 aparece como Paisagem.
 export const MAK_ORIENTATION_OPTIONS = Object.freeze([
@@ -114,12 +102,15 @@ export function MakgestaoFilterButton({ label, value, filterType = "text", listO
 
 /**
  * Topo do antigo (L509–518): título grande + "Análise e impressão" à esquerda; à direita o Imprimir verde.
- * Discretos ao lado dele: Excel, PDF e o menu "⋯" (CSV, JSON, Salvar modelo, Atualizar, colunas vazias).
+ * Discretos ao lado dele: Excel, PDF e o menu "⋯" (CSV, JSON, Abrir/Salvar modelo, Atualizar, colunas vazias).
+ * @param templates E1E: modelos deste relatório para "Abrir modelo" (null = sem modelos nesta tela, ex.
+ *   fora de Relatórios); onOpenTemplate(modelo). onDeleteTemplate: só com o modelo aberto e permissão.
  */
 export function MakgestaoTopBar({
-  title, templateName = null, loading = false, backLabel = "Relatórios", onBack,
+  title, templateName = null, loading = false, backLabel = "Relatórios", onBack = null,
   canExport, disabled, onPrint, onExcel, onPdf, onCsv, onJson, menuLabel,
-  onSaveTemplate = null, onRefresh, showEmptyColumns, onToggleEmptyColumns,
+  templates = null, currentTemplateId = null, onOpenTemplate = null, onSaveTemplate = null, onDeleteTemplate = null,
+  onRefresh, showEmptyColumns, onToggleEmptyColumns,
 }) {
   return (
     <header className="rpt-mak__top">
@@ -132,9 +123,11 @@ export function MakgestaoTopBar({
         </p>
       </div>
       <div className="rpt-mak__actions" role="group" aria-label="Imprimir e exportar">
-        <button type="button" className="rpt-mak-link" onClick={onBack} title={`Voltar para ${backLabel}`}>
-          <ArrowLeft aria-hidden="true" />{backLabel}
-        </button>
+        {onBack ? (
+          <button type="button" className="rpt-mak-link" onClick={onBack} title={`Voltar para ${backLabel}`}>
+            <ArrowLeft aria-hidden="true" />{backLabel}
+          </button>
+        ) : null}
         {canExport ? (
           <>
             <button type="button" className="rpt-mak-ghost" disabled={disabled} onClick={onExcel} title="Planilha Excel (XLSX) com a mesma tabela da folha">
@@ -160,7 +153,22 @@ export function MakgestaoTopBar({
                 <DropdownMenuSeparator />
               </>
             ) : null}
+            {templates && onOpenTemplate ? (
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger className="text-xs"><FolderOpen className="h-3.5 w-3.5" aria-hidden="true" />Abrir modelo</DropdownMenuSubTrigger>
+                <DropdownMenuSubContent className="rpt-mak-menu rpt-mak-menu--templates">
+                  {templates.length ? templates.map((template) => (
+                    <DropdownMenuItem key={template.id} className="text-xs" disabled={template.id === currentTemplateId} onClick={() => onOpenTemplate(template)}>
+                      {template.scope === "SHARED" ? <Users className="h-3.5 w-3.5" aria-hidden="true" /> : <FileText className="h-3.5 w-3.5" aria-hidden="true" />}
+                      {template.name}
+                    </DropdownMenuItem>
+                  )) : <DropdownMenuItem className="text-xs" disabled>Nenhum modelo salvo deste relatório</DropdownMenuItem>}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
+            ) : null}
             {onSaveTemplate ? <DropdownMenuItem className="text-xs" onClick={onSaveTemplate}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar modelo…</DropdownMenuItem> : null}
+            {onDeleteTemplate ? <DropdownMenuItem className="text-xs" onClick={onDeleteTemplate}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />Excluir modelo “{templateName}”…</DropdownMenuItem> : null}
+            <DropdownMenuSeparator />
             <DropdownMenuItem className="text-xs" onClick={onRefresh}><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Atualizar (reler os dados)</DropdownMenuItem>
             <DropdownMenuCheckboxItem className="text-xs" checked={showEmptyColumns} onCheckedChange={onToggleEmptyColumns}>Mostrar colunas vazias</DropdownMenuCheckboxItem>
           </DropdownMenuContent>
@@ -183,20 +191,65 @@ export function MakgestaoColumnsButton({ label, title, onClick }) {
 }
 
 /**
- * Cartão de filtros do antigo (L519–757). Linha 1: grade de 6 campos (Data Início | Data Fim | Orientação |
- * Tipo Relatório | [Linhas | Colunas no Sintético] | Ordenar Por | Pesagem Anterior). Depois os controles do
- * tipo que ficam embaixo (Agrupar Por do Analítico) e a linha de botões (filtros, Colunas, Limpar Filtros).
+ * E1E: campo "Relatório" (primeiro do cartão) — o catálogo do perfil agrupado por família, como a lista em
+ * cartões da 1.4.0. Trocar abre o outro relatório (ReportView → Relatorios.jsx, ?r=<id>).
+ */
+function ReportSelect({ value, options, onChange }) {
+  const groups = [];
+  for (const option of options) {
+    const last = groups[groups.length - 1];
+    if (last && last.family === option.family && !option.extra) last.items.push(option);
+    else groups.push({ family: option.family, label: option.extra ? "Aberto por link" : option.familyLabel, items: [option] });
+  }
+  return (
+    <div className="rpt-bar-field rpt-mak-field--report" data-field="relatorio">
+      <span className="rpt-bar-field__label" id="rpt-bar-label-relatorio">Relatório</span>
+      <Select value={value} onValueChange={(next) => next !== value && onChange(next)}>
+        <SelectTrigger id="rpt-bar-relatorio" className="rpt-bar-field__control" aria-label="Relatório" aria-labelledby="rpt-bar-label-relatorio" title="Relatório">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent className="rpt-mak-report-list">
+          {groups.map((group) => (
+            <SelectGroup key={`${group.family}-${group.items[0].value}`}>
+              <SelectLabel className="rpt-mak-report-list__family">{group.label}</SelectLabel>
+              {group.items.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+            </SelectGroup>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+/** Parâmetro inteiro do relatório (ex.: dias), com o rótulo em cima como as datas. */
+function MakNumberField({ id, label, value, min, onChange }) {
+  return (
+    <div className="rpt-bar-field rpt-mak-field" data-field={`param-${id}`}>
+      <label className="rpt-bar-field__label" htmlFor={`rpt-mak-param-${id}`}>{label}</label>
+      <input id={`rpt-mak-param-${id}`} type="number" className="rpt-mak-input" min={min ?? undefined} value={value ?? ""} onChange={(event) => onChange(event.target.value === "" ? null : Number(event.target.value))} />
+    </div>
+  );
+}
+
+/**
+ * Cartão de filtros do antigo (L519–757). Linha 1: grade de campos (Relatório | Data Início | Data Fim — ou
+ * "Estado atual (hoje)" sem período | Orientação | Tipo Relatório | [Linhas | Colunas no Sintético] | Ordenar
+ * Por | Pesagem Anterior | parâmetros). Depois os controles do tipo que ficam embaixo (Agrupar Por do
+ * Analítico) e a linha de botões (filtros, filtros rápidos, Colunas, Limpar Filtros).
+ * @param report E1E: { value, options, onChange } do campo "Relatório" ou null (fora de Relatórios).
+ * @param params E1E: parâmetros inteiros [{ id, label, min, value, onChange }].
  * @param typeControls controles do tipo (ReportView): na grade (eixos da matriz) ou embaixo (Agrupar Por).
  * @param columnsButton { label, onClick } | null — só o "Colunas" do Analítico fica nesta linha (L733–755);
  *   os "Colunas Painel/Detalhes" do antigo ficavam na área da folha (L1146–1176, L1445–1466).
  */
 export function MakgestaoFilterCard({
+  report = null,
   period = null, resolvedPeriod = null, onPeriod,
   orientation, onOrientation,
   views, viewId, onView,
   typeControls = null, typeControlsInGrid = false,
   sortOptions, sortValue, onSort,
-  previous = null,
+  previous = null, params = [],
   filterButtons = null, columnsButton = null, onClear, extras = null,
 }) {
   const from = period?.preset === "personalizado" ? period.from : resolvedPeriod?.from;
@@ -207,18 +260,25 @@ export function MakgestaoFilterCard({
   const sortChoices = sortValue === "custom" ? [...sortOptions, { value: "custom", label: "Personalizado" }] : sortOptions;
   return (
     <section className="rpt-mak__card" aria-label="Filtros do relatório">
-      <div className="rpt-mak__grid" role="group" aria-label="Período, tipo e ordem">
+      <div className="rpt-mak__grid" role="group" aria-label="Relatório, período, tipo e ordem">
+        {report ? <ReportSelect {...report} /> : null}
         {onPeriod ? (
           <>
             <MakDateField id="inicio" label="Data Início" value={from} onChange={(value) => setDate("from", value)} />
             <MakDateField id="fim" label="Data Fim" value={to} onChange={(value) => setDate("to", value)} />
           </>
-        ) : null}
+        ) : (
+          <div className="rpt-bar-field rpt-mak-field" data-field="periodo">
+            <span className="rpt-bar-field__label">Período</span>
+            <span className="rpt-mak-input rpt-mak-static" title="Relatório do rebanho como está hoje (sem período)">Estado atual (hoje)</span>
+          </div>
+        )}
         <BarSelect id="orientacao" label="Orientação" value={makOrientation(orientation)} options={MAK_ORIENTATION_OPTIONS} onChange={onOrientation} title="Orientação da folha na impressão e no PDF" />
         <BarSelect id="tipo" label="Tipo Relatório" value={viewId} options={viewOptions} onChange={(value) => value !== "custom" && onView(value)} />
         {typeControlsInGrid ? typeControls : null}
         <BarSelect id="ordenar" label="Ordenar Por" value={sortValue} options={sortChoices} onChange={(value) => value !== "custom" && onSort(value)} />
         {previous ? <BarSelect id="anterior" label="Pesagem Anterior" value={previous.value} options={PREVIOUS_OPTIONS} onChange={previous.onChange} /> : null}
+        {params.map((param) => <MakNumberField key={param.id} {...param} />)}
       </div>
       {!typeControlsInGrid && typeControls ? <div className="rpt-mak__type">{typeControls}</div> : null}
       <div className="rpt-mak__buttons" role="group" aria-label="Filtros">

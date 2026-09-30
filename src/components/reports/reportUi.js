@@ -100,5 +100,3 @@ export function aggregateChips(viewModel, aggregatesMap, level = 0) {
 }
 
 export { headerLabel };
-
-export const FAMILY_ORDER = ["rebanho", "pesagens", "desempenho", "movimentacao", "saidas", "comercial", "embarques", "controle", "cadastros"];
