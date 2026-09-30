@@ -110,22 +110,22 @@ const COMPRAS_BLOCKS = Object.freeze({
 
 // Configuração de cada layout. countId = total de animais (1 = "animal"); groupLabel = cabeçalho da coluna do grupo e
 // do Excel; cardPrefix = título do cartão ("COMPRADOR: W3"); emphasis = colunas destacadas no detalhe (o antigo
-// punha o Valor Total em semi-negrito e o Animal em peso médio); noun = "Nenhuma <noun> encontrada…".
+// punha o Valor Total em semi-negrito e o Animal em peso médio); emptyText = a folha sem lançamento (texto do antigo).
 export const SHEET_LAYOUT_CONFIGS = Object.freeze({
   vendas: Object.freeze({
     groupColumn: SHEET_LAYOUT_GROUPS.vendas, totals: VENDAS_BLOCK_TOTALS, blocks: VENDAS_BLOCKS, countId: 'animais_vendidos',
     groupLabel: 'Comprador', porGrupoTitle: 'TOTAIS POR COMPRADOR', gruposTitle: 'VENDAS POR COMPRADOR (DETALHADO)', cardPrefix: 'COMPRADOR',
-    emphasis: Object.freeze({ valor_venda_calc: 'semibold', numero_animal: 'medium' }), noun: 'venda',
+    emphasis: Object.freeze({ valor_venda_calc: 'semibold', numero_animal: 'medium' }), emptyText: 'Nenhuma venda encontrada com os filtros aplicados.',
   }),
   abates: Object.freeze({
     groupColumn: SHEET_LAYOUT_GROUPS.abates, totals: ABATES_BLOCK_TOTALS, blocks: ABATES_BLOCKS, countId: 'animais_abatidos',
     groupLabel: 'Frigorífico', porGrupoTitle: 'TOTAIS POR FRIGORÍFICO', gruposTitle: 'ABATES POR FRIGORÍFICO (DETALHADO)', cardPrefix: 'FRIGORÍFICO',
-    emphasis: Object.freeze({ valor_total_abate: 'semibold', numero_animal: 'medium' }), noun: 'abate',
+    emphasis: Object.freeze({ valor_total_abate: 'semibold', numero_animal: 'medium' }), emptyText: 'Nenhum abate encontrado com os filtros aplicados.',
   }),
   compras: Object.freeze({
     groupColumn: SHEET_LAYOUT_GROUPS.compras, totals: COMPRAS_BLOCK_TOTALS, blocks: COMPRAS_BLOCKS, countId: 'animais_comprados',
     groupLabel: 'Origem', porGrupoTitle: 'TOTAIS POR ORIGEM', gruposTitle: 'COMPRAS POR ORIGEM (DETALHADO)', cardPrefix: 'ORIGEM',
-    emphasis: Object.freeze({ valor_pago_cabeca: 'semibold', numero_animal: 'medium' }), noun: 'compra',
+    emphasis: Object.freeze({ valor_pago_cabeca: 'semibold', numero_animal: 'medium' }), emptyText: 'Nenhuma compra encontrada com os filtros aplicados.',
   }),
 });
 
@@ -245,7 +245,7 @@ export function buildVendasBlocks(viewModel, { showDetails = false, columns = nu
     showDetails: Boolean(showDetails),
     hasValues: visible.has('valor_total'),
     totals: [...visible],
-    emptyText: `Nenhuma ${config.noun} encontrada com os filtros aplicados.`,
+    emptyText: config.emptyText,
     resumo: {
       columns: [{ key: '__label__', label: 'Métrica', align: 'left' }, { key: '__value__', label: 'Valor', align: 'right' }],
       rows: itemsOf(blocks.resumo, totals, visible),

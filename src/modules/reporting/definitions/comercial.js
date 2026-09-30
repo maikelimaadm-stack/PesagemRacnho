@@ -29,7 +29,7 @@ const pelo = (values) => ({ operator: 'in', values, match: 'code' });
 export const ABATES_POPULATION = Object.freeze({ tipo_manejo: pelo(['Saída']), motivo_saida: pelo(['Abate']) });
 export const ABATES_COLUMNS = Object.freeze(['frigorifico', 'data_pesagem', 'numero_animal', 'peso', 'rendimento_carcaca', 'quantidade_arrobas', 'valor_arroba_abate', 'valor_total_abate']);
 export const ABATES_AVAILABLE_COLUMNS = Object.freeze([...ABATES_COLUMNS, 'peso_carcaca_estimado', 'marca', 'sexo', 'raca', 'era', 'nome_lote', 'nome_apartacao', 'embarque_nome', 'documento_numero', 'observacao']);
-export const ABATES_COLUMN_LABELS = Object.freeze({ rendimento_carcaca: 'Rendimento', quantidade_arrobas: '@ Carcaça', valor_arroba_abate: 'Valor @', valor_total_abate: 'Valor Total' });
+export const ABATES_COLUMN_LABELS = Object.freeze({ rendimento_carcaca: 'Rendimento', quantidade_arrobas: 'Qtd @ Carcaça', valor_arroba_abate: 'Valor @', valor_total_abate: 'Valor Total' });
 
 // Compras: cadastros com valor pago por cabeça (a mesma população de "Compras do período"), por origem/vendedor.
 export const COMPRAS_POPULATION = Object.freeze({ tipo_manejo: pelo(['Cadastro']), valor_pago_cabeca: { operator: 'not_empty' } });
