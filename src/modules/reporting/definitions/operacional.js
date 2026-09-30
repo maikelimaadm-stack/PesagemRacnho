@@ -162,6 +162,8 @@ const SAIDAS_TYPE_TOTALS = Object.freeze([
   { id: 'peso_total', columnId: 'peso', op: 'sum' }, { id: 'saidas', op: 'count' },
 ]);
 const SAIDAS_TYPE_DEFAULTS = Object.freeze(['animais', 'peso_medio', 'peso_total']);
+// Na lista só os totais padrão (a contagem de linhas repetiria as Cabeças no subtotal).
+const SAIDAS_LIST_TOTALS = Object.freeze(SAIDAS_TYPE_TOTALS.filter((spec) => SAIDAS_TYPE_DEFAULTS.includes(spec.id)));
 // Mortes (os antigos "Mortes por período/causa/categoria/lote"): motivo = Morte é condição do tipo (população,
 // pelo código, com cadeado); colunas e totais deles.
 export const MORTES_POPULATION = Object.freeze({ motivo_saida: { operator: 'in', values: ['Morte'], match: 'code' } });
@@ -178,7 +180,7 @@ export const SAIDAS_VIEWS = Object.freeze([
   mortes('mortes-por-causa', 'Mortes por Causa', ['causa_morte']),
   mortes('mortes-por-lote', 'Mortes por Lote', ['nome_lote']),
   mortes('mortes-por-categoria', 'Mortes por Categoria', ['categoria']),
-  listaTipo('analitico', 'Analítico (Lista de Saídas)', { columns: SAIDAS_COLUMNS, aggregates: SAIDAS_TYPE_TOTALS }),
+  listaTipo('analitico', 'Analítico (Lista de Saídas)', { columns: SAIDAS_COLUMNS, aggregates: SAIDAS_LIST_TOTALS }),
   listaTipo('mortes', 'Mortes (Lista)', { columns: MORTES_COLUMNS, aggregates: MORTES_TOTALS, population: MORTES_POPULATION }),
 ]);
 
@@ -241,12 +243,15 @@ const ROMANEIO_TOTALS = Object.freeze([{ id: 'cabecas', op: 'count' }, { id: 'an
 const ROMANEIO_TYPE_TOTALS = Object.freeze(['animais', 'peso_medio', 'peso_total', 'cabecas'].map((id) => ROMANEIO_TOTALS.find((spec) => spec.id === id)));
 const ROMANEIO_TYPE_DEFAULTS = Object.freeze(['animais', 'peso_medio', 'peso_total']);
 const EMBARQUE_DOCUMENTO = Object.freeze(['embarque_nome', 'documento_numero']);
+// Nas listas só os totais padrão (a contagem de linhas repetiria as Cabeças no subtotal).
+const ROMANEIO_LIST_TOTALS = Object.freeze(ROMANEIO_TYPE_TOTALS.filter((spec) => ROMANEIO_TYPE_DEFAULTS.includes(spec.id)));
 export const ROMANEIO_VIEWS = Object.freeze([
   resumoTipo('por-embarque-documento', 'Por Embarque/Documento', EMBARQUE_DOCUMENTO, ROMANEIO_TYPE_TOTALS, { defaults: ROMANEIO_TYPE_DEFAULTS }),
   resumoTipo('por-embarque', 'Por Embarque', ['embarque_nome'], ROMANEIO_TYPE_TOTALS, { defaults: ROMANEIO_TYPE_DEFAULTS }),
-  // O romaneio de papel: os animais de cada documento, com subtotal por documento e por embarque.
-  listaTipo('romaneio-lista', 'Romaneio (Lista por Documento)', { groups: EMBARQUE_DOCUMENTO, columns: ROMANEIO_COLUMNS, aggregates: ROMANEIO_TYPE_TOTALS }),
-  listaTipo('analitico', 'Analítico (Lista de Animais)', { columns: ROMANEIO_COLUMNS, aggregates: ROMANEIO_TYPE_TOTALS }),
+  // O romaneio de papel: os animais de cada documento, com subtotal por documento e por embarque (embarque e nº
+  // do documento já estão no título de cada grupo).
+  listaTipo('romaneio-lista', 'Romaneio (Lista por Documento)', { groups: EMBARQUE_DOCUMENTO, columns: ROMANEIO_COLUMNS.filter((id) => !EMBARQUE_DOCUMENTO.includes(id)), aggregates: ROMANEIO_LIST_TOTALS }),
+  listaTipo('analitico', 'Analítico (Lista de Animais)', { columns: ROMANEIO_COLUMNS, aggregates: ROMANEIO_LIST_TOTALS }),
 ]);
 
 export const EMBARQUES_ROMANEIO = defineReport(exitBase({
