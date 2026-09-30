@@ -8,6 +8,7 @@ import { sortTypeOfColumnType } from './sortEngine.js';
 import { MAX_GROUP_LEVELS } from './groupEngine.js';
 import { aggregateSpecId } from './reportAggregates.js';
 import { SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC } from './summaryLayout.js';
+import { defineCharts } from './chartDefinition.js';
 
 export const REPORT_FAMILIES = Object.freeze({
   rebanho: 'Rebanho',
@@ -353,6 +354,13 @@ export function defineReport(spec) {
   // mostra só os tipos declarados (sem o "Resumo por <agrupamento padrão>" gerado).
   if (spec.defaultView != null && !views.some((view) => view.id === spec.defaultView)) throw new Error(`${context}: defaultView desconhecida (${spec.defaultView})`);
   if (spec.defaultSortChoice != null && !sortChoices.some((choice) => choice.id === spec.defaultSortChoice)) throw new Error(`${context}: defaultSortChoice desconhecida (${spec.defaultSortChoice})`);
+  // E1G: gráficos (domain/chartDefinition.js) — só colunas do grão, nunca sensíveis; o gráfico opcional sem a
+  // coluna fica fora com aviso (chartsSkipped). O spec sem coluna usa o total da folha com a mesma operação.
+  const charts = defineCharts(spec.charts, byId, {
+    context,
+    grain: spec.grain,
+    aggregates: [...(spec.defaultAggregates || []), ...views.flatMap((view) => view.aggregates || [])],
+  });
   const sensitivities = [...new Set(columns.map((column) => column.sensitive).filter(Boolean))];
   return Object.freeze({
     description: '',
@@ -384,5 +392,8 @@ export function defineReport(spec) {
     sortChoices,
     defaultView: spec.defaultView ?? null,
     defaultSortChoice: spec.defaultSortChoice ?? null,
+    // E1G: gráficos declarados (vazio = relatório sem a vista Gráficos) e os opcionais que ficaram fora.
+    charts: charts.charts,
+    chartsSkipped: charts.skipped,
   });
 }

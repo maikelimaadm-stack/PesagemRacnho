@@ -53,6 +53,40 @@ export const REBANHO_VIEWS = Object.freeze([
   }),
 ]);
 
+// E1G — gráficos do Rebanho atual (domain/reportCharts), sobre as linhas da folha (só ativos, como os tipos).
+const CHART_CAB = CURRENT_TOTALS[0];
+const CHART_BAND_WIDTHS = Object.freeze([
+  { id: 'auto', label: 'Automática', largura: 'auto' },
+  ...[10, 15, 20, 25, 30, 50].map((largura) => ({ id: String(largura), label: `${largura} kg`, largura })),
+  { id: 'categorias', label: 'Faixas das categorias', largura: 'categorias' },
+]);
+export const REBANHO_CHARTS = Object.freeze([
+  {
+    id: 'distribuicao-peso', kind: 'histograma', title: 'Distribuição do peso atual', subtitle: 'Peso atual (última pesagem com peso) de cada animal',
+    valorAnimal: 'ultimo_peso_kg', porAnimal: 'linha', unidade: 'kg', semValor: 'Sem peso',
+    controls: { faixa: { label: 'Faixa', default: 'auto', choices: CHART_BAND_WIDTHS } },
+  },
+  // GMD médio por lote: usa o GMD médio (ponderado) da FOLHA do Rebanho atual — o spec sem coluna pega o total da
+  // folha com weightedGmd (colunas de GMD do Rebanho, trilha GMD da E1G). Opcional: sem essa coluna no grão o
+  // gráfico fica fora com aviso em REBANHO_ATUAL.chartsSkipped (o merge funciona nas duas ordens).
+  {
+    id: 'gmd-por-lote', kind: 'barras', title: 'GMD médio por lote', subtitle: 'GMD médio ponderado de cada animal do rebanho de hoje', unidade: 'kg/dia', opcional: true,
+    controls: {
+      serie: {
+        label: 'Agrupar por', default: 'lote', choices: [
+          { id: 'lote', label: 'Lote', columnId: 'lote_atual' },
+          { id: 'apartacao', label: 'Apartação', columnId: 'apartacao_atual' },
+          { id: 'categoria', label: 'Categoria', columnId: 'categoria' },
+          { id: 'raca', label: 'Raça', columnId: 'raca' },
+          { id: 'marca', label: 'Marca', columnId: 'marca' },
+          { id: 'sexo', label: 'Sexo', columnId: 'sexo' },
+        ],
+      },
+    },
+    valor: { op: 'weightedGmd' }, cab: CHART_CAB, semValor: 'Sem GMD',
+  },
+]);
+
 export const REBANHO_ATUAL = defineReport({
   id: 'rebanho.atual',
   family: 'rebanho',
@@ -87,5 +121,7 @@ export const REBANHO_ATUAL = defineReport({
   ],
   views: REBANHO_VIEWS,
   defaultView: REBANHO_DEFAULT_VIEW,
+  // E1G: vista "Gráficos".
+  charts: REBANHO_CHARTS,
   notes: ['Estado ATUAL de cada animal (uma linha por animal). Peso atual = última pesagem com peso.'],
 });
