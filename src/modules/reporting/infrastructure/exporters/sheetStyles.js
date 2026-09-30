@@ -3,13 +3,18 @@
 // Medidas em mm/pt (papel A4, margens de 10 mm). Números em fonte monoespaçada, alinhados à direita.
 // A folha é sempre "papel branco", também no tema escuro (é a pré-visualização do que sai na impressora).
 //
-// E1D visual: a folha dos 5 tipos de Pesagens tem a cara da do MAKGESTAO — regras escopadas em
-// `.rpt-sheet[data-style="makgestao"]` (M abaixo) e por tipo em [data-view]; os outros relatórios e o
-// Personalizado não mudam. Medidas tiradas das classes do antigo (Tailwind + shadcn Table): text-xs 12 px
-// (9 pt, a base), text-sm 14 px, text-base 16 px; TableHead h-10 px-2, TableCell p-2; cores slate/gray.
+// E1D visual: a folha tem a cara da do MAKGESTAO — regras escopadas em `.rpt-sheet[data-style="makgestao"]`
+// (M abaixo) e por desenho em [data-view]. E1E: vale para todos os relatórios (o resumo/lista genéricos usam
+// as regras do Resumo por Data/Analítico). Medidas tiradas das classes do antigo (Tailwind + shadcn Table):
+// text-xs 12 px (9 pt, a base), text-sm 14 px, text-base 16 px; TableHead h-10 px-2, TableCell p-2; cores slate/gray.
 
 const M = '.rpt-sheet[data-style="makgestao"]';
-const MONO = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
+// E1E: o resumo genérico usa o desenho do "Resumo por Data" e a lista genérica o do "Analítico" — a mesma
+// regra vale para os dois data-view (views(RESUMO, '.x') = "M[data-view=resumo-data] .x, M[data-view=resumo] .x").
+const RESUMO = ['resumo-data', 'resumo'];
+const LISTA = ['analitico', 'lista'];
+const views = (names, rest) => names.map((name) => `${M}[data-view="${name}"] ${rest}`).join(', ');
+const MONO ='ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace';
 const MAKGESTAO_CSS = `
 /* ---- Folha no estilo do MAKGESTAO (E1D visual) ---- */
 ${M} { --mk-fg: #020817; --mk-muted: #64748b; --mk-line: #e2e8f0; --mk-slate-50: #f8fafc; --mk-slate-100: #f1f5f9; --mk-slate-300: #cbd5e1; --mk-slate-500: #64748b; --mk-slate-600: #475569; --mk-slate-700: #334155; --mk-slate-800: #1e293b; --mk-slate-900: #0f172a; --mk-gray-50: #f9fafb; --mk-gray-100: #f3f4f6; --mk-gray-300: #d1d5db; --mk-gray-500: #6b7280; --mk-gray-600: #4b5563; --mk-gray-700: #374151; --mk-emerald: #059669; --mk-red: #dc2626;
@@ -56,22 +61,26 @@ ${M} .sheet-sec--1.sheet-keep { break-inside: auto; page-break-inside: auto; }
 ${M} .mk-line { font-size: 1em; line-height: 1.3333; color: var(--mk-slate-700); break-inside: avoid; page-break-inside: avoid; }
 ${M} .mk-line strong { font-weight: 700; }
 ${M} .mk-line--grid { display: grid; column-gap: 16px; padding: 8px 0; border-top: 1px solid var(--mk-line); }
+/* Corrida (resumo genérico com muitos totais): os itens com " | ", quebrando linha entre eles. */
+${M} .mk-line--flow { padding: 8px 0; border-top: 1px solid var(--mk-line); }
+${M} .mk-line--flow .mk-item { white-space: nowrap; }
+${M} .mk-line--flow .mk-sep { color: var(--mk-slate-300); }
 ${M} .mk-line--box { margin-top: 8px; font-weight: 700; background: var(--mk-slate-50); padding: 8px 12px; border: 1px solid var(--mk-line); border-radius: 6px; }
 ${M} .mk-line--right { margin-top: 8px; text-align: right; font-weight: 600; color: inherit; }
 ${M} .mk-grand { margin-top: 24px; }
-${M} .mk-grand .mk-line--grid { padding: 12px 0; border-top: 2px solid var(--mk-slate-300); color: var(--mk-slate-800); }
+${M} .mk-grand .mk-line--grid, ${M} .mk-grand .mk-line--flow { padding: 12px 0; border-top: 2px solid var(--mk-slate-300); color: var(--mk-slate-800); }
 
-/* Por Apartação (Resumo por Data): APARTAÇÃO (text-sm, linha dupla embaixo), DATA (xs semi), tabela com
-   cabeçalho gray-50, Subtotal em texto; bloco TOTAL POR LOTE (cabeçalho gray-100, Total com linha de 2 px). */
-${M}[data-view="resumo-data"] .sheet-sec--1 { margin: 0 0 24px; }
-${M}[data-view="resumo-data"] .sheet-sec-title--1 { font-size: 1.1667em; line-height: 1.4286; color: var(--mk-slate-800); border-bottom: 2px solid var(--mk-line); padding: 0 0 8px; margin: 0 0 12px; }
-${M}[data-view="resumo-data"] .sheet-sec--2 { border-top: 1px solid var(--mk-line); }
-${M}[data-view="resumo-data"] .sheet-sec-title--2 { font-size: 1em; line-height: 1.3333; font-weight: 600; color: var(--mk-slate-700); padding: 8px 0; margin: 0 0 4px; }
-${M}[data-view="resumo-data"] .sheet-table thead th { background: var(--mk-gray-50); }
-${M}[data-view="resumo-data"] .mk-block { margin-top: 16px; }
-${M}[data-view="resumo-data"] .sheet-sec-title--total { font-size: 1em; line-height: 1.3333; font-weight: 700; color: var(--mk-slate-700); border-bottom: 1px solid var(--mk-line); padding: 0 0 8px; margin: 0 0 8px; }
-${M}[data-view="resumo-data"] .sheet-table--leaf_total thead th { background: var(--mk-gray-100); }
-${M}[data-view="resumo-data"] .mk-block .mk-line--grid { padding: 12px 0; border-top-width: 2px; margin-top: 8px; }
+/* Por Apartação (Resumo por Data) e resumo genérico: APARTAÇÃO (text-sm, linha dupla embaixo), DATA (xs semi),
+   tabela com cabeçalho gray-50, Subtotal em texto; bloco TOTAL POR LOTE (cabeçalho gray-100, Total com 2 px). */
+${views(RESUMO, '.sheet-sec--1')} { margin: 0 0 24px; }
+${views(RESUMO, '.sheet-sec-title--1')} { font-size: 1.1667em; line-height: 1.4286; color: var(--mk-slate-800); border-bottom: 2px solid var(--mk-line); padding: 0 0 8px; margin: 0 0 12px; }
+${views(RESUMO, '.sheet-sec--2')} { border-top: 1px solid var(--mk-line); }
+${views(RESUMO, '.sheet-sec-title--2')} { font-size: 1em; line-height: 1.3333; font-weight: 600; color: var(--mk-slate-700); padding: 8px 0; margin: 0 0 4px; }
+${views(RESUMO, '.sheet-table thead th')} { background: var(--mk-gray-50); }
+${views(RESUMO, '.mk-block')} { margin-top: 16px; }
+${views(RESUMO, '.sheet-sec-title--total')} { font-size: 1em; line-height: 1.3333; font-weight: 700; color: var(--mk-slate-700); border-bottom: 1px solid var(--mk-line); padding: 0 0 8px; margin: 0 0 8px; }
+${views(RESUMO, '.sheet-table--leaf_total thead th')} { background: var(--mk-gray-100); }
+${views(RESUMO, '.mk-block .mk-line--grid')}, ${views(RESUMO, '.mk-block .mk-line--flow')} { padding: 12px 0; border-top-width: 2px; margin-top: 8px; }
 
 /* Por Apartação/Lote: título normal-case, grade com bordas (cabeçalho font-medium gray-700), tudo à esquerda. */
 ${M}[data-view="apartacao-lote"] .sheet-sec-title--1 { font-size: 1.1667em; line-height: 1.4286; text-transform: none; color: var(--mk-slate-800); margin: 4px 0; padding: 0; border: 0; }
@@ -81,11 +90,14 @@ ${M}[data-view="apartacao-lote"] .sheet-table tbody tr:last-child td { border-bo
 ${M}[data-view="apartacao-lote"] .mk-line--grid { padding: 4px 0; border-top: 0; }
 ${M}[data-view="apartacao-lote"] .mk-grand .mk-line--grid { padding: 12px 0; border-top: 2px solid var(--mk-slate-300); }
 
-/* Analítico: grupo (text-sm slate-700, linha embaixo), tabela, quadro do Subtotal e do TOTAL GERAL em negrito. */
-${M}[data-view="analitico"] .sheet-sec-title { font-size: 1.1667em; line-height: 1.4286; color: var(--mk-slate-700); border-bottom: 1px solid var(--mk-line); padding: 0 0 8px; margin: 16px 0 8px; }
-${M}[data-view="analitico"] .mk-leaf { margin-bottom: 16px; }
-${M}[data-view="analitico"] .mk-grand { margin-top: 16px; padding-top: 12px; border-top: 2px solid var(--mk-slate-300); }
-${M}[data-view="analitico"] .mk-grand .mk-line--box { margin-top: 0; padding: 12px; color: var(--mk-slate-800); }
+/* Analítico e lista genérica: grupo (text-sm slate-700, linha embaixo), tabela, quadro do Subtotal e do TOTAL
+   GERAL em negrito; na lista, o grupo de dentro (nível 2/3) um ponto menor. */
+${views(LISTA, '.sheet-sec-title')} { font-size: 1.1667em; line-height: 1.4286; color: var(--mk-slate-700); border-bottom: 1px solid var(--mk-line); padding: 0 0 8px; margin: 16px 0 8px; }
+${M}[data-view="lista"] .sheet-sec-title--2, ${M}[data-view="lista"] .sheet-sec-title--3 { font-size: 1em; }
+${M}[data-view="lista"] .sheet-sec:first-child > .sheet-sec-title { margin-top: 0; }
+${views(LISTA, '.mk-leaf')} { margin-bottom: 16px; }
+${views(LISTA, '.mk-grand')} { margin-top: 16px; padding-top: 12px; border-top: 2px solid var(--mk-slate-300); }
+${views(LISTA, '.mk-grand .mk-line--box')} { margin-top: 0; padding: 12px; color: var(--mk-slate-800); }
 
 /* Vendas: quadro do comprador (slate-50, borda, cantos) com os totais ANTES da tabela; TOTAL GERAL à direita. */
 ${M}[data-view="vendas"] .sheet-sec--1 { margin: 0 0 24px; }

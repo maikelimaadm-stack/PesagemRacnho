@@ -17,12 +17,13 @@ import { buildSheetRows, unzipStored, XLSX_BLOCK_KINDS } from '../src/modules/re
 await seedReportFixture();
 const P = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
 
-// Texto humano (tela/impressão) ou CSV → número; "—"/vazio → null.
+// Texto humano (tela/impressão) ou CSV → número; "—"/"-"/vazio → null. E1E: a folha leva a unidade na célula
+// ("345,0 kg", "R$ 3.000,00", "5,00 %", "20 cab.") — só o número conta.
 function readNumber(text) {
   if (text === null || text === undefined) return null;
   if (typeof text === 'number') return text;
-  const clean = String(text).replace(/\s/g, '').replace('R$', '').replace('%', '');
-  if (!clean || clean === '—') return null;
+  const clean = String(text).replace(/\s/g, '').replace('R$', '').replace('%', '').replace(/[^\d.,-]/g, '').replace(/\.$/, '');
+  if (!clean || clean === '—' || clean === '-') return null;
   const normalized = /,/.test(clean) ? clean.replace(/\./g, '').replace(',', '.') : clean;
   const value = Number(normalized);
   assert.ok(Number.isFinite(value), `número legível: ${text}`);
@@ -54,14 +55,29 @@ function xlsxRows(bytes) {
 // E1B: a impressão é a FOLHA (seções por nível). Cada nó da árvore aparece uma vez como linha de grupo
 // (nível folha), Subtotal (nível acima) ou Total da seção de nível 1 — lidas pelo data-row-id (= id do nó)
 // e comparadas métrica a métrica (data-key) com a mesma linha do layout da tela/CSV/XLSX/JSON.
+// E1E: a folha de todo relatório é a do MAKGESTAO — a linha de grupo continua na tabela; Subtotal, Total da
+// seção e TOTAL GERAL são LINHAS DE TEXTO (<div class="mk-line" data-row-id=…>, um item por métrica com
+// data-key: "Rótulo: 12 animais", "Peso Médio: 300,0 kg"), lidas do mesmo jeito.
+function lineNumberText(text) {
+  const value = decode(text.replace(/<[^>]+>/g, '')).replace(/^[^:]*:\s*/, '').replace(/\([^)]*\)/g, '').trim();
+  return value === '-' ? '—' : value.replace(/[^\d.,-]/g, '').replace(/\.$/, '');
+}
 function printRowsByNode(html) {
   const out = new Map();
-  for (const [, type, id, body] of html.matchAll(/<tr class="[^"]*" data-row-type="(GROUP|SUBTOTAL|TOTAL|GRAND_TOTAL|LEAF_TOTAL)" data-row-id="([^"]*)">([\s\S]*?)<\/tr>/g)) {
-    if (type === 'LEAF_TOTAL') continue;
+  const put = (type, id, cells) => {
     const nodeId = type === 'GRAND_TOTAL' ? '#grand' : decode(id).replace(/#(subtotal|total)$/, '');
-    const cells = Object.fromEntries([...body.matchAll(/<td data-col="\d+" data-key="([^"]*)" class="[^"]*"(?: title="[^"]*")?>([\s\S]*?)<\/td>/g)].map(([, key, text]) => [decode(key), decode(text.replace(/<[^>]+>/g, ''))]));
     assert.ok(!out.has(nodeId), `nó ${nodeId} aparece uma vez só na folha`);
     out.set(nodeId, cells);
+  };
+  for (const [, type, id, body] of html.matchAll(/<tr class="[^"]*" data-row-type="(GROUP|SUBTOTAL|TOTAL|GRAND_TOTAL|LEAF_TOTAL)" data-row-id="([^"]*)">([\s\S]*?)<\/tr>/g)) {
+    if (type === 'LEAF_TOTAL') continue;
+    put(type, id, Object.fromEntries([...body.matchAll(/<td data-col="\d+" data-key="([^"]*)" class="[^"]*"(?: title="[^"]*")?>([\s\S]*?)<\/td>/g)].map(([, key, text]) => [decode(key), decode(text.replace(/<[^>]+>/g, ''))])));
+  }
+  for (const chunk of html.split('<div class="mk-line').slice(1)) {
+    const head = chunk.match(/^[^"]*" data-row-type="(SUBTOTAL|TOTAL|GRAND_TOTAL)" data-row-id="([^"]*)"/);
+    assert.ok(head, 'linha de texto com o tipo e o nó');
+    const items = [...chunk.split('<div class="mk-line')[0].matchAll(/<(div|span) class="mk-item" data-key="([^"]*)">([\s\S]*?)<\/\1>/g)];
+    put(head[1], head[2], Object.fromEntries(items.map(([, , key, text]) => [decode(key), lineNumberText(text)])));
   }
   return out;
 }
@@ -119,7 +135,8 @@ for (const testCase of cases) {
   const sheetRows = printRowsByNode(printed.html);
   const nodeIds = ['#grand', ...vm.summaryRows.map((row) => row.id)];
   assert.deepEqual([...sheetRows.keys()].sort(), [...nodeIds].sort(), `${testCase.name}: folha cobre todos os nós (e só eles)`);
-  const zeroAsEmpty = new Set(printed.document.columns.filter((column) => column.zeroAsEmpty).map((column) => column.key));
+  // Contagem zero aparece "-" na folha do MAKGESTAO (E1E: em todo relatório), como as colunas zeroAsEmpty.
+  const zeroAsEmpty = new Set(printed.document.columns.filter((column) => column.zeroAsEmpty || ['count', 'countValid', 'countDistinct'].includes(column.op)).map((column) => column.key));
   screen.rows.forEach((row, index) => {
     const nodeId = row.node ? row.node.id : '#grand';
     const cells = sheetRows.get(nodeId);
