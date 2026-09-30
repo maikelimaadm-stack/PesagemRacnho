@@ -4,6 +4,7 @@
 // E1D: o "padrão" de um relatório com tipo padrão (Pesagens) é esse tipo — "Por Apartação (Resumo por
 // Data)" —; sem tipo padrão, o agrupamento/modo padrão da definição, como antes.
 import { aliasSelection } from '../definitions/legacyAliases.js';
+import { typesByStructure } from '../definitions/legacyViews.js';
 import { applyColumnKeys, filtersForDisplay, getReportView, resolveViewId, viewSelection } from '../domain/reportViews.js';
 import { legacySortChoice } from '../domain/sortChoices.js';
 import { templateToRequest } from './reportTemplateService.js';
@@ -16,8 +17,11 @@ import { templateToRequest } from './reportTemplateService.js';
 // mostrando o gerado pela estrutura (ReportView → resolveViewId).
 // Sem sortChoice (antes da E1D): a opção que mostra a ordem que ele tinha, ou "Personalizado"
 // (sortChoices.legacySortChoice — nada abre invertido).
+// E1E: a estrutura é conferida com os filtros do estado (filtros da pessoa + condições fixas): tipo com população
+// (Mortes, Perdendo Peso…) só quando o estado já filtra exatamente essa população (reportViews.matchView).
 export function withTypedState(definition, state) {
-  const resolved = state.view !== undefined ? state.view : resolveViewId(definition, state);
+  const filters = { ...(state.uiFilters ?? {}), ...(state.fixedFilters ?? {}) };
+  const resolved = state.view !== undefined ? state.view : resolveViewId(definition, { ...state, filters });
   const declared = resolved ? getReportView(definition, resolved) : null;
   const view = declared && !declared.generated ? declared.id : null;
   const typed = view ? declared : null;
@@ -40,6 +44,13 @@ export function typedViewSelection(definition, view, typeColumns) {
   const selection = viewSelection(resolved, definition);
   const keys = typeColumns?.[resolved.id];
   return keys?.length && resolved.columnChoices ? { ...selection, ...applyColumnKeys(resolved, definition, keys) } : selection;
+}
+
+/** Tipo com que uma visão antiga abre num relatório de tipos: o declarado nela, o da estrutura (E1E) ou nenhum. */
+function presetView(definition, preset) {
+  const declared = preset?.view ? getReportView(definition, preset.view) : null;
+  if (declared && !declared.generated) return { view: declared.id };
+  return typesByStructure(definition) ? {} : { view: null };
 }
 
 /** Pedido já revalidado (modelo ou último estado, templateToRequest) → estado da tela. */
@@ -113,9 +124,10 @@ export function buildInitialReportState(definition, { template = null, preset = 
   return {
     state: withTypedState(definition, {
       ...blank,
-      // E1D: visão antiga num relatório de tipos fixos abre a seleção dela como "Personalizado" (nunca vira
-      // um dos 5 tipos só porque a estrutura coincide).
-      ...(legacy && definition.defaultView ? { view: null } : {}),
+      // E1D: visão antiga em Pesagens abre a seleção dela como "Personalizado" (nunca vira um dos 5 tipos só
+      // porque a estrutura coincide). E1E: nos demais relatórios os tipos SÃO as visões antigas — a seleção dela
+      // abre no tipo que bate pela estrutura (legacyViews.typesByStructure); a que declara o tipo (`view`), nele.
+      ...(legacy && definition.defaultView ? presetView(definition, preset) : {}),
       params,
       uiFilters: filtersForDisplay(legacyFilters ?? definition.defaultFilters ?? {}, definition.columns),
       columns: legacy?.columns ?? definition.defaultColumns,

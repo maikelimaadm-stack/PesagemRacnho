@@ -5,6 +5,7 @@
 // Visões NÃO são aliases antigos (LEGACY_REPORT_ALIASES) e não viram presetId no manifesto.
 import { REPORT_MODES, VIEW_LAYOUTS, metricKeysOf } from './reportDefinition.js';
 import { aggregateSpecId } from './reportAggregates.js';
+import { isFilterActive } from './filterEngine.js';
 
 export const DEFAULT_VIEW_ID = 'padrao';
 export const ANALYTIC_VIEW_ID = 'analitico';
@@ -164,7 +165,36 @@ export function filtersForDisplay(filters, columns = []) {
   return out;
 }
 
-const aggregatesKey = (list) => JSON.stringify((list ?? []).map((spec) => `${spec.id}|${spec.op}|${spec.columnId ?? ''}`).sort());
+const specKey = (spec) => `${spec.id}|${spec.op}|${spec.columnId ?? ''}`;
+const aggregatesKey = (list) => JSON.stringify((list ?? []).map(specKey).sort());
+
+// E1E: os totais do estado são os do tipo — iguais aos declarados ou, num tipo resumido com "Colunas"
+// (columnChoices), uma escolha não vazia dentro deles (o que o "Colunas Painel" do tipo produz; os antigos
+// "Rebanho por …", "Saídas por motivo"… tinham parte dos totais do tipo novo).
+function sameMetrics(definition, view, aggregates) {
+  const pool = view.aggregates ?? definition?.defaultAggregates ?? [];
+  if (aggregatesKey(aggregates) === aggregatesKey(pool)) return true;
+  if (view.mode !== REPORT_MODES.RESUMIDO || !view.columnChoices || !aggregates.length) return false;
+  const inPool = new Set(pool.map(specKey));
+  return aggregates.every((spec) => inPool.has(specKey(spec)));
+}
+
+// Filtro comparável: operador e valores (sem diferença de caixa; em coluna enum, código e rótulo são o mesmo).
+function filterKey(filter, column) {
+  const options = column?.type === 'enum' && Array.isArray(column.options) ? column.options : [];
+  const text = (value) => String(options.find((option) => option.value === value)?.label ?? value ?? '').trim().toLocaleLowerCase('pt-BR');
+  const values = Array.isArray(filter?.values) ? [...new Set(filter.values.map(text))].sort() : [];
+  return JSON.stringify([filter?.operator ?? null, text(filter?.value), text(filter?.valueTo), values]);
+}
+
+/** A população do tipo já está nos filtros do estado (mesma condição em cada coluna dela)? */
+function populationIn(definition, population, filters) {
+  return Object.entries(population).every(([columnId, condition]) => {
+    const filter = filters?.[columnId];
+    const column = definition?.columns?.find((item) => item.id === columnId);
+    return filter && typeof filter === 'object' && isFilterActive(filter) && filterKey(filter, column) === filterKey(condition, column);
+  });
+}
 
 // E1D: a matriz declara groups vazio (os níveis vêm dos eixos); pela estrutura ela é Linhas › Colunas nos
 // eixos padrão. Sem isto um Resumido sem agrupamento (só o Total geral) passaria por "Sintético (Matriz)".
@@ -179,21 +209,27 @@ function structuralGroups(definition, view) {
  * modo; quando o estado informa `aggregates`, os mesmos totais; no Detalhado, quando informa `columns`,
  * as mesmas colunas. Nenhuma → null ("Personalizado") — assim o seletor nunca mostra um tipo que não está
  * aplicado de fato (e escolhê-lo de novo reaplica a visão).
- * @param {{ groups?: { columnId, direction? }[], mode?: string, aggregates?: object[], columns?: string[] }} state
+ * E1E: quando o estado informa `filters` (filtros da pessoa + condições fixas), um tipo com população (Mortes,
+ * Perdendo Peso, Sem Pesagem Recente…) só bate se os filtros já trazem exatamente a população dele — senão o
+ * tipo estreitaria o estado em silêncio (ex.: "sem pesagem há mais de 15 dias" não vira o tipo dos 30) — e,
+ * batendo, ele vence o tipo genérico de mesma estrutura ("Mudanças de Lote" × "Por Lote").
+ * @param {{ groups?: { columnId, direction? }[], mode?: string, aggregates?: object[], columns?: string[], filters?: object }} state
  */
 export function matchView(definition, state = {}) {
   const groups = (state.groups ?? definition?.defaultGroups ?? []).filter((group) => group?.columnId);
   const mode = state.mode ?? definition?.defaultMode ?? REPORT_MODES.DETALHADO;
-  const found = listReportViews(definition).find((view) => {
+  const candidates = listReportViews(definition).filter((view) => {
     if (view.mode !== mode || !sameGroups(structuralGroups(definition, view), groups)) return false;
-    if (Array.isArray(state.aggregates) && aggregatesKey(state.aggregates) !== aggregatesKey(view.aggregates ?? definition.defaultAggregates)) return false;
+    if (Array.isArray(state.aggregates) && !sameMetrics(definition, view, state.aggregates)) return false;
     if (mode === REPORT_MODES.DETALHADO && Array.isArray(state.columns)) {
       const expected = view.columns ?? definition.defaultColumns ?? [];
       if (state.columns.join('|') !== expected.join('|')) return false;
     }
     return true;
   });
-  return found?.id ?? null;
+  if (!state.filters || typeof state.filters !== 'object') return candidates[0]?.id ?? null;
+  const covered = candidates.find((view) => view.population && populationIn(definition, view.population, state.filters));
+  return (covered ?? candidates.find((view) => !view.population))?.id ?? null;
 }
 
 /**

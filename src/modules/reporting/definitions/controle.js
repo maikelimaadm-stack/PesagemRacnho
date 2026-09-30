@@ -7,17 +7,29 @@ import { GRAINS } from '../domain/reportGrain.js';
 import {
   AUDIT_COLUMNS, BACKUP_COLUMNS, DATA_ISSUE_COLUMNS, REGISTRY_BASE_COLUMNS, REGISTRY_EXTRA_COLUMNS, SHIPMENT_DOCUMENT_COLUMNS,
 } from './columns/controlColumns.js';
+import { listaTipo, resumoTipo } from './tipos.js';
+
+// E1E "Tipo Relatório" (definitions/tipos.js); versão 2 = ganhou os tipos (ver rebanho.js).
+const PREVISTO_COLUMNS = Object.freeze(['embarque', 'data_embarque', 'destino', 'tipo_documento', 'numero_gta', 'prev_machos', 'real_machos', 'prev_femeas', 'real_femeas', 'prev_total', 'real_total', 'diferenca_total', 'peso_total_real']);
+const PREVISTO_TOTALS = Object.freeze([{ id: 'documentos', op: 'count' }, { id: 'previsto', columnId: 'prev_total', op: 'sum' }, { id: 'realizado', columnId: 'real_total', op: 'sum' }, { id: 'diferenca', columnId: 'diferenca_total', op: 'sum' }, { id: 'peso', columnId: 'peso_total_real', op: 'sum' }]);
+export const PREVISTO_REALIZADO_VIEWS = Object.freeze([
+  resumoTipo('por-embarque', 'Por Embarque', ['embarque'], PREVISTO_TOTALS),
+  resumoTipo('por-destino', 'Por Destino', ['destino'], PREVISTO_TOTALS),
+  listaTipo('analitico', 'Analítico (Lista de Documentos)', { columns: PREVISTO_COLUMNS, aggregates: PREVISTO_TOTALS, sort: [{ columnId: 'data_embarque', direction: 'asc' }] }),
+]);
 
 export const EMBARQUES_PREVISTO_REALIZADO = defineReport({
-  id: 'embarques.previsto-realizado', family: 'embarques', grain: GRAINS.SHIPMENT_DOCUMENT, version: 1, source: 'shipments.documents',
+  id: 'embarques.previsto-realizado', family: 'embarques', grain: GRAINS.SHIPMENT_DOCUMENT, version: 2, source: 'shipments.documents',
   requires: ['reports.read', 'shipment.read'], columns: SHIPMENT_DOCUMENT_COLUMNS, title: 'Embarques: previsto × realizado',
   description: 'Por documento de embarque: machos e fêmeas previstos contra as saídas efetivamente vinculadas.',
   params: [{ id: 'periodo', type: 'period', label: 'Período do embarque', required: false, default: { preset: 'ultimos_90_dias' } }],
   metrics: ['Previsto', 'Realizado', 'Diferença'],
-  defaultColumns: ['embarque', 'data_embarque', 'destino', 'tipo_documento', 'numero_gta', 'prev_machos', 'real_machos', 'prev_femeas', 'real_femeas', 'prev_total', 'real_total', 'diferenca_total', 'peso_total_real'],
+  defaultColumns: [...PREVISTO_COLUMNS],
   defaultGroups: [{ columnId: 'embarque' }],
   defaultSort: [{ columnId: 'data_embarque', direction: 'asc' }],
-  defaultAggregates: [{ id: 'documentos', op: 'count' }, { id: 'previsto', columnId: 'prev_total', op: 'sum' }, { id: 'realizado', columnId: 'real_total', op: 'sum' }, { id: 'diferenca', columnId: 'diferenca_total', op: 'sum' }, { id: 'peso', columnId: 'peso_total_real', op: 'sum' }],
+  defaultAggregates: [...PREVISTO_TOTALS],
+  views: PREVISTO_REALIZADO_VIEWS,
+  defaultView: 'por-embarque',
   notes: ['Destino/frigorífico é o texto do embarque (sem vínculo canônico por parceiro).', 'Documento sem previsão informada: previsto e diferença ausentes (não zero).'],
 });
 

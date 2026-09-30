@@ -78,6 +78,17 @@ export const LEGACY_REPORT_VIEWS = deepFreeze({
   ],
 });
 
+/**
+ * E1E: relatório cujos tipos SÃO os antigos relatórios separados (Rebanho, Desempenho, Saídas… — todos com tipo
+ * padrão e sem tipos da E1B trocados): modelo, último estado ou visão antiga (favorito/link) sem tipo gravado
+ * abre no tipo que bate pela estrutura (reportViews.matchView, com a população conferida nos filtros); o que não
+ * bate, "Personalizado". Pesagens (tipos da E1B com a conversão explícita acima) continua como na E1D: o que não
+ * converte abre "Personalizado".
+ */
+export function typesByStructure(definition) {
+  return Boolean(definition?.defaultView) && !LEGACY_REPORT_VIEWS[definition.id];
+}
+
 const directionOf = (group) => (group?.direction === 'desc' ? 'desc' : 'asc');
 const sameGroups = (left, right) => left.length === right.length
   && left.every((group, index) => group.columnId === right[index].columnId && directionOf(group) === directionOf(right[index]));
