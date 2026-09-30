@@ -7,13 +7,15 @@ import { calculateCarcassTrade } from '@/modules/weighing/domain/commercialCalcu
 import { useAuth } from '@/components/auth/useAuth';
 import SanidadeAnimalCard from '@/components/sanidade/SanidadeAnimalCard';
 import { VIA_LABELS, listApplications } from '@/modules/sanity/application/sanityService';
+import { buildAnimalWeightCurve, curveLegend } from '@/modules/animals/domain/animalWeightCurve';
+import { CHART_SCREEN_CSS } from '@/modules/reporting/infrastructure/exporters/chartStyles';
+import ChartPlot from '@/components/reports/ChartPlot';
 import '@/styles/operational-insights.css';
 
 const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const n3 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const ni = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const dateBr = (value) => value ? String(value).split('-').reverse().join('/') : '—';
-const shortDate = (value) => value ? dateBr(value).slice(0, 5) : '—';
 const identityKey = (row) => row.animal_id || `${String(row.numero_animal || '').trim().toUpperCase()}::${String(row.marca || '').trim().toUpperCase()}`;
 const hasNumber = (value) => value !== null && value !== undefined && value !== '' && Number.isFinite(Number(value));
 const dayDiff = (from, to) => Math.max(0, Math.round((new Date(`${to}T12:00:00`) - new Date(`${from}T12:00:00`)) / 86400000));
@@ -26,6 +28,11 @@ const download = (name, content, type) => {
   URL.revokeObjectURL(url);
 };
 const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+// E1G: dica de cada ponto da curva (data, evento, peso, dias, ganho e GMD do trecho — animalWeightCurve).
+const describeCurvePoint = (curve, target) => {
+  const point = curve.series[0].points.find((item) => item.xKey === target.xKey);
+  return point ? { title: `${dateBr(point.data)} · ${point.evento}`, lines: point.detalhe } : { title: target.label, lines: [] };
+};
 
 function buildProfiles(catalog) {
   const groups = new Map();
@@ -105,32 +112,10 @@ export default function FichaAnimal() {
     return profiles.filter((profile) => `${profile.number} ${profile.brand} ${profile.race}`.toLocaleUpperCase('pt-BR').includes(term)).slice(0, 12);
   }, [profiles, query]);
 
-  const rangedEntries = useMemo(() => {
-    if (!selected) return [];
-    if (range === 'all') return selected.entries;
-    const latest = selected.entries.at(-1)?.data_pesagem;
-    if (!latest) return selected.entries;
-    const days = range === '90' ? 90 : 183;
-    const cutoff = new Date(`${latest}T12:00:00`);
-    cutoff.setDate(cutoff.getDate() - days);
-    const iso = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`;
-    return selected.entries.filter((entry) => entry.data_pesagem >= iso);
-  }, [selected, range]);
-
-  const chart = useMemo(() => {
-    const values = rangedEntries.map((row) => Number(row.peso)).filter((value) => Number.isFinite(value) && value > 0);
-    if (!values.length) return { points: '', area: '', dots: [], min: 0, max: 0 };
-    const min = Math.min(...values);
-    const max = Math.max(...values);
-    const spread = Math.max(1, max - min);
-    const dots = values.map((value, index) => ({
-      x: values.length === 1 ? 310 : 20 + index * 580 / (values.length - 1),
-      y: 176 - (value - min) / spread * 142,
-      value,
-    }));
-    const points = dots.map((dot) => `${dot.x},${dot.y}`).join(' ');
-    return { points, area: `${points} ${dots.at(-1).x},199 ${dots[0].x},199`, dots, min, max };
-  }, [rangedEntries]);
+  // E1G: curva com eixo de tempo REAL, eixo Y em kg e dica por ponto — o mesmo desenho dos gráficos dos relatórios
+  // (chartGeometry/renderChartSvg), só com pesagens COM peso; a legenda sai do mesmo intervalo (curveLegend).
+  const curve = useMemo(() => buildAnimalWeightCurve(selected?.entries ?? [], { range }), [selected, range]);
+  const curveText = curveLegend(curve.resumo);
 
   if (!selected) return <main className="op-screen"><section className="op-card"><div className="op-empty">Nenhum animal cadastrado. Faça o primeiro lançamento para gerar a ficha.</div></section></main>;
 
@@ -185,7 +170,7 @@ export default function FichaAnimal() {
       <div className="op-kpis">{kpis.map(([label, value, hint, accent]) => <div key={label} className={`op-kpi ${accent ? `op-kpi--${accent}` : ''}`}><span className="op-kpi__label">{label}</span><strong className="op-kpi__value">{value}</strong><span className="op-kpi__hint">{hint}</span></div>)}</div>
 
       <div className="op-grid-two">
-        <section className="op-card"><header className="op-card__header"><h2>Curva de peso</h2><div className="op-segmented">{[['90', '90 dias'], ['183', '6 meses'], ['all', 'Tudo']].map(([value, label]) => <button className={range === value ? 'is-active' : ''} type="button" key={value} onClick={() => setRange(value)}>{label}</button>)}</div></header><div className="op-chart"><svg viewBox="0 0 620 200" preserveAspectRatio="none" role="img" aria-label="Curva de peso do animal"><line x1="0" y1="20" x2="620" y2="20" stroke="#eef1f4" /><line x1="0" y1="65" x2="620" y2="65" stroke="#eef1f4" /><line x1="0" y1="110" x2="620" y2="110" stroke="#eef1f4" /><line x1="0" y1="155" x2="620" y2="155" stroke="#eef1f4" /><line x1="0" y1="199" x2="620" y2="199" stroke="#e4e8ed" />{chart.dots.length > 1 && <polygon points={chart.area} fill="rgba(64,222,99,.12)" />}{chart.dots.length > 1 && <polyline points={chart.points} fill="none" stroke="#40de63" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />}{chart.dots.map((dot, index) => <circle key={`${dot.x}-${dot.y}`} cx={dot.x} cy={dot.y} r={index === chart.dots.length - 1 ? 6 : 5} fill={index === chart.dots.length - 1 ? '#40de63' : '#fff'} stroke="#40de63" strokeWidth="3" />)}</svg><div className="op-chart-labels">{rangedEntries.map((entry) => <span key={entry.id}>{shortDate(entry.data_pesagem)}</span>)}</div><div className="op-chart-legend"><span><i />Peso registrado</span><span>{ni.format(rangedEntries.length)} pesagens · {ni.format(totalDays)} dias · <strong className={totalGain >= 0 ? 'is-positive' : 'is-negative'}>{totalGain >= 0 ? '+' : ''}{nf.format(totalGain)} kg</strong></span></div></div></section>
+        <section className="op-card"><header className="op-card__header"><h2>Curva de peso</h2><div className="op-segmented">{[['90', '90 dias'], ['183', '6 meses'], ['all', 'Tudo']].map(([value, label]) => <button className={range === value ? 'is-active' : ''} type="button" key={value} onClick={() => setRange(value)}>{label}</button>)}</div></header><div className="op-chart op-curve rpt-charts-host"><style>{CHART_SCREEN_CSS}</style>{curve.vazio ? <div className="op-empty">{curve.textoVazio}</div> : <ChartPlot chart={curve} uid="curva-peso" height={220} describe={describeCurvePoint} label="Curva de peso do animal" />}<div className="op-chart-legend"><span><i />Peso com balança</span><span>{curveText.pesagens} · {curveText.dias} · <strong className={curveText.tone === 'neg' ? 'is-negative' : curveText.tone === 'pos' ? 'is-positive' : ''}>{curveText.ganho}</strong></span></div></div></section>
         <section className="op-card"><header className="op-card__header"><h2>Linha do tempo</h2><span>{ni.format(events.length)} eventos</span></header><div className="op-timeline">{events.map((event, index) => <div className="op-event" key={`${event.date}-${index}`}><div className="op-event__rail"><span className="op-event__dot" style={{ background: event.color }} />{index < events.length - 1 && <span className="op-event__line" />}</div><div className="op-event__body"><strong>{event.title}</strong><time>{dateBr(event.date)}</time><span>{event.detail}</span></div></div>)}</div></section>
       </div>
 
