@@ -77,7 +77,8 @@ assert.match(reference, /useState\("analitico"\)/, 'controle: o antigo abria no 
 assert.match(reference, /Relatório de Pesagens Individuais \{tipoRelatorio === 'analitico' \? '\(Analítico\)' : '\(Sintético\)'\}/, 'regra do título no antigo');
 assert.deepEqual(views.map((view) => [view.id, view.titleKind]), [['analitico', 'Analítico'], ['sintetico-matriz', 'Sintético'], ['por-apartacao-lote', 'Sintético'], ['por-apartacao-data', 'Sintético'], ['vendas', 'Sintético']], 'titleKind de cada tipo');
 // Os outros relatórios não mudam de tipo (sem defaultView: padrão + analítico gerados).
-for (const definition of listReportDefinitions({ visibility: 'catalog' }).filter((item) => item.id !== 'pesagens')) {
+// E1E: o Comercial também tem tipos fixos (Vendas, Abates e Compras — gate reports:comercial:verify).
+for (const definition of listReportDefinitions({ visibility: 'catalog' }).filter((item) => !['pesagens', 'comercial'].includes(item.id))) {
   assert.equal(definition.defaultView, null, `NEGATIVO: ${definition.id} sem tipo padrão`);
 }
 ok('tipos');

@@ -15,7 +15,8 @@ const catalog = listReportDefinitions();
 const maintenance = listReportDefinitions({ visibility: 'maintenance' });
 const available = definitions.filter((d) => d.status !== 'blocked');
 const blocked = definitions.filter((d) => d.status === 'blocked');
-assert.equal(catalog.length, 12, 'catálogo com 12 relatórios');
+// E1E: Vendas, Abates e Compras do período viraram os tipos do Comercial (12 → 10; os ids antigos são aliases).
+assert.equal(catalog.length, 10, 'catálogo com 10 relatórios');
 assert.ok(catalog.every((d) => d.status !== 'blocked'), 'nenhum bloqueado no catálogo');
 
 // Famílias do catálogo (ordem da tela) têm relatório disponível
@@ -55,8 +56,8 @@ for (const definition of available.filter((d) => d.family === 'comercial')) {
 // Catálogo por perfil (Relatórios) e aba Controle (Manutenção)
 const visible = (actor, visibility = 'catalog') => new Set(listReports(actor, { visibility }).filter((r) => r.available).map((r) => r.id));
 const admin = visible(ADMIN); const gestor = visible(GESTOR); const operador = visible(OPERADOR); const consulta = visible(CONSULTA);
-assert.equal(admin.size, 12, 'ADMIN vê os 12');
-assert.ok(gestor.has('comercial.vendas') && !operador.has('comercial.vendas') && !consulta.has('comercial.vendas'), 'comercial só com commercial.values');
+assert.equal(admin.size, 10, 'ADMIN vê os 10');
+assert.ok(gestor.has('comercial') && !operador.has('comercial') && !consulta.has('comercial'), 'comercial só com commercial.values');
 assert.ok(operador.has('pesagens') && operador.has('rebanho.atual') && operador.has('desempenho'), 'OPERADOR: operacionais');
 assert.ok(!operador.has('controle.fechamento-dia') && gestor.has('controle.fechamento-dia'), 'fechamento segue session.close');
 const ctlGestor = visible(GESTOR, 'maintenance'); const ctlOperador = visible(OPERADOR, 'maintenance'); const ctlConsulta = visible(CONSULTA, 'maintenance');
@@ -84,14 +85,17 @@ const causa = await run('saidas.mortes.causa');
 assert.deepEqual(labels(causa, 'mortes'), { Raio: 1 });
 assert.ok(causa.notes.some((n) => /Taxa de mortalidade não é calculada/.test(n)));
 
+// E1E: pelo id antigo abre o tipo do Comercial, com os totais do relatório de venda (vendasLayout).
 const vendas = await run('comercial.vendas');
+assert.equal(vendas.view.id, 'vendas');
 assert.equal(vendas.rowCount, 1);
-assert.equal(vendas.totals.valor.value, 3000);
-assert.ok(Math.abs(vendas.totals.arrobas.value - 140 / 15) < 1e-9);
-assert.equal(vendas.totals.preco_arroba.value, 300, 'preço/@ ponderado pelas arrobas');
+assert.equal(vendas.totals.valor_total.value, 3000);
+assert.ok(Math.abs(vendas.totals.media_arroba.value - 280 / 30) < 1e-9, '@ viva = peso ÷ 30');
+assert.equal(vendas.totals.media_valor_arroba.value, 300, 'Valor @ ponderado pelas arrobas');
 const compras = await run('comercial.compras');
+assert.equal(compras.view.id, 'compras');
 assert.equal(compras.rowCount, 0, 'nenhum cadastro com valor de compra na massa');
-assert.equal(compras.totals.valor.value, null, 'sem compras → valor ausente, não 0');
+assert.equal(compras.totals.valor_total.value, null, 'sem compras → valor ausente, não 0');
 
 const romaneio = await run('embarques.romaneio');
 assert.equal(romaneio.rowCount, 1);

@@ -1,4 +1,5 @@
-// Catálogo de relatórios (Modelo 1). E1 (1.4.0): 12 relatórios visíveis no catálogo; 4 de controle na
+// Catálogo de relatórios (Modelo 1). E1 (1.4.0): 12 relatórios visíveis no catálogo (E1E: 10 — Vendas, Abates
+// e Compras do período viraram os tipos do Comercial, e os 3 ids antigos são aliases); 4 de controle na
 // aba Controle da Manutenção; cadastros.* e os bloqueados (com motivo, nunca simulados) ficam fora da
 // interface como backlog. Os 42 ids antigos consolidados continuam válidos como aliases
 // (legacyAliases.js): getReportDefinition(idAntigo) devolve a definição nova.
@@ -6,8 +7,9 @@ import { REPORT_VISIBILITY } from '../domain/reportDefinition.js';
 import { PESAGENS } from './pesagens.js';
 import { REBANHO_ATUAL } from './rebanho.js';
 import {
-  COMERCIAL_ABATES, COMERCIAL_COMPRAS, COMERCIAL_VENDAS, EMBARQUES_ROMANEIO, FECHAMENTO_DIA, LOTES_OCUPACAO, MOV_LOTES, PESAGENS_PENDENCIAS, SAIDAS,
+  EMBARQUES_ROMANEIO, FECHAMENTO_DIA, LOTES_OCUPACAO, MOV_LOTES, PESAGENS_PENDENCIAS, SAIDAS,
 } from './operacional.js';
+import { COMERCIAL } from './comercial.js';
 import {
   CADASTROS_RELATORIOS, CADASTROS_USUARIOS, CONTROLE_AUDITORIA, CONTROLE_BACKUPS, CONTROLE_QUALIDADE, EMBARQUES_PREVISTO_REALIZADO, RELATORIOS_BLOQUEADOS,
 } from './controle.js';
@@ -25,9 +27,8 @@ const DEFINITIONS = [
   DESEMPENHO,
   MOV_LOTES,
   SAIDAS,
-  COMERCIAL_VENDAS,
-  COMERCIAL_ABATES,
-  COMERCIAL_COMPRAS,
+  // E1E: Vendas, Abates e Compras do período viraram os tipos do Comercial (os ids antigos são aliases).
+  COMERCIAL,
   EMBARQUES_ROMANEIO,
   EMBARQUES_PREVISTO_REALIZADO,
   // Aba Controle da Manutenção
@@ -52,6 +53,8 @@ for (const [legacyId, entry] of Object.entries(LEGACY_REPORT_ALIASES)) {
   // Modelo convertido leva a condição fixa do alias para `fixedFilters`, somada às lockedFilters da
   // definição num mapa por coluna: o relatório de destino não pode ter lockedFilters próprias.
   if (entry.fixed.length && BY_ID.get(entry.id).lockedFilters) throw new Error(`catálogo: alias ${legacyId} com condição fixa aponta para relatório com lockedFilters (${entry.id})`);
+  // E1E: alias que virou TIPO (comercial.vendas → Comercial › Vendas) aponta para um tipo declarado do relatório.
+  if (entry.view != null && !BY_ID.get(entry.id).views.some((view) => view.id === entry.view)) throw new Error(`catálogo: alias ${legacyId} aponta para tipo inexistente (${entry.id} › ${entry.view})`);
 }
 
 /** Relatórios de uma área da interface (padrão: catálogo de Relatórios — os 12). */

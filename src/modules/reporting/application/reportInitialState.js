@@ -88,9 +88,11 @@ export function buildInitialReportState(definition, { template = null, preset = 
   for (const param of definition.params) if (param.default != null) params[param.id] = param.default;
   const blank = { search: '', widths: {}, drill: [], orientation: 'auto', showEmptyColumns: false, detailSheet: false, fixedFilters: {} };
   // E1D: relatório com tipo padrão (Pesagens → "Por Apartação (Resumo por Data)") abre nele, com as colunas
-  // que a pessoa escolheu para esse tipo.
-  if (!preset && definition.defaultView) {
-    const selection = typedViewSelection(definition, definition.defaultView, typeColumns);
+  // que a pessoa escolheu para esse tipo. E1E: relatório antigo que virou tipo (favorito/link de "Vendas do
+  // período" → Comercial › Vendas) abre nesse tipo, do mesmo jeito.
+  const startView = preset ? preset.view ?? null : definition.defaultView ?? null;
+  if (startView) {
+    const selection = typedViewSelection(definition, startView, typeColumns);
     return {
       state: withTypedState(definition, {
         ...blank,

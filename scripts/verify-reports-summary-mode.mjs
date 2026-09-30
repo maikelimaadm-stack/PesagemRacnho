@@ -23,7 +23,8 @@ const plain = (value) => JSON.parse(JSON.stringify(value));
 // ---- 1. Toda definição agrupada e todo alias agrupado: Resumido ≡ Detalhado ----
 const grouped = [
   ...listAllReportDefinitions().filter((d) => d.status !== 'blocked' && d.defaultGroups.length).map((d) => d.id),
-  ...Object.entries(LEGACY_REPORT_ALIASES).filter(([, alias]) => alias.groups.length).map(([id]) => id),
+  // E1E: alias que virou tipo (comercial.*) tem o modo do tipo (Detalhado com o desenho de venda) — fica de fora.
+  ...Object.entries(LEGACY_REPORT_ALIASES).filter(([, alias]) => alias.groups.length && !alias.view).map(([id]) => id),
 ];
 assert.ok(grouped.length >= 30, `cobertura: ${grouped.length} relatórios/aliases agrupados`);
 let nodesChecked = 0;
