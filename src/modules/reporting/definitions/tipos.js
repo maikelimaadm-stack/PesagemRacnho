@@ -6,7 +6,8 @@
 // Tipo resumido: a folha "resumo" (seções nos níveis de cima, tabela no nível folha, totais em linha de texto).
 // Os totais do tipo são as colunas dele ("Colunas Painel": a pessoa escolhe quais aparecem, por tipo). Um
 // estado antigo com parte desses totais continua sendo o tipo (reportViews.matchView).
-// Tipo lista: Detalhado (a folha "lista": títulos de grupo, tabela e subtotal em linha de texto).
+// Tipo lista: Detalhado (a folha "lista": títulos de grupo, tabela e subtotal em linha de texto), com o seletor
+// "Colunas" dele (E1F: todas as colunas do relatório; a escolha fica por tipo e usuário).
 import { metricKeysOf } from '../domain/reportDefinition.js';
 
 const levels = (groups) => groups.map((group) => (typeof group === 'string' ? { columnId: group } : { ...group }));
@@ -25,11 +26,18 @@ export function resumoTipo(id, label, groups, aggregates, { defaults, ...extra }
   };
 }
 
-/** Tipo lista (Detalhado): colunas, totais (subtotal e total geral) e ordem das linhas próprios. */
-export function listaTipo(id, label, { groups = [], columns, aggregates, sort, ...extra }) {
+/**
+ * Tipo lista (Detalhado): colunas, totais (subtotal e total geral) e ordem das linhas próprios.
+ * E1F: `from` = colunas do relatório → o tipo ganha o seletor "Colunas" próprio (columnChoices: as do tipo
+ * primeiro, depois as demais do relatório; só de cálculo fica fora) — a escolha fica guardada por tipo e por
+ * usuário (report-type-columns), como nos tipos de Pesagens. Sem `from`, sem seletor (o "Colunas" genérico).
+ */
+export function listaTipo(id, label, { groups = [], columns, aggregates, sort, from, ...extra }) {
+  const others = (from ?? []).filter((column) => !column.metricOnly && !columns.includes(column.id)).map((column) => column.id);
   return {
     id, label, mode: 'DETALHADO', titleKind: 'Analítico', groups: levels(groups), columns: [...columns],
     aggregates: aggregates.map((spec) => ({ ...spec })), ...(sort ? { sort: sort.map((item) => ({ ...item })) } : {}),
+    ...(from ? { columnChoices: { available: [...columns, ...others], defaults: [...columns] } } : {}),
     ...extra,
   };
 }

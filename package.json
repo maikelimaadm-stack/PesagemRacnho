@@ -113,6 +113,7 @@
     "reports:tipos-todos:verify": "node scripts/verify-reports-tipos-todos.mjs",
     "reports:folha-makgestao-todos:verify": "node scripts/verify-reports-folha-makgestao-todos.mjs",
     "reports:tela-unica:verify": "node scripts/verify-reports-tela-unica.mjs",
+    "reports:colunas-todas:verify": "node scripts/verify-reports-colunas-todas.mjs",
     "ui:dark-field-text:verify": "node scripts/verify-dark-field-text.mjs",
     "reports:performance:verify": "node --max-old-space-size=8192 scripts/verify-reports-performance.mjs",
     "perf:reports": "node --max-old-space-size=8192 scripts/measure-report-performance.mjs --mass=36k,250k --samples=3 --out=docs/evidence/reporting-program/R5-report-families-performance/bench",

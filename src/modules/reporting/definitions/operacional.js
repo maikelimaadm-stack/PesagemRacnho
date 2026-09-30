@@ -53,11 +53,11 @@ const FECHAMENTO_TYPE_TOTALS = Object.freeze(['animais', 'registros', 'peso_medi
 const COM_PENDENCIAS = Object.freeze({ pendencias: { operator: 'not_empty' } });
 export const FECHAMENTO_VIEWS = Object.freeze([
   // O fechamento é conferência linha a linha: abre na lista por sessão (o resumo fica a um clique).
-  listaTipo('por-sessao', 'Por Sessão (Lista)', { groups: ['sessao'], columns: FECHAMENTO_COLUMNS, aggregates: FECHAMENTO_TYPE_TOTALS }),
+  listaTipo('por-sessao', 'Por Sessão (Lista)', { from: EVENT_COLUMNS, groups: ['sessao'], columns: FECHAMENTO_COLUMNS, aggregates: FECHAMENTO_TYPE_TOTALS }),
   resumoTipo('resumo-por-sessao', 'Resumo por Sessão', ['sessao'], FECHAMENTO_TYPE_TOTALS),
   resumoTipo('por-apartacao-lote', 'Por Apartação/Lote', ['nome_apartacao', 'nome_lote'], FECHAMENTO_TYPE_TOTALS),
-  listaTipo('com-pendencias', 'Com Pendências', { groups: ['pendencias'], columns: FECHAMENTO_COLUMNS, aggregates: FECHAMENTO_TYPE_TOTALS, population: COM_PENDENCIAS }),
-  listaTipo('analitico', 'Analítico (Lista do Dia)', { columns: FECHAMENTO_COLUMNS, aggregates: FECHAMENTO_TYPE_TOTALS }),
+  listaTipo('com-pendencias', 'Com Pendências', { from: EVENT_COLUMNS, groups: ['pendencias'], columns: FECHAMENTO_COLUMNS, aggregates: FECHAMENTO_TYPE_TOTALS, population: COM_PENDENCIAS }),
+  listaTipo('analitico', 'Analítico (Lista do Dia)', { from: EVENT_COLUMNS, columns: FECHAMENTO_COLUMNS, aggregates: FECHAMENTO_TYPE_TOTALS }),
 ]);
 
 export const FECHAMENTO_DIA = defineReport(eventBase({
@@ -97,7 +97,7 @@ export const MOV_LOTES_VIEWS = Object.freeze([
   resumoTipo('por-lote-anterior', 'Por Lote Anterior', ['lote_origem'], MOV_TYPE_TOTALS),
   resumoTipo('por-marca', 'Por Marca', ['marca'], MOV_TYPE_TOTALS),
   resumoTipo('por-sexo', 'Por Sexo', ['sexo'], MOV_TYPE_TOTALS),
-  listaTipo('analitico', 'Analítico (Lista de Permanências)', { columns: MOV_COLUMNS, aggregates: MOV_TYPE_TOTALS, sort: [{ columnId: 'inicio', direction: 'asc' }] }),
+  listaTipo('analitico', 'Analítico (Lista de Permanências)', { from: LOT_STAY_COLUMNS, columns: MOV_COLUMNS, aggregates: MOV_TYPE_TOTALS, sort: [{ columnId: 'inicio', direction: 'asc' }] }),
 ]);
 
 export const MOV_LOTES = defineReport({
@@ -126,7 +126,7 @@ const OCUPACAO_TOTALS = Object.freeze([{ id: 'lotes', op: 'count' }, { id: 'anim
 export const LOTES_OCUPACAO_VIEWS = Object.freeze([
   resumoTipo('por-apartacao', 'Por Apartação', ['apartacao'], OCUPACAO_TOTALS),
   resumoTipo('por-apartacao-lote', 'Por Apartação/Lote', ['apartacao', 'lote'], OCUPACAO_TOTALS),
-  listaTipo('analitico', 'Analítico (Lista de Lotes)', { columns: OCUPACAO_COLUMNS, aggregates: OCUPACAO_TOTALS, sort: [{ columnId: 'lote', direction: 'asc' }] }),
+  listaTipo('analitico', 'Analítico (Lista de Lotes)', { from: LOT_COLUMNS, columns: OCUPACAO_COLUMNS, aggregates: OCUPACAO_TOTALS, sort: [{ columnId: 'lote', direction: 'asc' }] }),
 ]);
 
 export const LOTES_OCUPACAO = defineReport({
@@ -180,8 +180,8 @@ export const SAIDAS_VIEWS = Object.freeze([
   mortes('mortes-por-causa', 'Mortes por Causa', ['causa_morte']),
   mortes('mortes-por-lote', 'Mortes por Lote', ['nome_lote']),
   mortes('mortes-por-categoria', 'Mortes por Categoria', ['categoria']),
-  listaTipo('analitico', 'Analítico (Lista de Saídas)', { columns: SAIDAS_COLUMNS, aggregates: SAIDAS_LIST_TOTALS }),
-  listaTipo('mortes', 'Mortes (Lista)', { columns: MORTES_COLUMNS, aggregates: MORTES_TOTALS, population: MORTES_POPULATION }),
+  listaTipo('analitico', 'Analítico (Lista de Saídas)', { from: EVENT_COLUMNS, columns: SAIDAS_COLUMNS, aggregates: SAIDAS_LIST_TOTALS }),
+  listaTipo('mortes', 'Mortes (Lista)', { from: EVENT_COLUMNS, columns: MORTES_COLUMNS, aggregates: MORTES_TOTALS, population: MORTES_POPULATION }),
 ]);
 
 export const SAIDAS = defineReport(exitBase({
@@ -216,8 +216,8 @@ export const ROMANEIO_VIEWS = Object.freeze([
   resumoTipo('por-embarque', 'Por Embarque', ['embarque_nome'], ROMANEIO_TYPE_TOTALS, { defaults: ROMANEIO_TYPE_DEFAULTS }),
   // O romaneio de papel: os animais de cada documento, com subtotal por documento e por embarque (embarque e nº
   // do documento já estão no título de cada grupo).
-  listaTipo('romaneio-lista', 'Romaneio (Lista por Documento)', { groups: EMBARQUE_DOCUMENTO, columns: ROMANEIO_COLUMNS.filter((id) => !EMBARQUE_DOCUMENTO.includes(id)), aggregates: ROMANEIO_LIST_TOTALS }),
-  listaTipo('analitico', 'Analítico (Lista de Animais)', { columns: ROMANEIO_COLUMNS, aggregates: ROMANEIO_LIST_TOTALS }),
+  listaTipo('romaneio-lista', 'Romaneio (Lista por Documento)', { from: EVENT_COLUMNS, groups: EMBARQUE_DOCUMENTO, columns: ROMANEIO_COLUMNS.filter((id) => !EMBARQUE_DOCUMENTO.includes(id)), aggregates: ROMANEIO_LIST_TOTALS }),
+  listaTipo('analitico', 'Analítico (Lista de Animais)', { from: EVENT_COLUMNS, columns: ROMANEIO_COLUMNS, aggregates: ROMANEIO_LIST_TOTALS }),
 ]);
 
 export const EMBARQUES_ROMANEIO = defineReport(exitBase({
@@ -229,6 +229,9 @@ export const EMBARQUES_ROMANEIO = defineReport(exitBase({
   defaultGroups: [{ columnId: 'embarque_nome' }, { columnId: 'documento_numero' }],
   lockedFilters: () => ({ embarque_vinculado: { operator: 'equals', value: true } }),
   defaultAggregates: [...ROMANEIO_TOTALS],
+  // E1F: a contagem de linhas é "Saídas" sempre — no seletor "Colunas Painel", na folha e no XLSX, com ou sem
+  // "Cabeças" (animais distintos) ao lado; o rótulo automático dizia "Cabeças" quando ela vinha sozinha.
+  metricLabels: { cabecas: 'Saídas' },
   views: ROMANEIO_VIEWS,
   defaultView: 'por-embarque-documento',
 }));

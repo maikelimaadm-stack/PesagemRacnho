@@ -4,8 +4,8 @@
 //   b) Subtotal e Total de cada seção = motor da E1 sobre a população do nó; Σ das linhas = subtotal só nas
 //      métricas somáveis (contagem e soma) — média, mínimo, máximo, Qtd distinta e GMD nunca são somados;
 //   c) "TOTAL POR <nível folha> – <nível 1>" = o mesmo motor (groupRows) sobre a população da seção;
-//   d) coluna sem nenhum valor no relatório some (e volta com "mostrar colunas vazias"); contagem só com
-//      zeros (Fêmeas num lote só de machos) também; o GMD sem pesagem anterior é "—", nunca "0,000" (E1D
+//   d) coluna sem nenhum valor no relatório some no padrão do tipo (e volta com "mostrar colunas vazias"; E1F:
+//      a escolhida em "Colunas" nunca some); contagem só com zeros (Fêmeas num lote só de machos) também; o GMD sem pesagem anterior é "—", nunca "0,000" (E1D
 //      item 8: sem as notas longas na folha — colunas ocultas e "GMD calculado com N de M" saíram);
 //   e) kg com 1 casa, @ com 2, GMD com 3; Média (@) = Peso médio ÷ divisor; rodapé "@ = peso vivo ÷ 30/15";
 //   f) na tela, o clique no grupo (detalhe) e a ordenação por métrica apontam para nós reais da árvore;
@@ -199,15 +199,20 @@ assert.match(html, /<strong>TOTAL GERAL:<\/strong> \d+ anima(l|is)</, 'linha "TO
 assert.ok(html.includes('data-style="makgestao" data-view="resumo-data"'), 'CSS da folha do MAKGESTAO escopado pelo documento');
 
 // ---- d) colunas vazias, zeros e GMD "—" ----
-const cadastros = await run({ ...FULL, filters: { tipo_manejo: { operator: 'in', values: ['Cadastro'] } } });
+// E1F: a regra vale para o PADRÃO do tipo; coluna escolhida em "Colunas" (FULL ≠ padrão) aparece mesmo vazia.
+const soCadastros = { tipo_manejo: { operator: 'in', values: ['Cadastro'] } };
+const cadastros = await run({ ...viewSelection(view, PESAGENS), filters: soCadastros });
 const cadDoc = buildReportDocument(cadastros);
 const hiddenKeys = cadDoc.hiddenColumns.map((column) => column.key);
-for (const key of ['ganho_medio', 'ganho_total', 'dias_medios', 'gmd_medio']) assert.ok(hiddenKeys.includes(key), `só Cadastros (sem pesagem anterior): coluna ${key} oculta`);
+assert.ok(hiddenKeys.includes('gmd_medio'), 'só Cadastros (sem pesagem anterior), padrão do tipo: coluna GMD Médio oculta');
+const cadEscolha = buildReportDocument(await run({ ...FULL, filters: soCadastros }));
+for (const key of ['ganho_medio', 'ganho_total', 'dias_medios', 'gmd_medio']) assert.ok(cadEscolha.columns.some((column) => column.key === key) && !cadEscolha.hiddenColumns.length, `E1F: ${key} escolhida em "Colunas" continua na folha mesmo vazia`);
 // E1D item 8: a lista de colunas ocultas continua no documento (hiddenColumns), mas não vira nota na folha.
 const cadHtml = renderSheetBody(cadDoc, { mode: 'print' });
 assert.ok(cadDoc.notes === undefined && !cadHtml.includes('sheet-notes') && !cadHtml.includes('Sem nenhum valor'), 'NEGATIVO: sem nota de colunas ocultas na folha');
-const cadAll = buildReportDocument(cadastros, { showEmptyColumns: true });
-assert.ok(cadAll.columns.some((column) => column.key === 'gmd_medio') && cadAll.hiddenColumns.length === 0, '"mostrar colunas vazias" traz as colunas de volta');
+const cadAll = buildReportDocument(await run({ ...FULL, filters: soCadastros }), { showEmptyColumns: true });
+assert.ok(buildReportDocument(cadastros, { showEmptyColumns: true }).columns.some((column) => column.key === 'gmd_medio'), '"mostrar colunas vazias" traz as colunas de volta');
+assert.ok(cadAll.columns.some((column) => column.key === 'gmd_medio') && cadAll.hiddenColumns.length === 0, 'todas as colunas na folha');
 // E1D visual: o tipo tem a cara da folha do MAKGESTAO — ausente é "-" (hífen, como no antigo), nunca 0,000.
 for (const row of documentRows(cadAll)) {
   const gmd = row.cells.find((cell) => cell.key === 'gmd_medio');
@@ -215,7 +220,7 @@ for (const row of documentRows(cadAll)) {
   const item = row.line?.items.find((part) => part.key === 'gmd_medio');
   if (item) assert.equal(item.text, MAK_MISSING, `sem pesagem anterior: "GMD Médio: -" na linha de total ${row.id}`);
 }
-const machos = await run({ ...FULL, filters: { sexo: { operator: 'in', values: ['M'] } } });
+const machos = await run({ ...viewSelection(view, PESAGENS), filters: { sexo: { operator: 'in', values: ['M'] } } });
 const machosDoc = buildReportDocument(machos);
 assert.ok(machosDoc.hiddenColumns.some((column) => column.key === 'femeas'), 'só machos: coluna Fêmeas (toda zero) oculta');
 assert.ok(machosDoc.columns.some((column) => column.key === 'machos'), 'Machos continua');
