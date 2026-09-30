@@ -1,7 +1,7 @@
 import { Button } from '@/components/ui/button';
 import { fmtDateBR, fmtInt } from '@/components/common/formatNumber';
 import AfericaoArquivo from './AfericaoArquivo';
-import { IMPORT_TYPES, animaisComVariasLinhas, avisoNumerosParecidos, avisosCadastrosAntecipados } from './importacaoModel';
+import { IMPORT_TYPES, animaisComVariasLinhas, avisoNumerosParecidos, avisosCadastrosAntecipados, explicacaoNumerosParecidos } from './importacaoModel';
 
 function Contagem({ label, valor, tom = '' }) {
   return (
@@ -86,10 +86,7 @@ export default function StepConciliacao({ plan, analisando, erro, onAnalisar, af
           {numerosParecidos ? (
             <div className="importacao-alert importacao-alert--info" data-testid="importacao-numeros-parecidos">
               <strong>{numerosParecidos}</strong>
-              <span>
-                {' '}É o mesmo número escrito de outro jeito (zeros à esquerda ou o “,0” que o Excel acrescenta).
-                As pesagens entram no animal já cadastrado e o número dele não muda.
-              </span>
+              <span>{' '}{explicacaoNumerosParecidos(type)}</span>
             </div>
           ) : null}
 

@@ -212,6 +212,15 @@ export function avisoNumerosParecidos(summary) {
   return `${inicio}: ${info.exemplos.join(', ')}${outros}.`;
 }
 
+/**
+ * E1G (revisão): explicação que acompanha o aviso do número parecido. A importação de sanidade
+ * também casa por número parecido e lá entram aplicações, não pesagens.
+ */
+export function explicacaoNumerosParecidos(type) {
+  const oQueEntra = type === IMPORT_TYPES.SANIDADE ? 'As aplicações entram' : 'As pesagens entram';
+  return `É o mesmo número escrito de outro jeito (zeros à esquerda ou o “,0” que o Excel acrescenta). ${oQueEntra} no animal já cadastrado e o número dele não muda.`;
+}
+
 // Data ISO do plano → dd/mm/aaaa (sem os formatadores da tela, para o gate rodar em Node).
 const dataBR = (iso) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '—');
 

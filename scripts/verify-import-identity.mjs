@@ -40,7 +40,7 @@ import { normalizeHeader } from '../src/modules/import/domain/importFields.js';
 import { buildImportPlan, prepareImportRows } from '../src/modules/import/domain/importPlanner.js';
 import { buildRegistryContext } from '../src/modules/import/domain/importRegistryContext.js';
 import { writeImportBatch } from '../src/modules/import/infrastructure/importWriter.js';
-import { afericaoDoArquivo, avisoNumerosParecidos, avisosCadastrosAntecipados } from '../src/components/importacao/importacaoModel.js';
+import { afericaoDoArquivo, avisoNumerosParecidos, avisosCadastrosAntecipados, explicacaoNumerosParecidos } from '../src/components/importacao/importacaoModel.js';
 import { runReport } from '../src/modules/reporting/application/reportService.js';
 
 const ADMIN = Object.freeze({ id: 'u-admin', nome: 'Ana Admin', role: 'ADMIN' });
@@ -163,6 +163,14 @@ assert.deepEqual(planManejos.summary.numerosParecidos, { linhas: 3, exemplos: ['
 assert.equal(avisoNumerosParecidos(planManejos.summary), '3 linhas casaram com animais existentes por número parecido: 01016 → 1016, 1016,0 → 1016, 1016.0 → 1016.', '4: aviso da tela');
 assert.equal(avisoNumerosParecidos({ numerosParecidos: { linhas: 1, exemplos: ['01016 → 1016'], outrosExemplos: 0 } }), '1 linha casou com um animal existente por número parecido: 01016 → 1016.');
 assert.equal(avisoNumerosParecidos({ numerosParecidos: { linhas: 0, exemplos: [], outrosExemplos: 0 } }), null, 'sem número parecido não há aviso');
+// E1G (revisão): a importação de SANIDADE também casa por número parecido e mostra o mesmo aviso;
+// a explicação fala de aplicações (lá não entra pesagem nenhuma).
+const sanityPlan = await analyzeImport({ text: csv('Data;NumeroAnimal;Marca;Programa', '15/02/2026;01016;ABC;Aftosa'), type: 'SANIDADE' });
+assert.equal(sanityPlan.rows[0].identity.animalId, a1016.animal_id, '4: sanidade — "01016" casou com o 1016');
+assert.equal(sanityPlan.summary.numerosParecidos.linhas, 1, '4: sanidade — o resumo conta o número parecido');
+assert.equal(explicacaoNumerosParecidos('SANIDADE'), 'É o mesmo número escrito de outro jeito (zeros à esquerda ou o “,0” que o Excel acrescenta). As aplicações entram no animal já cadastrado e o número dele não muda.');
+assert.doesNotMatch(explicacaoNumerosParecidos('SANIDADE'), /pesagens/, 'NEGATIVO: na sanidade o aviso não fala de pesagens');
+assert.match(explicacaoNumerosParecidos('MANEJOS'), /As pesagens entram no animal já cadastrado/);
 assert.equal(rowsManejos.get(5).status, ROW_STATUS.ERRO, 'NEGATIVO: "A01" não casa com "A1"');
 assert.equal(rowsManejos.get(5).messages[0], 'Animal A01 / ABC não encontrado. Importe o Cadastro antes (tipo Cadastros ou Histórico).');
 assert.deepEqual([2, 3, 4].map((line) => rowsManejos.get(line).derived.gmd), [0.645, 0.714, 0.645], '4: GMD recalculado contra o 1016');
@@ -360,6 +368,8 @@ assert.equal(new Set(reportRows1016.map((row) => row.numero_animal)).size, 1, '8
 const stepConciliacao = readFileSync(fileURLToPath(new URL('../src/components/importacao/StepConciliacao.jsx', import.meta.url)), 'utf8');
 assert.match(stepConciliacao, /const numerosParecidos = avisoNumerosParecidos\(summary\);/, '9: aviso de número parecido vem do resumo');
 assert.match(stepConciliacao, /data-testid="importacao-numeros-parecidos"/, '9: bloco do número parecido na análise');
+assert.match(stepConciliacao, /\{explicacaoNumerosParecidos\(type\)\}/,'9: a explicação do número parecido depende do tipo (sanidade = aplicações)');
+assert.doesNotMatch(stepConciliacao, /As pesagens entram no animal/, 'NEGATIVO: sem texto fixo de pesagens na tela');
 assert.match(stepConciliacao, /const cadastrosAntecipados = avisosCadastrosAntecipados\(summary\);/, '9: frases do Cadastro antecipado vêm do resumo');
 assert.match(stepConciliacao, /data-testid="importacao-cadastros-antecipados"/, '9: bloco do Cadastro antecipado na análise');
 // E1G (revisão): o mesmo número em duas marcas não pode gerar duas frases iguais (nem chave repetida
