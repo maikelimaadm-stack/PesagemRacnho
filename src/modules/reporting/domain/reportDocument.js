@@ -12,6 +12,7 @@
 // ordem do cabeçalho (o erro de colunas desalinhadas do modelo antigo fica impossível por construção).
 // Coluna sem nenhum valor no relatório inteiro some (opção showEmptyColumns desliga; E1F: nunca quando a pessoa
 // escolheu as colunas em uso — viewModel.columnsChosen); GMD sem pesagem anterior fica "—" (o motor exclui).
+// E1G: Dias, Ganho e GMD (e as métricas feitas sobre eles) nunca somem — "-" e, no rodapé, "GMD de N de M cab.".
 //
 // E1D item 8 ("menos informação na folha" — vale para TODOS os relatórios: a folha é uma só): título
 // "(Analítico)"/"(Sintético)" pelo tipo do relatório; abaixo dele só "Período: dd/mm/aaaa a dd/mm/aaaa";
