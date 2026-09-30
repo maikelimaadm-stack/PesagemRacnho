@@ -132,7 +132,8 @@ o botão **Limpar filtros** (funil) limpa todos. O filtro por **Proprietário** 
 de donos dos animais (próxima etapa).
 
 **Pesagem anterior:** "Com pesagem anterior" mostra só as pesagens que têm uma pesagem anterior válida do
-mesmo animal (as que dão ganho e GMD). Cadastro e Saída não contam como "com anterior".
+mesmo animal (as que dão ganho e GMD). O Cadastro não conta como "com anterior"; a Saída com peso (venda,
+abate) conta, e a Saída sem peso não.
 
 Para agrupar em **dois ou três níveis** (ex.: Apartação › Data › Lote), use o botão de camadas
 (**Níveis de agrupamento**). Animais sem valor na coluna do grupo ficam no grupo **"Não informado"**,
