@@ -3,7 +3,7 @@
   "productName": "Pesagens Individuais",
   "description": "Sistema offline de pesagens individuais",
   "private": true,
-  "version": "1.4.1",
+  "version": "1.4.2",
   "main": "electron/main.cjs",
   "author": "MAKGESTAO",
   "type": "module",
