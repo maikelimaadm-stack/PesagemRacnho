@@ -197,6 +197,11 @@ function resolveRowAnimal(row, context) {
     const animal = result.animal;
     row.animal = animal;
     row.identity = { key: `id:${animal.id}`, animalId: String(animal.id), isNew: false, label: labelOf(animal.numero_animal, animal.marca), via: result.via };
+    // E1G: casou só pelo número parecido ("01016" → 1016); o número do animal não muda.
+    if (result.similarNumber) {
+      row.identity.similarNumber = { informado: row.input.numero, cadastrado: animal.numero_animal };
+      row.messages.push(`Número ${row.input.numero} reconhecido como o animal ${animal.numero_animal} já cadastrado (o mesmo número sem os zeros à esquerda ou sem o ",0" do Excel).`);
+    }
     return;
   }
   row.identity = { key: `linha:${row.line}`, animalId: null, isNew: false, label: labelOf(row.input.numero, marcaNome), via: result.via };

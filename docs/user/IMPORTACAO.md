@@ -48,7 +48,7 @@ Salve a planilha como **CSV (separado por ponto e vírgula)**. O sistema também
 
 > **O arquivo tem mais de uma pesagem do mesmo animal?**
 
-- **Sim — conciliar automaticamente (recomendado).** O sistema ordena as linhas por data: a pesagem mais antiga de cada animal novo vira **Cadastro** e as seguintes viram **Manejo**. Se o animal já existe no sistema, todas entram como Manejo. A ordem das linhas no arquivo não importa: vale a data.
+- **Sim — conciliar automaticamente (recomendado).** O sistema ordena as linhas por data: a pesagem mais antiga de cada animal novo vira **Cadastro** e as seguintes viram **Manejo**. Se o animal já existe no sistema, todas entram como Manejo — a não ser que o arquivo traga pesagem **mais antiga que o Cadastro** dele: aí a mais antiga passa a ser o Cadastro e o Cadastro antigo vira Manejo (veja "Cadastrei o animal hoje e quero importar as pesagens antigas" nas perguntas comuns). A ordem das linhas no arquivo não importa: vale a data.
 - **Não — todas as linhas são do mesmo tipo.** Aí você escolhe entre **Cadastros de animais**, **Manejos** ou **Saídas**. Nesse modo, duas linhas do mesmo animal viram conflito.
 - **Cadastros mestres.** Para uma planilha só de nomes: cada nome preenchido vira uma marca, raça, causa de morte ou categoria.
 - **Aplicações de sanidade.** Para uma planilha de vacinas, vermífugos e tratamentos já aplicados: cada linha é uma aplicação ligada a um animal. Veja a seção própria mais abaixo.
@@ -167,6 +167,12 @@ Nada acontece. O sistema reconhece o que já gravou e ignora. A tela até avisa,
 
 **A planilha traz peso anterior, dias e GMD. Posso deixar?**
 Pode, mas esses valores **não são importados**: o sistema recalcula a série do animal pela data. Se o valor da planilha for diferente do recalculado, isso aparece como observação na conferência.
+
+**O número do brinco na planilha está com zero na frente (01016) ou com ",0" (1016,0).**
+O sistema reconhece: "01016", "1016,0" e "1016.0" encontram o animal **1016** já cadastrado, e o número dele não muda. Na Conciliação aparece o aviso "N linhas casaram com animais existentes por número parecido", com os exemplos. Número com letra ("A01" e "A1") continua diferente. Número igual ao cadastrado sempre vence. Se o número da planilha só é parecido com o de dois animais ("007", com os animais "07" e "7" na mesma marca), a linha fica **ambígua**: corrija o número na planilha.
+
+**Cadastrei o animal hoje e quero importar as pesagens antigas dele.**
+Use **Sim — conciliar automaticamente**. Se o arquivo traz pesagens mais antigas que o Cadastro já gravado, a mais antiga passa a ser o **Cadastro** e o Cadastro de hoje vira **Manejo**, com dias, ganho e GMD calculados. A Conciliação mostra a troca antes de gravar (por exemplo: "O Cadastro de 29/09/2026 do animal 701 passa a Manejo; o novo Cadastro é 02/06/2026."). Nos tipos Manejos, Cadastros e Saídas, pesagem anterior ao Cadastro continua sendo conflito.
 
 **O sistema disse que a marca não está cadastrada.**
 Cadastre a marca antes (**Cadastros › Marcas**) ou volte à etapa Regras e marque **Criar marcas, raças e causas que faltam**.

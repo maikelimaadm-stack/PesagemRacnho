@@ -8,11 +8,14 @@
 //      (compareWeighingEvents), classifica, valida e recalcula peso anterior/dias/ganho/GMD
 //      com recalculateWeightSeries sobre a série mesclada. Derivados da planilha servem só
 //      para comparação ("planilha X, recalculado Y").
+// E1G: número de brinco parecido ("01016" → 1016) casa com o animal existente e agrupa as
+// linhas do mesmo animal novo ("007" e "7"); no Histórico, pesagem anterior ao Cadastro
+// gravado antecipa o Cadastro (a linha mais antiga vira Cadastro e o gravado vira Manejo).
 import { normalizeName } from '../../catalog/domain/normalize.js';
 import { eraOfCategory } from '../../operations/domain/categorySuggestion.js';
 import { validateUiPayload } from '../../weighing/domain/weighingMapper.js';
 import { compareWeighingEvents, recalculateWeightSeries } from '../../weighing/domain/weighingSeries.js';
-import { IDENTITY_STATUS, findIdentityCandidates, normalizeIdentifierValue, resolveAnimalIdentity } from './animalIdentity.js';
+import { IDENTITY_STATUS, findIdentityCandidates, importGroupingKey, normalizeIdentifierValue, resolveAnimalIdentity } from './animalIdentity.js';
 import { resolveImportCategory } from './importCategory.js';
 import { BLOCKING_STATUSES, CATEGORY_MODES, EVENT_TYPES, EXIT_REASONS_WITHOUT_WEIGHT, IMPORT_TYPES, ROW_STATUS } from './importConstants.js';
 import { invertMapping, listImportFields } from './importFields.js';
@@ -25,6 +28,8 @@ const MASTER_LABELS = Object.freeze({ marcas: 'Marca', racas: 'Raça', causasMor
 
 const fmtNumber = (value) => (value === null || value === undefined ? '—' : String(value).replace('.', ','));
 const rawText = (value) => (value === undefined || value === null || String(value).trim() === '' ? null : String(value).trim());
+// Data ISO → dd/mm/aaaa nas mensagens novas para a tela (E1G).
+const fmtDate = (iso) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : String(iso ?? '—'));
 
 // ---------------------------------------------------------------------------
 // Fase 1 — leitura e validação de campos
@@ -238,13 +243,19 @@ function resolveRowIdentity(row, type, context) {
     row.animal = animal;
     row.groupKey = `id:${animal.id}`;
     row.identity = { key: row.groupKey, animalId: String(animal.id), isNew: false, label: labelOf(animal.numero_animal, animal.marca), via: result.via };
-    const informed = normalizeIdentifierValue(row.input.numero);
-    if (result.via === 'animal_id' && informed && informed !== normalizeIdentifierValue(animal.numero_animal)) {
+    // E1G: casou só pelo número parecido — o número gravado do animal não muda.
+    if (result.similarNumber) {
+      row.identity.similarNumber = { informado: row.input.numero, cadastrado: animal.numero_animal };
+      row.messages.push(`Número ${row.input.numero} reconhecido como o animal ${animal.numero_animal} já cadastrado (o mesmo número sem os zeros à esquerda ou sem o ",0" do Excel); o número do animal não muda.`);
+    }
+    const informed = importGroupingKey(row.input.numero);
+    if (result.via === 'animal_id' && informed && informed !== importGroupingKey(animal.numero_animal)) {
       row.errors.push(`animal_id aponta para ${row.identity.label}, mas a linha informa a identificação ${row.input.numero}.`);
     }
     return;
   }
-  const numeroKey = normalizeIdentifierValue(row.input.numero);
+  // E1G: animal novo agrupa pela chave numérica ("007" e "7" = o mesmo animal).
+  const numeroKey = importGroupingKey(row.input.numero);
   const brandKey = row.marca?.row ? `id:${row.marca.row.id}` : row.marca?.unknownText ? `nome:${normalizeName(row.marca.unknownText)}` : 'sem-marca';
   row.identity = { key: `novo:${brandKey}|${numeroKey}`, animalId: null, isNew: false, label: labelOf(row.input.numero, marcaNome), via: result.via };
   if (result.status === IDENTITY_STATUS.INVALID || result.status === IDENTITY_STATUS.INELIGIBLE) {
@@ -328,6 +339,59 @@ function matchAgainstSeries(rows, series, type, rules) {
   }
 }
 
+// E1G: Histórico de animal existente com pesagem ANTERIOR ao Cadastro gravado (o Cadastro
+// foi lançado depois, com a data do dia, e o histórico antigo chegou por planilha). A linha
+// mais antiga passa a ser o Cadastro e o Cadastro gravado vira Manejo — o importWriter troca
+// os dois na MESMA transação e recalcula a série. Só quando a nova data é anterior a TODOS os
+// eventos gravados do animal; senão continua CONFLITO. Outros tipos continuam como antes.
+function planRegistrationPromotion(group, pending, registration) {
+  const before = pending.filter((row) => row.input.data < registration.data_pesagem);
+  if (!before.length) return null;
+  const first = before[0]; // pending já vem por data e linha
+  const firstStoredDate = group.series[0]?.data_pesagem ?? registration.data_pesagem;
+  if (!(first.input.data < firstStoredDate)) return null;
+  // Conflito do próprio arquivo na data mais antiga (ou antes dela): o Cadastro fica indefinido.
+  const blocked = group.rows.some((row) => row.status === ROW_STATUS.CONFLITO && row.input.data <= first.input.data);
+  if (blocked) {
+    for (const row of before) setStatus(row, ROW_STATUS.ERRO, 'O evento mais antigo deste animal está em conflito; resolva-o para definir o Cadastro.');
+    return null;
+  }
+  return { row: first, registration };
+}
+
+function applyRegistrationPromotion(group, promotion) {
+  const { row: first, registration } = promotion;
+  const text = `O Cadastro de ${fmtDate(registration.data_pesagem)} do animal ${group.animal.numero_animal ?? '?'} passa a Manejo; o novo Cadastro é ${fmtDate(first.input.data)}.`;
+  // O que foi mudado fica anotado para desfazer se a linha do novo Cadastro não for gravada.
+  const touched = [{ row: first, eventType: first.eventType, message: text }];
+  first.eventType = EVENT_TYPES.CADASTRO;
+  first.messages.push(text);
+  for (const row of group.rows) {
+    if (row.input.data !== registration.data_pesagem || row.eventType !== EVENT_TYPES.CADASTRO) continue;
+    const message = row.matchedEvent === registration ? `${text.replace(/\.$/, '')} (linha ${first.line}).` : null;
+    touched.push({ row, eventType: row.eventType, message });
+    row.eventType = EVENT_TYPES.MANEJO;
+    if (message) row.messages.push(message);
+  }
+  group.promotion = { ...promotion, touched };
+}
+
+// Cadastro antecipado cuja linha não será gravada: as linhas anteriores ao Cadastro gravado
+// ficariam antes de qualquer Cadastro — viram ERRO e a troca é desfeita.
+function settleRegistrationPromotion(group) {
+  const { promotion } = group;
+  if (!promotion || promotion.row.status === ROW_STATUS.NOVO) return;
+  for (const { row, eventType, message } of promotion.touched) {
+    row.eventType = eventType;
+    if (message && row.messages.includes(message)) row.messages.splice(row.messages.indexOf(message), 1);
+  }
+  for (const row of group.rows) {
+    if (row.status !== ROW_STATUS.NOVO || row.input.data >= promotion.registration.data_pesagem) continue;
+    setStatus(row, ROW_STATUS.ERRO, `Depende do Cadastro da linha ${promotion.row.line}, que não será gravado.`);
+  }
+  group.promotion = null;
+}
+
 function classifyGroup(group, type, context) {
   const { rules } = context;
   const series = group.series;
@@ -346,12 +410,15 @@ function classifyGroup(group, type, context) {
 
   if (type === IMPORT_TYPES.HISTORICO) {
     if (group.animal) {
+      const promotion = registration ? planRegistrationPromotion(group, pending, registration) : null;
       for (const row of pending) {
         row.eventType = EVENT_TYPES.MANEJO;
+        if (row.status) continue; // ERRO do Cadastro antecipado impossível (conflito na data mais antiga)
         if (!registration) setStatus(row, ROW_STATUS.CONFLITO, 'O animal já existe sem Cadastro: importe o Cadastro pelo tipo Cadastros ou corrija o animal antes do histórico.');
-        else if (beforeRegistration(row)) setStatus(row, ROW_STATUS.CONFLITO, `A data ${row.input.data} é anterior ao Cadastro do animal (${registration.data_pesagem}).`);
+        else if (beforeRegistration(row) && !promotion) setStatus(row, ROW_STATUS.CONFLITO, `A data ${row.input.data} é anterior ao Cadastro do animal (${registration.data_pesagem}).`);
         else if (exit && row.input.data >= exit.data_pesagem) setStatus(row, ROW_STATUS.CONFLITO, `O animal já possui ${exitText}; o evento de ${row.input.data} não pode entrar.`);
       }
+      if (promotion) applyRegistrationPromotion(group, promotion);
     } else {
       const blockedEarliest = rows.some((row) => row.status === ROW_STATUS.CONFLITO && pending.length && row.input.data <= pending[0].input.data);
       pending.forEach((row, index) => {
@@ -557,8 +624,10 @@ function recalculateGroup(group, context) {
   const matchedRows = group.rows.filter((row) => row.status === ROW_STATUS.JA_EXISTE && row.matchedEvent);
   if (!newRows.length && !matchedRows.length) return;
   const syntheticKey = `import:${group.key}`;
+  // E1G: Cadastro antecipado — o Cadastro gravado entra na série como Manejo (ganha derivados).
+  const demotedId = group.promotion ? String(group.promotion.registration.id) : null;
   const merged = [
-    ...group.series.map((event) => ({ ...event, animal_id: syntheticKey })),
+    ...group.series.map((event) => ({ ...event, animal_id: syntheticKey, ...(String(event.id) === demotedId ? { tipo_manejo: EVENT_TYPES.MANEJO } : {}) })),
     ...newRows.map((row) => ({
       id: `linha:${row.line}`,
       animal_id: syntheticKey,
@@ -615,6 +684,14 @@ export function buildImportPlan(prepared, context) {
     groups.set(row.groupKey, group);
   }
 
+  // E1G: animal novo com o número escrito de jeitos diferentes no arquivo ("007" e "7").
+  for (const group of groups.values()) {
+    if (!group.isNew) continue;
+    const numbers = [...new Set(group.rows.map((row) => normalizeIdentifierValue(row.input.numero)))];
+    if (numbers.length < 2) continue;
+    for (const row of group.rows) row.messages.push(`Os números ${numbers.join(', ')} foram tratados como o mesmo animal (zeros à esquerda ou ",0" do Excel).`);
+  }
+
   for (const group of groups.values()) {
     classifyGroup(group, type, work);
     for (const row of group.rows.filter((item) => item.status === ROW_STATUS.NOVO)) validateNewRow(row, group, type, work);
@@ -626,6 +703,7 @@ export function buildImportPlan(prepared, context) {
         }
       }
     }
+    settleRegistrationPromotion(group);
     recalculateGroup(group, work);
     for (const row of group.rows) {
       compareSheetDerived(row);
@@ -681,10 +759,32 @@ export function buildImportPlan(prepared, context) {
         categoria_automatica: registration.payload.categoria_automatica,
         era: registration.payload.era,
       } : null,
+      // E1G: Cadastro antecipado — o writer troca o Cadastro gravado (demotedEventId) por Manejo
+      // na mesma transação em que grava o novo Cadastro (linha `line`).
+      promoteRegistration: group.promotion ? {
+        numero: group.animal.numero_animal ?? null,
+        line: group.promotion.row.line,
+        data: group.promotion.row.input.data,
+        demotedEventId: String(group.promotion.registration.id),
+        demotedData: group.promotion.registration.data_pesagem,
+      } : null,
     };
   });
 
   return summarizePlan({ type, rules, fileErrors, planRows, animals, work });
+}
+
+const SIMILAR_NUMBER_EXAMPLES = 10;
+
+/** E1G: linhas que casaram com animal existente só pelo número parecido ("01016 → 1016"). */
+export function similarNumbersOf(planRows) {
+  const rows = planRows.filter((row) => row.status !== ROW_STATUS.IGNORADA && row.identity?.similarNumber);
+  const exemplos = [...new Set(rows.map((row) => `${row.identity.similarNumber.informado} → ${row.identity.similarNumber.cadastrado}`))];
+  return {
+    linhas: rows.length,
+    exemplos: exemplos.slice(0, SIMILAR_NUMBER_EXAMPLES),
+    outrosExemplos: Math.max(0, exemplos.length - SIMILAR_NUMBER_EXAMPLES),
+  };
 }
 
 export function summarizePlan({ type, rules, fileErrors, planRows, animals, work }) {
@@ -710,6 +810,16 @@ export function summarizePlan({ type, rules, fileErrors, planRows, animals, work
     seriesAfetadas: work.counters.seriesAfetadas,
     eventosRecalculados: work.counters.eventosRecalculados,
     cadastrosMestresNovos: planRows.filter((row) => row.status === ROW_STATUS.NOVO && row.master).length,
+    numerosParecidos: similarNumbersOf(planRows),
+    // E1G: animais cujo Cadastro gravado passa a Manejo porque o histórico começa antes dele.
+    cadastrosAntecipados: animals.filter((animal) => animal.promoteRegistration).map((animal) => ({
+      animalId: animal.animalId,
+      animal: animal.label,
+      numero: animal.promoteRegistration.numero,
+      cadastroGravado: animal.promoteRegistration.demotedData,
+      novoCadastro: animal.promoteRegistration.data,
+      linha: animal.promoteRegistration.line,
+    })),
   };
   const blocking = fileErrors.length > 0 || planRows.some((row) => BLOCKING_STATUSES.includes(row.status));
   return { type, rules, fileErrors, summary, rows: planRows, blocking, animals };

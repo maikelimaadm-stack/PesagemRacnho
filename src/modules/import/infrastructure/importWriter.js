@@ -6,6 +6,9 @@
 // fora dos animais do lote. Os helpers de gravação são os do Lançamento
 // (weighingDataAdapter): newAnimal, newVisualIdentifier, newSession, stampAutomaticCategory,
 // rebuildAnimalStateProjection, rebuildAnimalLotProjection e auditRow.
+// E1G: Cadastro antecipado pelo Histórico — no mesmo lote (mesma transação) o Cadastro gravado
+// vira Manejo (auditado como ATUALIZAR, com derivados), o movimento "Entrada" dele é cancelado,
+// o identificador visual passa a valer desde o novo Cadastro e a série é recalculada.
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
 import { isOpenSessionStatus } from '../../../storage/indexedDb/normalize.js';
 import { filterLegacyPayload, storageRecordToViewModel, uiToStorageRecord } from '../../weighing/domain/weighingMapper.js';
@@ -28,6 +31,7 @@ export const IMPORT_WRITE_STORES = Object.freeze([
 ]);
 
 const DERIVED_FIELDS = ['data_anterior', 'peso_anterior', 'dias', 'ganho', 'gmd'];
+const brDate = (iso) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : String(iso ?? ''));
 
 export class ImportWriteError extends Error {
   constructor(code, message) {
@@ -145,6 +149,20 @@ function buildMovements(mergedViewModels, newIds, animalId, ts) {
   }));
 }
 
+// E1G: confere, dentro da transação, que o Cadastro a antecipar é o mesmo da análise (id, tipo e
+// data) e que o novo Cadastro continua anterior a todos os eventos gravados; senão, plano velho.
+function registrationToDemote(group, rows, storedRows, storedViewModels) {
+  const promote = group.promoteRegistration;
+  const stale = () => new ImportWriteError('IMPORT_STALE_PLAN', `O Cadastro do animal ${group.label} mudou depois da análise; refaça a análise.`);
+  const record = storedRows.find((row) => String(row.id) === promote.demotedEventId);
+  const view = storedViewModels.find((event) => String(event.id) === promote.demotedEventId);
+  const newRegistration = rows.find((row) => row.line === promote.line);
+  if (!record || !view || view.tipo_manejo !== EVENT_TYPES.CADASTRO || view.data_pesagem !== promote.demotedData) throw stale();
+  if (!newRegistration || newRegistration.payload.tipo_manejo !== EVENT_TYPES.CADASTRO || newRegistration.payload.data_pesagem !== promote.data) throw stale();
+  if (storedViewModels.some((event) => event.data_pesagem <= promote.data)) throw stale();
+  return { record, view };
+}
+
 /**
  * writeImportBatch(db, { groups, rowsByLine, job, empresaId, operador, propriedadeId, clock }) → contagens do lote.
  * `clock()` devolve um instante ISO crescente: define `created_at` dos eventos na ordem das
@@ -189,12 +207,14 @@ export async function writeImportBatch(db, { groups, rowsByLine, job, empresaId,
     const audits = [];
     const derivedUpdates = [];
     const projectionTargets = [];
+    const demotions = [];
 
     for (const group of groups) {
       const rows = group.novos.map((line) => rowsByLine.get(line)).filter(Boolean).sort((left, right) => left.line - right.line);
       if (!rows.length) continue;
       let animal;
       let storedViewModels = [];
+      let demotion = null;
       if (group.isNew) {
         if (!group.create) throw new ImportWriteError('IMPORT_STALE_PLAN', `Animal ${group.label} sem Cadastro no plano.`);
         const animalId = crypto.randomUUID();
@@ -224,13 +244,21 @@ export async function writeImportBatch(db, { groups, rowsByLine, job, empresaId,
       } else {
         animal = (await db.table('animais').where('id').equals(group.animalId).toArray()).find((row) => !row.deleted_at);
         if (!animal) throw new ImportWriteError('IMPORT_STALE_PLAN', `Animal ${group.label} não existe mais; refaça a análise.`);
-        storedViewModels = (await weighings.where('animal_id').equals(animal.id).toArray())
-          .filter((row) => !row.deleted_at)
-          .map(storageRecordToViewModel);
+        const storedRows = (await weighings.where('animal_id').equals(animal.id).toArray()).filter((row) => !row.deleted_at);
+        storedViewModels = storedRows.map(storageRecordToViewModel);
         const classOf = (tipo) => (tipo === EVENT_TYPES.SAIDA ? 'S' : 'P');
         const clash = rows.find((row) => storedViewModels.some((event) => event.data_pesagem === row.payload.data_pesagem && classOf(event.tipo_manejo) === classOf(row.payload.tipo_manejo)));
         if (clash) {
           throw new ImportWriteError('IMPORT_STALE_PLAN', `O animal ${group.label} recebeu lançamento em ${clash.payload.data_pesagem} depois da análise; refaça a análise.`);
+        }
+        // Sem antecipação no plano, um Cadastro novo em animal existente é plano velho.
+        if (!group.promoteRegistration && rows.some((row) => row.payload.tipo_manejo === EVENT_TYPES.CADASTRO)) {
+          throw new ImportWriteError('IMPORT_STALE_PLAN', `O animal ${group.label} já tem Cadastro; refaça a análise.`);
+        }
+        if (group.promoteRegistration) {
+          demotion = { ...registrationToDemote(group, rows, storedRows, storedViewModels), animalId: animal.id, group };
+          // A série é recalculada com o Cadastro gravado já como Manejo.
+          storedViewModels = storedViewModels.map((event) => (event === demotion.view ? { ...event, tipo_manejo: EVENT_TYPES.MANEJO } : event));
         }
         counters.animais_conciliados += 1;
       }
@@ -269,15 +297,49 @@ export async function writeImportBatch(db, { groups, rowsByLine, job, empresaId,
           continue;
         }
         const stored = merged.find((event) => String(event.id) === String(update.id));
-        if (DERIVED_FIELDS.some((field) => (update.patch[field] ?? null) !== (stored?.[field] ?? null))) derivedUpdates.push(update);
+        const derivedChanged = DERIVED_FIELDS.some((field) => (update.patch[field] ?? null) !== (stored?.[field] ?? null));
+        if (demotion && String(update.id) === String(demotion.record.id)) {
+          demotion.patch = update.patch;
+          demotion.derivedChanged = derivedChanged;
+          continue;
+        }
+        if (derivedChanged) derivedUpdates.push(update);
       }
-      movements.push(...buildMovements(merged, newIds, animal.id, ts));
+      if (demotion) {
+        // E1G: o Cadastro gravado vira Manejo com os derivados, auditado como alteração da importação.
+        const { record, view, patch } = demotion;
+        const changes = {
+          ...patch,
+          tipo_pesagem: EVENT_TYPES.MANEJO,
+          // Mesmo caminho dos derivados (view model + patch, filtrado pela lista permitida).
+          legacy_payload: filterLegacyPayload({ ...view, ...patch, tipo_manejo: EVENT_TYPES.MANEJO }),
+          updated_by_user_id: userId,
+          updated_at: ts,
+        };
+        demotion.changes = changes;
+        demotions.push(demotion);
+        audits.push(auditRow({
+          entidade: 'pesagens',
+          entidade_id: record.id,
+          acao: 'ATUALIZAR',
+          antes: record,
+          depois: { ...record, ...changes },
+          origem: 'importacao',
+          operador,
+          importacao_id: job.id,
+          motivo: `Cadastro antecipado pela importação do histórico: o Cadastro de ${brDate(group.promoteRegistration.demotedData)} passa a Manejo; o novo Cadastro é ${brDate(group.promoteRegistration.data)}.`,
+          created_at: ts,
+        }));
+      }
+      // O Cadastro rebaixado conta como evento "novo" para movimento (Mudança de lote se o lote mudou).
+      const movementIds = demotion ? new Set([...newIds, String(demotion.record.id)]) : newIds;
+      movements.push(...buildMovements(merged, movementIds, animal.id, ts));
       for (const entry of groupEntries) {
         audits.push(auditRow({ entidade: 'pesagens', entidade_id: entry.id, acao: 'CRIAR', depois: entry, origem: 'importacao', operador, importacao_id: job.id, created_at: ts }));
       }
       entries.push(...groupEntries);
       counters.series_recalculadas += 1;
-      projectionTargets.push({ animalId: animal.id, rebuildLots: groupEntries.some((entry) => entry.lote_id || entry.legacy_payload.tipo_manejo === EVENT_TYPES.SAIDA) });
+      projectionTargets.push({ animalId: animal.id, rebuildLots: Boolean(demotion) || groupEntries.some((entry) => entry.lote_id || entry.legacy_payload.tipo_manejo === EVENT_TYPES.SAIDA) });
     }
 
     if (newAnimals.length) await db.table('animais').bulkAdd(newAnimals);
@@ -296,7 +358,18 @@ export async function writeImportBatch(db, { groups, rowsByLine, job, empresaId,
         updated_at: ts,
       });
     }
-    counters.eventos_recalculados = derivedUpdates.length;
+    // E1G: Cadastro antecipado — troca do tipo, "Entrada" antiga cancelada e identificador visual
+    // valendo desde o novo Cadastro (a Entrada nova já foi gravada com os movimentos do lote).
+    for (const { record, changes, animalId, group } of demotions) {
+      await weighings.update(record.localId, changes);
+      const oldEntries = (await db.table('movimentosAnimais').where('animal_id').equals(animalId).toArray())
+        .filter((row) => !row.deleted_at && String(row.pesagem_id) === String(record.id) && row.tipo === 'Entrada');
+      for (const row of oldEntries) await db.table('movimentosAnimais').update(row.localId, { deleted_at: ts, updated_at: ts });
+      const identifiers = (await db.table('animalIdentificadores').where('animal_id').equals(animalId).toArray())
+        .filter((row) => !row.deleted_at && row.ativo !== false && row.inicio === group.promoteRegistration.demotedData);
+      for (const row of identifiers) await db.table('animalIdentificadores').update(row.localId, { inicio: group.promoteRegistration.data, updated_at: ts });
+    }
+    counters.eventos_recalculados = derivedUpdates.length + demotions.filter((item) => item.derivedChanged).length;
     for (const target of projectionTargets) {
       if (target.rebuildLots) await rebuildAnimalLotProjection(db, target.animalId, ts);
       await rebuildAnimalStateProjection(db, target.animalId, ts);

@@ -30,6 +30,12 @@ export default function ConfirmarImportacaoDialog({ open, onOpenChange, plan, pr
             <li><strong>{fmtInt(summary?.animaisNovos)}</strong> animal(is) novo(s) serão criados</li>
             <li><strong>{fmtInt(summary?.cadastros)}</strong> cadastro(s), <strong>{fmtInt(summary?.manejos)}</strong> manejo(s) e <strong>{fmtInt(summary?.saidas)}</strong> saída(s)</li>
             <li><strong>{fmtInt((summary?.jaExistem || 0) + (summary?.duplicidades || 0))}</strong> linha(s) já existentes serão ignoradas</li>
+            {/* E1G (revisão): a troca do Cadastro gravado também é lembrada na confirmação. */}
+            {summary?.cadastrosAntecipados?.length ? (
+              <li data-testid="importacao-confirmar-antecipados">
+                <strong>{fmtInt(summary.cadastrosAntecipados.length)}</strong> Cadastro(s) já gravado(s) passam a Manejo, porque o histórico do animal começa antes deles
+              </li>
+            ) : null}
             {plan?.rules?.createMissingMasters && summary?.cadastrosMestresAusentes?.length ? (
               <li><strong>{fmtInt(summary.cadastrosMestresAusentes.length)}</strong> cadastro(s) mestre(s) serão criados antes das pesagens</li>
             ) : null}

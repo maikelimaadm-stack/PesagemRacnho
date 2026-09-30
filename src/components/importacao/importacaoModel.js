@@ -13,6 +13,7 @@ import {
   IMPORT_TYPE_LABELS,
   ROW_STATUS,
 } from '../../modules/import/domain/importConstants.js';
+import { importGroupingKey } from '../../modules/import/domain/animalIdentity.js';
 
 export { CATEGORY_MODES, DATE_FORMATS, DECIMAL_FORMATS, EXIT_REASONS, IMPORT_TYPES, IMPORT_TYPE_LABELS, ROW_STATUS };
 
@@ -39,8 +40,9 @@ export const CONCILIACAO_OPCOES = Object.freeze([
   Object.freeze({
     id: 'SIM',
     titulo: 'Sim — conciliar automaticamente (recomendado)',
-    texto: 'O sistema ordena as linhas por data: a pesagem mais antiga de cada animal novo vira Cadastro e as seguintes viram Manejo. Se o animal já existe no sistema, todas entram como Manejo.',
-    detalhe: 'A ordem das linhas no arquivo não importa — vale a data. Peso anterior, dias, ganho e GMD são sempre recalculados pelo sistema, mesmo que venham na planilha.',
+    // E1G: pesagem anterior ao Cadastro de um animal já cadastrado antecipa o Cadastro.
+    texto: 'O sistema ordena as linhas por data: a pesagem mais antiga de cada animal novo vira Cadastro e as seguintes viram Manejo. Se o animal já existe no sistema, todas entram como Manejo — a não ser que o arquivo traga pesagem mais antiga que o Cadastro dele: aí a mais antiga passa a ser o Cadastro e o Cadastro antigo vira Manejo.',
+    detalhe: 'A ordem das linhas no arquivo não importa — vale a data. O número do brinco escrito com zeros à esquerda ou com o ",0" do Excel (01016, 1016,0) é reconhecido como o mesmo animal. Peso anterior, dias, ganho e GMD são sempre recalculados pelo sistema, mesmo que venham na planilha.',
     tipo: IMPORT_TYPES.HISTORICO,
   }),
   Object.freeze({
@@ -160,7 +162,8 @@ export function afericaoDoArquivo(file, mapping) {
   const headerMarca = headerOfField(mapping, 'marca');
   const contagem = new Map();
   for (const row of file.rows) {
-    const numero = String(row.values?.[headerNumero] ?? '').trim().toUpperCase();
+    // E1G: mesma chave da importação — "007" e "7" contam como um animal só.
+    const numero = importGroupingKey(row.values?.[headerNumero]);
     if (!numero) continue;
     const marca = headerMarca ? String(row.values?.[headerMarca] ?? '').trim().toUpperCase() : '';
     const chave = `${numero}|${marca}`;
@@ -192,6 +195,49 @@ export function animaisComVariasLinhas(plan, { limite = 12 } = {}) {
   for (const grupo of repetidos) grupo.linhas.sort((a, b) => a.line - b.line);
   repetidos.sort((a, b) => b.linhas.length - a.linhas.length || String(a.label).localeCompare(String(b.label), 'pt-BR'));
   return { total: repetidos.length, grupos: repetidos.slice(0, limite) };
+}
+
+/**
+ * E1G: aviso das linhas que casaram com animais já cadastrados por número parecido
+ * ("12 linhas casaram com animais existentes por número parecido: 01016 → 1016").
+ * Só lê o resumo do plano; null quando não houve nenhuma.
+ */
+export function avisoNumerosParecidos(summary) {
+  const info = summary?.numerosParecidos;
+  if (!info?.linhas) return null;
+  const inicio = info.linhas === 1
+    ? '1 linha casou com um animal existente por número parecido'
+    : `${info.linhas} linhas casaram com animais existentes por número parecido`;
+  const outros = info.outrosExemplos ? ` e mais ${info.outrosExemplos}` : '';
+  return `${inicio}: ${info.exemplos.join(', ')}${outros}.`;
+}
+
+/**
+ * E1G (revisão): explicação que acompanha o aviso do número parecido. A importação de sanidade
+ * também casa por número parecido e lá entram aplicações, não pesagens.
+ */
+export function explicacaoNumerosParecidos(type) {
+  const oQueEntra = type === IMPORT_TYPES.SANIDADE ? 'As aplicações entram' : 'As pesagens entram';
+  return `É o mesmo número escrito de outro jeito (zeros à esquerda ou o “,0” que o Excel acrescenta). ${oQueEntra} no animal já cadastrado e o número dele não muda.`;
+}
+
+// Data ISO do plano → dd/mm/aaaa (sem os formatadores da tela, para o gate rodar em Node).
+const dataBR = (iso) => (iso && /^\d{4}-\d{2}-\d{2}/.test(iso) ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}` : '—');
+
+/**
+ * E1G: uma frase por animal cujo Cadastro gravado passa a Manejo porque o histórico começa
+ * antes dele ("O Cadastro de 29/09/2026 do animal 701 passa a Manejo; o novo Cadastro é 02/06/2026.").
+ */
+export function avisosCadastrosAntecipados(summary) {
+  const itens = summary?.cadastrosAntecipados || [];
+  // E1G (revisão): o mesmo número em marcas diferentes mostra a marca ("701 / ABC"), senão as
+  // frases saem iguais e não dá para saber de qual animal se trata.
+  const vezes = new Map();
+  for (const item of itens) vezes.set(item.numero, (vezes.get(item.numero) || 0) + 1);
+  return itens.map((item) => {
+    const animal = item.numero == null || vezes.get(item.numero) > 1 ? item.animal : item.numero;
+    return `O Cadastro de ${dataBR(item.cadastroGravado)} do animal ${animal} passa a Manejo; o novo Cadastro é ${dataBR(item.novoCadastro)}.`;
+  });
 }
 
 /** Campos obrigatórios do tipo que ainda não têm coluna ligada (mesma regra do motor). */
