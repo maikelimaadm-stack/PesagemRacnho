@@ -15,7 +15,7 @@
 //                  relatório antigo para converter modelo salvo nele com agrupamento próprio (Personalizado).
 import { REPORT_MODES } from '../domain/reportDefinition.js';
 import { viewSelection } from '../domain/reportViews.js';
-import { ATIVOS, CURRENT_TOTALS, INVENTORY_COLUMNS } from './rebanho.js';
+import { ATIVOS, CURRENT_TOTALS, REBANHO_ANALITICO_COLUMNS, REBANHO_ANALITICO_TOTALS } from './rebanho.js';
 import { EVENT_TOTALS, PERIOD_EVENT_COLUMNS } from './pesagens.js';
 import { PERFORMANCE_COLUMNS, PERFORMANCE_TOTALS } from './desempenho.js';
 import { LOT_STAY_TOTALS, OPERATIONAL_EVENT_TOTALS } from './operacional.js';
@@ -74,8 +74,9 @@ const PERFORMANCE_DIMENSIONS = [
 
 const entries = [
   // ---- Rebanho → rebanho.atual ----
+  // E1G (A4): o inventário abre no Analítico do Rebanho atual, que ganhou o Último GMD e o GMD desde a entrada.
   ['rebanho.inventario', alias('rebanho.atual', 'Inventário atual do rebanho', {
-    columns: INVENTORY_COLUMNS, filters: ATIVOS, sort: ANIMAL_ASC, aggregates: CURRENT_TOTALS, mode: DETALHADO,
+    columns: REBANHO_ANALITICO_COLUMNS, filters: ATIVOS, sort: ANIMAL_ASC, aggregates: REBANHO_ANALITICO_TOTALS, mode: DETALHADO,
   })],
   ...HERD_DIMENSIONS.map(([key, columnId, title]) => [`rebanho.dimensao.${key}`, alias('rebanho.atual', title, {
     columns: ['animal', 'marca', 'sexo', 'raca', 'categoria', 'lote_atual', 'ultimo_peso_kg'].filter((id) => id !== columnId),

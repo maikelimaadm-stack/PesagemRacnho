@@ -47,8 +47,40 @@ function bandFor(weight, sexo, bands) {
   return weightBand(weight, applicable);
 }
 
-/** Estado atual (projeção `animais`) → linha ANIMAL_CURRENT. */
-export function toAnimalCurrentRows(animals, lookups, { today, bands = [] } = {}) {
+/**
+ * E1G (A4): ganho desde a entrada e último GMD de um animal do rebanho atual.
+ * @param animal linha da projeção `animais` (peso atual = ultimo_peso_kg na ultima_pesagem_data)
+ * @param {{ entrada?: { data: string, peso: number }|null, ultima?: { gmd, ganho, dias }|null }} weighings
+ *   entrada = o Cadastro com peso; ultima = derivados gravados na última pesagem com peso (animalSource)
+ */
+export function currentGainOf(animal, weighings = null) {
+  const entrada = weighings?.entrada ?? null;
+  const ultima = weighings?.ultima ?? null;
+  const lastDate = animal?.ultima_pesagem_data ? String(animal.ultima_pesagem_data).slice(0, 10) : null;
+  const lastWeight = toFiniteNumber(animal?.ultimo_peso_kg);
+  const entryWeight = toFiniteNumber(entrada?.peso);
+  const entryDate = entrada?.data ? String(entrada.data).slice(0, 10) : null;
+  // Desde a entrada só com peso atual numa data DEPOIS da entrada (animal pesado uma vez só: "-").
+  const hasPair = entryDate && entryWeight !== null && entryWeight > 0 && lastDate && lastWeight !== null && lastDate > entryDate;
+  const dias = hasPair ? daysBetween(entryDate, lastDate) : null;
+  const ganho = hasPair ? lastWeight - entryWeight : null;
+  const ultimoGmd = toFiniteNumber(ultima?.gmd);
+  const ultimoDias = toFiniteNumber(ultima?.dias);
+  return {
+    peso_entrada: entryWeight !== null && entryWeight > 0 ? entryWeight : null,
+    data_entrada: entryDate,
+    dias_entrada: dias,
+    ganho_entrada: ganho,
+    gmd_entrada: hasPair && dias > 0 ? ganho / dias : null,
+    ultimo_gmd: ultimoGmd,
+    // Base do "GMD médio" ponderado do último GMD (Σ ganho ÷ Σ dias das últimas pesagens).
+    ultimo_ganho: ultimoGmd !== null ? toFiniteNumber(ultima?.ganho) : null,
+    ultimo_dias: ultimoGmd !== null && ultimoDias !== null && ultimoDias > 0 ? ultimoDias : null,
+  };
+}
+
+/** Estado atual (projeção `animais`) → linha ANIMAL_CURRENT. `weighings` (E1G): Map id → { entrada, ultima }. */
+export function toAnimalCurrentRows(animals, lookups, { today, bands = [], weighings = null } = {}) {
   return animals.filter((row) => !row.deleted_at).map((animal) => {
     const loteId = animal.lote_atual_id ?? null;
     const apartacaoId = animal.apartacao_atual_id ?? (loteId ? lookups.loteApartacao.get(loteId) ?? null : null);
@@ -79,6 +111,7 @@ export function toAnimalCurrentRows(animals, lookups, { today, bands = [] } = {}
       data_saida: animal.data_saida ?? null,
       motivo_saida: animal.motivo_saida ?? null,
       data_cadastro: animal.created_at ? String(animal.created_at).slice(0, 10) : null,
+      ...currentGainOf(animal, weighings?.get(animal.id) ?? null),
     };
   });
 }
@@ -92,11 +125,26 @@ export function animalKeyOf(event) {
   return event.animal_key || event.animal_id || `legado:${normalizeText(event.numero_animal)}::${normalizeText(event.marca)}`;
 }
 
+// E1G (A2): base do período = a pesagem anterior GRAVADA na primeira pesagem com peso do período (Manejo ou Saída
+// com data/peso anterior — a última pesagem com peso ANTES do período). Sem ela (a primeira é o Cadastro, ou dado
+// sem anterior), a base é a própria primeira pesagem do período, como antes.
+function periodBaseOf(first) {
+  if (!first) return null;
+  const dataAnterior = first.data_anterior ? String(first.data_anterior).slice(0, 10) : null;
+  const pesoAnterior = toFiniteNumber(first.peso_anterior);
+  if (dataAnterior && pesoAnterior !== null && pesoAnterior > 0 && dataAnterior < String(first.data_pesagem || '').slice(0, 10)) {
+    return { data: dataAnterior, peso: pesoAnterior, anterior: true };
+  }
+  return { data: first.data_pesagem ?? null, peso: toFiniteNumber(first.peso), anterior: false };
+}
+
 /**
  * Eventos do período (event rows) → uma linha por animal (ANIMAL_PERIOD).
- * Peso inicial/final = primeiro/último evento COM peso no período; ganho e dias só com ≥ 2
- * pesagens com peso; GMD = ganho ÷ dias (dias > 0). Dimensões atuais vêm da projeção do animal
- * quando existe; senão, do último evento.
+ * Peso inicial = última pesagem com peso ANTES do período (data/peso anterior gravados na primeira pesagem do
+ * período), quando existe; senão, a primeira pesagem com peso do período. Peso final = última pesagem com peso do
+ * período. Ganho e dias só com base e final em datas diferentes; GMD = ganho ÷ dias (dias > 0). Pela soma dos
+ * ganhos/dias gravados, o GMD do animal (e o ponderado do grupo) é o mesmo do relatório Pesagens no período.
+ * Dimensões atuais vêm da projeção do animal quando existe; senão, do último evento.
  */
 export function toAnimalPeriodRows(events, animalsById, lookups, { bands = [] } = {}) {
   const byAnimal = new Map();
@@ -113,9 +161,10 @@ export function toAnimalPeriodRows(events, animalsById, lookups, { bands = [] } 
     const first = weighed[0] ?? null;
     const last = weighed.at(-1) ?? null;
     const latest = list.at(-1);
-    const hasPair = weighed.length >= 2;
-    const dias = hasPair ? daysBetween(first.data_pesagem, last.data_pesagem) : null;
-    const ganho = hasPair ? toFiniteNumber(last.peso) - toFiniteNumber(first.peso) : null;
+    const base = periodBaseOf(first);
+    const hasPair = Boolean(base && last) && (base.anterior || weighed.length >= 2);
+    const dias = hasPair ? daysBetween(base.data, last.data_pesagem) : null;
+    const ganho = hasPair ? toFiniteNumber(last.peso) - base.peso : null;
     const animalId = list.map((event) => event.animal_id || event.animal_id_resolvido).find(Boolean) || null;
     const animal = animalId ? animalsById.get(animalId) : null;
     const loteId = latest.lote_id ?? null;
@@ -140,8 +189,10 @@ export function toAnimalPeriodRows(events, animalsById, lookups, { bands = [] } 
       apartacao_nome: apartacaoId ? lookups.apartacoes.get(apartacaoId) ?? latest.nome_apartacao ?? null : latest.nome_apartacao ?? null,
       pesagens: list.length,
       pesagens_com_peso: weighed.length,
-      data_inicial: first?.data_pesagem ?? null,
-      peso_inicial: first ? toFiniteNumber(first.peso) : null,
+      data_inicial: base?.data ?? null,
+      peso_inicial: base?.peso ?? null,
+      // E1G: o peso inicial veio da pesagem anterior ao período (não é pesagem do período).
+      inicio_antes_do_periodo: Boolean(base?.anterior),
       data_final: last?.data_pesagem ?? null,
       peso_final: last ? toFiniteNumber(last.peso) : null,
       dias,

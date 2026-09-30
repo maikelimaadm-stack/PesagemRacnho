@@ -24,6 +24,15 @@ export function measuredWeightOf(entry) {
 }
 const eventOrder = compareWeighingEvents;
 
+// E1G (1.4.2): tipos que recebem data/peso anterior, dias, ganho e GMD contra a pesagem anterior com peso
+// (calculateWeightGain). O Manejo sempre recebeu; a Saída com peso (venda, abate) passa a receber — Saída sem
+// peso continua sem (não há peso para comparar). O Cadastro é a entrada do animal: nunca tem anterior.
+export const WEIGHT_GAIN_EVENT_TYPES = Object.freeze(['Manejo', 'Saída']);
+
+export function receivesWeightGain(tipoManejo) {
+  return WEIGHT_GAIN_EVENT_TYPES.includes(tipoManejo);
+}
+
 export function recalculateWeightSeries(entries = [], affectedKeys = null) {
   const groups = new Map();
   for (const entry of entries.filter((row) => !row.deleted_at)) {
@@ -40,7 +49,7 @@ export function recalculateWeightSeries(entries = [], affectedKeys = null) {
     const history = [];
     for (const entry of group) {
       const measuredWeight = measuredWeightOf(entry);
-      const result = entry.tipo_manejo === 'Manejo'
+      const result = receivesWeightGain(entry.tipo_manejo)
         ? calculateWeightGain({ history, date: entry.data_pesagem, weight: measuredWeight })
         : { dataAnterior: null, pesoAnterior: null, dias: null, ganho: null, gmd: null };
       const patch = {

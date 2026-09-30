@@ -18,7 +18,8 @@ assert.ok(Math.abs(mediaDosGrupos - report.totals.peso_medio.value) > 1e-6, 'NEG
 assert.equal(report.totals.animais.value, 4);
 assert.equal(report.tree.reduce((acc, node) => acc + node.rowCount, 0), report.rowCount, 'grupos particionam as linhas');
 assert.equal(report.totals.registros.value, report.rowCount);
-close(report.totals.gmd_ponderado.value, (30 + 15 + 10) / (20 + 20 + 10), 'GMD ponderado geral dos eventos de manejo');
+// E1G: a saída com peso (e6, A2 260 → 280 em 21 d) entra no GMD como os manejos — o mesmo 75/71 do Desempenho.
+close(report.totals.gmd_ponderado.value, (30 + 15 + 10 + 20) / (20 + 20 + 10 + 21), 'GMD ponderado geral dos manejos e da saída com peso');
 
 // Com filtro: o total acompanha a população filtrada.
 const filtrado = await runReport('pesagens.periodo', { today: TODAY, params: period, selection: { filters: { sexo: { operator: 'in', values: ['F'] } } } }, ADMIN);

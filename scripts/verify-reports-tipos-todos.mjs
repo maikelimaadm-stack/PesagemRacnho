@@ -215,7 +215,8 @@ const byView = async (definitionId, viewId, options) => {
 // Rebanho: só ativos (A1 em Lote 01, A4 sem lote); peso atual = última pesagem.
 const rebLote = await byView('rebanho.atual', 'por-lote');
 assert.deepEqual(levelRows(rebLote).map((row) => [row.label, metric(row, 'animais'), metric(row, 'peso_total')]), [['Lote 01', 1, 345], ['Não informado', 1, 200]], 'Rebanho Por Lote: Lote 01 (A1 345 kg) e sem lote (A4 200 kg)');
-assert.deepEqual(totalsOf(rebLote), { animais: 2, peso_min: 200, peso_max: 345, peso_medio: 272.5, peso_total: 545 }, 'Rebanho Por Lote: total geral');
+// E1G (A4): GMD médio = o da última pesagem de cada animal, ponderado (A1: +15 em 20 d; A4 só o Cadastro, sem GMD).
+assert.deepEqual(totalsOf(rebLote), { animais: 2, peso_min: 200, peso_max: 345, peso_medio: 272.5, peso_total: 545, gmd_medio: 0.75 }, 'Rebanho Por Lote: total geral');
 const rebSituacao = await byView('rebanho.atual', 'por-situacao');
 assert.deepEqual(levelRows(rebSituacao).map((row) => [row.label, metric(row, 'animais')]), [['Ativo', 2], ['Morto', 1], ['Vendido', 1]], 'Rebanho Por Situação: todas as situações (sem o filtro de ativos)');
 const rebApLote = await byView('rebanho.atual', 'por-apartacao-lote');

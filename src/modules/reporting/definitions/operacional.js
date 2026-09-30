@@ -156,6 +156,9 @@ export const MORTALITY_NOTES = Object.freeze([
 ]);
 
 const SAIDAS_COLUMNS = Object.freeze(['data_pesagem', 'motivo_saida', 'numero_animal', 'marca', 'sexo', 'categoria', 'peso', 'nome_lote', 'causa_morte']);
+// E1G (A1): o Analítico das saídas mostra o GMD da saída com peso (contra a pesagem anterior) no padrão; Dias e
+// Ganho ficam em "Colunas" (todas as colunas do relatório, como nos demais tipos lista).
+const SAIDAS_ANALITICO_COLUMNS = Object.freeze(['data_pesagem', 'motivo_saida', 'numero_animal', 'marca', 'sexo', 'categoria', 'peso', 'gmd', 'nome_lote', 'causa_morte']);
 // Totais das saídas (os de "Saídas por motivo") + peso total; "Saídas" (= linhas) fica só no "Colunas Painel".
 const SAIDAS_TYPE_TOTALS = Object.freeze([
   { id: 'animais', columnId: 'numero_animal', op: 'countDistinct' }, { id: 'peso_medio', columnId: 'peso', op: 'avg' },
@@ -180,7 +183,7 @@ export const SAIDAS_VIEWS = Object.freeze([
   mortes('mortes-por-causa', 'Mortes por Causa', ['causa_morte']),
   mortes('mortes-por-lote', 'Mortes por Lote', ['nome_lote']),
   mortes('mortes-por-categoria', 'Mortes por Categoria', ['categoria']),
-  listaTipo('analitico', 'Analítico (Lista de Saídas)', { from: EVENT_COLUMNS, columns: SAIDAS_COLUMNS, aggregates: SAIDAS_LIST_TOTALS }),
+  listaTipo('analitico', 'Analítico (Lista de Saídas)', { from: EVENT_COLUMNS, columns: SAIDAS_ANALITICO_COLUMNS, aggregates: SAIDAS_LIST_TOTALS }),
   listaTipo('mortes', 'Mortes (Lista)', { from: EVENT_COLUMNS, columns: MORTES_COLUMNS, aggregates: MORTES_TOTALS, population: MORTES_POPULATION }),
 ]);
 

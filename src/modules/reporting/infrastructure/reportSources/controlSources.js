@@ -7,6 +7,9 @@ import { logicalIntegrity } from '../../../../storage/indexedDb/health/health.js
 import { daysBetween } from '../../domain/reportPeriod.js';
 import { toFiniteNumber } from '../../domain/aggregateEngine.js';
 import { dedupeById, storageRowToEventViewModel } from './eventRows.js';
+import { normalizeText } from '../../domain/filterEngine.js';
+import { storageRecordToViewModel } from '../../../weighing/domain/weighingMapper.js';
+import { compareWeighingEvents, measuredWeightOf } from '../../../weighing/domain/weighingSeries.js';
 
 const active = (rows) => rows.filter((row) => !row.deleted_at);
 const byId = (rows) => new Map(rows.map((row) => [row.id, row]));
@@ -218,6 +221,83 @@ function classifyIssue(text) {
   return { area, registro, descricao, categoria_problema: rule[1], gravidade: rule[2] };
 }
 
+// E1G (A6): número de brinco só com algarismos (e ",0"/".0" do Excel) sem os zeros à esquerda — "07", "7" e "7,0"
+// viram "7". Texto com letra não tem forma numérica (null). Só para APONTAR parecidos; nada é regravado.
+export function similarNumberKey(numero) {
+  const text = String(numero ?? '').trim();
+  const match = /^(\d+)(?:[.,]0+)?$/.exec(text);
+  if (!match) return null;
+  return match[1].replace(/^0+(?=\d)/, '');
+}
+
+const isBlankValue = (value) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
+const brDate = (value) => (value ? String(value).slice(0, 10).split('-').reverse().join('/') : '-');
+const numberOf = (animal) => String(animal.numero_animal ?? animal.identificacao_normalizada ?? '').trim();
+
+/**
+ * E1G (A6): apontamentos do GMD (só leitura): "Animal com uma pesagem só" (ativo, sem pesagem anterior: sem GMD),
+ * "Manejo sem GMD" com o motivo e "Números parecidos (zeros à esquerda)" (mesmo número e marca escritos de outro
+ * jeito: a série pode estar partida em dois animais). Função pura sobre a projeção `animais` e as pesagens (view
+ * models de Cadastro e Manejo — animal ativo não tem Saída).
+ * @returns {{ area, registro, descricao, categoria_problema, gravidade }[]}
+ */
+export function gmdDataIssues({ animais = [], pesagens = [], marcaNames = new Map() } = {}) {
+  const issues = [];
+  const push = (area, registro, descricao, categoria, gravidade) => issues.push({ area, registro, descricao, categoria_problema: categoria, gravidade });
+  const byAnimal = new Map();
+  for (const view of pesagens) {
+    if (!view?.animal_id) continue;
+    const list = byAnimal.get(view.animal_id) || [];
+    list.push(view);
+    byAnimal.set(view.animal_id, list);
+  }
+  for (const list of byAnimal.values()) list.sort(compareWeighingEvents);
+  const liveAnimals = active(animais);
+
+  for (const animal of liveAnimals) {
+    if (animal.situacao !== 'ATIVO') continue;
+    const weighed = (byAnimal.get(animal.id) || []).filter((view) => measuredWeightOf(view) !== null);
+    if (weighed.length !== 1) continue;
+    push('animais', animal.id, `animal ${numberOf(animal)} tem uma pesagem só (${brDate(weighed[0].data_pesagem)}): sem pesagem anterior, fica sem GMD`, 'Animal com uma pesagem só', 'BAIXA');
+  }
+
+  for (const view of pesagens) {
+    if (view?.tipo_manejo !== 'Manejo' || !isBlankValue(view.gmd)) continue;
+    const date = String(view.data_pesagem || '').slice(0, 10);
+    let motivo;
+    // Revisão E1G: motivos sem jargão técnico (nada de "animal_id") — o texto vai para a tela da responsável.
+    if (measuredWeightOf(view) === null) motivo = 'pesagem sem peso';
+    else if (!view.animal_id) motivo = 'registro antigo sem ligação com o cadastro do animal: o histórico dele não foi encontrado';
+    else {
+      const others = (byAnimal.get(view.animal_id) || []).filter((item) => item !== view && measuredWeightOf(item) !== null);
+      if (others.some((item) => String(item.data_pesagem || '').slice(0, 10) < date)) motivo = 'há pesagem anterior, mas o GMD não foi gravado: edite a pesagem para recalcular';
+      else if (others.some((item) => String(item.data_pesagem || '').slice(0, 10) === date)) motivo = 'mesma data da pesagem anterior: o GMD conta a partir do dia seguinte';
+      else motivo = 'sem pesagem com peso antes desta data';
+    }
+    push('pesagens', view.id, `manejo do animal ${view.numero_animal ?? ''} em ${brDate(date)} sem GMD: ${motivo}`, 'Manejo sem GMD', 'MEDIA');
+  }
+
+  const groups = new Map();
+  for (const animal of liveAnimals) {
+    const key = similarNumberKey(numberOf(animal));
+    if (key === null) continue;
+    const brand = animal.marca_id || normalizeText((animal.marca_id && marcaNames.get(animal.marca_id)) || animal.marca || '');
+    const groupKey = `${key}::${brand}`;
+    const list = groups.get(groupKey) || [];
+    list.push(animal);
+    groups.set(groupKey, list);
+  }
+  for (const list of groups.values()) {
+    if (list.length < 2 || new Set(list.map(numberOf)).size < 2) continue;
+    for (const animal of list) {
+      const others = [...new Set(list.filter((item) => item !== animal).map((item) => `"${numberOf(item)}"`))].join(', ');
+      const brand = (animal.marca_id && marcaNames.get(animal.marca_id)) || animal.marca || 'sem marca';
+      push('animais', animal.id, `animal "${numberOf(animal)}" (marca ${brand}) parecido com ${others}: mesmo número sem zeros à esquerda — pode ser o mesmo animal com a série partida`, 'Números parecidos (zeros à esquerda)', 'MEDIA');
+    }
+  }
+  return issues;
+}
+
 /** Qualidade dos dados: verificação lógica existente + checagens de dados legados para relatórios. */
 export async function loadDataIssueRows() {
   const db = await storage.ensureReady();
@@ -225,7 +305,7 @@ export async function loadDataIssueRows() {
   const result = await logicalIntegrity();
   // Mensagens sobre usuários citam o login: removido (dado pessoal fora do relatório de usuários).
   const issues = (result?.issues ?? result?.problems ?? (Array.isArray(result) ? result : [])).map((text, index) => ({ id: `integridade-${index}`, ...classifyIssue(String(text).replace(/\s*\([^)]*\)\s*$/, (match) => (/credencial/.test(text) ? '' : match))) }));
-  const [animais, pesagens] = await Promise.all([db.table('animais').toArray(), db.table('pesagens').where('tipo_pesagem').anyOf(['Cadastro', 'Manejo']).toArray()]);
+  const [animais, pesagens, marcas] = await Promise.all([db.table('animais').toArray(), db.table('pesagens').where('tipo_pesagem').anyOf(['Cadastro', 'Manejo']).toArray(), db.table('marcas').toArray()]);
   const queriedAt = now();
   let seq = 0;
   const push = (area, registro, descricao, categoria, gravidade) => issues.push({ id: `extra-${seq += 1}`, area, registro, descricao, categoria_problema: categoria, gravidade });
@@ -238,6 +318,10 @@ export async function loadDataIssueRows() {
     if (!row.animal_id) push('pesagens', row.id, 'pesagem sem animal_id (registro legado: animais únicos por número+marca)', 'Registro legado', 'MEDIA');
     if (payload.marca && !payload.marca_id) push('pesagens', row.id, `marca "${payload.marca}" gravada só como texto (anterior à 1.2.0)`, 'Cadastro não resolvido', 'BAIXA');
   }
+  // E1G (A6): apontamentos do GMD sobre as MESMAS leituras (Cadastro e Manejo; animal ativo não tem Saída).
+  const marcaNames = new Map(active(marcas).map((row) => [row.id, row.nome]));
+  const views = active(pesagens).map((row) => storageRecordToViewModel(row)).filter(Boolean);
+  for (const issue of gmdDataIssues({ animais, pesagens: views, marcaNames })) push(issue.area, issue.registro, issue.descricao, issue.categoria_problema, issue.gravidade);
   return timed(startedAt, queriedAt, issues, 'health:logicalIntegrity+stores', issues.length);
 }
 

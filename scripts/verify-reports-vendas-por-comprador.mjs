@@ -74,7 +74,8 @@ assert.deepEqual(JSON.parse(JSON.stringify(view.population)), {
 }, 'população fixa = Saída + motivo Venda, pelo código (como "Vendas do período")');
 assert.deepEqual([...VENDAS_COLUMNS], ['comprador', 'data_pesagem', 'numero_animal', 'peso', 'peso_arroba', 'valor_arroba', 'valor_venda_calc'], 'colunas do "Mostrar Detalhes" do antigo');
 assert.deepEqual([...view.columnChoices.defaults], [...VENDAS_COLUMNS]);
-assert.deepEqual([...view.columnChoices.available].slice(VENDAS_COLUMNS.length), ['destino_venda', 'nome_lote', 'nome_apartacao', 'sexo', 'raca', 'era', 'marca', 'observacao'], 'opcionais do antigo no seletor "Colunas"');
+// E1G (A1): a venda com peso tem Dias, Ganho e GMD contra a pesagem anterior — no fim do seletor, fora do padrão.
+assert.deepEqual([...view.columnChoices.available].slice(VENDAS_COLUMNS.length), ['destino_venda', 'nome_lote', 'nome_apartacao', 'sexo', 'raca', 'era', 'marca', 'observacao', 'dias', 'ganho', 'gmd'], 'opcionais do antigo no seletor "Colunas" (+ Dias, Ganho e GMD)');
 assert.deepEqual({ ...view.columnLabels }, { peso_arroba: 'Qtd @', valor_arroba: 'Valor @', valor_venda_calc: 'Valor Total' }, 'cabeçalhos do antigo');
 assert.equal(VENDAS_TOTALS, VENDAS_BLOCK_TOTALS, 'os totais do tipo SÃO os dos blocos da folha');
 assert.deepEqual(VENDAS_TOTALS.map((spec) => spec.id), ['animais_vendidos', 'peso_total', 'peso_medio', 'media_arroba', 'media_valor_arroba', 'valor_total']);

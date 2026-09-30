@@ -125,7 +125,9 @@ export const VENDAS_POPULATION = Object.freeze({
 // usa a @ de CARCAÇA (peso × rendimento ÷ 15 × Valor @) e pode dar outro valor para a mesma venda sem valor
 // digitado.
 export const VENDAS_COLUMNS = Object.freeze(['comprador', 'data_pesagem', 'numero_animal', 'peso', 'peso_arroba', 'valor_arroba', 'valor_venda_calc']);
-export const VENDAS_AVAILABLE_COLUMNS = Object.freeze([...VENDAS_COLUMNS, 'destino_venda', 'nome_lote', 'nome_apartacao', 'sexo', 'raca', 'era', 'marca', 'observacao']);
+// E1G (A1): a Saída com peso tem dias, ganho e GMD contra a pesagem anterior — oferecidos em "Colunas" (o padrão
+// do desenho W3 não muda).
+export const VENDAS_AVAILABLE_COLUMNS = Object.freeze([...VENDAS_COLUMNS, 'destino_venda', 'nome_lote', 'nome_apartacao', 'sexo', 'raca', 'era', 'marca', 'observacao', 'dias', 'ganho', 'gmd']);
 // Cabeçalhos do antigo (grade, folha, CSV, XLSX e seletor "Colunas").
 export const VENDAS_COLUMN_LABELS = Object.freeze({ peso_arroba: 'Qtd @', valor_arroba: 'Valor @', valor_venda_calc: 'Valor Total' });
 // Totais do tipo = os dos blocos do relatório de venda (domain/vendasLayout.js — Métrica/Valor, Totais por
@@ -179,6 +181,7 @@ export const PESAGENS_SHEET_HEADERS = Object.freeze({
     comprador: 'Comprador', data_pesagem: 'Data', numero_animal: 'Animal', peso: 'Peso (kg)', peso_arroba: 'Qtd @',
     valor_arroba: 'Valor @', valor_venda_total: 'Valor Total', destino_venda: 'Destino', nome_lote: 'Lote',
     nome_apartacao: 'Apartação', sexo: 'Sexo', raca: 'Raça', era: 'Era', marca: 'Marca', observacao: 'Obs',
+    dias: 'Dias', ganho: 'Ganho', gmd: 'GMD',
   }),
   // Sintético (Matriz): "Valores: Qtd / Peso Médio / GMD Médio".
   matrix: Object.freeze({ qtd: 'Qtd', peso_medio: 'Peso Médio', gmd_medio: 'GMD Médio' }),

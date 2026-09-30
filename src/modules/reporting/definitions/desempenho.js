@@ -23,10 +23,11 @@ export const PERFORMANCE_TOTALS = Object.freeze([
 
 export const PERFORMANCE_COLUMNS = Object.freeze(['animal', 'marca', 'sexo', 'categoria', 'lote', 'pesagens', 'peso_inicial', 'peso_final', 'dias', 'ganho', 'gmd']);
 
+// E1G (A2): o peso inicial é a última pesagem ANTES do período quando existe — o GMD do período bate com o Pesagens.
 export const PERFORMANCE_NOTES = Object.freeze([
-  'Uma linha por animal com pesagem no período. Peso inicial/final = primeira/última pesagem com peso dentro do período.',
-  'Ganho, dias e GMD só existem com duas ou mais pesagens com peso; sem par válido aparecem como "—" e não entram no GMD.',
-  'GMD do grupo = soma dos ganhos ÷ soma dos dias (ponderado); GMD simples = média dos GMD individuais.',
+  'Uma linha por animal com pesagem no período. Peso inicial = última pesagem com peso antes do período (a pesagem anterior da primeira pesagem do período); sem ela, a primeira pesagem com peso do período. Peso final = última pesagem com peso do período.',
+  'Ganho, dias e GMD existem quando há peso inicial e final em datas diferentes; sem isso aparecem como "-" e não entram no GMD.',
+  'GMD do grupo = soma dos ganhos ÷ soma dos dias (ponderado) — o mesmo GMD do relatório Pesagens no período; GMD simples = média dos GMD individuais.',
 ]);
 
 // E1E "Tipo Relatório" (definitions/tipos.js). Totais dos tipos = os dos antigos relatórios de desempenho

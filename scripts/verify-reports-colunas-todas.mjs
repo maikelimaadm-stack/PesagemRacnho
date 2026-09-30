@@ -222,10 +222,16 @@ const rview = listReportViews(REBANHO).find((view) => view.id === 'analitico');
 const rebanhoVazio = await run(REBANHO, typedViewSelection(REBANHO, rview, { analitico: [...rview.columns, 'data_saida'] }));
 assert.ok(buildReportDocument(rebanhoVazio).columns.some((column) => column.key === 'data_saida'), 'NEGATIVO antigo: Data da saída escolhida (todos ativos) na folha');
 // Padrão do tipo: a coluna vazia continua sumindo; "Mostrar colunas vazias" traz de volta.
+// E1G (A3, muda o contrato da E1C só para o ganho): Dias, Ganho e GMD nunca somem — sem valor, "-".
 const padraoVazio = await run(PESAGENS, viewSelection('analitico', PESAGENS), ADMIN, soCadastros);
 assert.equal(padraoVazio.columnsChosen, false);
-const hiddenPadrao = buildReportDocument(padraoVazio).hiddenColumns.map((column) => column.key);
-assert.ok(['dias', 'ganho', 'gmd'].every((key) => hiddenPadrao.includes(key)), `padrão do tipo: Dias, Ganho e GMD sem valor somem (E1C) — ${hiddenPadrao}`);
+const docPadraoVazio = buildReportDocument(padraoVazio);
+const hiddenPadrao = docPadraoVazio.hiddenColumns.map((column) => column.key);
+assert.ok(['dias', 'ganho', 'gmd'].every((key) => !hiddenPadrao.includes(key) && docPadraoVazio.columns.some((column) => column.key === key)), `padrão do tipo: Dias, Ganho e GMD sem valor ficam na folha (E1G) — ocultas: ${hiddenPadrao}`);
+// Controle: as outras colunas vazias do padrão continuam sumindo (só o A4, sem raça nem lote, em 12/09).
+const soA4 = { periodo: { preset: 'personalizado', from: '2026-09-12', to: '2026-09-12' } };
+const padraoA4 = buildReportDocument(await run(PESAGENS, viewSelection('analitico', PESAGENS), ADMIN, soA4));
+assert.deepEqual(padraoA4.hiddenColumns.map((column) => column.key), ['raca', 'nome_lote', 'nome_apartacao'], 'padrão do tipo: Raça, Lote e Apartação sem valor somem (E1C); Dias, Ganho e GMD ficam');
 assert.deepEqual(buildReportDocument(padraoVazio, { showEmptyColumns: true }).hiddenColumns, [], '"Mostrar colunas vazias" traz de volta');
 // Voltar ao padrão pelo seletor (mesmas chaves do padrão) = padrão (as vazias somem de novo).
 const devolta = await run(PESAGENS, typedViewSelection(PESAGENS, pview('analitico'), { analitico: [...pview('analitico').columnChoices.defaults] }), ADMIN, soCadastros);

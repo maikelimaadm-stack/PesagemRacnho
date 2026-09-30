@@ -230,9 +230,10 @@ for (const testCase of cases) {
   const keys = ['qtd', 'faixa_min', 'faixa_max', 'menor', 'maior', 'peso_medio', 'peso_total', 'media_arroba', 'gmd_medio', 'machos', 'femeas'];
   assert.deepEqual(engorda.lines.map((row) => valueAt(row, 2)), ['Lote 01', 'Lote 02'], 'Engorda: Lote 01 e Lote 02 na coluna Lote');
   assert.deepEqual(pick(engorda.lines[0], keys), [2, 300, 400, 300, 410, 346.3, 1385, 11.54, 1.125, 2, 0], 'Lote 01 (todas as datas)');
-  assert.deepEqual(pick(engorda.lines[1], keys), [1, 200, 300, 250, 280, 263.3, 790, 8.78, 1, 0, 1], 'Lote 02 (todas as datas)');
+  // E1G: a saída com peso do Lote 02 (260 → 280 em 21 d) entra no GMD: (10 + 20) ÷ (10 + 21) = 0,968; Engorda 75 ÷ 71.
+  assert.deepEqual(pick(engorda.lines[1], keys), [1, 200, 300, 250, 280, 263.3, 790, 8.78, 0.968, 0, 1], 'Lote 02 (todas as datas)');
   assert.equal(valueAt(engorda.total, 0), 'Total Engorda');
-  assert.deepEqual(pick(engorda.total, keys), [3, null, null, 250, 410, 310.7, 2175, 10.36, 1.1, 2, 1], 'Total Engorda = nó de nível 1, sem faixa');
+  assert.deepEqual(pick(engorda.total, keys), [3, null, null, 250, 410, 310.7, 2175, 10.36, 1.056, 2, 1], 'Total Engorda = nó de nível 1, sem faixa');
   const dateQtd = rows.slice(TOP_ROWS).filter((row) => valueAt(row, 1) !== null).map((row) => valueAt(row, col('qtd')));
   assert.ok(dateQtd.length > 1 && dateQtd.reduce((sum, value) => sum + value, 0) > valueAt(engorda.total, col('qtd')), 'Qtd do Total não é a soma das datas (cabeças distintas)');
   // Formatos: kg #,##0.0 (11), @ #,##0.00 (6), GMD #,##0.000 (7), contagem #,##0 (8).

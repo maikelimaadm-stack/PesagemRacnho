@@ -85,7 +85,9 @@ ponderado. Os demais: Registros, Animais únicos, Peso médio, GMD ponderado (sa
 
 Todos: `weighing.read` (A G O C); período obrigatório, padrão **Últimos 90 dias**; parâmetro `faixas`.
 Totais padrão: Animais, soma de pesagens, peso inicial médio, peso final médio, ganho total, ganho médio,
-GMD ponderado, GMD simples. Ganho, dias e GMD só existem com duas ou mais pesagens com peso no período.
+GMD ponderado, GMD simples. E1G (1.4.2): o peso inicial é a última pesagem com peso ANTES do período (data/peso
+anterior gravados na primeira pesagem do período), quando existe; sem ela, a primeira pesagem com peso do período.
+Ganho, dias e GMD existem com peso inicial e final em datas diferentes; o GMD do período é o mesmo do relatório Pesagens.
 
 | id | Título | Agrupamento padrão | Observações |
 |---|---|---|---|

@@ -49,6 +49,7 @@ import SelecionarAnimalDialog from "../components/pesagens/SelecionarAnimalDialo
 import { buildAnimalLookupIndex, buildDeletionPlan, createAnimalId, getAnimalHistory, getRegisteredAnimals, legacyAnimalKey, normalizeAnimalText } from "@/modules/animals/domain/animalHistory";
 import { findLatestSnProfile, isSnIdentifier, normalizeAnimalIdentifier } from "@/modules/animals/domain/snAnimal";
 import { calculateWeightGain } from "@/modules/weighing/domain/weighingCalculations";
+import { receivesWeightGain } from "@/modules/weighing/domain/weighingSeries";
 import { deleteEntriesRespectingHistory, propagateAnimalProfile } from "@/modules/animals/application/animalHistoryService";
 import { fmtCurrency, fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
 import { isFutureCivilDate, parseBrazilianNumber, parseCivilDate } from "@/modules/weighing/domain/brazilianValues";
@@ -1075,7 +1076,7 @@ export default function LancamentoPesagensIndividuais() {
       }
     }
 
-    // Cadastro e saída não calculam ganho/GMD. Venda e abate usam rendimento
+    // E1G: Manejo e Saída com peso calculam ganho/GMD (Cadastro não). Venda e abate usam rendimento
     // informado, mantendo peso vivo, peso estimado de carcaça e arrobas separados.
     const rendimentoInformado = normalizeCarcassYield(motivoSaida === 'Abate' ? rendimentoCarcacaAbate : rendimentoCarcacaVenda);
     const precoArrobaInformado = motivoSaida === 'Abate' ? valorArrobaAbate : valorArroba;
@@ -1179,12 +1180,12 @@ export default function LancamentoPesagensIndividuais() {
       documento_numero: usaEmbarque ? (selectedDoc ? (selectedDoc.tipo_documento === 'GTA+NF-e' ? `GTA: ${selectedDoc.numero_gta || '-'} | NF-e: ${selectedDoc.numero_nfe || '-'}` : (selectedDoc.numero_gta || selectedDoc.numero_nfe || null)) : null) : null,
       motorista_nome: usaEmbarque ? (selectedDoc?.motorista_nome || null) : null,
       placa_carreta: usaEmbarque ? (selectedDoc?.placa_carreta || null) : null,
-      // Cadastro e Saída não têm ganho de peso
-      data_anterior: tipoManejo === 'Manejo' ? dataAnterior : null,
-      peso_anterior: tipoManejo === 'Manejo' ? pesoAnterior : null,
-      dias: tipoManejo === 'Manejo' ? dias : null,
-      ganho: tipoManejo === 'Manejo' && ganho !== null ? ganho : null,
-      gmd: tipoManejo === 'Manejo' ? gmd : null
+      // E1G: Manejo e Saída com peso levam o ganho contra a pesagem anterior; o Cadastro não tem anterior.
+      data_anterior: receivesWeightGain(tipoManejo) ? dataAnterior : null,
+      peso_anterior: receivesWeightGain(tipoManejo) ? pesoAnterior : null,
+      dias: receivesWeightGain(tipoManejo) ? dias : null,
+      ganho: receivesWeightGain(tipoManejo) && ganho !== null ? ganho : null,
+      gmd: receivesWeightGain(tipoManejo) ? gmd : null
     };
 
     try {

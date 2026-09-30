@@ -4,7 +4,7 @@ import {
   validateUiPayload,
 } from '../domain/weighingMapper.js';
 import * as weighingDataAdapter from '../infrastructure/weighingDataAdapter.js';
-import { animalIdentityKey, recalculateWeightSeries } from '../domain/weighingSeries.js';
+import { animalIdentityKey, receivesWeightGain, recalculateWeightSeries } from '../domain/weighingSeries.js';
 import { calculateWeightGain } from '../domain/weighingCalculations.js';
 import { getCurrentActor, hasActorProvider } from '../../../storage/indexedDb/auditActor.js';
 import { authorize, can, forbiddenError } from '../../auth/domain/permissionService.js';
@@ -83,7 +83,8 @@ export async function createEntry(rawPayload) {
     const existingSeries = animalId
       ? await weighingDataAdapter.listAllEntries({ animalId })
       : [];
-    const derived = uiPayload.tipo_manejo === 'Manejo'
+    // E1G: Manejo e Saída com peso (venda/abate) ganham os derivados contra a pesagem anterior; Cadastro não.
+    const derived = receivesWeightGain(uiPayload.tipo_manejo)
       ? calculateWeightGain({
         history: existingSeries,
         date: uiPayload.data_pesagem,
@@ -183,8 +184,18 @@ export async function recalculateAllWeightSeries() {
   return recalculateWeightSeriesForKeys(null);
 }
 
+// E1G (revisão): derivado igual ao gravado? null/undefined/'' são "sem valor"; números comparados pelo valor.
+const DERIVED_KEYS = ['data_anterior', 'peso_anterior', 'dias', 'ganho', 'gmd'];
+const blankDerived = (value) => value === null || value === undefined || value === '';
+const sameDerived = (stored, computed) => (blankDerived(stored) || blankDerived(computed)
+  ? blankDerived(stored) && blankDerived(computed)
+  : String(stored) === String(computed) || Number(stored) === Number(computed));
+const derivedUnchanged = (entry, patch) => Boolean(entry) && DERIVED_KEYS.every((key) => sameDerived(entry[key], patch[key]));
+
 // Exportada para a importação: recalcula só as séries afetadas (nunca a base inteira).
-export async function recalculateWeightSeriesForKeys(affectedKeys) {
+// E1G (revisão): onlyChanged regrava só as pesagens cujos derivados mudaram (o recálculo único da abertura não
+// reescreve o histórico inteiro dos animais vendidos — só a Saída, e o que estiver desatualizado).
+export async function recalculateWeightSeriesForKeys(affectedKeys, { onlyChanged = false } = {}) {
   const trace = globalThis.__MAK_PERF_TRACE__ === true;
   const startedAt = trace ? performance.now() : 0;
   let entries;
@@ -211,7 +222,9 @@ export async function recalculateWeightSeriesForKeys(affectedKeys) {
       )).flat();
   }
   const loadedAt = trace ? performance.now() : 0;
-  const updates = recalculateWeightSeries(entries, affectedKeys);
+  const computed = recalculateWeightSeries(entries, affectedKeys);
+  const storedById = onlyChanged ? new Map(entries.filter((entry) => !entry.deleted_at).map((entry) => [entry.id, entry])) : null;
+  const updates = onlyChanged ? computed.filter((update) => !derivedUnchanged(storedById.get(update.id), update.patch)) : computed;
   const calculatedAt = trace ? performance.now() : 0;
   if (updates.length) {
     // Patches derivados já foram produzidos pelo domínio e contêm somente os

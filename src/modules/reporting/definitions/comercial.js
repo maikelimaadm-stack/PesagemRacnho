@@ -28,7 +28,8 @@ const pelo = (values) => ({ operator: 'in', values, match: 'code' });
 // contas gravadas no lançamento; as opcionais ficam no seletor "Colunas".
 export const ABATES_POPULATION = Object.freeze({ tipo_manejo: pelo(['Saída']), motivo_saida: pelo(['Abate']) });
 export const ABATES_COLUMNS = Object.freeze(['frigorifico', 'data_pesagem', 'numero_animal', 'peso', 'rendimento_carcaca', 'quantidade_arrobas', 'valor_arroba_abate', 'valor_total_abate']);
-export const ABATES_AVAILABLE_COLUMNS = Object.freeze([...ABATES_COLUMNS, 'peso_carcaca_estimado', 'marca', 'sexo', 'raca', 'era', 'nome_lote', 'nome_apartacao', 'embarque_nome', 'documento_numero', 'observacao']);
+// E1G (A1): a Saída com peso (abate) tem dias, ganho e GMD — em "Colunas", fora do padrão.
+export const ABATES_AVAILABLE_COLUMNS = Object.freeze([...ABATES_COLUMNS, 'peso_carcaca_estimado', 'marca', 'sexo', 'raca', 'era', 'nome_lote', 'nome_apartacao', 'embarque_nome', 'documento_numero', 'observacao', 'dias', 'ganho', 'gmd']);
 export const ABATES_COLUMN_LABELS = Object.freeze({ rendimento_carcaca: 'Rendimento', quantidade_arrobas: 'Qtd @ Carcaça', valor_arroba_abate: 'Valor @', valor_total_abate: 'Valor Total' });
 
 // Compras: cadastros com valor pago por cabeça (a mesma população de "Compras do período"), por origem/vendedor.

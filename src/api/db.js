@@ -5,6 +5,7 @@
 // A abertura passa pelo coordenador de migração (ADR-038): backup físico
 // pré-migração validado ANTES de abrir na versão nova, backfill resumível depois.
 import storage from '../storage/storageAdapter.js';
+import { runSaidaDerivedBackfill } from '../modules/weighing/application/weighingDerivedBackfill.js';
 
 export const DEFAULT_EMPRESA_ID = 'local';
 
@@ -62,6 +63,10 @@ export const bootstrapLocalDb = async ({ onProgress } = {}) => {
     };
     if (result.blocked) {
       console.warn('[storage] migração com falha; escrita bloqueada até "Continuar migração":', result.error?.message);
+    } else {
+      // E1G (1.4.2): passo de DADOS único (ganho e GMD das saídas com peso), guardado por marcador em
+      // configurações. Nunca bloqueia a abertura: a falha fica no console e a próxima abertura tenta de novo.
+      bootstrapState.dataSteps = { saidaDerived: await runSaidaDerivedBackfill() };
     }
   } catch (err) {
     if (PRE_OPEN_BLOCK_CODES.has(err?.code)) {
