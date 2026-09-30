@@ -245,7 +245,9 @@ export function makHeaderLabel(label) {
  * @param unit unidade que o texto também leva (linha de total: "Capacidade: 20 cab.")
  */
 export function makGenericLabel(label, column = null, unit = null) {
-  const text = String(label ?? '').trim();
+  // Parêntese que só explica a coluna sai ("Lote (última pesagem no período)" → "Lote", "Dias no lote (no
+  // período) — média" → "Dias no Lote — Média"); os que mudam o sentido do número ficam.
+  const text = String(label ?? '').replace(/\s*\((?!mais antiga\)|mais recente\)|com valor\))[^()]*\s[^()]*\)/g, '').trim();
   const shown = new Set(unit ? [unit] : []);
   if (column?.unit && ['weight', 'percentage'].includes(column.type)) shown.add(column.unit);
   if (column?.type === 'money') shown.add('R$');
@@ -447,7 +449,8 @@ function makLine(mak, items, source, { lead, layout, lotes = null, leafLevel = f
     // arroba: a linha mostra @ (o rodapé explica "@ = peso vivo ÷ N" mesmo sem a coluna de @ na tabela).
     out.push({ key: item.key, label: item.label ?? lead, text, raw: value, ...(column.unit === '@' ? { arroba: true } : {}) });
   }
-  return { layout, items: out };
+  // Resumo genérico em grade: o 1º item ("Subtotal <grupo>: N …") na largura dele, sem quebrar; os outros dividem o resto.
+  return layout === 'grid' && mak.variant === MAK_GENERIC_VARIANTS.RESUMO ? { layout, items: out, leadFit: true } : { layout, items: out };
 }
 
 /**
@@ -736,6 +739,8 @@ function makDetailColumns(columns, variant) {
       decimals: weight && !generic ? (variant === 'vendas' ? 0 : 2) : null,
       unit: variant !== 'vendas',
     };
+    // Genérico: sem o parêntese que só explica a coluna ("Lote (última pesagem no período)" → "Lote" — o título
+    // do grupo e a tela já dizem); o de uma palavra fica ("Destino/frigorífico (texto)", "Tamanho (bytes)").
     const label = generic ? makGenericLabel(headerLabel(source), source) : labels[source.id] ?? makHeaderLabel(source.label);
     return { ...column, label, mk };
   });

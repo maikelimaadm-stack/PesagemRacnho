@@ -170,11 +170,13 @@ function renderMakRow(doc, row, { interactive }) {
  * (Analítico e lista genérica, TOTAL GERAL de Vendas).
  */
 export function renderMakLine(row) {
-  const { layout, items } = row.line;
+  const { layout, items, leadFit } = row.line;
   const attrs = `class="mk-line mk-line--${layout}" data-row-type="${row.type}" data-row-id="${escapeHtml(row.id)}"`;
   if (layout === 'grid') {
     const cells = items.map((item) => `<div class="mk-item" data-key="${escapeHtml(item.key)}"><strong>${escapeHtml(item.label)}:</strong> ${escapeHtml(item.text)}</div>`).join('');
-    return `<div ${attrs} style="grid-template-columns: repeat(${items.length}, minmax(0, 1fr))">${cells}</div>`;
+    // leadFit (resumo genérico): o rótulo "Subtotal <grupo>" não quebra; os demais itens dividem o resto.
+    const template = leadFit && items.length > 1 ? `max-content repeat(${items.length - 1}, minmax(0, 1fr))` : `repeat(${items.length}, minmax(0, 1fr))`;
+    return `<div ${attrs} style="grid-template-columns: ${template}">${cells}</div>`;
   }
   const label = (item) => (layout === 'flow' ? `<strong>${escapeHtml(item.label)}:</strong>` : `${escapeHtml(item.label)}:`);
   const parts = items.map((item) => `<span class="mk-item" data-key="${escapeHtml(item.key)}">${label(item)} ${escapeHtml(item.text)}</span>`);
