@@ -10,8 +10,8 @@
 // sobre a própria população, nunca soma filhos) e o "TOTAL POR" é o MESMO motor (groupRows) sobre a
 // população da seção de nível 1 (buildLeafTotalBlock — o XLSX grava o mesmo bloco). Colunas: cada linha é gerada por columns.map — uma célula por coluna, na
 // ordem do cabeçalho (o erro de colunas desalinhadas do modelo antigo fica impossível por construção).
-// Coluna sem nenhum valor no relatório inteiro some (opção showEmptyColumns desliga); GMD sem pesagem
-// anterior fica "—" (o motor exclui).
+// Coluna sem nenhum valor no relatório inteiro some (opção showEmptyColumns desliga; E1F: nunca quando a pessoa
+// escolheu as colunas em uso — viewModel.columnsChosen); GMD sem pesagem anterior fica "—" (o motor exclui).
 //
 // E1D item 8 ("menos informação na folha" — vale para TODOS os relatórios: a folha é uma só): título
 // "(Analítico)"/"(Sintético)" pelo tipo do relatório; abaixo dele só "Período: dd/mm/aaaa a dd/mm/aaaa";
@@ -1089,9 +1089,12 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   let allColumns = matrix ? matrixColumns(matrix) : summary ? summaryColumns(viewModel) : detailColumns(viewModel);
   if (mak) allColumns = layout === 'detail' ? makDetailColumns(allColumns, variant) : makSummaryColumns(allColumns, variant);
   const hasRows = (viewModel.rowCount ?? 0) > 0;
+  // E1F: colunas escolhidas pela pessoa ("Colunas Painel/Detalhes/Visíveis/Colunas" ≠ padrão, reportService
+  // columnsChosen) aparecem todas, mesmo vazias ("-") — marcar faz a coluna aparecer, como no MAKGESTAO.
+  const keepEmpty = showEmptyColumns || viewModel.columnsChosen === true;
   const isEmptyColumn = (column) => {
     // Coluna da matriz nunca some: cada valor do eixo X existe porque há pesagem nele.
-    if (!hasRows || showEmptyColumns || column.kind === 'label' || column.kind === 'matrix') return false;
+    if (!hasRows || keepEmpty || column.kind === 'label' || column.kind === 'matrix') return false;
     if (summary) return metricIsEmpty(column, viewModel.totals);
     return (viewModel.rows ?? []).every((row) => formatCell(column.column, dataCellRaw(viewModel, column.column, row), 'print') === MISSING_SCREEN);
   };

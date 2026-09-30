@@ -15,7 +15,7 @@ const PREVISTO_TOTALS = Object.freeze([{ id: 'documentos', op: 'count' }, { id: 
 export const PREVISTO_REALIZADO_VIEWS = Object.freeze([
   resumoTipo('por-embarque', 'Por Embarque', ['embarque'], PREVISTO_TOTALS),
   resumoTipo('por-destino', 'Por Destino', ['destino'], PREVISTO_TOTALS),
-  listaTipo('analitico', 'Analítico (Lista de Documentos)', { columns: PREVISTO_COLUMNS, aggregates: PREVISTO_TOTALS, sort: [{ columnId: 'data_embarque', direction: 'asc' }] }),
+  listaTipo('analitico', 'Analítico (Lista de Documentos)', { from: SHIPMENT_DOCUMENT_COLUMNS, columns: PREVISTO_COLUMNS, aggregates: PREVISTO_TOTALS, sort: [{ columnId: 'data_embarque', direction: 'asc' }] }),
 ]);
 
 export const EMBARQUES_PREVISTO_REALIZADO = defineReport({

@@ -47,8 +47,8 @@ export const REBANHO_VIEWS = Object.freeze([
   herd('por-situacao', 'Por Situação', ['situacao'], { filters: TODAS_SITUACOES }),
   herd('por-faixa-peso', 'Por Faixa de Peso', ['faixa_peso']),
   // = o antigo "Inventário atual do rebanho".
-  listaTipo('analitico', 'Analítico (Lista de Animais)', { columns: INVENTORY_COLUMNS, aggregates: HERD_TYPE_TOTALS, sort: [{ columnId: 'animal', direction: 'asc' }], filters: ATIVOS }),
-  listaTipo('sem-pesagem-recente', 'Sem Pesagem Recente', {
+  listaTipo('analitico', 'Analítico (Lista de Animais)', { from: ANIMAL_CURRENT_COLUMNS, columns: INVENTORY_COLUMNS, aggregates: HERD_TYPE_TOTALS, sort: [{ columnId: 'animal', direction: 'asc' }], filters: ATIVOS }),
+  listaTipo('sem-pesagem-recente', 'Sem Pesagem Recente', { from: ANIMAL_CURRENT_COLUMNS,
     columns: SEM_PESAGEM_COLUMNS, aggregates: SEM_PESAGEM_TOTALS, sort: [{ columnId: 'dias_sem_pesagem', direction: 'desc' }], filters: ATIVOS, population: SEM_PESAGEM_POPULATION,
   }),
 ]);

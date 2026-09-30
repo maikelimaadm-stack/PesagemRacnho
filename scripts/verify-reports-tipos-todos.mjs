@@ -182,7 +182,8 @@ for (const definition of CATALOGO) {
     assert.deepEqual({ id: vm.view?.id, label: vm.view?.label, layout: vm.view?.layout, titleKind: vm.view?.titleKind }, { id: view.id, label: view.label, layout: null, titleKind: view.titleKind }, `${where}: executa no tipo`);
     assert.equal(vm.mode, view.mode, `${where}: modo do tipo`);
     assert.deepEqual(vm.groups.map((group) => group.columnId), view.groups.map((group) => group.columnId), `${where}: agrupamento do tipo`);
-    const expectedMetrics = view.columnChoices ? view.columnChoices.defaults : view.aggregates.map((spec) => spec.id);
+    // (E1F: o tipo lista também tem "Colunas" — de colunas, não de totais; os totais dele são os declarados.)
+    const expectedMetrics = view.mode === R && view.columnChoices ? view.columnChoices.defaults : view.aggregates.map((spec) => spec.id);
     assert.deepEqual(vm.aggregates.map((spec) => spec.id), expectedMetrics, `${where}: totais do tipo, na ordem da folha`);
     if (view.mode === D) assert.deepEqual(vm.columns.map((column) => column.id), view.columns, `${where}: colunas da lista`);
     const locked = Object.keys(definition.lockedFilters ? definition.lockedFilters({}) : {});

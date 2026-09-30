@@ -50,8 +50,8 @@ export const DESEMPENHO_VIEWS = Object.freeze([
   perf('por-sexo', 'Por Sexo', ['sexo']),
   perf('por-faixa-peso', 'Por Faixa de Peso', ['faixa_peso']),
   // = o antigo "Desempenho individual".
-  listaTipo('analitico', 'Analítico (Animal por Animal)', { columns: PERFORMANCE_COLUMNS, aggregates: PERFORMANCE_TYPE_TOTALS, sort: [{ columnId: 'animal', direction: 'asc' }] }),
-  listaTipo('perdendo-peso', 'Perdendo Peso', { columns: PERDENDO_PESO_COLUMNS, aggregates: PERFORMANCE_TYPE_TOTALS, sort: [{ columnId: 'ganho', direction: 'asc' }], population: PERDENDO_PESO_POPULATION }),
+  listaTipo('analitico', 'Analítico (Animal por Animal)', { from: ANIMAL_PERIOD_COLUMNS, columns: PERFORMANCE_COLUMNS, aggregates: PERFORMANCE_TYPE_TOTALS, sort: [{ columnId: 'animal', direction: 'asc' }] }),
+  listaTipo('perdendo-peso', 'Perdendo Peso', { from: ANIMAL_PERIOD_COLUMNS, columns: PERDENDO_PESO_COLUMNS, aggregates: PERFORMANCE_TYPE_TOTALS, sort: [{ columnId: 'ganho', direction: 'asc' }], population: PERDENDO_PESO_POPULATION }),
 ]);
 
 export const DESEMPENHO = defineReport({

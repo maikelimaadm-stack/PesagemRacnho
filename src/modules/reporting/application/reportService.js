@@ -145,11 +145,13 @@ export function resolveSelection(definition, selection = {}, role) {
     if (!canSeeColumn(accessor.column, role)) throw forbiddenError(role, 'commercial.values');
   }
 
-  const aggregates = (selection.aggregates ?? typeDefaults?.aggregates ?? definition.defaultAggregates).filter((spec) => {
+  const visibleAggregate = (spec) => {
     assertAggregateSpec(spec, resolve);
     if (!spec.columnId) return true;
     return canSeeColumn(resolve(spec.columnId).column, role);
-  });
+  };
+  const defaultAggregates = typeDefaults?.aggregates ?? definition.defaultAggregates;
+  const aggregates = (selection.aggregates ?? defaultAggregates).filter(visibleAggregate);
 
   // Condições fixas de um modelo convertido na 1.4.0 (a condição do relatório antigo numa coluna em
   // que o modelo também filtrava): aplicadas como as `lockedFilters` da definição. Nunca são
@@ -169,6 +171,15 @@ export function resolveSelection(definition, selection = {}, role) {
   // modo é o do tipo — exceto no detalhe de um grupo (clique na folha), que é sempre o Detalhado.
   const drilling = (selection.drill ?? []).some((part) => part?.columnId);
   const mode = typed.view && !drilling ? typed.view.mode : normalizeReportMode(selection.mode, definition.defaultMode ?? REPORT_MODES.DETALHADO);
+
+  // E1F: a pessoa escolheu as colunas em uso ("Colunas Painel/Detalhes/Visíveis/Colunas") — diferentes do padrão
+  // do tipo (sem tipo, do relatório), no que o papel vê? A folha então mostra TODAS as que estão em uso, mesmo sem
+  // valor ("-"), como no MAKGESTAO; no padrão, a coluna vazia continua sumindo (E1C). Só apresentação.
+  const shownByDefault = (typeDefaults?.columns?.length ? typeDefaults.columns : definition.defaultColumns)
+    .filter((id) => resolve(id) && canSeeColumn(resolve(id).column, role) && !resolve(id).column.metricOnly);
+  const columnsChosen = mode === REPORT_MODES.RESUMIDO
+    ? aggregates.map(aggregateSpecId).join('|') !== defaultAggregates.filter(visibleAggregate).map(aggregateSpecId).join('|')
+    : columns.join('|') !== shownByDefault.join('|');
 
   // Detalhe de um grupo (clique no Resumido): recorte EXATO pela mesma chave do agrupamento
   // (groupKeyOf), inclusive "Não informado" — não é filtro de texto, então nunca mistura grupos.
@@ -192,7 +203,7 @@ export function resolveSelection(definition, selection = {}, role) {
   }
   return {
     resolve, columns, filters, fixedFilters, search: String(selection.search ?? '').trim(), searchColumnIds, sort, groups, aggregates, warnings, hiddenByPermission, mode, drill, summarySort,
-    view: typed.view, matrix: typed.matrix, sortChoice: typed.sortChoice,
+    view: typed.view, matrix: typed.matrix, sortChoice: typed.sortChoice, columnsChosen,
   };
 }
 
@@ -434,6 +445,8 @@ export async function runReport(definitionOrId, request = {}, actor) {
     periodDescription: period ? describePeriod(period) : null,
     // E1D: cabeçalho próprio do tipo (columnLabels, ex.: Vendas "Qtd @") vale na tela, na folha e nas exportações.
     columns: selection.columns.map(typedColumn),
+    // E1F: colunas/totais em uso escolhidos pela pessoa (≠ padrão): a folha não esconde as vazias.
+    columnsChosen: selection.columnsChosen,
     availableColumns: definition.columns.filter((column) => canSeeColumn(column, role)).map((column) => typedColumn(column.id)),
     hiddenByPermission: selection.hiddenByPermission,
     search: selection.search,

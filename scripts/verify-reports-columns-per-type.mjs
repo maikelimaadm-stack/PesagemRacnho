@@ -158,11 +158,18 @@ assert.deepEqual(Object.keys(await getTypeColumnPrefs('pesagens', ADMIN)).sort()
 assert.deepEqual(await saveTypeColumnPrefs('pesagens', 'analitico', [...ANALITICO_COLUMNS], ADMIN), [], 'igual ao padrão = padrão');
 assert.deepEqual(Object.keys(await getTypeColumnPrefs('pesagens', ADMIN)), ['por-apartacao-lote']);
 
-// Coluna sem valor continua sumindo da folha (showEmptyColumns), escolhida ou não.
+// E1F (muda o contrato da E1D): coluna ESCOLHIDA em "Colunas" aparece mesmo sem valor ("-") — marcar faz a coluna
+// aparecer, como no MAKGESTAO; no padrão do tipo, a coluna sem valor continua sumindo (E1C; "Mostrar colunas
+// vazias" traz de volta). Gate reports:colunas-todas:verify cobre todos os relatórios.
 const agosto = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-08-31' } };
 const semObs = await run({ view: 'analitico', columns: ['data_pesagem', 'numero_animal', 'observacao'] }, ADMIN, agosto);
-assert.deepEqual(buildReportDocument(semObs).hiddenColumns.map((column) => column.key), ['observacao'], 'Observação sem valor some da folha');
-assert.equal(buildReportDocument(semObs, { showEmptyColumns: true }).columns.some((column) => column.key === 'observacao'), true, '"Mostrar colunas vazias" traz de volta');
+assert.equal(semObs.columnsChosen, true, 'escolha ≠ padrão do tipo');
+assert.deepEqual(buildReportDocument(semObs).hiddenColumns, [], 'Observação escolhida e sem valor continua na folha');
+assert.ok(documentRows(buildReportDocument(semObs)).filter((row) => row.type === 'DATA').every((row) => row.cells.find((cell) => cell.key === 'observacao').text === '-'), 'sem valor: "-"');
+const padraoAgosto = await run({ view: 'analitico' }, ADMIN, agosto);
+assert.equal(padraoAgosto.columnsChosen, false, 'padrão do tipo');
+assert.ok(!buildReportDocument(padraoAgosto).columns.some((column) => column.key === 'observacao'), 'controle: Observação não é do padrão');
+assert.equal(buildReportDocument(padraoAgosto, { showEmptyColumns: true }).hiddenColumns.length, 0, '"Mostrar colunas vazias" traz de volta as do padrão');
 
 // ---- 3. Chave inválida descartada; recusas ----
 assert.deepEqual(await saveTypeColumnPrefs('pesagens', 'por-apartacao-lote', ['xpto', 'qtd', 'qtd', 'numero_animal', 'faixa_min', 'faixa'], ADMIN), ['qtd', 'faixa'], 'NEGATIVO: fora do tipo, repetida e id de métrica solta saem');
