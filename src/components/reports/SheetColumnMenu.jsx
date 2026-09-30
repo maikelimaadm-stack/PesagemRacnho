@@ -65,8 +65,13 @@ export default function SheetColumnMenu({ menu, anchor, onAction, onClose }) {
           <DropdownMenuSub>
             <DropdownMenuSubTrigger className="text-xs"><Plus className="h-3.5 w-3.5" aria-hidden="true" />Adicionar coluna…</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="rpt-mak-menu rpt-col-menu rpt-col-menu--list">
-              {menu.add.map((option) => (
-                <DropdownMenuItem key={option.key} className="text-xs" onSelect={() => pick({ type: "add", add: option.key })}>{option.label}</DropdownMenuItem>
+              {menu.add.map((option, index) => (
+                <React.Fragment key={option.key}>
+                  {/* No tipo com "Colunas": as do tipo primeiro; depois as outras do relatório. */}
+                  {option.group === "relatorio" && menu.add[index - 1]?.group === "tipo" ? <DropdownMenuSeparator /> : null}
+                  {option.group === "relatorio" && menu.add[index - 1]?.group !== "relatorio" && menu.add.some((item) => item.group === "tipo") ? <DropdownMenuLabel className="rpt-col-menu__hint">Outras do relatório</DropdownMenuLabel> : null}
+                  <DropdownMenuItem className="text-xs" onSelect={() => pick({ type: "add", add: option.key })}>{option.label}</DropdownMenuItem>
+                </React.Fragment>
               ))}
             </DropdownMenuSubContent>
           </DropdownMenuSub>

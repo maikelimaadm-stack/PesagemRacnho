@@ -397,23 +397,46 @@ function reportMetricOptions(ctx) {
   return options;
 }
 
+/**
+ * "Adicionar coluna…": no tipo com "Colunas", primeiro as do tipo que não estão na folha (group 'tipo'); depois
+ * as demais do relatório (group 'relatorio' — ficam na tela e no último estado, fora da escolha do tipo, como uma
+ * conta trocada em "Calcular"). Fora desse tipo, as do relatório. Só o que o papel vê.
+ */
 function addOptions(ctx, docColumn, layout) {
   const { definition, state, role } = ctx;
   if (layout === HEADER_LAYOUTS.MATRIX) return [];
   const view = viewOf(ctx);
+  const typed = typeColumnsOn(ctx, view);
   if (docColumn.kind === 'data') {
     const shown = new Set(state.columns ?? []);
-    if (typeColumnsOn(ctx, view) && view.mode === REPORT_MODES.DETALHADO) {
-      return typeColumnOptions(definition, view, role).filter((option) => !shown.has(option.key)).map((option) => ({ key: option.key, label: option.label }));
-    }
-    return (definition.columns ?? []).filter((column) => !column.metricOnly && !shown.has(column.id) && canSeeColumn(column, role))
-      .map((column) => ({ key: column.id, label: headerLabel(column) }));
+    const own = typed && view.mode === REPORT_MODES.DETALHADO
+      ? typeColumnOptions(definition, view, role).filter((option) => !shown.has(option.key)).map((option) => ({ key: option.key, label: option.label, group: 'tipo' }))
+      : [];
+    const others = (definition.columns ?? []).filter((column) => !column.metricOnly && !shown.has(column.id) && canSeeColumn(column, role) && !own.some((option) => option.key === column.id))
+      .map((column) => ({ key: column.id, label: headerLabel(column), group: 'relatorio' }));
+    return [...own, ...others];
   }
-  if (typeColumnsOn(ctx, view) && view.mode === REPORT_MODES.RESUMIDO) {
-    const current = new Set(columnKeysOf(view, definition, { aggregates: aggregatesOf(ctx) }));
-    return typeColumnOptions(definition, view, role).filter((option) => !current.has(option.key)).map((option) => ({ key: option.key, label: option.label }));
-  }
-  return reportMetricOptions(ctx).map(({ key, label }) => ({ key, label }));
+  const own = typed && view.mode === REPORT_MODES.RESUMIDO
+    ? (() => {
+      const current = new Set(columnKeysOf(view, definition, { aggregates: aggregatesOf(ctx) }));
+      return typeColumnOptions(definition, view, role).filter((option) => !current.has(option.key)).map((option) => ({ key: option.key, label: option.label, group: 'tipo' }));
+    })()
+    : [];
+  const ownSpecs = own.length ? typeSpecsOf(ctx, view, own.map((option) => option.key)) : [];
+  const others = reportMetricOptions(ctx)
+    .filter((option) => !own.some((item) => item.key === option.key) && !option.specs.every((spec) => ownSpecs.some((item) => sameSpec(item, spec))))
+    .map(({ key, label }) => ({ key, label, group: 'relatorio' }));
+  return [...own, ...others];
+}
+
+/** Totais do tipo por trás de chaves do seletor "Colunas" (o par vira as duas). */
+function typeSpecsOf(ctx, view, keys) {
+  const pool = view.aggregates ?? ctx.definition.defaultAggregates ?? [];
+  const pairs = ctx.definition.metricPairs ?? [];
+  return keys.flatMap((key) => {
+    const pair = pairs.find((item) => item.id === key);
+    return (pair ? [pair.from, pair.to] : [key]).map((id) => pool.find((spec) => aggregateSpecId(spec) === id)).filter(Boolean).map(clone);
+  });
 }
 
 function insertAfter(list, index, items) {
@@ -421,25 +444,19 @@ function insertAfter(list, index, items) {
   return [...list.slice(0, at), ...items, ...list.slice(at)];
 }
 
-function applyAdd(ctx, docColumn, addKey) {
-  const { definition, state } = ctx;
+function applyAdd(ctx, docColumn, option) {
+  const { state } = ctx;
   const view = viewOf(ctx);
+  const addKey = option.key;
   if (docColumn.kind === 'data') {
-    if (!addOptions(ctx, docColumn, HEADER_LAYOUTS.DETAIL).some((option) => option.key === addKey)) return null;
     const current = state.columns ?? [];
     const columns = insertAfter(current, current.indexOf(docColumn.key), [addKey]);
     return { patch: { columns }, typeKeys: typeKeys(ctx, { columns }) };
   }
   const current = aggregatesOf(ctx);
-  let specs;
-  if (typeColumnsOn(ctx, view) && view.mode === REPORT_MODES.RESUMIDO) {
-    if (!view.columnChoices.available.includes(addKey)) return null;
-    const pool = view.aggregates ?? definition.defaultAggregates ?? [];
-    const pair = (definition.metricPairs ?? []).find((item) => item.id === addKey);
-    specs = (pair ? [pair.from, pair.to] : [addKey]).map((id) => pool.find((spec) => aggregateSpecId(spec) === id)).filter(Boolean).map(clone);
-  } else {
-    specs = reportMetricOptions(ctx).find((option) => option.key === addKey)?.specs ?? null;
-  }
+  const specs = option.group === 'tipo'
+    ? typeSpecsOf(ctx, view, [addKey])
+    : reportMetricOptions(ctx).find((item) => item.key === addKey)?.specs ?? null;
   if (!specs?.length) return null;
   // Depois da coluna clicada (no rótulo, no começo).
   const anchor = docColumn.kind === 'label' ? -1 : Math.max(...docSpecs(ctx, docColumn).map((spec) => current.findIndex((item) => aggregateSpecId(item) === aggregateSpecId(spec))), -1);
@@ -510,8 +527,10 @@ export function applyHeaderAction(ctx, docColumn, action) {
       return menu?.group ? wrap(applyGroup(ctx, docColumn, menu.group)) : null;
     case 'hide':
       return menu?.hide ? applyHide(ctx, docColumn, menu.hide) : null;
-    case 'add':
-      return menu?.add.some((item) => item.key === action.add) ? applyAdd(ctx, docColumn, action.add) : null;
+    case 'add': {
+      const option = menu?.add.find((item) => item.key === action.add);
+      return option ? applyAdd(ctx, docColumn, option) : null;
+    }
     case 'resize': {
       const width = clampWidth(action.width);
       if (width === null) return null;
