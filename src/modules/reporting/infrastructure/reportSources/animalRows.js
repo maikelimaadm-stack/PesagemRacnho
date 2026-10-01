@@ -3,6 +3,9 @@
 import { daysBetween } from '../../domain/reportPeriod.js';
 import { toFiniteNumber } from '../../domain/aggregateEngine.js';
 import { normalizeText } from '../../domain/filterEngine.js';
+import { annotateGmdQuality } from '../../domain/gmdColumns.js';
+import { ANIMAL_CURRENT_COLUMNS, ANIMAL_PERIOD_COLUMNS } from '../../definitions/columns/animalColumns.js';
+import { GMD_DIAS_MINIMOS_PADRAO } from '../../../weighing/domain/gmdQuality.js';
 
 const nameMap = (rows, label = (row) => row.nome) => new Map((rows || []).filter((row) => !row.deleted_at).map((row) => [row.id, label(row)]));
 
@@ -80,8 +83,10 @@ export function currentGainOf(animal, weighings = null) {
 }
 
 /** Estado atual (projeção `animais`) → linha ANIMAL_CURRENT. `weighings` (E1G): Map id → { entrada, ultima }. */
-export function toAnimalCurrentRows(animals, lookups, { today, bands = [], weighings = null } = {}) {
-  return animals.filter((row) => !row.deleted_at).map((animal) => {
+// M1: gmdDiasMinimos = intervalo mínimo do GMD — Último GMD classificado pelos dias da última pesagem e GMD desde a
+// entrada pelos dias desde a entrada (ultimo_gmd_qualidade/…, gmd_entrada_qualidade/…), derivados aqui, na leitura.
+export function toAnimalCurrentRows(animals, lookups, { today, bands = [], weighings = null, gmdDiasMinimos = GMD_DIAS_MINIMOS_PADRAO } = {}) {
+  const rows = animals.filter((row) => !row.deleted_at).map((animal) => {
     const loteId = animal.lote_atual_id ?? null;
     const apartacaoId = animal.apartacao_atual_id ?? (loteId ? lookups.loteApartacao.get(loteId) ?? null : null);
     const lastDate = animal.ultima_pesagem_data ?? null;
@@ -114,6 +119,8 @@ export function toAnimalCurrentRows(animals, lookups, { today, bands = [], weigh
       ...currentGainOf(animal, weighings?.get(animal.id) ?? null),
     };
   });
+  annotateGmdQuality(rows, ANIMAL_CURRENT_COLUMNS, gmdDiasMinimos);
+  return rows;
 }
 
 const eventOrder = (left, right) => String(left.data_pesagem || '').localeCompare(String(right.data_pesagem || ''))
@@ -146,7 +153,7 @@ function periodBaseOf(first) {
  * ganhos/dias gravados, o GMD do animal (e o ponderado do grupo) é o mesmo do relatório Pesagens no período.
  * Dimensões atuais vêm da projeção do animal quando existe; senão, do último evento.
  */
-export function toAnimalPeriodRows(events, animalsById, lookups, { bands = [] } = {}) {
+export function toAnimalPeriodRows(events, animalsById, lookups, { bands = [], gmdDiasMinimos = GMD_DIAS_MINIMOS_PADRAO } = {}) {
   const byAnimal = new Map();
   for (const event of events) {
     const key = animalKeyOf(event);
@@ -201,5 +208,7 @@ export function toAnimalPeriodRows(events, animalsById, lookups, { bands = [] } 
       faixa_peso: bandFor(last?.peso, sexo, bands),
     });
   }
+  // M1: GMD do período classificado pelos dias do período do animal (gmd_qualidade/gmd_motivo), na leitura.
+  annotateGmdQuality(rows, ANIMAL_PERIOD_COLUMNS, gmdDiasMinimos);
   return rows;
 }

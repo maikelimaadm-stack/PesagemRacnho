@@ -103,6 +103,14 @@ export function defineColumn(spec) {
   if (type === 'enum' && !Array.isArray(spec.options)) throw new Error(`coluna ${id}: enum exige options`);
   if (spec.sensitive != null && !Object.values(SENSITIVITY).includes(spec.sensitive)) throw new Error(`coluna ${id}: sensibilidade inválida (${spec.sensitive})`);
   if (spec.weighted && (!spec.weighted.gain || !spec.weighted.days)) throw new Error(`coluna ${id}: weighted exige gain e days`);
+  // M1: qualidade do GMD (domain/gmdColumns.js) — só em coluna de GMD; dias (campo ou função) e os campos da linha
+  // onde a fonte grava a qualidade e o motivo derivados.
+  if (spec.gmdQuality != null) {
+    const quality = spec.gmdQuality;
+    if (type !== 'gmd') throw new Error(`coluna ${id}: gmdQuality só em coluna de GMD (tipo ${type})`);
+    if (!quality || typeof quality !== 'object' || !(typeof quality.dias === 'string' || typeof quality.dias === 'function')) throw new Error(`coluna ${id}: gmdQuality exige dias (campo ou função)`);
+    if (typeof quality.qualidade !== 'string' || !quality.qualidade || typeof quality.motivo !== 'string' || !quality.motivo) throw new Error(`coluna ${id}: gmdQuality exige os campos qualidade e motivo`);
+  }
   const column = {
     source: 'historico',
     sortable: true,
@@ -129,6 +137,7 @@ export function defineColumn(spec) {
   // somar dias de animais diferentes não diz nada). Sem ela, a regra geral (headerActions.defaultTotalOp).
   if (spec.totalOp != null && !aggregations.includes(spec.totalOp)) throw new Error(`coluna ${id}: totalOp ${spec.totalOp} fora das agregações da coluna`);
   column.aggregations = Object.freeze([...aggregations]);
+  if (column.gmdQuality) column.gmdQuality = Object.freeze({ ...column.gmdQuality });
   column.filterType = filterTypeOfColumnType(type);
   column.grains = Object.freeze([...spec.grains]);
   if (column.options) column.options = Object.freeze(column.options.map((option) => Object.freeze(typeof option === 'object' ? { ...option } : { value: option, label: String(option) })));

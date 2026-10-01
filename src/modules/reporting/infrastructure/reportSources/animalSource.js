@@ -6,6 +6,14 @@ import { compareWeighingEvents, measuredWeightOf } from '../../../weighing/domai
 import { loadEventRows } from './eventSource.js';
 import { readByKeys } from './readByKeys.js';
 import { bandsFromCategories, buildAnimalLookups, toAnimalCurrentRows, toAnimalPeriodRows } from './animalRows.js';
+import { addDays } from '../../domain/reportPeriod.js';
+import { annotateGmdQuality } from '../../domain/gmdColumns.js';
+import { ANIMAL_CURRENT_COLUMNS, GMD_REGRESSAO_COLUMN_ID } from '../../definitions/columns/animalColumns.js';
+import { GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinimos } from '../../../weighing/domain/gmdQuality.js';
+import { REGRESSAO_JANELA_DIAS, computeWeightedGmd } from '../../../weighing/domain/weightRegression.js';
+
+// A coluna "GMD (regressão)" é a mesma nos dois grãos (mesma declaração de qualidade).
+const REGRESSION_COLUMNS = ANIMAL_CURRENT_COLUMNS.filter((column) => column.id === GMD_REGRESSAO_COLUMN_ID);
 
 async function readAllActive(table) {
   return (await table.toArray()).filter((row) => !row.deleted_at);
@@ -86,7 +94,8 @@ export async function loadCurrentWeighings(db, animals) {
   return { weighings, rowsRead: cadastros.length + lastRows.length };
 }
 
-export async function loadAnimalCurrentRows({ empresaId, today, params } = {}) {
+/** M1: gmdDiasMinimos = intervalo mínimo do GMD (7/14/21/28; padrão 21) — qualidade do Último GMD e do desde a entrada. */
+export async function loadAnimalCurrentRows({ empresaId, today, params, gmdDiasMinimos = GMD_DIAS_MINIMOS_PADRAO } = {}) {
   const db = await storage.ensureReady();
   const startedAt = performance.now();
   const animals = await db.table('animais').toArray();
@@ -95,7 +104,8 @@ export async function loadAnimalCurrentRows({ empresaId, today, params } = {}) {
   const queriedAt = performance.now();
   const { lookups, categorias } = await loadLookups(db);
   const { bands, origin } = resolveBands(params, categorias);
-  const rows = toAnimalCurrentRows(scoped, lookups, { today, bands, weighings: current.weighings });
+  const minimo = normalizeGmdDiasMinimos(gmdDiasMinimos);
+  const rows = toAnimalCurrentRows(scoped, lookups, { today, bands, weighings: current.weighings, gmdDiasMinimos: minimo });
   const warnings = [];
   if (!bands.length) warnings.push({ code: 'NO_WEIGHT_BANDS', message: 'Nenhuma faixa de peso configurada (categorias sem faixa e modelo sem faixas): faixa aparece como "Não informado".' });
   return {
@@ -107,22 +117,94 @@ export async function loadAnimalCurrentRows({ empresaId, today, params } = {}) {
     timings: { query: queriedAt - startedAt, transform: performance.now() - queriedAt },
     warnings,
     bandsOrigin: origin,
+    gmdDiasMinimos: minimo,
   };
 }
 
-export async function loadAnimalPeriodRows({ empresaId, period, params } = {}) {
-  const events = await loadEventRows({ from: period.from, to: period.to, empresaId });
+/** M1: gmdDiasMinimos = intervalo mínimo do GMD (7/14/21/28; padrão 21) — qualidade do GMD do período de cada animal. */
+export async function loadAnimalPeriodRows({ empresaId, period, params, gmdDiasMinimos = GMD_DIAS_MINIMOS_PADRAO } = {}) {
+  const minimo = normalizeGmdDiasMinimos(gmdDiasMinimos);
+  const events = await loadEventRows({ from: period.from, to: period.to, empresaId, gmdDiasMinimos: minimo });
   const db = await storage.ensureReady();
   const startedAt = performance.now();
   const ids = [...new Set(events.rows.map((row) => row.animal_id || row.animal_id_resolvido).filter(Boolean))];
   const animals = (await readByKeys(db.table('animais'), 'id', ids)).filter((row) => !row.deleted_at);
   const { lookups, categorias } = await loadLookups(db);
   const { bands } = resolveBands(params, categorias);
-  const rows = toAnimalPeriodRows(events.rows, new Map(animals.map((row) => [row.id, row])), lookups, { bands });
+  const rows = toAnimalPeriodRows(events.rows, new Map(animals.map((row) => [row.id, row])), lookups, { bands, gmdDiasMinimos: minimo });
   return {
     rows,
     strategy: `${events.strategy}+group:animal`,
     rowsRead: events.rowsRead,
     timings: { query: events.timings.query, transform: events.timings.transform + (performance.now() - startedAt) },
+    gmdDiasMinimos: minimo,
   };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M1 §2 — "GMD (regressão)" (coluna opcional do Desempenho e do Rebanho atual)
+// ---------------------------------------------------------------------------------------------------------------
+
+/**
+ * Data de referência ("hoje") da regressão: no Rebanho atual, hoje; no Desempenho, o fim do período (nunca depois
+ * de hoje) — a janela de 120 dias termina onde o relatório termina.
+ */
+export function regressionReferenceDate({ period = null, today }) {
+  const to = period?.to ? String(period.to).slice(0, 10) : null;
+  return to && today && to < today ? to : today;
+}
+
+/**
+ * Pontos (data, peso) de cada animal na janela [hoje − 120, hoje]: UMA consulta pelo índice `data_pesagem` (as linhas
+ * canônicas do grão EVENT, com a mesma identidade de animal do Desempenho — animal_key), nunca uma consulta por animal.
+ * Só pesagens com peso medido (Saída sem balança não vira 0 kg); canceladas ficam fora (a fonte já tira).
+ * @returns {Promise<{ points: Map<string, { data: string, peso: number }[]>, rowsRead: number, from: string, to: string }>}
+ */
+export async function loadRegressionPoints({ hoje, empresaId, janelaDias = REGRESSAO_JANELA_DIAS } = {}) {
+  const from = addDays(hoje, -janelaDias);
+  const events = await loadEventRows({ from, to: hoje, empresaId });
+  const points = new Map();
+  for (const row of events.rows) {
+    const peso = measuredWeightOf(row);
+    if (peso === null) continue;
+    const key = row.animal_key;
+    if (!key) continue;
+    const list = points.get(key);
+    const point = { data: String(row.data_pesagem).slice(0, 10), peso };
+    if (list) list.push(point);
+    else points.set(key, [point]);
+  }
+  return { points, rowsRead: events.rowsRead, from, to: hoje };
+}
+
+/**
+ * Acrescenta às linhas do animal o "GMD (regressão)" (computeWeightedGmd, interface congelada da M1) e a qualidade
+ * dele (pelos dias cobertos, com o mesmo mínimo do relatório): gmd_regressao, gmd_regressao_n, gmd_regressao_dias,
+ * gmd_regressao_erro_padrao, gmd_regressao_qualidade, gmd_regressao_motivo. Muta as linhas (canônicas, da fonte).
+ * @param rows linhas ANIMAL_CURRENT (chave animal_id) ou ANIMAL_PERIOD (chave animal_key)
+ */
+export function attachWeightRegression(rows, points, { hoje, gmdDiasMinimos = GMD_DIAS_MINIMOS_PADRAO } = {}) {
+  const minimo = normalizeGmdDiasMinimos(gmdDiasMinimos);
+  for (const row of rows ?? []) {
+    const key = row.animal_key ?? row.animal_id ?? null;
+    const result = computeWeightedGmd(key ? points.get(key) ?? [] : [], { hoje, diasMinimos: minimo });
+    row.gmd_regressao = result?.gmd ?? null;
+    row.gmd_regressao_n = result?.n ?? 0;
+    row.gmd_regressao_dias = result?.diasCobertos ?? null;
+    row.gmd_regressao_erro_padrao = result?.erroPadrao ?? null;
+  }
+  // Qualidade pelos dias cobertos — a mesma regra (classifyGmd) e o mesmo mínimo de todos os GMD do relatório.
+  annotateGmdQuality(rows ?? [], REGRESSION_COLUMNS, minimo);
+  return rows;
+}
+
+/**
+ * Lê os pontos da janela e acrescenta o GMD (regressão) às linhas já carregadas (runReport chama só quando a coluna
+ * está em uso). @returns {{ hoje: string, rowsRead: number }}
+ */
+export async function loadAnimalRegression(rows, { period = null, today, empresaId, gmdDiasMinimos } = {}) {
+  const hoje = regressionReferenceDate({ period, today });
+  const { points, rowsRead } = await loadRegressionPoints({ hoje, empresaId });
+  attachWeightRegression(rows, points, { hoje, gmdDiasMinimos });
+  return { hoje, rowsRead };
 }

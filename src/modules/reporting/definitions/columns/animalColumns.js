@@ -4,6 +4,22 @@ import { GRAINS } from '../../domain/reportGrain.js';
 import { defineColumn } from '../../domain/columnDefinition.js';
 import { SEXO_OPTIONS } from './eventColumns.js';
 
+// M1 (1.5.0): onde cada GMD do animal guarda a qualidade derivada na leitura (domain/gmdColumns) e de quais dias ela
+// sai — Desempenho: os dias do período do animal; Rebanho: Último GMD pelos dias da última pesagem, GMD desde a
+// entrada pelos dias desde a entrada; GMD (regressão): pelos dias cobertos pelas pesagens da janela de 120 dias.
+export const PERIOD_GMD_QUALITY = Object.freeze({ dias: 'dias', qualidade: 'gmd_qualidade', motivo: 'gmd_motivo' });
+export const ULTIMO_GMD_QUALITY = Object.freeze({ dias: 'ultimo_dias', qualidade: 'ultimo_gmd_qualidade', motivo: 'ultimo_gmd_motivo' });
+export const ENTRADA_GMD_QUALITY = Object.freeze({ dias: 'dias_entrada', qualidade: 'gmd_entrada_qualidade', motivo: 'gmd_entrada_motivo' });
+export const REGRESSAO_GMD_QUALITY = Object.freeze({ dias: 'gmd_regressao_dias', qualidade: 'gmd_regressao_qualidade', motivo: 'gmd_regressao_motivo' });
+export const GMD_REGRESSAO_COLUMN_ID = 'gmd_regressao';
+
+// M1 §2: "GMD (regressão)" — coluna OPCIONAL ("Adicionar coluna…"/"Colunas"), fora do padrão de todo tipo: o GMD entre
+// pesagens consecutivas continua sendo o da folha. A fonte só lê as pesagens da janela quando a coluna está em uso.
+const regressionColumn = (grains, description) => defineColumn({
+  id: GMD_REGRESSAO_COLUMN_ID, label: 'GMD (regressão)', unit: 'kg/dia', type: 'gmd', grains, source: 'derivado', defaultWidth: 104,
+  aggregations: ['countValid', 'avg', 'min', 'max'], gmdQuality: REGRESSAO_GMD_QUALITY, description,
+});
+
 const CURRENT = [GRAINS.ANIMAL_CURRENT];
 const PERIOD = [GRAINS.ANIMAL_PERIOD];
 const BOTH = [GRAINS.ANIMAL_CURRENT, GRAINS.ANIMAL_PERIOD];
@@ -53,12 +69,15 @@ export const ANIMAL_CURRENT_COLUMNS = [
     id: 'gmd_entrada', label: 'GMD desde a entrada', unit: 'kg/dia', type: 'gmd', grains: CURRENT,
     weighted: { gain: 'ganho_entrada', days: 'dias_entrada' }, aggregations: ['countValid', 'avg', 'min', 'max', 'weightedGmd'],
     description: '(Peso atual − peso de entrada) ÷ dias entre a entrada e a última pesagem com peso.',
+    gmdQuality: ENTRADA_GMD_QUALITY,
   }),
   defineColumn({
     id: 'ultimo_gmd', label: 'Último GMD', unit: 'kg/dia', type: 'gmd', grains: CURRENT,
     weighted: { gain: 'ultimo_ganho', days: 'ultimo_dias' }, aggregations: ['countValid', 'avg', 'min', 'max', 'weightedGmd'],
     description: 'GMD da última pesagem com peso, contra a pesagem anterior (o mesmo do relatório Pesagens).',
+    gmdQuality: ULTIMO_GMD_QUALITY,
   }),
+  regressionColumn(CURRENT, 'Inclinação do peso pelas pesagens dos últimos 120 dias até hoje, pesando mais as recentes (3 ou mais pesagens; com 2, a conta simples).'),
 ];
 
 export const ANIMAL_PERIOD_COLUMNS = [
@@ -76,5 +95,7 @@ export const ANIMAL_PERIOD_COLUMNS = [
   defineColumn({
     id: 'gmd', label: 'GMD', unit: 'kg/dia', type: 'gmd', grains: PERIOD, defaultVisible: true,
     weighted: { gain: 'ganho', days: 'dias' }, aggregations: ['countValid', 'avg', 'min', 'max', 'weightedGmd'],
+    gmdQuality: PERIOD_GMD_QUALITY,
   }),
+  regressionColumn(PERIOD, 'Inclinação do peso pelas pesagens dos 120 dias até o fim do período, pesando mais as recentes (3 ou mais pesagens; com 2, a conta simples).'),
 ];

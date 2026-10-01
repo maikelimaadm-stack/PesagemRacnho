@@ -4,6 +4,7 @@
 import {
   count, countDistinct, countValid, max as maxOf, min as minOf, ratio, range as rangeOf, sum, avg, weightedAvg,
 } from './aggregateEngine.js';
+import { hasGmdQuality, reliableRowsOf } from './gmdColumns.js';
 
 function readerFor(spec, row) {
   if (typeof spec === 'function') return spec(row);
@@ -39,8 +40,25 @@ export function assertAggregateSpec(spec, resolve) {
   return accessor;
 }
 
+/**
+ * M1: conta de uma coluna de GMD (gmdQuality) só com as linhas CONFIAVEL — média, ponderado, mínimo, máximo,
+ * amplitude e contagem de valores. O intervalo curto (NAO_CONFIAVEL) e o sem cálculo (SEM_GMD) contam como
+ * AUSENTES: n_total continua sendo a população inteira e n_ausentes = n_total − n_validos (a nota "N de M" da
+ * folha diz quantos entraram). A contagem de registros (count) não é conta de GMD e vê todas as linhas.
+ */
 export function computeAggregate(rows, spec, resolve) {
   const accessor = assertAggregateSpec(spec, resolve);
+  if (spec.op !== 'count' && hasGmdQuality(accessor?.column)) {
+    const reliable = reliableRowsOf(accessor.column, rows);
+    if (reliable.length !== rows.length) {
+      const result = computeAggregateOn(reliable, spec, accessor);
+      return { ...result, n_ausentes: rows.length - result.n_validos, n_total: rows.length };
+    }
+  }
+  return computeAggregateOn(rows, spec, accessor);
+}
+
+function computeAggregateOn(rows, spec, accessor) {
   const column = accessor?.column;
   const valueOf = accessor ? (row) => accessor.valueOf(row) : null;
   switch (spec.op) {

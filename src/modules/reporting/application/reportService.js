@@ -12,7 +12,7 @@ import { aggregateSpecId, assertAggregateSpec, computeAggregates } from '../doma
 import { REPORT_MODES, REPORT_VISIBILITY, VIEW_LAYOUTS, createColumnResolver, normalizeReportMode } from '../domain/reportDefinition.js';
 import { getReportView, viewSelection } from '../domain/reportViews.js';
 import { applySortChoice, isKnownSortChoice } from '../domain/sortChoices.js';
-import { GRAIN_LABELS, grainHasAnimal } from '../domain/reportGrain.js';
+import { GRAINS, GRAIN_LABELS, grainHasAnimal } from '../domain/reportGrain.js';
 import { describePeriod, localToday, resolvePeriod } from '../domain/reportPeriod.js';
 import { assertCanRunReport, canRunReport, canSeeColumn, forbiddenColumnIds } from '../domain/reportPermissions.js';
 import { SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC, buildSummaryRows } from '../domain/summaryLayout.js';
@@ -22,6 +22,10 @@ import { aliasSelection, getLegacyAlias } from '../definitions/legacyAliases.js'
 import { getReportSource } from '../infrastructure/reportSources/index.js';
 import { APP_VERSION, DATA_BUILD_ID, DB_SCHEMA_VERSION } from '../../../versioning/versionInfo.js';
 import { ARROBA_DIVISORS, REPORT_SETTINGS_DEFAULTS, getReportSettings } from '../../settings/application/appConfigService.js';
+import { GMD_DIAS_MINIMOS_OPCOES, GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinimos } from '../../weighing/domain/gmdQuality.js';
+import { annotateGmdQuality, hasGmdQuality } from '../domain/gmdColumns.js';
+import { GMD_REGRESSAO_COLUMN_ID } from '../definitions/columns/animalColumns.js';
+import { loadAnimalRegression } from '../infrastructure/reportSources/animalSource.js';
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -337,6 +341,33 @@ async function resolveArrobaDivisor(requested, empresaId) {
   }
 }
 
+/**
+ * M1: intervalo mínimo do GMD (gmd_dias_minimos) — o da chamada (7, 14, 21 ou 28 — testes) ou o de Configurações ›
+ * Relatórios; sem configuração legível, o padrão 21. Abaixo dele o GMD fica cinza e fora de toda conta.
+ */
+async function resolveGmdDiasMinimos(requested, empresaId) {
+  if (requested !== undefined && requested !== null && requested !== '') {
+    const number = Number(requested);
+    if (!GMD_DIAS_MINIMOS_OPCOES.includes(number)) throw new Error(`relatório: intervalo mínimo do GMD deve ser ${GMD_DIAS_MINIMOS_OPCOES.join(', ')} (recebido ${requested})`);
+    return number;
+  }
+  try {
+    const settings = await getReportSettings(empresaId);
+    return normalizeGmdDiasMinimos(settings?.gmd_dias_minimos);
+  } catch {
+    return GMD_DIAS_MINIMOS_PADRAO;
+  }
+}
+
+/** Colunas que a seleção usa (dados, filtros, condições fixas, ordem e totais) — para saber se a regressão é lida. */
+function selectionUsesColumn(selection, columnId) {
+  return selection.columns.includes(columnId)
+    || Object.prototype.hasOwnProperty.call(selection.filters ?? {}, columnId)
+    || Object.prototype.hasOwnProperty.call(selection.fixedFilters ?? {}, columnId)
+    || selection.sort.some((item) => item.columnId === columnId)
+    || selection.aggregates.some((spec) => spec.columnId === columnId);
+}
+
 // E1F: nome do relatório do usuário para o título da folha (texto; vazio = o nome do relatório).
 const requestedSheetTitle = (value) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, 80) : null);
 
@@ -374,12 +405,29 @@ export async function runReport(definitionOrId, request = {}, actor) {
   // O divisor da @ vai para as linhas (peso_arroba/ganho_arroba): entra no sourceKey para o reuse
   // nunca servir linhas calculadas com o divisor anterior.
   const arrobaDivisor = await resolveArrobaDivisor(request.arrobaDivisor, empresaId);
-  const sourceKey = JSON.stringify([definition.id, definition.version, empresaId, today, params, role, arrobaDivisor]);
+  // M1: o mínimo do GMD decide a qualidade gravada nas linhas (derivada na leitura): também entra no sourceKey.
+  const gmdDiasMinimos = await resolveGmdDiasMinimos(request.gmdDiasMinimos, empresaId);
+  const sourceKey = JSON.stringify([definition.id, definition.version, empresaId, today, params, role, arrobaDivisor, gmdDiasMinimos]);
 
   const reusable = request.reuse && request.reuse.sourceKey === sourceKey && request.reuse.sourceLoaded;
   const loaded = reusable
     ? { ...request.reuse.sourceLoaded, strategy: `${request.reuse.sourceLoaded.strategy}+reuse`, timings: { query: 0, transform: 0 } }
-    : await source({ definition, params, empresaId, today, arrobaDivisor, deps: request.deps });
+    : await source({ definition, params, empresaId, today, arrobaDivisor, gmdDiasMinimos, deps: request.deps });
+  // M1: a fonte classifica o GMD com o mínimo que recebeu (reportSources/index.js repassa gmdDiasMinimos); se ela
+  // classificou com outro (fonte que não repassa — padrão 21), a mesma regra é refeita aqui com o mínimo resolvido.
+  if (!reusable && loaded.gmdDiasMinimos !== gmdDiasMinimos && definition.columns.some(hasGmdQuality)) {
+    annotateGmdQuality(loaded.rows, definition.columns, gmdDiasMinimos);
+  }
+  // M1 §2: "GMD (regressão)" só é lido quando a coluna está em uso (dado, filtro, ordem ou total) — uma consulta pelo
+  // índice de data na janela de 120 dias, nunca uma por animal; reaproveitado enquanto as linhas forem as mesmas.
+  let regressao = loaded.regressao ?? null;
+  const wantsRegression = [GRAINS.ANIMAL_CURRENT, GRAINS.ANIMAL_PERIOD].includes(definition.grain)
+    && definition.columns.some((column) => column.id === GMD_REGRESSAO_COLUMN_ID)
+    && selectionUsesColumn(selection, GMD_REGRESSAO_COLUMN_ID);
+  if (wantsRegression && !regressao) {
+    const period = Object.values(params).find((value) => value && value.from && value.to) || null;
+    regressao = await loadAnimalRegression(loaded.rows, { period, today, empresaId, gmdDiasMinimos });
+  }
   const afterLoad = now();
   const locked = Object.keys(lockedFilters).length ? applyFilters(loaded.rows, { filters: lockedFilters }, selection.resolve) : loaded.rows;
   const filtered = applyDrill(applyFilters(locked, { search: selection.search, searchColumnIds: selection.searchColumnIds, filters: selection.filters }, selection.resolve), selection.drill, selection.resolve);
@@ -465,6 +513,8 @@ export async function runReport(definitionOrId, request = {}, actor) {
     // E1B: divisor da @ de peso vivo usado nas linhas (rodapé "@ = peso vivo ÷ N" e manifesto); rótulos
     // de curral por id de métrica e pares "de–até" da definição (só os pares com as duas métricas).
     arrobaDivisor,
+    // M1: intervalo mínimo do GMD usado nas linhas (abaixo dele: cinza, aviso e fora das contas).
+    gmdDiasMinimos,
     metricLabels: definition.metricLabels ?? {},
     metricPairs: pairsPresent(definition.metricPairs ?? [], selection.aggregates, tree.levels).active,
     // Métricas de um par que não vale neste agrupamento (ex.: faixa do lote agrupando por data): fora da folha e das exportações.
@@ -480,6 +530,8 @@ export async function runReport(definitionOrId, request = {}, actor) {
       rowsRead: loaded.rowsRead,
       rowsLoaded: loaded.rows.length,
       rowsOut: sorted.length,
+      // M1: GMD (regressão) lido nesta tela — data de referência e pesagens lidas na janela (null sem a coluna).
+      regressao,
       timings: {
         query: loaded.timings?.query ?? null,
         transform: loaded.timings?.transform ?? null,
@@ -496,6 +548,6 @@ export async function runReport(definitionOrId, request = {}, actor) {
     resolve: selection.resolve,
     population: locked,
     sourceKey,
-    sourceLoaded: { rows: loaded.rows, strategy: reusable ? request.reuse.sourceLoaded.strategy : loaded.strategy, rowsRead: loaded.rowsRead, warnings: loaded.warnings },
+    sourceLoaded: { rows: loaded.rows, strategy: reusable ? request.reuse.sourceLoaded.strategy : loaded.strategy, rowsRead: loaded.rowsRead, warnings: loaded.warnings, ...(regressao ? { regressao } : {}) },
   };
 }

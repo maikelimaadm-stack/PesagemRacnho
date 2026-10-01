@@ -11,6 +11,7 @@ import { GRAINS } from '../../domain/reportGrain.js';
 import { SENSITIVITY, defineColumn } from '../../domain/columnDefinition.js';
 import { normalizeText } from '../../domain/filterEngine.js';
 import { toFiniteNumber } from '../../domain/aggregateEngine.js';
+import { entersGmdMath } from '../../domain/gmdColumns.js';
 
 const EVENT_GRAINS = [GRAINS.EVENT, GRAINS.EXIT, GRAINS.SHIPMENT_DOCUMENT];
 
@@ -86,8 +87,13 @@ export function saleValueOf(row) {
   return price !== null && arrobas !== null ? arrobas * price : null;
 }
 
-// Pesagem com anterior válida (entra no GMD ponderado): dias > 0 e ganho preenchido.
+// Pesagem com anterior válida: dias > 0 e ganho preenchido (base do "Ganho de N de M cab." dos gráficos de ganho).
 const hasPreviousGain = (row) => Number(row?.dias) > 0 && !isBlank(row?.ganho) && Number.isFinite(Number(row.ganho));
+
+// M1: onde a linha do evento guarda a qualidade do GMD (derivada na leitura — domain/gmdColumns.annotateGmdQuality).
+export const EVENT_GMD_QUALITY = Object.freeze({ dias: 'dias', qualidade: 'gmd_qualidade', motivo: 'gmd_motivo' });
+// Pesagem que ENTRA no GMD (M1): anterior válida E intervalo confiável (dias ≥ mínimo) — a base de "GMD de N de M".
+const hasReliableGmd = (row) => hasPreviousGain(row) && entersGmdMath({ id: 'gmd', gmdQuality: EVENT_GMD_QUALITY }, row);
 
 // Contagem condicional de animais sem operação nova: coluna identificador cuja chave de grupo só
 // existe quando a condição vale; countDistinct conta animais únicos (0 quando ninguém casa).
@@ -239,9 +245,12 @@ export const EVENT_COLUMNS = [
     accessor: liveArrobaOf('ganho'), aggregations: ['countValid', 'sum', 'avg', 'min', 'max'],
     description: '@ de peso vivo do ganho: ganho ÷ divisor da arroba (só pesagens com pesagem anterior).',
   }),
+  // M1: qualidade pelos dias do intervalo GRAVADO (dias × gmd_dias_minimos, derivada na leitura pela fonte): o
+  // intervalo curto aparece em cinza com o aviso e fica fora de toda conta de GMD (reportAggregates).
   defineColumn({
     id: 'gmd', label: 'GMD', unit: 'kg/dia', type: 'gmd', grains: EVENT_GRAINS, defaultVisible: true, defaultWidth: 92,
     weighted: { gain: 'ganho', days: 'dias' }, aggregations: ['countValid', 'avg', 'min', 'max', 'weightedGmd'],
+    gmdQuality: EVENT_GMD_QUALITY,
   }),
   defineColumn({ id: 'observacao', label: 'Observação', type: 'text', grains: EVENT_GRAINS }),
   defineColumn({ id: 'pendencias', label: 'Pendências', type: 'text', grains: EVENT_GRAINS, groupable: true, source: 'derivado', description: 'Mesmas regras do Fechamento do Dia: Peso (GMD negativo), Lote (sem lote), Doc (saída sem documento exigido).' }),
@@ -276,7 +285,14 @@ export const EVENT_COLUMNS = [
   defineColumn({
     id: 'animais_com_anterior', label: 'Animais com pesagem anterior', type: 'identifier', grains: EVENT_GRAINS, source: 'derivado',
     aggregations: ['countDistinct'], metricOnly: true, filterable: false, sortable: false, exportable: false, ...animalWhen(hasPreviousGain),
-    description: 'Animais com ao menos uma pesagem com anterior válida (dias > 0 e ganho): os que entram no GMD.',
+    description: 'Animais com ao menos uma pesagem com anterior válida (dias > 0 e ganho): base do "Ganho de N de M cab.".',
+  }),
+  // M1: animais com ao menos um GMD CONFIÁVEL (intervalo ≥ mínimo de Configurações › Relatórios) — base do "GMD de N
+  // de M cab." dos gráficos de GMD (o intervalo curto não entra no GMD, então não conta aqui).
+  defineColumn({
+    id: 'animais_com_gmd', label: 'Animais com GMD confiável', type: 'identifier', grains: EVENT_GRAINS, source: 'derivado',
+    aggregations: ['countDistinct'], metricOnly: true, filterable: false, sortable: false, exportable: false, ...animalWhen(hasReliableGmd),
+    description: 'Animais com ao menos uma pesagem cujo GMD entra na média (intervalo igual ou maior que o mínimo).',
   }),
 ];
 
