@@ -9,10 +9,35 @@ A 1.4.1 com o pedido de 30/09/2026 (E1G): GMD em todos os relatórios e gráfico
 **8** e backup **formato 3**, sem mudança. Notas em `docs/release/1.4.2/RELEASE-NOTES.md`.
 
 ### Added (E1G)
-- (preenchido na integração da E1G)
+- **Gráficos** (SVG próprio, sem biblioteca, offline) com o alternador **Folha | Gráficos** em Pesagens
+  (evolução do peso médio, GMD por grupo, ganho/@ por mês, distribuição do peso), Desempenho (GMD por grupo,
+  peso inicial × final, faixas de GMD, distribuição do peso final) e Rebanho atual (distribuição do peso, GMD
+  por lote). Mesmos números da folha por construção (groupRows/computeAggregates sobre o view model);
+  dica, legenda que liga/desliga, "Ver tabela", clique abre o detalhe; tema claro/escuro; paleta validada.
+  Impressão/PDF "gráficos + folha" ou "só os gráficos" (SVG inline, CSP intacta) e aba "Gráficos" no Excel.
+- **Rebanho atual:** Peso e Data de entrada, Ganho/Dias/GMD desde a entrada e Último GMD; "GMD médio"
+  ponderado nos resumos.
+- **Qualidade dos dados:** "Animal com uma pesagem só", "Manejo sem GMD" (com o motivo) e "Números parecidos".
+- **Importação:** brinco numérico casa sem zeros à esquerda e sem ",0"/".0" do Excel (não "1.000"); cabeçalhos
+  "Dt.Ant."/"Peso Ant."; no Histórico, pesagens anteriores ao Cadastro gravado antecipam o Cadastro (o antigo
+  vira Manejo, na mesma transação, com aviso antes de gravar).
+- Gates: `reports:gmd`, `import:identity`, `reports:charts`, `reports:charts-print`, `reports:charts-state`,
+  `animal:weight-curve`.
+
+### Changed (E1G)
+- **Venda e abate com peso** passam a ter data/peso anterior, dias, ganho e GMD (Cadastro e saída sem peso
+  continuam sem). Recálculo único na primeira abertura (marcador `derivados-saida-v1`, só os campos derivados,
+  regrava só o que muda, auditoria como "Sistema"; também após restaurar backup). Colunas Dias/Ganho/GMD em
+  "Colunas" de Vendas, Saídas, Comercial e Romaneio; Saídas › Analítico com GMD no padrão.
+- **Desempenho:** peso inicial = última pesagem ANTES do período, quando existe — GMD igual ao de Pesagens.
 
 ### Fixed (E1G)
-- (preenchido na integração da E1G)
+- GMD sumia da folha quando nenhuma linha tinha valor: Dias, Ganho e GMD nunca somem ("-" e "GMD de N de M
+  cab." no rodapé).
+- Desempenho sem GMD para quem pesa por aparte (precisava de 2 pesagens dentro do período).
+- Importação criava animal novo para "01016"/"1016,0", partindo a série e deixando o GMD vazio.
+- Curva de peso da Ficha do Animal com eixo pelo índice da pesagem (a inclinação mentia): agora pela data,
+  com eixo em kg, dica por ponto e tema escuro.
 
 ## [1.4.1] — 2026-09-30
 

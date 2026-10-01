@@ -27,7 +27,7 @@ abrindo.
 
 | Assunto | Relatório | Abre em | Tipos |
 |---|---|---|---|
-| Rebanho | **Rebanho atual** | Por Lote | Por Lote, Por Apartação/Lote, Por Apartação, Por Categoria, Por Raça, Por Marca, Por Sexo, Por Situação, Por Faixa de Peso, Analítico (Lista de Animais), Sem Pesagem Recente |
+| Rebanho | **Rebanho atual** (1.4.2: com peso e data de entrada, ganho e GMD desde a entrada e último GMD; GMD médio nos resumos) | Por Lote | Por Lote, Por Apartação/Lote, Por Apartação, Por Categoria, Por Raça, Por Marca, Por Sexo, Por Situação, Por Faixa de Peso, Analítico (Lista de Animais), Sem Pesagem Recente |
 | Rebanho | **Ocupação de lotes** | Por Apartação | Por Apartação, Por Apartação/Lote, Analítico |
 | Pesagens | **Pesagens** (Relatório de Pesagens Individuais) | Por Apartação (Resumo por Data) | Os 5 tipos do MAKGESTAO: Analítico, Sintético (Matriz), Por Apartação/Lote, Por Apartação (Resumo por Data) e Vendas |
 | Pesagens | **Fechamento do dia** | Por Sessão (Lista) | Por Sessão (Lista), Resumo por Sessão, Por Apartação/Lote, Com Pendências, Analítico |
@@ -232,8 +232,11 @@ Regras da folha:
 - **Cada número fica sob o título da sua coluna** — sempre (o programa confere isso a cada versão).
 - **Coluna sem nenhum valor no relatório inteiro some** (ex.: Fêmeas num relatório só de machos). Para
   vê-las mesmo assim, use o botão **Mostrar colunas vazias** (olho riscado) no alto; ele vale também para a
-  impressão.
-- **GMD sem pesagem anterior aparece "—", nunca "0,000"**, e fica fora da média.
+  impressão. **Exceção (1.4.2): Dias, Ganho e GMD nunca somem** — sem valor, aparecem "-".
+- **GMD sem pesagem anterior aparece "—", nunca "0,000"**, e fica fora da média. Quando falta GMD para
+  alguém, o rodapé diz "GMD de N de M cab.".
+- **Venda e abate com peso têm GMD (1.4.2)**: contra a última pesagem antes da saída. O Cadastro e a saída
+  sem peso (morte, por exemplo) continuam sem GMD.
 - **Faixa exigida** é a faixa de peso do **cadastro atual do lote** e só aparece na linha do lote (nunca
   no subtotal da data, da apartação ou no total geral, onde juntaria lotes diferentes).
 - Contagem zero em Machos/Fêmeas aparece "—".
@@ -243,6 +246,33 @@ Regras da folha:
 **A arroba da folha.** Média (@), Total (@) e o ganho em @ usam a arroba de **peso vivo**: peso ÷ 30 (o
 padrão) ou peso ÷ 15. Quem escolhe é o ADMIN ou o GESTOR em **Configurações › Relatórios › Divisor da
 arroba** (o GESTOR vê em Configurações só essa seção). O divisor usado aparece no rodapé de cada folha. Isso não muda a @ de carcaça do Comercial (carcaça ÷ 15).
+
+## 7A. Gráficos (1.4.2)
+
+Em **Pesagens**, **Desempenho** e **Rebanho atual**, acima da folha, o botão **Folha | Gráficos** troca a
+vista. Os gráficos usam **os mesmos números da folha**: o mesmo período, os mesmos filtros e o mesmo detalhe.
+Trocar de vista não refaz o relatório.
+
+| Relatório | Gráficos |
+|---|---|
+| Pesagens | **Evolução do peso médio** (uma linha por lote, apartação, sexo, raça ou marca; mês, data ou sessão; troca para GMD médio) · **GMD médio por grupo** · **Ganho de peso por mês** (kg ou @) · **Distribuição do peso** (faixas, com a última pesagem de cada animal) |
+| Desempenho | **GMD médio por grupo** · **Peso inicial × peso final** · **Animais por faixa de GMD** (perdendo peso em vermelho) · **Distribuição do peso final** |
+| Rebanho atual | **Distribuição do peso atual** · **GMD médio por lote** |
+
+- Passe o mouse (ou use Tab) para ver os valores; **clique numa barra** para abrir a folha só daquele grupo
+  (o × da pílula "Detalhe" volta).
+- Na legenda, clique numa série para escondê-la ou mostrá-la. **Ver tabela** mostra os números do gráfico.
+- Grupo sem GMD não vira barra zero: aparece escrito embaixo ("Sem GMD: Lote 03 (4 cab.)").
+- **Imprimir/PDF** na vista Gráficos: os gráficos vêm antes e a folha começa em página nova. No menu **⋯**
+  há **Imprimir só os gráficos** e **PDF só dos gráficos**. O **Excel** ganha a aba **Gráficos** com os
+  números de cada gráfico.
+- A vista e as escolhas de cada gráfico ficam guardadas como o resto do relatório (e em "Meus relatórios").
+
+**GMD no Desempenho (1.4.2):** o peso inicial de cada animal é a **última pesagem antes do período** (quando
+existe). Assim quem pesa por aparte, com meses entre as pesagens, tem GMD, e o número bate com o de Pesagens.
+
+**Ficha do Animal:** a **Curva de peso** usa as datas na escala certa; passe o mouse num ponto para ver peso,
+dias, ganho e GMD daquele trecho.
 
 ## 8. Cabeçalho da propriedade
 
@@ -362,6 +392,11 @@ favoritos e modelos ficam em Relatórios.
 
 Quem não abre Backup e Manutenção (OPERADOR e CONSULTA) encontra **Pendências de pesagem** e
 **Qualidade dos dados** na própria tela de Relatórios, no grupo **Controle**.
+
+**Faltando GMD? (1.4.2)** A **Qualidade dos dados** aponta: **Animal com uma pesagem só** (sem GMD por
+falta de pesagem anterior), **Manejo sem GMD** (com o motivo, ex.: mesma data da anterior, sem peso) e
+**Números parecidos** ("07" e "7" da mesma marca — o mesmo animal escrito de dois jeitos, o que parte a
+série de pesagens em dois).
 
 ## 14. O que cada perfil pode fazer
 
