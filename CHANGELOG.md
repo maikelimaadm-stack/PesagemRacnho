@@ -3,6 +3,10 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.5.0] — 2026-10-01
+
+(preenchido na integração da M1)
+
 ## [1.4.2] — 2026-09-30
 
 A 1.4.1 com o pedido de 30/09/2026 (E1G): GMD em todos os relatórios e gráficos de peso e ganho. Esquema Dexie
