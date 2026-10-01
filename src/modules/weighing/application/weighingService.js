@@ -8,7 +8,7 @@ import { animalIdentityKey, receivesWeightGain, recalculateWeightSeries } from '
 import { calculateWeightGain } from '../domain/weighingCalculations.js';
 import { getCurrentActor, hasActorProvider } from '../../../storage/indexedDb/auditActor.js';
 import { authorize, can, forbiddenError } from '../../auth/domain/permissionService.js';
-import { parseCivilDate } from '../domain/brazilianValues.js';
+import { parseBrazilianNumber, parseCivilDate } from '../domain/brazilianValues.js';
 import { SanityError, validateLaunchApplications } from '../../sanity/domain/sanityRules.js';
 import { MOTIVO_REPESAGEM, planSameDayReweigh } from '../domain/repesagem.js';
 
@@ -167,7 +167,8 @@ export async function replaceSameDayEntry(previousIds, rawPayload) {
       animal: uiPayload,
       date: parseCivilDate(uiPayload.data_pesagem),
       tipoManejo: uiPayload.tipo_manejo,
-      peso: uiPayload.peso ?? uiPayload.peso_kg,
+      // Peso como o mapper lê (pt-BR: "335,5"), para a regra valer igual ao createEntry.
+      peso: parseBrazilianNumber(uiPayload.peso ?? uiPayload.peso_kg),
     });
     if (!ids.length || anteriores.length !== ids.length || !plano.repesar || plano.anteriores.length !== ids.length) {
       throw new WeighingError('WEIGHING_SAVE_001', 'Só se repesa pesagem de Manejo com peso do mesmo animal, na mesma data.');

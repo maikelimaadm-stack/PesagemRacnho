@@ -285,6 +285,11 @@ for (const role of ['CONSULTA']) {
 setActorProvider(() => ({ id: 'u-ADMIN', nome: 'Ana Admin', role: 'ADMIN' }));
 assert.equal((await raw('m-b2')).deleted_at, null, 'depois de todas as recusas, a de hoje continua valendo');
 await integridadeVerde('depois das recusas');
+// Peso em texto pt-BR ("317,5"), como o mapper aceita: a regra lê igual e a série recalculada fecha a conta.
+const repesadaTexto = await weighingService.replaceSameDayEntry(['m-b2'], evento('r-b2', 'B', '202', 'Manejo', '2026-09-20', '317,5'));
+assert.equal(repesadaTexto.peso, 317.5, 'peso "317,5" gravado como 317,5 kg');
+assert.deepEqual(derived(repesadaTexto), { data_anterior: '2026-09-10', peso_anterior: 305, dias: 10, ganho: 12.5, gmd: 1.25 }, 'derivados contra a repesada de 10/09');
+await integridadeVerde('depois da repesagem com peso em texto');
 ok('recusas');
 
 setActorProvider(null);
