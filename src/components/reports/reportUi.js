@@ -7,6 +7,7 @@ import { isFilterActive } from "@/modules/reporting/domain/filterEngine";
 import { isLeafGroupLevel, leafOnlyMetricKeys } from "@/modules/reporting/domain/summaryLayout";
 import { rangeText } from "@/modules/reporting/domain/reportDocument";
 import { filtersForDisplay } from "@/modules/reporting/domain/reportViews";
+import { gmdCellOf, hasGmdQuality } from "@/modules/reporting/domain/gmdColumns";
 
 /** Ator da sessão para os serviços ({ id, nome, role }); null fora do AuthGate. */
 export function useReportActor() {
@@ -72,7 +73,19 @@ export function toServiceFilters(uiFilters, columns) {
 export const toDisplayFilters = filtersForDisplay;
 
 export function screenCell(viewModel, column, row) {
+  const gmd = screenGmd(viewModel, column, row);
+  // M1: GMD sem cálculo (SEM_GMD) é "—", nunca 0; com número, o mesmo número (o cinza vem de screenGmd).
+  if (gmd && gmd.texto === "-") return formatCell(column, null, "screen");
   return formatCell(column, cellRawValue(viewModel, column, row), "screen");
+}
+
+/**
+ * M1: qualidade do GMD da célula na grade (gmdExibicao do contrato, via domain/gmdColumns): { cinza, aviso, texto } ou
+ * null fora das colunas de GMD com qualidade declarada. A grade pinta de cinza e põe o motivo no title.
+ */
+export function screenGmd(viewModel, column, row) {
+  const definition = typeof viewModel?.resolve === "function" ? viewModel.resolve(column.id)?.column : null;
+  return hasGmdQuality(definition) ? gmdCellOf(definition, row) : null;
 }
 
 /** Totais em chips; `level` do nó (0 = Total geral): a faixa do lote (par leafOnly) só no nível folha. */

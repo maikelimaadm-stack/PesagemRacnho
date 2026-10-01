@@ -30,6 +30,7 @@ import { computeAggregates } from './reportAggregates.js';
 import { REPORT_MODES, SHEET_LAYOUT_GROUPS } from './reportDefinition.js';
 import { formatCell, headerLabel, MISSING_SCREEN } from './reportFormatting.js';
 import { formatGroupLabel } from './summaryLayout.js';
+import { gmdCellOf, hasGmdQuality } from './gmdColumns.js';
 
 export const VENDAS_VIEW_ID = 'vendas';
 // Sem valor: "-" como no antigo (o Valor total de uma venda sem Valor @ nem valor digitado).
@@ -191,9 +192,14 @@ function detailCell(viewModel, entry, row, emphasis) {
   const accessor = viewModel.resolve(entry.key);
   const raw = entry.column?.type === 'entity' ? accessor.displayOf(row) : accessor.valueOf(row);
   const shown = entry.column?.type === 'weight' ? { ...entry.column, decimals: 0 } : entry.column;
-  const formatted = formatCell(shown, raw, 'print');
-  const text = formatted === MISSING_SCREEN || formatted === '' ? VENDAS_MISSING : formatted;
-  return { key: entry.key, raw: isMissing(raw) ? null : raw, text, align: entry.align, emphasis: emphasis[entry.key] ?? null };
+  // M1: GMD pelo formatador compartilhado — SEM_GMD "-" (nunca 0); intervalo curto com o número, cinza e o aviso.
+  const gmd = hasGmdQuality(accessor.column) ? gmdCellOf(accessor.column, row, (value) => formatCell(shown, value, 'print')) : null;
+  const formatted = gmd ? gmd.texto : formatCell(shown, raw, 'print');
+  const text = formatted === MISSING_SCREEN || formatted === '' || formatted === '-' ? VENDAS_MISSING : formatted;
+  return {
+    key: entry.key, raw: isMissing(raw) || gmd?.texto === '-' ? null : raw, text, align: entry.align, emphasis: emphasis[entry.key] ?? null,
+    ...(gmd?.cinza ? { gmd: { qualidade: gmd.gmdQualidade, cinza: true, aviso: gmd.aviso } } : {}),
+  };
 }
 
 /**

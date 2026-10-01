@@ -7,7 +7,7 @@ import MakTh, { makRowClass } from "@/components/mak/MakTh";
 import { fmtInt } from "@/components/common/formatNumber";
 import { flattenTree } from "@/modules/reporting/domain/groupEngine";
 import { formatGroupLabel } from "@/modules/reporting/domain/summaryLayout";
-import { aggregateChips, headerLabel, screenCell } from "./reportUi";
+import { aggregateChips, headerLabel, screenCell, screenGmd } from "./reportUi";
 
 // Tabela do relatório (ModeloBase1 `.emp-table-pro`): linhas de grupo, dados e subtotal vindas da
 // árvore do view model; paginação SOMENTE de apresentação — subtotais e total geral são sempre da
@@ -97,11 +97,20 @@ export default function ReportTable({ viewModel, sort, onSort, widths = {}, filt
               dataIndex += 1;
               return (
                 <TableRow key={`d-${line.row.id ?? index}-${index}`} className={`${rowClass} emp-table-data-row`}>
-                  {columns.map((column) => (
-                    <TableCell key={column.id} className={`text-xs${column.align === "right" ? " text-right font-mono" : ""}`}>
-                      {screenCell(viewModel, column, line.row)}
-                    </TableCell>
-                  ))}
+                  {columns.map((column) => {
+                    // M1: GMD de intervalo curto em cinza (cor que o tema já tem), com o motivo no title.
+                    const gmd = screenGmd(viewModel, column, line.row);
+                    return (
+                      <TableCell
+                        key={column.id}
+                        className={`text-xs${column.align === "right" ? " text-right font-mono" : ""}${gmd?.cinza ? " text-muted-foreground" : ""}`}
+                        title={gmd?.cinza ? `GMD não entra na média: ${gmd.aviso ?? "intervalo curto"}` : undefined}
+                        data-gmd={gmd?.cinza ? "NAO_CONFIAVEL" : undefined}
+                      >
+                        {screenCell(viewModel, column, line.row)}
+                      </TableCell>
+                    );
+                  })}
                 </TableRow>
               );
             })}

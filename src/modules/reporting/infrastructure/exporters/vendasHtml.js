@@ -6,7 +6,7 @@
 // para o miolo). Estilo em sheetStyles.js (bloco ".sheet-vendas", classes sv-* iguais nos três desenhos), copiado
 // das classes Tailwind do antigo.
 // escapeHtml vem de sheetHtml (que importa este arquivo): só é chamado na renderização, nunca ao carregar.
-import { escapeHtml, renderHeaderCell } from './sheetHtml.js';
+import { GMD_GRAY_CLASS, escapeHtml, renderHeaderCell } from './sheetHtml.js';
 
 const ALIGN = Object.freeze({ left: 'sv-l', right: 'sv-r', center: 'sv-c' });
 
@@ -37,7 +37,9 @@ function renderTotais(block, id) {
 // E1F: na tela, o cabeçalho interativo (menu e puxador — sheetHtml.renderHeaderCell); com largura escolhida
 // pela pessoa, as larguras da folha (doc.print) em colgroup, na tela, na impressão e no PDF.
 function renderDetail(columns, rows, { headerMenu = false, sort = null, widthPercents = null } = {}) {
-  const body = rows.map((row) => `<tr data-row-id="${escapeHtml(row.id)}">${row.cells.map((cell) => `<td class="${cellClass({ align: cell.align, numeric: cell.align === 'right', emphasis: cell.emphasis })}" data-key="${escapeHtml(cell.key)}">${escapeHtml(cell.text)}</td>`).join('')}</tr>`);
+  // M1: GMD de intervalo curto em cinza, com o motivo no title (a mesma marca da folha comum — sheetHtml).
+  const gmdMark = (cell) => (cell.gmd?.cinza ? { cls: ` ${GMD_GRAY_CLASS}`, attrs: ` title="${escapeHtml(`GMD não entra na média: ${cell.gmd.aviso ?? 'intervalo curto'}`)}" data-gmd="${escapeHtml(cell.gmd.qualidade ?? 'NAO_CONFIAVEL')}"` } : { cls: '', attrs: '' });
+  const body = rows.map((row) => `<tr data-row-id="${escapeHtml(row.id)}">${row.cells.map((cell) => { const mark = gmdMark(cell); return `<td class="${cellClass({ align: cell.align, numeric: cell.align === 'right', emphasis: cell.emphasis })}${mark.cls}" data-key="${escapeHtml(cell.key)}"${mark.attrs}>${escapeHtml(cell.text)}</td>`; }).join('')}</tr>`);
   const thead = headerMenu ? `<thead><tr>${columns.map((column, index) => renderHeaderCell({ ...column, kind: 'data' }, index, { cls: ALIGN[column.align] ?? 'sv-l', sort })).join('')}</tr></thead>` : head(columns);
   const fixed = widthPercents?.length === columns.length;
   const colgroup = fixed ? `<colgroup>${widthPercents.map((percent) => `<col style="width:${percent}%">`).join('')}</colgroup>` : '';

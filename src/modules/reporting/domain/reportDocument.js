@@ -34,6 +34,7 @@ import { computeAggregate } from './reportAggregates.js';
 import { REPORT_MODES } from './reportDefinition.js';
 import { formatCell, headerLabel, MISSING_SCREEN } from './reportFormatting.js';
 import { formatGroupLabel, summaryMetrics, SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC } from './summaryLayout.js';
+import { entersGmdMath, gmdCellOf, gmdGrayNote, hasGmdQuality } from './gmdColumns.js';
 import { buildVendasBlocks, isVendasViewModel, vendasDocumentBody } from './vendasLayout.js';
 
 export const DOCUMENT_KIND = 'pesagens.report-document';
@@ -514,7 +515,7 @@ function makLeafCount(mak, rows) {
  * Texto de uma célula de dados como no antigo: kg nos pesos, R$ no dinheiro, "-" no vazio; Sexo "M"/"F" só
  * no Analítico e em Vendas de Pesagens (na lista genérica fica o nome, "Macho"/"Fêmea").
  */
-function makDataCell(mak, column, raw) {
+function makDataCell(mak, column, raw, row = null) {
   const source = column.column;
   if (source.id === 'sexo' && !isGenericVariant(mak.variant) && !isMissingValue(raw) && String(raw).trim() !== '') {
     const text = String(raw).trim();
@@ -523,13 +524,38 @@ function makDataCell(mak, column, raw) {
   }
   if (MAK_ZERO_AS_MISSING.has(source.id) && Number(raw) === 0) return { text: MAK_MISSING };
   const numeric = MAK_NUMERIC_TYPES.has(source.type);
-  const text = numeric
-    ? makNumberText(source, raw, { decimals: column.mk.decimals, unit: column.mk.unit })
-    : formatCell(source, raw, 'print');
+  const numberText = (value) => makNumberText(source, value, { decimals: column.mk.decimals, unit: column.mk.unit });
+  // M1: GMD pelo formatador compartilhado (gmdExibicao, com o número da folha): SEM_GMD "-" (nunca 0) e o
+  // NAO_CONFIAVEL com o mesmo número, em cinza e com o aviso.
+  const gmd = row ? dataCellGmd(mak.viewModel, source, row, numberText) : null;
+  if (gmd) {
+    if (gmd.texto === '-') return { text: MAK_MISSING, tone: null };
+    if (gmd.cinza) return { text: gmd.texto, tone: null, gmd: gmdMark(gmd) };
+  }
+  const text = numeric ? numberText(raw) : formatCell(source, raw, 'print');
   const shown = text === MISSING_SCREEN || text === '' ? MAK_MISSING : text;
   // GMD verde quando ganha, vermelho quando perde (text-emerald-600 / text-red-600 do antigo).
   const tone = source.type === 'gmd' && typeof raw === 'number' && raw !== 0 ? (raw > 0 ? 'pos' : 'neg') : null;
   return { text: shown, tone };
+}
+
+/** M1: marca da célula de GMD não confiável (a folha desenha cinza, com o motivo no title). */
+const gmdMark = (gmd) => ({ qualidade: gmd.gmdQualidade, cinza: true, aviso: gmd.aviso });
+
+/**
+ * M1: exibição do GMD da linha numa coluna da folha (gmdExibicao do contrato, com o formatador da camada) — null fora
+ * das colunas de GMD com qualidade declarada.
+ */
+function dataCellGmd(viewModel, column, row, format) {
+  const definition = definitionColumnOf(viewModel, column?.id);
+  return hasGmdQuality(definition) ? gmdCellOf(definition, row, format) : null;
+}
+
+/** M1: a folha tem GMD em cinza (intervalo curto) em alguma coluna de dados? (todas as linhas — a impressão leva todas) */
+function hasGrayGmd(viewModel, columns) {
+  const gmdColumns = columns.filter((column) => column.kind === 'data').map((column) => definitionColumnOf(viewModel, column.column?.id ?? column.key)).filter(hasGmdQuality);
+  if (!gmdColumns.length) return false;
+  return (viewModel.rows ?? []).some((row) => gmdColumns.some((column) => gmdCellOf(column, row)?.cinza));
 }
 
 // ---------------------------------------------------------------------------
@@ -831,10 +857,12 @@ function buildDetailBody(viewModel, columns, { maxDataRows = Infinity } = {}, ma
         const raw = dataCellRaw(viewModel, column.column, row);
         const kind = column.align === 'right' ? 'num' : 'txt';
         if (mak) {
-          const { text, tone } = makDataCell(mak, column, raw);
-          return { col, key: column.key, text, raw: null, align: column.align, kind, ...(tone ? { tone } : {}) };
+          const { text, tone, gmd: mark } = makDataCell(mak, column, raw, row);
+          return { col, key: column.key, text, raw: null, align: column.align, kind, ...(tone ? { tone } : {}), ...(mark ? { gmd: mark } : {}) };
         }
-        return { col, key: column.key, text: formatCell(column.column, raw, 'print'), raw: null, align: column.align, kind };
+        const gmd = dataCellGmd(viewModel, column.column, row, (value) => formatCell(column.column, value, 'print'));
+        const text = gmd?.texto === '-' ? MISSING_SCREEN : formatCell(column.column, raw, 'print');
+        return { col, key: column.key, text, raw: null, align: column.align, kind, ...(gmd?.cinza ? { gmd: gmdMark(gmd) } : {}) };
       }),
     };
   };
@@ -1144,11 +1172,36 @@ export function gmdCoverageOf(viewModel, columns = [], matrix = null) {
     const key = animalAccessor.groupKeyOf(row);
     if (key === null || key === undefined || key === '') continue;
     all.add(key);
-    if (toFiniteNumber(gmdAccessor.valueOf(row)) !== null) withGmd.add(key);
+    // M1: só o GMD que ENTRA na conta (CONFIAVEL) conta para o "N" — o do intervalo curto aparece, mas não entra.
+    if (toFiniteNumber(gmdAccessor.valueOf(row)) !== null && entersGmdMath(gmdAccessor.column, row)) withGmd.add(key);
   }
   if (!all.size) return null;
   const missing = withGmd.size < all.size;
   return { columnId, validos: withGmd.size, total: all.size, texto: missing ? `GMD de ${withGmd.size.toLocaleString('pt-BR')} de ${all.size.toLocaleString('pt-BR')} cab.` : null };
+}
+
+/**
+ * M1: a mesma cobertura do GMD ("GMD de N de M cab.") direto do view model — para o XLSX/PDF levarem o rodapé da folha
+ * sem montar o documento: Detalhado = a 1ª coluna de GMD em uso; Resumido = a 1ª métrica de GMD; Matriz = a métrica
+ * de GMD da célula; venda (quadros) = só com "Mostrar Detalhes" (a folha de venda sem detalhe não tem coluna de GMD).
+ */
+export function gmdCoverageOfViewModel(viewModel, { showDetails = false } = {}) {
+  if (!(viewModel?.rowCount > 0) && !(viewModel?.rows ?? []).length) return null;
+  const summary = viewModel.mode === REPORT_MODES.RESUMIDO;
+  const matrix = summary && isMatrixViewModel(viewModel) ? buildMatrix(viewModel, { target: 'xlsx' }) : null;
+  if (matrix) return gmdCoverageOf(viewModel, [], matrix);
+  if (isVendasViewModel(viewModel) && !showDetails) return null;
+  const columns = summary
+    ? summaryMetrics(viewModel).map((metric) => ({ kind: 'metric', key: metric.key, metric }))
+    : (viewModel.columns ?? []).map((column) => ({ kind: 'data', key: column.id, column }));
+  return gmdCoverageOf(viewModel, columns, null);
+}
+
+/** M1: a nota do cinza (intervalo curto) quando o Detalhado tem GMD em cinza — a mesma do rodapé da folha. */
+export function gmdGrayNoteOfViewModel(viewModel) {
+  if (viewModel?.mode === REPORT_MODES.RESUMIDO) return null;
+  const columns = (viewModel?.columns ?? []).map((column) => ({ kind: 'data', key: column.id, column }));
+  return hasGrayGmd(viewModel, columns) ? gmdGrayNote(viewModel.gmdDiasMinimos) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1220,6 +1273,9 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   // E1G (A3): quantos animais têm GMD, quando falta para alguém (curto, no rodapé — não é nota longa).
   // No desenho de venda sem "Mostrar Detalhes" não há tabela de colunas: sem GMD na folha, sem nota.
   const gmdCoverage = hasRows ? gmdCoverageOf(viewModel, vendas && !showDetails ? [] : columns, matrix) : null;
+  // M1: GMD de intervalo curto na folha (cinza): o rodapé diz o que o cinza quer dizer — a impressão e o PDF não têm o
+  // "title" da célula. Só no Detalhado (o Resumido mostra contas, que já não levam o intervalo curto).
+  const gmdGray = hasRows && !summary && hasGrayGmd(viewModel, vendas && !showDetails ? [] : columns);
 
   const emitted = formatEmittedAt(viewModel.generatedAt);
   const emitter = viewModel.emittedBy?.nome ?? viewModel.emittedBy?.id ?? '—';
@@ -1230,6 +1286,8 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     filtros: `Filtros: ${describeReportFilters(viewModel)}`,
     arroba: usesArroba ? `@ = peso vivo ÷ ${divisor}` : null,
     gmd: gmdCoverage?.texto ?? null,
+    // M1: "GMD em cinza = intervalo menor que 21 dias: não entra na média" (só quando há GMD em cinza na folha).
+    gmdCinza: gmdGray ? gmdGrayNote(viewModel.gmdDiasMinimos) : null,
     omitidas: omitted ? `${omitted} coluna(s) omitida(s) pelo perfil de quem emitiu` : null,
     emitidoPor: `Emitido por ${emitter} em ${emitted}`,
   };

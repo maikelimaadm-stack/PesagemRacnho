@@ -51,6 +51,20 @@ function cellClass(cell) {
   return cell.kind === 'num' ? 'num' : 'txt';
 }
 
+// M1: GMD de intervalo curto (NAO_CONFIAVEL) — o número em cinza (classe), o motivo no title (tela) e a qualidade em
+// data-gmd (gates/paridade). A impressão e o PDF explicam o cinza no rodapé (doc.footer.gmdCinza).
+export const GMD_GRAY_CLASS = 'mk-gmd-cinza';
+
+function gmdAttrs(cell) {
+  return cell.gmd?.cinza ? ` data-gmd="${escapeHtml(cell.gmd.qualidade ?? 'NAO_CONFIAVEL')}"` : '';
+}
+
+/** title da célula: o aviso do GMD (motivo) ou o "Calculado com N de M valores" do total parcial. */
+function cellTitle(cell) {
+  if (cell.gmd?.cinza) return ` title="${escapeHtml(`GMD não entra na média: ${cell.gmd.aviso ?? 'intervalo curto'}`)}"`;
+  return cell.partial ? ` title="Calculado com ${cell.partial.nValid} de ${cell.partial.nTotal} valores"` : '';
+}
+
 function renderHeadRow(doc, { interactive, sort }) {
   const cells = doc.columns.map((column, index) => {
     const cls = column.align === 'left' ? ' class="lbl"' : '';
@@ -79,9 +93,8 @@ function renderRow(doc, row, { interactive }) {
     } else if (interactive && cell.drill && text) {
       text = `<button type="button" class="sheet-drill" data-drill="${escapeHtml(cell.drill)}" title="Abrir o detalhado deste cruzamento">${text}</button>`;
     }
-    const cls = cell.partial ? `${cellClass(cell)} sheet-partial` : cellClass(cell);
-    const title = cell.partial ? ` title="Calculado com ${cell.partial.nValid} de ${cell.partial.nTotal} valores"` : '';
-    return `<td data-col="${cell.col}" data-key="${escapeHtml(cell.key)}" class="${cls}"${title}>${text}</td>`;
+    const cls = [cellClass(cell), cell.partial ? 'sheet-partial' : null, cell.gmd?.cinza ? GMD_GRAY_CLASS : null].filter(Boolean).join(' ');
+    return `<td data-col="${cell.col}" data-key="${escapeHtml(cell.key)}" class="${cls}"${cellTitle(cell)}${gmdAttrs(cell)}>${text}</td>`;
   });
   return `<tr ${attrs}>${cells.join('')}</tr>`;
 }
@@ -129,6 +142,7 @@ function makCellClass(doc, cell) {
   if (cell.tone) parts.push(`mk-${cell.tone}`);
   if (column?.total) parts.push('mk-tcol'); // coluna TOTAL da matriz
   if (cell.partial) parts.push('sheet-partial');
+  if (cell.gmd?.cinza) parts.push(GMD_GRAY_CLASS);
   return parts.join(' ');
 }
 
@@ -175,8 +189,7 @@ function renderMakRow(doc, row, { interactive }) {
     } else if (interactive && cell.drill && text) {
       text = `<button type="button" class="sheet-drill" data-drill="${escapeHtml(cell.drill)}" title="Abrir o detalhado deste cruzamento">${text}</button>`;
     }
-    const title = cell.partial ? ` title="Calculado com ${cell.partial.nValid} de ${cell.partial.nTotal} valores"` : '';
-    return `<td data-col="${cell.col}" data-key="${escapeHtml(cell.key)}" class="${makCellClass(doc, cell)}"${title}>${text}</td>`;
+    return `<td data-col="${cell.col}" data-key="${escapeHtml(cell.key)}" class="${makCellClass(doc, cell)}"${cellTitle(cell)}${gmdAttrs(cell)}>${text}</td>`;
   });
   return `<tr ${attrs}>${cells.join('')}</tr>`;
 }
@@ -250,9 +263,9 @@ function renderMakContent(doc, options) {
 }
 
 // E1D item 8: filtros, @ (quando houver), colunas omitidas pelo perfil (quando houver) e quem emitiu/quando.
-// E1G: "GMD de N de M cab." quando falta GMD para algum animal da folha.
+// E1G: "GMD de N de M cab." quando falta GMD para algum animal da folha. M1: o que o cinza do GMD quer dizer.
 function renderFooter(doc) {
-  const parts = [doc.footer.filtros, doc.footer.arroba, doc.footer.gmd, doc.footer.omitidas, doc.footer.emitidoPor].filter(Boolean);
+  const parts = [doc.footer.filtros, doc.footer.arroba, doc.footer.gmd, doc.footer.gmdCinza, doc.footer.omitidas, doc.footer.emitidoPor].filter(Boolean);
   return `<div class="sheet-footer">${parts.map((part) => `<span>${escapeHtml(part)}</span>`).join('')}<span class="sheet-footer__pages">Página X de Y na impressão</span></div>`;
 }
 

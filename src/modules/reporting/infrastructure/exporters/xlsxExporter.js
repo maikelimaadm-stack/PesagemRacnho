@@ -9,7 +9,7 @@
 import { describeFilters } from './printDocument.js';
 import { describePeriod } from '../../domain/reportPeriod.js';
 import { DEFAULT_DECIMALS, formatCell } from '../../domain/reportFormatting.js';
-import { buildLeafTotalBlock, DOC_ROW_TYPES } from '../../domain/reportDocument.js';
+import { buildLeafTotalBlock, DOC_ROW_TYPES, gmdCoverageOfViewModel, gmdGrayNoteOfViewModel } from '../../domain/reportDocument.js';
 import { buildMatrix, isMatrixViewModel, MATRIX_TOTAL_LABEL, matrixValues } from '../../domain/matrixLayout.js';
 import { leafOnlyMetricKeys, summaryMetricValue } from '../../domain/summaryLayout.js';
 import { aggregateValueColumn, buildReportLines } from './reportLayout.js';
@@ -46,8 +46,8 @@ export function columnLetter(index) {
 
 // Estilos (cellXfs): 0 padrão · 1 texto com borda · 2 cabeçalho · 3 título · 4 total · 5 grupo ·
 // 6 número 2 casas · 7 número 3 casas · 8 inteiro · 9 subtotal · 10 rótulo de metadados ·
-// 11 número 1 casa (E1B: kg agregado)
-const STYLE = { text: 1, header: 2, title: 3, total: 4, group: 5, num2: 6, num3: 7, int: 8, subtotal: 9, meta: 10, num1: 11 };
+// 11 número 1 casa (E1B: kg agregado) · 12 (M1) GMD de intervalo curto: número 3 casas em CINZA (fora da média)
+const STYLE = { text: 1, header: 2, title: 3, total: 4, group: 5, num2: 6, num3: 7, int: 8, subtotal: 9, meta: 10, num1: 11, gmdGray: 12 };
 
 // Formato do Excel = casas da coluna (as mesmas de formatCell): 0 inteiro, 1, 2 (padrão) ou 3.
 function numberStyle(column) {
@@ -185,15 +185,32 @@ function buildMatrixSheetRows(viewModel) {
   return { rows, width, dataHeaders, merges, freeze: { rows: headerRow + 1, cols: 1 } };
 }
 
-/** Linhas da planilha principal: [{ cells: [[valor, estilo], ...], kind }]. */
+// M1: rodapé da folha no fim da planilha — "GMD de N de M cab." (só CONFIAVEL conta) e o que o cinza quer dizer.
+export const XLSX_FOOTER_KIND = 'FOOTER';
+
+function gmdFooterRows(viewModel, { vendas = false } = {}) {
+  const coverage = gmdCoverageOfViewModel(viewModel, { showDetails: vendas });
+  const notes = [coverage?.texto, gmdGrayNoteOfViewModel(viewModel)].filter(Boolean);
+  if (!notes.length) return [];
+  return [{ kind: 'BLANK', cells: [] }, ...notes.map((text) => ({ kind: XLSX_FOOTER_KIND, overflow: true, cells: [[text, STYLE.meta]] }))];
+}
+
+/** Linhas da planilha principal: [{ cells: [[valor, estilo], ...], kind }] — com o rodapé do GMD da folha (M1). */
 export function buildSheetRows(viewModel) {
+  const vendas = !isMatrixViewModel(viewModel) && isVendasViewModel(viewModel);
+  const sheet = buildSheetBody(viewModel);
+  return { ...sheet, rows: [...sheet.rows, ...gmdFooterRows(viewModel, { vendas })] };
+}
+
+function buildSheetBody(viewModel) {
   if (isMatrixViewModel(viewModel)) return buildMatrixSheetRows(viewModel);
   // E1D: Vendas (Detalhado) sai com os blocos da folha (exporters/vendasXlsx.js), com os estilos daqui.
   if (isVendasViewModel(viewModel)) return buildVendasSheetRows(viewModel, { STYLE, numberStyle, metaRows });
   const layout = buildReportLines(viewModel, 'xlsx');
   if (layout.mode === 'RESUMIDO') return buildSummarySheetRows(viewModel, layout);
-  const { headers, lines } = layout;
-  const width = 4 + viewModel.columns.length;
+  // M1: as colunas da exportação (com "Aviso do GMD" logo após o GMD em cinza, quando houver).
+  const { headers, lines, columns: dataColumns } = layout;
+  const width = 4 + dataColumns.length;
   const pad = (cells) => [...cells, ...Array(Math.max(0, width - cells.length)).fill([null, STYLE.text])];
   const rows = metaRows(viewModel);
   rows.push({ kind: 'HEADER', cells: pad([['Tipo', STYLE.header], ['Grupo', STYLE.header], ['Métrica', STYLE.header], ['Valor', STYLE.header], ...headers.map((header) => [header, STYLE.header])]) });
@@ -201,7 +218,7 @@ export function buildSheetRows(viewModel) {
     if (line.type === 'GROUP') {
       rows.push({ kind: 'GROUP', cells: pad([['GROUP', STYLE.group], [line.label, STYLE.group], [`${line.rowCount} registro(s)`, STYLE.group], [null, STYLE.group]]) });
     } else if (line.type === 'DATA') {
-      rows.push({ kind: 'DATA', cells: pad([['DATA', STYLE.text], [line.group || null, STYLE.text], [null, STYLE.text], [null, STYLE.text], ...line.cells.map((value, index) => [value, typeof value === 'number' ? numberStyle(viewModel.columns[index]) : STYLE.text])]) });
+      rows.push({ kind: 'DATA', cells: pad([['DATA', STYLE.text], [line.group || null, STYLE.text], [null, STYLE.text], [null, STYLE.text], ...line.cells.map((value, index) => [value, typeof value === 'number' ? (line.gray?.includes(index) ? STYLE.gmdGray : numberStyle(dataColumns[index])) : STYLE.text])]) });
     } else {
       const style = line.type === 'GRAND_TOTAL' ? STYLE.total : STYLE.subtotal;
       const valueStyle = typeof line.value === 'number' ? numberStyle(aggregateColumn(line.spec, viewModel)) : style;
@@ -236,11 +253,11 @@ function worksheetXml(rows, width, widths, { merges = [], freeze = null } = {}) 
 const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <numFmts count="4"><numFmt numFmtId="164" formatCode="#,##0.00"/><numFmt numFmtId="165" formatCode="#,##0.000"/><numFmt numFmtId="166" formatCode="#,##0"/><numFmt numFmtId="167" formatCode="#,##0.0"/></numFmts>
-<fonts count="3"><font><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font></fonts>
+<fonts count="4"><font><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="10"/><name val="Calibri"/></font><font><b/><sz val="14"/><name val="Calibri"/></font><font><sz val="10"/><color rgb="FF6B7280"/><name val="Calibri"/></font></fonts>
 <fills count="5"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE5E7EB"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDFF0E5"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFEEF7F1"/><bgColor indexed="64"/></patternFill></fill></fills>
 <borders count="2"><border/><border><left style="thin"><color rgb="FFD1D5DB"/></left><right style="thin"><color rgb="FFD1D5DB"/></right><top style="thin"><color rgb="FFD1D5DB"/></top><bottom style="thin"><color rgb="FFD1D5DB"/></bottom></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="12">
+<cellXfs count="13">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
@@ -253,6 +270,7 @@ const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
 <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
 <xf numFmtId="167" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
+<xf numFmtId="165" fontId="3" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyBorder="1"/>
 </cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
