@@ -146,8 +146,7 @@ for (const definition of CATALOGO) {
   assert.deepEqual(views.map((view) => [view.id, view.label, view.mode, view.groups.map((group) => group.columnId)]), tipos, `${definition.id}: tipos (nomes, ordem, modo, agrupamento)`);
   assert.ok(views.every((view) => !view.generated), `${definition.id}: nenhum tipo gerado ("Resumo por …"/"Analítico" automáticos saíram)`);
   assert.equal(definition.defaultView, padrao, `${definition.id}: tipo padrão`);
-  // E1G: o Desempenho foi para a 3 ("Dias médios" no padrão; estado da 2 com o padrão antigo abre com o novo).
-  assert.equal(definition.version, definition.id === 'desempenho' ? 3 : 2, `${definition.id}: versão ${definition.id === 'desempenho' ? 3 : 2} (ganhou tipos — estado gravado na 1 sem tipo abre pela estrutura)`);
+  assert.equal(definition.version, 2, `${definition.id}: versão 2 (ganhou tipos — estado gravado na 1 sem tipo abre pela estrutura)`);
   assert.ok(typesByStructure(definition), `${definition.id}: estado antigo sem tipo abre pela estrutura`);
   assert.ok(views.some((view) => view.mode === D && view.id === 'analitico' && view.groups.length === 0), `${definition.id}: tem o tipo lista Analítico`);
   for (const view of views) {

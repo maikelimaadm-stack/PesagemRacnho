@@ -603,6 +603,8 @@ export async function saveTemplate(input, actor, { empresaId = 'local', now = ne
     ownerUserId: previous?.ownerUserId ?? actor.id,
     ownerName: previous?.ownerName ?? actor.nome ?? null,
     ...config,
+    // E1G: revisão dos padrões dos tipos com que foi gravado (upgradedTypeAggregates).
+    defaultsVersion: definition.defaultsVersion ?? 1,
     createdAt: previous?.createdAt ?? now,
     updatedAt: now,
     updatedBy: actor.id,
@@ -652,19 +654,20 @@ export async function renameTemplate(templateId, name, actor, { empresaId = 'loc
   return sanitizeTemplateFor(renamed, actor.role);
 }
 
-// E1G: modelo/último estado gravado por versão ANTERIOR do relatório com o padrão antigo de um tipo (a pessoa nunca
-// escolheu colunas) abre com o padrão de hoje — ex.: "Dias médios" entrou no Desempenho (versão 3). Só o gravado
-// antes: uma escolha feita hoje igual ao padrão antigo (esconder Dias médios) é respeitada.
+// E1G: modelo/último estado gravado ANTES da revisão atual dos padrões do relatório (definition.defaultsVersion; o
+// gravado hoje leva a marca) com o padrão antigo de um tipo abre com o padrão de hoje — ex.: "Dias médios" entrou
+// no Desempenho. Uma escolha feita hoje igual ao padrão antigo (esconder Dias médios) é respeitada.
 function upgradedTypeAggregates(definition, template, viewId, state) {
-  if ((Number(template.baseReportVersion) || 1) >= definition.version || !state.aggregates.length) return null;
+  if ((Number(template.defaultsVersion) || 1) >= (definition.defaultsVersion ?? 1) || !state.aggregates.length) return null;
   const id = viewId !== undefined ? viewId : resolveViewId(definition, state);
   const view = id ? getReportView(definition, id) : null;
   if (!view || view.generated) return null;
   if (view.mode === REPORT_MODES.DETALHADO) return isPreviousAggregates(view, state.aggregates) ? view.aggregates.map((spec) => ({ ...spec })) : null;
   const previous = view.columnChoices?.previous;
   if (!previous?.length) return null;
-  const keys = [...new Set(metricKeysOf(state.aggregates, definition.metricPairs ?? []))].sort().join('|');
-  if (!previous.some((list) => [...new Set(list)].sort().join('|') === keys)) return null;
+  // A SEQUÊNCIA do padrão antigo (ordem trocada no Colunas Painel é escolha da pessoa e fica).
+  const keys = metricKeysOf(state.aggregates, definition.metricPairs ?? []).join('|');
+  if (!previous.some((list) => list.join('|') === keys)) return null;
   return applyColumnKeys(view, definition, view.columnChoices.defaults).aggregates;
 }
 
@@ -806,6 +809,8 @@ export async function saveReportViewState(reportId, config, actor, { empresaId =
     ...normalized,
     baseReportId: definition.id,
     baseReportVersion: definition.version,
+    // E1G: revisão dos padrões dos tipos com que foi gravado (upgradedTypeAggregates).
+    defaultsVersion: definition.defaultsVersion ?? 1,
     showEmptyColumns: config?.showEmptyColumns === true,
     updatedAt: now,
   };

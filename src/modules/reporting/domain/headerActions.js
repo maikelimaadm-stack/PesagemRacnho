@@ -274,13 +274,18 @@ function totalOption(ctx, docColumn, layout) {
   const op = defaultTotalOp(column);
   if (!op) return null;
   // Ligado = a conta padrão da coluna já está nos totais (a média do tipo, ex. Peso Médio, não conta: é outra conta).
-  return { op, active: aggregatesOf(ctx).some((spec) => sameSpec(spec, specFor(op, column.id))) };
+  // E1G: numa coluna de média (Dias), a soma gravada antes (quando o total era soma) também é o total dela.
+  const ops = totalOpsOf(column, op);
+  return { op, active: aggregatesOf(ctx).some((spec) => spec.columnId === column.id && ops.has(spec.op)) };
 }
+
+const totalOpsOf = (column, op) => new Set([op, ...(column?.totalOp && column.totalOp !== 'sum' ? ['sum'] : [])]);
 
 function applyTotal(ctx, docColumn, option) {
   const current = aggregatesOf(ctx);
   const spec = specFor(option.op, docColumn.key);
-  const aggregates = option.active ? current.filter((item) => !sameSpec(item, spec)) : [...current, spec];
+  const ops = totalOpsOf(columnOf(ctx.definition, docColumn.key), option.op);
+  const aggregates = option.active ? current.filter((item) => !(item.columnId === docColumn.key && ops.has(item.op))) : [...current, spec];
   return { aggregates, summarySort: keepSummarySort(ctx.state, aggregates) };
 }
 

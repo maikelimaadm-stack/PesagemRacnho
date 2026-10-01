@@ -42,9 +42,11 @@ assert.equal(stored.templates.length, 2);
 const serialized = JSON.stringify(stored, (key, value) => (['id', 'createdAt', 'updatedAt'].includes(key) ? undefined : value));
 for (const forbidden of ['"rows"', '"data"', '"population"', '345', 'Frigo Sul']) assert.ok(!serialized.includes(forbidden), `modelo não guarda dados (${forbidden})`);
 // E1 (1.4.0): o modelo guarda também o modo (Resumido/Detalhado) e a ordem do Resumido.
-assert.deepEqual(Object.keys(stored.templates[0]).sort(), ['aggregates', 'baseReportId', 'baseReportVersion', 'columns', 'createdAt', 'filters', 'groups', 'id', 'mode', 'name', 'orientation', 'ownerName', 'ownerUserId', 'params', 'period', 'scope', 'search', 'sort', 'summarySort', 'updatedAt', 'updatedBy', 'version', 'widths'].sort());
+// E1G: + defaultsVersion (revisão dos padrões dos tipos com que o modelo foi gravado; reportTemplateService.upgradedTypeAggregates).
+assert.deepEqual(Object.keys(stored.templates[0]).sort(), ['aggregates', 'baseReportId', 'baseReportVersion', 'columns', 'createdAt', 'defaultsVersion', 'filters', 'groups', 'id', 'mode', 'name', 'orientation', 'ownerName', 'ownerUserId', 'params', 'period', 'scope', 'search', 'sort', 'summarySort', 'updatedAt', 'updatedBy', 'version', 'widths'].sort());
 assert.equal(stored.templates[0].baseReportId, 'desempenho', 'salvar a partir do id antigo grava o id novo');
 assert.equal(stored.templates[0].mode, null, 'sem modo escolhido: abre no padrão da definição');
+assert.equal(stored.templates[0].defaultsVersion, 2, 'modelo do Desempenho gravado hoje leva a revisão 2 dos padrões');
 
 // Visibilidade: dono vê o pessoal; todos veem o compartilhado
 assert.deepEqual((await listTemplates(OPERADOR)).map((t) => t.name).sort(), ['GMD engorda', 'GMD machos']);
