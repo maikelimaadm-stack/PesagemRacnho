@@ -146,10 +146,16 @@ export function buildAnimalWeightCurve(entries = [], { range = 'all', gmdDiasMin
   const gmdResumo = ganho !== null && dias > 0 ? ganho / dias : null;
   const qualidadeResumo = classifyGmd({ dias, gmd: gmdResumo }, minimo);
   // M1 §2: GMD (regressão) do animal — todas as pesagens com peso; a janela (120 dias até hoje) é da própria conta.
-  const regressao = computeWeightedGmd(weighed.map((entry) => ({ data: civil(entry.data_pesagem), peso: measuredWeightOf(entry) })), { ...(hoje ? { hoje } : {}), diasMinimos: minimo });
+  // A qualidade é a MESMA regra dos relatórios (classifyGmd pelos dias cobertos, com o mesmo mínimo) — o número
+  // da Ficha e o da coluna do Rebanho atual saem iguais, inclusive o cinza. Sem conta possível: SEM_GMD ("—").
+  const reta = computeWeightedGmd(weighed.map((entry) => ({ data: civil(entry.data_pesagem), peso: measuredWeightOf(entry) })), { ...(hoje ? { hoje } : {}), diasMinimos: minimo });
+  const regressaoQualidade = classifyGmd({ dias: reta?.diasCobertos ?? null, gmd: reta?.gmd ?? null }, minimo);
   const resumo = {
     pesagens: shown.length, dias, ganho, gmd: gmdResumo, gmdQualidade: qualidadeResumo.gmdQualidade, gmdMotivo: qualidadeResumo.gmdMotivo,
-    regressao: regressao ? { ...regressao, motivo: classifyGmd({ dias: regressao.diasCobertos, gmd: regressao.gmd }, minimo).gmdMotivo } : null,
+    regressao: {
+      gmd: reta?.gmd ?? null, n: reta?.n ?? 0, diasCobertos: reta?.diasCobertos ?? 0, erroPadrao: reta?.erroPadrao ?? null,
+      qualidade: regressaoQualidade.gmdQualidade, motivo: regressaoQualidade.gmdMotivo,
+    },
   };
   const legend = curveLegend(resumo);
   return {

@@ -57,6 +57,9 @@ export function buildManifest(viewModel, format) {
     parameters: viewModel.params,
     // E1B: divisor da @ de peso vivo usado na emissão (Média/Total em @); null em view model antigo.
     arrobaDivisor: viewModel.arrobaDivisor ?? null,
+    // M1: intervalo mínimo do GMD usado na emissão (abaixo dele o GMD saiu em cinza e fora das contas); null em view
+    // model antigo.
+    gmdDiasMinimos: viewModel.gmdDiasMinimos ?? null,
     filters: viewModel.filters,
     lockedFilters: viewModel.lockedFilters,
     drill: (viewModel.drill ?? []).map(({ columnId, key, label }) => ({ columnId, key, label })),

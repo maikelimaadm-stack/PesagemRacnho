@@ -36,6 +36,7 @@ import { renderSheetBody } from '../src/modules/reporting/infrastructure/exporte
 import { parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
 import { unzipStored } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
 import { computeWeightedGmd } from '../src/modules/weighing/domain/weightRegression.js';
+import { attachWeightRegression } from '../src/modules/reporting/infrastructure/reportSources/animalSource.js';
 import { GMD_QUALIDADE } from '../src/modules/weighing/domain/gmdQuality.js';
 import { updateAppConfig } from '../src/modules/settings/application/appConfigService.js';
 
@@ -230,7 +231,10 @@ for (const [where, html] of [['tela', screenHtml], ['impressão/PDF', pdf.html]]
 }
 assert.match(pdf.html, /td\.mk-gmd-cinza \{ color: var\(--mk-gray-500\); \}/, 'PDF: o cinza do tema da folha');
 // CSV: o mesmo número e o aviso na coluna logo após o GMD.
-const csv = parseCsv((await prepareEmission(vm21, 'csv', ADMIN)).content);
+const emissaoCsv = await prepareEmission(vm21, 'csv', ADMIN);
+assert.equal(emissaoCsv.manifest.gmdDiasMinimos, 21, 'manifesto da emissão: o mínimo do GMD usado');
+assert.equal(pdf.manifest.gmdDiasMinimos, 21, 'manifesto da impressão/PDF: o mínimo do GMD usado');
+const csv = parseCsv(emissaoCsv.content);
 const header = csv[0];
 const gi = header.indexOf('GMD (kg/dia)');
 assert.equal(header[gi + 1], 'Aviso do GMD', 'CSV: "Aviso do GMD" logo após o GMD');
@@ -300,8 +304,10 @@ const rebReg = await run('rebanho.atual', { ...viewSelection('analitico', REBANH
 assert.equal(rebReg.stats.regressao.hoje, TODAY, 'Rebanho: hoje');
 assert.equal(rebReg.rows.find((row) => row.animal_id === 'A1').gmd_regressao, expectedA1.gmd, 'Rebanho: A1 = o mesmo do Desempenho até 15/09');
 // Qualidade da regressão: 14 a 20 dias cobertos = cinza (NAO_CONFIAVEL), como qualquer GMD.
-const curto = computeWeightedGmd([{ data: '2026-09-01', peso: 280 }, { data: '2026-09-16', peso: 295 }], { hoje: '2026-09-16', diasMinimos: 21 });
-assert.deepEqual([curto.diasCobertos, curto.qualidade], [15, NAO_CONFIAVEL], '15 dias cobertos: regressão NAO_CONFIAVEL');
+const [curto] = attachWeightRegression([{ animal_id: 'X' }], new Map([['X', [{ data: '2026-09-01', peso: 280 }, { data: '2026-09-16', peso: 295 }]]]), { hoje: '2026-09-16', gmdDiasMinimos: 21 });
+assert.deepEqual([curto.gmd_regressao, curto.gmd_regressao_dias, curto.gmd_regressao_qualidade, curto.gmd_regressao_motivo], [1, 15, NAO_CONFIAVEL, 'intervalo curto (15 dias)'], '15 dias cobertos: regressão com número, NAO_CONFIAVEL (cinza)');
+const [curto14] = attachWeightRegression([{ animal_id: 'X' }], new Map([['X', [{ data: '2026-09-01', peso: 280 }, { data: '2026-09-16', peso: 295 }]]]), { hoje: '2026-09-16', gmdDiasMinimos: 14 });
+assert.equal(curto14.gmd_regressao_qualidade, CONFIAVEL, 'mínimo 14: os mesmos 15 dias confiáveis');
 // NEGATIVO: nenhuma consulta de pesagens por animal num laço (a leitura é a da janela, pelo índice).
 const animalSource = fs.readFileSync(new URL('../src/modules/reporting/infrastructure/reportSources/animalSource.js', import.meta.url), 'utf8');
 assert.ok(!/for \(const (row|animal)[^\n]*\) \{[^}]*await (db\.table\('pesagens'\)|loadEventRows)/.test(animalSource), 'NEGATIVO: nenhuma consulta por animal');
