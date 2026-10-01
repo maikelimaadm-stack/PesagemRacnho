@@ -109,8 +109,9 @@ export const DESEMPENHO = defineReport({
   id: 'desempenho',
   family: 'desempenho',
   grain: GRAINS.ANIMAL_PERIOD,
-  // 2 (E1E): ganhou os tipos (ver rebanho.js).
-  version: 2,
+  // 2 (E1E): ganhou os tipos (ver rebanho.js). 3 (E1G): "Dias médios" no padrão — estado/modelo gravado na versão 2
+  // com o padrão antigo abre com o novo (reportTemplateService.upgradedTypeAggregates).
+  version: 3,
   source: 'animals.period',
   requires: ['reports.read', 'weighing.read'],
   title: 'Desempenho',

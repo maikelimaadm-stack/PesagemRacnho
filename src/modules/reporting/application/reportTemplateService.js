@@ -41,13 +41,13 @@ import { can, forbiddenError } from '../../auth/domain/permissionService.js';
 import { getReportDefinition, resolveReportId } from '../definitions/reportCatalog.js';
 import { aliasSelection, getLegacyAlias } from '../definitions/legacyAliases.js';
 import { convertLegacyViewConfig, typesByStructure } from '../definitions/legacyViews.js';
-import { REPORT_MODES, normalizeReportMode } from '../domain/reportDefinition.js';
+import { REPORT_MODES, metricKeysOf, normalizeReportMode } from '../domain/reportDefinition.js';
 import { canRunReport, canSeeColumn } from '../domain/reportPermissions.js';
 import { MAX_GROUP_LEVELS } from '../domain/groupEngine.js';
 import { isFilterActive, serializeFilters } from '../domain/filterEngine.js';
 import { clampWidth } from '../domain/headerActions.js';
 import { PERIOD_PRESETS } from '../domain/reportPeriod.js';
-import { getReportView } from '../domain/reportViews.js';
+import { applyColumnKeys, getReportView, isPreviousAggregates, resolveViewId } from '../domain/reportViews.js';
 import { isKnownSortChoice } from '../domain/sortChoices.js';
 import { hasTypeColumns, sanitizeTypeColumnKeys, typeColumnDefaults } from '../domain/typeColumns.js';
 import { chartsStateOf } from '../domain/reportCharts.js';
@@ -652,6 +652,22 @@ export async function renameTemplate(templateId, name, actor, { empresaId = 'loc
   return sanitizeTemplateFor(renamed, actor.role);
 }
 
+// E1G: modelo/último estado gravado por versão ANTERIOR do relatório com o padrão antigo de um tipo (a pessoa nunca
+// escolheu colunas) abre com o padrão de hoje — ex.: "Dias médios" entrou no Desempenho (versão 3). Só o gravado
+// antes: uma escolha feita hoje igual ao padrão antigo (esconder Dias médios) é respeitada.
+function upgradedTypeAggregates(definition, template, viewId, state) {
+  if ((Number(template.baseReportVersion) || 1) >= definition.version || !state.aggregates.length) return null;
+  const id = viewId !== undefined ? viewId : resolveViewId(definition, state);
+  const view = id ? getReportView(definition, id) : null;
+  if (!view || view.generated) return null;
+  if (view.mode === REPORT_MODES.DETALHADO) return isPreviousAggregates(view, state.aggregates) ? view.aggregates.map((spec) => ({ ...spec })) : null;
+  const previous = view.columnChoices?.previous;
+  if (!previous?.length) return null;
+  const keys = [...new Set(metricKeysOf(state.aggregates, definition.metricPairs ?? []))].sort().join('|');
+  if (!previous.some((list) => [...new Set(list)].sort().join('|') === keys)) return null;
+  return applyColumnKeys(view, definition, view.columnChoices.defaults).aggregates;
+}
+
 /** Tipo de um modelo/último estado sem conversão: Pesagens (E1D) sem tipo = Personalizado; E1E, pela estrutura. */
 function typedTemplateOf(definition, config) {
   if (!definition.defaultView) return config;
@@ -701,17 +717,19 @@ export function templateToRequest(source, role) {
   // E1G: vista e gráficos guardados; o que deixou de existir (gráfico, opção, vista) sai com aviso.
   const charted = chartsStateOf(definition, { display: template.display, charts: template.charts });
   for (const warning of charted.warnings) warnings.push({ code: warning.code, message: warning.message });
+  // Modelo de antes da 1.4.0 (sem modo) — resposta 3 da responsável ao REPORT da E1: abre Resumido
+  // só se tiver agrupamento; salvo como lista abre Detalhado (nunca um Resumido só com o Total geral).
+  const mode = template.mode ? normalizeReportMode(template.mode, definition.defaultMode) : (groups.length ? REPORT_MODES.RESUMIDO : REPORT_MODES.DETALHADO);
+  const upgraded = upgradedTypeAggregates(definition, template, typed.view, { groups, mode, aggregates, columns, filters: { ...filters, ...(template.fixedFilters || {}) } });
   return {
     ...charted.values,
     reportId: definition.id,
     params: { ...(template.period ? { periodo: template.period } : {}), ...(template.params || {}) },
     selection: {
-      columns, filters, groups, sort, aggregates, search: template.search || '',
+      columns, filters, groups, sort, aggregates: upgraded ?? aggregates, search: template.search || '',
       // Condição fixa do relatório antigo (modelo convertido): nunca some, nem por perfil.
       fixedFilters: { ...(template.fixedFilters || {}) },
-      // Modelo de antes da 1.4.0 (sem modo) — resposta 3 da responsável ao REPORT da E1: abre Resumido
-      // só se tiver agrupamento; salvo como lista abre Detalhado (nunca um Resumido só com o Total geral).
-      mode: template.mode ? normalizeReportMode(template.mode, definition.defaultMode) : (groups.length ? REPORT_MODES.RESUMIDO : REPORT_MODES.DETALHADO),
+      mode,
       summarySort: template.summarySort ?? null,
       // E1D (ausentes em modelos anteriores: a tela identifica o tipo pela estrutura — reportViews.resolveViewId).
       ...(typed.view !== undefined ? { view: typed.view } : {}),

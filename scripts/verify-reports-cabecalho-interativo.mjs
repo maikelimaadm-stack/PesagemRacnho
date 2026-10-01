@@ -533,25 +533,31 @@ ok('Mais filtros');
     assert.equal(column.totalOp, 'avg', `${reportId} › ${columnId}: conta padrão = média`);
   }
   assert.throws(() => defineColumn({ id: 'x_dias', label: 'X', type: 'integer', grains: ['EVENT'], totalOp: 'weightedGmd' }), /totalOp/, 'NEGATIVO: totalOp fora das agregações é recusado');
-  // Quem já abriu o Desempenho na 1.4.0/1.4.1 tem o último estado com o padrão antigo (sem Dias Médios): abre com o de hoje.
+  // Último estado/modelo gravado pela VERSÃO 2 do Desempenho (1.4.0/1.4.1) com o padrão antigo (sem Dias médios):
+  // abre com o padrão de hoje. Gravado pela versão 3 (escolha feita hoje, ex.: esconder Dias médios): respeitado.
   const fresh = buildInitialReportState(DESEMPENHO, { role: 'ADMIN' }).state;
-  const reopen = (aggregates, typeColumns = null) => {
+  const reopen = (aggregates, version, typeColumns = null) => {
     const payload = viewStatePayload(DESEMPENHO, { ...fresh, aggregates }, 'ADMIN');
-    return buildInitialReportState(DESEMPENHO, { savedState: templateToRequest({ ...payload, baseReportId: DESEMPENHO.id }, 'ADMIN'), role: 'ADMIN', typeColumns }).state;
+    return buildInitialReportState(DESEMPENHO, { savedState: templateToRequest({ ...payload, baseReportId: DESEMPENHO.id, baseReportVersion: version }, 'ADMIN'), role: 'ADMIN', typeColumns }).state;
   };
   const OLD6 = ['animais', 'peso_inicial_medio', 'peso_final_medio', 'ganho_total', 'ganho_medio', 'gmd_ponderado'];
-  const antigo = reopen(fresh.aggregates.filter((spec) => OLD6.includes(spec.id)));
+  const old6 = fresh.aggregates.filter((spec) => OLD6.includes(spec.id));
+  assert.equal(DESEMPENHO.version, 3, 'Desempenho na versão 3 (Dias médios)');
+  const antigo = reopen(old6, 2);
   assert.equal(antigo.view, 'por-lote');
-  assert.ok(antigo.aggregates.some((spec) => spec.id === 'dias_medio'), 'último estado da 1.4.1 abre com Dias Médios');
-  const escolhido = reopen(fresh.aggregates.filter((spec) => ['animais', 'gmd_ponderado'].includes(spec.id)));
-  assert.deepEqual(escolhido.aggregates.map((spec) => spec.id), ['animais', 'gmd_ponderado'], 'NEGATIVO: escolha da pessoa (Colunas Painel) não muda');
-  const prefsAntigas = typedViewSelection(DESEMPENHO, 'por-lote', { 'por-lote': OLD6 });
-  assert.ok(prefsAntigas.aggregates.some((spec) => spec.id === 'dias_medio'), '"Colunas" gravada igual ao padrão antigo = padrão de hoje');
-  // Modelo 1.3.x "Desempenho individual" (8 totais antigos): continua sendo o Analítico e ganha Dias Médios.
-  const old8 = DESEMPENHO.views.find((item) => item.id === 'analitico').aggregates.filter((spec) => spec.id !== 'dias_medio');
-  const analitico = buildInitialReportState(DESEMPENHO, { savedState: { params: {}, selection: { mode: 'DETALHADO', groups: [], aggregates: old8, columns: [...getReportView(DESEMPENHO, 'analitico').columns] } }, role: 'ADMIN' }).state;
-  assert.equal(analitico.view, 'analitico', 'totais antigos do Analítico ainda são o tipo');
-  assert.ok(analitico.aggregates.some((spec) => spec.id === 'dias_medio'), 'e abrem com Dias Médios');
+  assert.deepEqual(antigo.aggregates.map((spec) => spec.id), fresh.aggregates.map((spec) => spec.id), 'estado da versão 2 abre com Dias médios, na ordem do padrão');
+  assert.ok(!reopen(old6, 3).aggregates.some((spec) => spec.id === 'dias_medio'), 'NEGATIVO: escondeu Dias médios hoje (versão 3) → continua escondido');
+  const escolhido = reopen(fresh.aggregates.filter((spec) => ['animais', 'gmd_ponderado'].includes(spec.id)), 2);
+  assert.deepEqual(escolhido.aggregates.map((spec) => spec.id), ['animais', 'gmd_ponderado'], 'NEGATIVO: escolha personalizada da versão 2 não muda');
+  const prefsHoje = typedViewSelection(DESEMPENHO, 'por-lote', { 'por-lote': OLD6 });
+  assert.ok(!prefsHoje.aggregates.some((spec) => spec.id === 'dias_medio'), 'NEGATIVO: "Colunas" sem Dias médios escolhida hoje é respeitada');
+  // Modelo 1.3.x "Desempenho individual" (8 totais antigos, sem versão): continua sendo o Analítico e ganha Dias médios.
+  const analiticoView = getReportView(DESEMPENHO, 'analitico');
+  const old8 = analiticoView.aggregates.filter((spec) => spec.id !== 'dias_medio');
+  const modelo13 = (version) => buildInitialReportState(DESEMPENHO, { savedState: templateToRequest({ baseReportId: DESEMPENHO.id, ...(version ? { baseReportVersion: version } : {}), mode: 'DETALHADO', groups: [], aggregates: old8, columns: [...analiticoView.columns] }, 'ADMIN'), role: 'ADMIN' }).state;
+  assert.equal(modelo13(null).view, 'analitico', 'totais antigos do Analítico ainda são o tipo');
+  assert.ok(modelo13(null).aggregates.some((spec) => spec.id === 'dias_medio'), 'e abrem com Dias médios');
+  assert.ok(!modelo13(3).aggregates.some((spec) => spec.id === 'dias_medio'), 'NEGATIVO: desmarcou a média dos dias hoje (versão 3) → respeitado');
   ok('Dias = média');
 }
 
