@@ -72,7 +72,9 @@ for (const relativePath of dialogFiles) {
 // auditado por scripts/verify-import-ui.mjs.
 // 23/09/2026 (1.3.1): a Relação ganhou dois diálogos de ações em lote (identificação/classificação e
 // dados comerciais), ambos no contrato padrão — cobertos também por weighing:bulk-actions:verify.
-assert.equal(dialogCount, 13, 'a auditoria deve cobrir os treze diálogos dos fluxos operacionais verificados');
+// 01/10/2026 (M1 1.5.0): o Lançamento ganhou o diálogo de repesagem no mesmo dia ("Esse animal já foi pesado hoje.
+// Repesar?"), no contrato padrão compacto — coberto também por weighing:repesagem:verify.
+assert.equal(dialogCount, 14, 'a auditoria deve cobrir os catorze diálogos dos fluxos operacionais verificados');
 const importDialog = readFileSync(join(root, 'src/components/importacao/ConfirmarImportacaoDialog.jsx'), 'utf8');
 for (const opening of importDialog.match(/<DialogContent\b[^>]*>/g) || []) {
   assert.match(opening, /d17b-standard-dialog--(?:compact|medium|large)/, 'a confirmação da importação segue o contrato padrão de diálogo');
