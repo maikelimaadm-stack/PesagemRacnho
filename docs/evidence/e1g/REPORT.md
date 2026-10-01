@@ -2,7 +2,8 @@
 
 **ETAPA:** E1G, pedido direto da responsável em 30/09/2026 (`docs/plano-mestre/E1G-GMD-E-GRAFICOS.md`).
 **VERSÃO:** **1.4.2**, esquema Dexie 8 e backup formato 3, sem mudança. **BRANCH:** `program/e1-relatorios`, de
-`2c6bd0d` até o build em `ad4e752`, mais o commit deste REPORT; a main continua em `6cccb5f`.
+`2c6bd0d` até o build em `f7c8918` (1º build em `ad4e752`; o 2º traz os Dias em média, §2A), mais o commit deste
+REPORT; a main continua em `6cccb5f`.
 
 **STATUS: CONCLUÍDA.** test:quick integrado com 102 passos: 99 verdes no primeiro giro. Os 2 de release
 estavam vermelhos porque o build ainda era o da 1.4.1, e ficaram verdes depois do build. O `reports:charts`
@@ -71,20 +72,32 @@ Capturas (massa de TESTE):
   - o gate `reports:charts`, que esperava GMD diferente entre Pesagens e Desempenho — agora os dois dão o
     mesmo, como pedido.
 
+## 2A. Ajuste de 01/10: Dias em média no Desempenho
+
+Pedido: "no relatório de Desempenho os dias têm que mostrar média e está mostrando soma, não consigo mudar".
+- Desempenho ganhou **Dias médios** no padrão dos resumos (e no Colunas Painel e no total do Analítico).
+- Qualquer coluna de dias usa **média** no "Subtotal/Total desta coluna" e no "Adicionar coluna…" (antes era soma);
+  o "Calcular" troca para Mínimo/Máximo.
+- Quem já abriu o Desempenho na 1.4.0/1.4.1 tem o último estado com o padrão antigo: ele abre com Dias médios
+  (marca `defaultsVersion` no que for gravado daqui em diante); escolha feita hoje (esconder Dias médios, ordem
+  trocada) é respeitada; "Personalizado" continua Personalizado.
+- Revisão adversarial achou 4 pontos nessa atualização automática; os 4 foram corrigidos com testes.
+
 ## 3. Gates e instalador
 
 | Comando | Resultado |
 |---|---|
-| `npm run test:quick` (102 passos) | verde, depois do build e da correção do `reports:charts` |
+| `npm run test:quick` (102 passos) | verde no código do 2º build (`f7c8918`) |
 | Gates novos | `reports:gmd`, `import:identity`, `reports:charts`, `reports:charts-print`, `reports:charts-state`, `animal:weight-curve` — verdes, com casos negativos |
 | `dist:unsigned` / `release:current-only:verify` / `release:version-contract:verify` | OK |
 | Passos só do test:full (`storage:all`, `weighing:mapper`, `maintenance:ui`, `maintenance:dialog`, `e2e:installed:verify:dev`, `import:performance` — 31 min) | 6/6 verdes no código do build |
 
 **Instalador 1.4.2:**
 - `C:\Users\maike\Desktop\projeto\INSTALAR-ESTE-1.4.2\Pesagens Individuais Setup 1.4.2.exe`
-- 92.236.751 bytes
-- **SHA-256 `779a34ec8f0725822feb5e6ea9daff7dee985122355fc834831f69c9a47abb0a`**, igual ao do `.sha256`, do manifesto e da cópia
-- manifesto: `appVersion 1.4.2`, `gitCommit ad4e752`, sem "-dirty"
+- 92.237.351 bytes
+- **SHA-256 `faa8ad20046ef276744695f31569881b6bcf6516c425f9efc55d2b82f523c8a3`**, igual ao do `.sha256`, do manifesto e da cópia
+- manifesto: `appVersion 1.4.2`, `gitCommit f7c8918`, sem "-dirty"
+- substituiu o 1º instalador 1.4.2 (`779a34ec…`, que ainda não tinha sido instalado: o registro mostra a 1.4.0)
 
 ## 4. Pendências e perguntas
 
