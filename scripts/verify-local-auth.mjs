@@ -304,13 +304,14 @@ assert.deepEqual(defaults, {
   limite_gmd_alerta: 5,
   variacao_max_percent: 35,
   arroba_divisor: 30,
-}, 'visão mesclada com os defaults dos cinco grupos (E1B: report-settings)');
+  gmd_dias_minimos: 21,
+}, 'visão mesclada com os defaults dos cinco grupos (E1B: report-settings; M1: gmd_dias_minimos)');
 assert.equal(defaults.bloqueio_inatividade_minutos, undefined, 'campo da rev. 1 não existe mais');
 assert.deepEqual(await appConfig.getOperationalDefaults(), { versao: 1, marca_padrao_id: null, raca_padrao_id: null, propriedade_padrao_id: null, apartacao_padrao_id: null, intervalo_pesagem_dias: 30, rendimento_padrao: null, rendimento_padrao_origem: 'PADRAO_EMPRESA' });
 assert.deepEqual(await appConfig.getSalesPolicy(), { versao: 1, exigir_documento_venda: false });
 assert.deepEqual(await appConfig.getWeightWarningPolicy(), { versao: 1, faixa_peso_min: 20, faixa_peso_max: 1500, limite_gmd_alerta: 5, variacao_max_percent: 35 });
 assert.deepEqual(await appConfig.getAuthPolicy(), { versao: 1, inactivity_lock_minutes: 30, failed_attempt_limit: 5, lock_minutes: 0.5 });
-assert.deepEqual(await appConfig.getReportSettings(), { versao: 1, arroba_divisor: 30 }, 'E1B: @ de peso vivo ÷ 30 por padrão');
+assert.deepEqual(await appConfig.getReportSettings(), { versao: 1, arroba_divisor: 30, gmd_dias_minimos: 21 }, 'E1B: @ de peso vivo ÷ 30 por padrão; M1: GMD confiável a partir de 21 dias');
 assert.equal(await appConfig.getInactivityMinutes(), 30);
 assert.equal(await db2.table('appSettings').count(), 0, 'defaults não gravam nada');
 
@@ -363,11 +364,20 @@ assert.equal(await appConfig.updateAppConfig(actorAdmin, { intervalo_pesagem_dia
 // E1B/E1C: GESTOR troca o divisor da @ (grupo report-settings, settings.reports), auditado.
 const divisor15 = await appConfig.updateAppConfig(actorGestor, { arroba_divisor: 15 });
 assert.equal(divisor15.arroba_divisor, 15);
-assert.deepEqual(await appConfig.getReportSettings('local'), { versao: 1, arroba_divisor: 15 });
-assert.deepEqual((await db2.table('appSettings').get('report-settings:local')).value, { versao: 1, arroba_divisor: 15 }, 'chave report-settings:local');
+assert.deepEqual(await appConfig.getReportSettings('local'), { versao: 1, arroba_divisor: 15, gmd_dias_minimos: 21 });
+assert.deepEqual((await db2.table('appSettings').get('report-settings:local')).value, { versao: 1, arroba_divisor: 15, gmd_dias_minimos: 21 }, 'chave report-settings:local');
 assert.equal(await db2.table('auditoria').where('entidade').equals('appSettings').count(), 6, 'troca do divisor auditada');
 await db2.table('appSettings').put({ key: 'report-settings:local', value: { versao: 1, arroba_divisor: 7 } });
 assert.equal((await appConfig.getReportSettings('local')).arroba_divisor, 30, 'divisor inválido gravado volta ao padrão 30');
+// M1: intervalo mínimo do GMD (7, 14, 21, 28; padrão 21) — GESTOR troca; inválido gravado ou enviado vira 21 sem
+// derrubar o divisor; OPERADOR/CONSULTA não trocam.
+await db2.table('appSettings').put({ key: 'report-settings:local', value: { versao: 1, arroba_divisor: 15, gmd_dias_minimos: 28 } });
+assert.deepEqual(await appConfig.getReportSettings('local'), { versao: 1, arroba_divisor: 15, gmd_dias_minimos: 28 }, 'gmd_dias_minimos 28 gravado');
+await db2.table('appSettings').put({ key: 'report-settings:local', value: { versao: 1, arroba_divisor: 15, gmd_dias_minimos: 10 } });
+assert.deepEqual(await appConfig.getReportSettings('local'), { versao: 1, arroba_divisor: 15, gmd_dias_minimos: 21 }, 'mínimo inválido gravado → 21, divisor mantido');
+assert.equal((await appConfig.updateAppConfig(actorGestor, { gmd_dias_minimos: 14 })).gmd_dias_minimos, 14, 'GESTOR troca o mínimo do GMD');
+assert.equal((await appConfig.updateAppConfig(actorGestor, { gmd_dias_minimos: 'x' })).gmd_dias_minimos, 21, 'mínimo inválido enviado → 21');
+await rejectsWithCode(appConfig.updateAppConfig({ id: 'o1', role: 'OPERADOR' }, { gmd_dias_minimos: 7 }), 'AUTH_FORBIDDEN', 'OPERADOR não altera o mínimo do GMD');
 
 // Migração da chave antiga 'config:<empresa>' (rev. 1): uma vez, sem sobrescrever grupos novos, e removida.
 await deleteDbForTests();

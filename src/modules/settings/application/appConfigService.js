@@ -4,8 +4,9 @@
 //   operational-defaults:<empresa>   { versao, marca/raca/propriedade/apartacao padrão, intervalo, rendimento }
 //   sales-policy:<empresa>           { versao, exigir_documento_venda }
 //   weight-warning-policy:<empresa>  { versao, faixa_peso_min/max, limite_gmd_alerta, variacao_max_percent }
-//   report-settings:<empresa>        { versao, arroba_divisor } (E1B 1.4.0: @ de PESO VIVO da folha dos
-//                                    relatórios — não é a @ de carcaça do Comercial, que continua ÷ 15)
+//   report-settings:<empresa>        { versao, arroba_divisor, gmd_dias_minimos } (E1B 1.4.0: @ de PESO VIVO da folha
+//                                    dos relatórios — não é a @ de carcaça do Comercial, que continua ÷ 15; M1 1.5.0:
+//                                    intervalo mínimo do GMD confiável, 7/14/21/28, padrão 21 — weighing/domain/gmdQuality)
 // getAppConfig() devolve a visão MESCLADA (chaves planas) e updateAppConfig() distribui o
 // patch pelos grupos. A chave antiga 'config:<empresa>' (revisão 1) é migrada uma vez e removida.
 // Permissões: settings.auth (ADMIN) para auth-policy; settings.reports (ADMIN e GESTOR, E1C) para
@@ -17,6 +18,7 @@ import storage from '../../../storage/storageAdapter.js';
 import { ensureStorageReady } from '../../../storage/indexedDb/db.js';
 import { authorize, roleOf } from '../../auth/domain/permissionService.js';
 import { actorFields } from '../../auth/application/auditContext.js';
+import { GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinimos } from '../../weighing/domain/gmdQuality.js';
 
 export const APP_CONFIG_VERSION = 1;
 export const DEFAULT_EMPRESA_ID = 'local';
@@ -55,6 +57,8 @@ export const WEIGHT_WARNING_POLICY_DEFAULTS = Object.freeze({
 export const ARROBA_DIVISORS = Object.freeze([30, 15]);
 export const REPORT_SETTINGS_DEFAULTS = Object.freeze({
   arroba_divisor: 30,
+  // M1: GMD de intervalo menor que isto aparece em cinza e fica fora de média e agregado.
+  gmd_dias_minimos: GMD_DIAS_MINIMOS_PADRAO,
 });
 
 // Grupo → { prefixo da chave, defaults, permissão exigida para gravar }.
@@ -166,7 +170,8 @@ const NORMALIZERS = {
   reports(raw) {
     const divisor = Number(raw.arroba_divisor);
     if (!ARROBA_DIVISORS.includes(divisor)) throw configError('Divisor da arroba deve ser 30 ou 15.', 'arroba_divisor');
-    return { arroba_divisor: divisor };
+    // M1: ausente ou inválido → 21 (nunca derruba o divisor da arroba junto).
+    return { arroba_divisor: divisor, gmd_dias_minimos: normalizeGmdDiasMinimos(raw.gmd_dias_minimos) };
   },
 };
 
@@ -264,7 +269,7 @@ export async function getWeightWarningPolicy(empresaId = DEFAULT_EMPRESA_ID) {
   return readGroup('weightWarning', empresaId);
 }
 
-/** Configurações dos relatórios (E1B): { versao, arroba_divisor } — valor inválido gravado volta ao padrão 30. */
+/** Configurações dos relatórios (E1B): { versao, arroba_divisor, gmd_dias_minimos } — divisor inválido gravado volta ao padrão 30; mínimo do GMD inválido, a 21 (M1). */
 export async function getReportSettings(empresaId = DEFAULT_EMPRESA_ID) {
   await migrateLegacyConfig(empresaId);
   return readGroup('reports', empresaId);
