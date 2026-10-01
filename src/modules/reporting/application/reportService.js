@@ -26,7 +26,7 @@ import { GMD_DIAS_MINIMOS_OPCOES, GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinim
 import { annotateGmdQuality, hasGmdQuality } from '../domain/gmdColumns.js';
 import { GMD_REGRESSAO_COLUMN_ID } from '../definitions/columns/animalColumns.js';
 import { loadAnimalRegression } from '../infrastructure/reportSources/animalSource.js';
-import { definitionForDivisor, metricLabelsFor } from '../domain/arrobaColumns.js';
+import { assertSeparateArrobaTotals, definitionForDivisor, metricLabelsFor } from '../domain/arrobaColumns.js';
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -157,6 +157,9 @@ export function resolveSelection(definition, selection = {}, role) {
   };
   const defaultAggregates = typeDefaults?.aggregates ?? definition.defaultAggregates;
   const aggregates = (selection.aggregates ?? defaultAggregates).filter(visibleAggregate);
+  // M1 §5 (proibição dura): nenhum total junta @ de peso vivo com @ de carcaça — nem pelo id (um modelo com o mesmo id
+  // nas duas) nem por dentro (média ponderada de uma pela outra). Cada uma tem o seu total.
+  assertSeparateArrobaTotals(aggregates, resolve);
 
   // Condições fixas de um modelo convertido na 1.4.0 (a condição do relatório antigo numa coluna em
   // que o modelo também filtrava): aplicadas como as `lockedFilters` da definição. Nunca são
