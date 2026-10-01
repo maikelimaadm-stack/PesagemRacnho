@@ -54,7 +54,8 @@ const results = [];
 const code = async (fn) => { try { await fn(); return 'OK'; } catch (error) { return error.code ?? error.message; } };
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 const PERIODO = { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' };
-const KEYS_BEFORE = ['aggregates', 'baseReportId', 'baseReportVersion', 'columns', 'createdAt', 'filters', 'groups', 'id', 'mode', 'name', 'orientation', 'ownerName', 'ownerUserId', 'params', 'period', 'scope', 'search', 'sort', 'summarySort', 'updatedAt', 'updatedBy', 'version', 'widths'];
+// E1G: + defaultsVersion (revisão dos padrões dos tipos com que o modelo foi gravado), sempre gravada.
+const KEYS_BEFORE = ['aggregates', 'baseReportId', 'baseReportVersion', 'columns', 'createdAt', 'defaultsVersion', 'filters', 'groups', 'id', 'mode', 'name', 'orientation', 'ownerName', 'ownerUserId', 'params', 'period', 'scope', 'search', 'sort', 'summarySort', 'updatedAt', 'updatedBy', 'version', 'widths'];
 const { db } = await seedReportFixture();
 const storedTemplates = async () => (await db.table('appSettings').get('report-templates:local')).value.templates;
 const defaultState = (definition, role = 'ADMIN') => {

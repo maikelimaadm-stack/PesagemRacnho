@@ -308,7 +308,8 @@ await check('título: tela e folha com o nome do relatório do usuário; sem ele
   const forPrint = await runReport('pesagens', { today: TODAY, params: request.params, selection: request.selection, sheetTitle: listed.name }, GESTOR);
   const printed = preparePrint(forPrint, GESTOR, { orientation: 'landscape' });
   assert.ok(printed.html.includes('Relatório de Meu GMD (Sintético)'), 'impressão/PDF com o nome');
-  const keys = new Set(['version', 'id', 'name', 'baseReportId', 'baseReportVersion', 'scope', 'ownerUserId', 'ownerName', 'columns', 'filters', 'fixedFilters', 'groups', 'aggregates', 'sort', 'mode', 'summarySort', 'period', 'params', 'search', 'widths', 'orientation', 'view', 'matrix', 'sortChoice', 'createdAt', 'updatedAt', 'updatedBy']);
+  // E1G: + defaultsVersion (revisão dos padrões dos tipos com que o modelo foi gravado).
+  const keys = new Set(['version', 'id', 'name', 'baseReportId', 'baseReportVersion', 'defaultsVersion', 'scope', 'ownerUserId', 'ownerName', 'columns', 'filters', 'fixedFilters', 'groups', 'aggregates', 'sort', 'mode', 'summarySort', 'period', 'params', 'search', 'widths', 'orientation', 'view', 'matrix', 'sortChoice', 'createdAt', 'updatedAt', 'updatedBy']);
   for (const template of await storedTemplates()) {
     for (const key of Object.keys(template)) assert.ok(keys.has(key), `modelo sem campo novo (${key})`);
   }
