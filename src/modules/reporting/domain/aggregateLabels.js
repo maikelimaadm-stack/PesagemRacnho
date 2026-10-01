@@ -105,6 +105,8 @@ export function summaryMetricLabel(spec, columns, { grain = null, animalColumnId
   if (spec.op === 'countDistinct') return isAnimal ? 'Cabeças' : `${column.label} (distintos)`;
   if (spec.op === 'countValid') return column.label.includes('(') ? `${column.label} — com valor` : `${column.label} (com valor)`;
   if (column.type === 'gmd') {
+    // M1: "GMD (regressão)" não é o GMD entre pesagens — o rótulo diz qual é ("GMD (regressão) médio (kg/dia)").
+    if (column.id === 'gmd_regressao') return `GMD (regressão) ${WEIGHT_OPS[spec.op] ?? spec.op} (kg/dia)`;
     if (spec.op === 'weightedGmd') return 'GMD (kg/dia)';
     if (spec.op === 'avg') return 'GMD simples (kg/dia)';
     return `GMD ${WEIGHT_OPS[spec.op] ?? spec.op} (kg/dia)`;
