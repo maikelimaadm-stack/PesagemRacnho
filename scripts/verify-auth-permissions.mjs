@@ -18,6 +18,7 @@ import { PROFILES, PERMISSIONS, ALL_PERMISSIONS, PROFILE_LABELS, assertCan, list
 import { setPasswordPolicyForTests } from '../src/modules/auth/domain/passwordPolicy.js';
 import * as auth from '../src/modules/auth/application/localAuthService.js';
 import * as appConfig from '../src/modules/settings/application/appConfigService.js';
+import * as gmdQuality from '../src/modules/weighing/domain/gmdQuality.js';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const read = (rel) => readFileSync(join(root, rel), 'utf8');
@@ -283,7 +284,10 @@ function pageDecisions(page) {
   assert.equal(rows.reduce((total, row) => total + row.ids.length, 0), (page.match(/\{renderSection\('/g) || []).length, 'toda renderSection está numa linha condicionada');
   assert.equal(rows.filter((row) => row.data).length, 1, 'cartão Dados numa linha condicionada');
   const run = new Function('SECTIONS', 'auth', 'useMemo', `const sections = useMemo(() => ${sectionsExpr}, [auth]);\n${statements.join('')}return { sectionById, on: [${rows.map((row) => row.condition).join(', ')}] };`);
-  const all = new Function(`return ${literal};`)();
+  // M1 (1.5.0): o campo "Intervalo mínimo do GMD" monta as opções a partir do contrato (gmdQuality) — o literal
+  // das seções é avaliado com esses nomes no escopo, como na página.
+  const contrato = ['GMD_DIAS_MINIMOS_OPCOES', 'GMD_DIAS_MINIMOS_PADRAO', 'normalizeGmdDiasMinimos'];
+  const all = new Function(...contrato, `return ${literal};`)(...contrato.map((name) => gmdQuality[name]));
   assert.deepEqual(all.map((section) => section.id), ['geral', 'curral', 'comercial', 'seguranca', 'relatorios'], 'Configurações: cinco seções');
   return (role) => {
     const { sectionById, on } = run(all, { can: (action) => can(role, action) }, (fn) => fn());
