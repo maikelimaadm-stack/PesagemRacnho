@@ -106,11 +106,13 @@ assert.deepEqual(analitico.columns.map((column) => headerLabel(column)), ANALITI
 assert.deepEqual(typeColumnOptions(definition, view('analitico'), 'ADMIN').filter((option) => !option.default).map((option) => option.label), ['Data anterior', 'Peso anterior (kg)', 'Observação'], 'Analítico: opcionais no seletor');
 assert.deepEqual(typeColumnOptions(definition, view('analitico'), 'ADMIN').map((option) => option.key), ANALITICO_AVAILABLE_COLUMNS, 'Analítico: seletor na ordem do antigo');
 
-const SHEET_HEADERS = ['Lote', 'Qtd', 'Faixa exigida (kg)', 'Menor (kg)', 'Maior (kg)', 'Peso médio (kg)', 'Média (@)', 'Peso total (kg)', 'GMD médio (kg/dia)', 'Machos', 'Fêmeas'];
-const SHEET_EXTRA_LABELS = ['Total (@)', 'Ganho médio (kg)', 'Ganho médio (@)', 'Ganho total (kg)', 'Ganho total (@)', 'Dias médios'];
+// M1 §5 (1.5.0): a @ de peso vivo leva a marca e o divisor em uso — "Média (@ vivo ÷30)" (antes "Média (@)") — no
+// seletor, na grade, nas exportações e na folha.
+const SHEET_HEADERS = ['Lote', 'Qtd', 'Faixa exigida (kg)', 'Menor (kg)', 'Maior (kg)', 'Peso médio (kg)', 'Média (@ vivo ÷30)', 'Peso total (kg)', 'GMD médio (kg/dia)', 'Machos', 'Fêmeas'];
+const SHEET_EXTRA_LABELS = ['Total (@ vivo ÷30)', 'Ganho médio (kg)', 'Ganho médio (@ vivo ÷30)', 'Ganho total (kg)', 'Ganho total (@ vivo ÷30)', 'Dias médios'];
 // E1D visual: a FOLHA dos tipos tem os cabeçalhos do antigo (Title Case, sem unidade — o "kg" vai em cada
 // número); o seletor "Colunas", a grade e as exportações continuam com os rótulos de curral (metricLabels).
-const SHEET_DOC_HEADERS = ['Lote', 'Qtd', 'Faixa Exigida', 'Menor', 'Maior', 'Peso Médio', 'Média (@)', 'Peso Total', 'GMD Médio', 'Machos', 'Fêmeas'];
+const SHEET_DOC_HEADERS = ['Lote', 'Qtd', 'Faixa Exigida', 'Menor', 'Maior', 'Peso Médio', 'Média (@ vivo ÷30)', 'Peso Total', 'GMD Médio', 'Machos', 'Fêmeas'];
 for (const id of ['por-apartacao-lote', 'por-apartacao-data']) {
   const typed = view(id);
   assert.deepEqual(typed.columnChoices.available, [...SHEET_COLUMN_KEYS], `${id}: as 16 chaves do painel`);
@@ -118,10 +120,11 @@ for (const id of ['por-apartacao-lote', 'por-apartacao-data']) {
   const vm = await run({ view: id });
   const doc = buildReportDocument(vm, { showEmptyColumns: true });
   assert.deepEqual(doc.columns.map((column) => column.label), SHEET_DOC_HEADERS, `${id}: folha com Lote + as 10 visíveis por padrão (cabeçalhos do antigo)`);
-  const options = typeColumnOptions(definition, typed, 'ADMIN');
+  // M1 §5: o seletor recebe o divisor do view model (a tela passa viewModel.arrobaDivisor).
+  const options = typeColumnOptions(definition, typed, 'ADMIN', { arrobaDivisor: vm.arrobaDivisor });
   assert.deepEqual(options.filter((option) => !option.default).map((option) => option.label), SHEET_EXTRA_LABELS, `${id}: as outras 6 no seletor`);
   assert.deepEqual(options.filter((option) => option.default).map((option) => option.label), SHEET_HEADERS.slice(1), `${id}: rótulos das visíveis no seletor (os da grade e das exportações)`);
-  assert.deepEqual(options.filter((option) => option.default).map((option) => PESAGENS_SHEET_HEADERS.metrics[option.key]), SHEET_DOC_HEADERS.slice(1), `${id}: as visíveis do seletor = as colunas da folha, na mesma ordem`);
+  assert.deepEqual(options.filter((option) => option.default).map((option) => PESAGENS_SHEET_HEADERS.metrics[option.key].replace('{@}', '@ vivo ÷30')), SHEET_DOC_HEADERS.slice(1), `${id}: as visíveis do seletor = as colunas da folha, na mesma ordem`);
 }
 
 assert.deepEqual(VENDAS_COLUMNS, ['comprador', 'data_pesagem', 'numero_animal', 'peso', 'peso_arroba', 'valor_arroba', 'valor_venda_calc'], 'Vendas: colunas do contrato (Valor Total = valor_venda_calc: digitado, senão @ viva × Valor @)');

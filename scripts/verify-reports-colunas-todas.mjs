@@ -181,7 +181,9 @@ for (const definition of withTypes) {
   const report = { tipos: 0, opcoes: 0 };
   for (const view of listReportViews(definition).filter((item) => item.columnChoices)) {
     report.tipos += 1;
-    const options = typeColumnOptions(definition, view, 'ADMIN');
+    // M1 §5: o seletor recebe o divisor da @ do view model (a tela passa viewModel.arrobaDivisor) — a marca da @ de peso
+    // vivo é a mesma no seletor e na folha ("Média (@ vivo ÷30)"); o run() deste gate usa ÷ 30.
+    const options = typeColumnOptions(definition, view, 'ADMIN', { arrobaDivisor: 30 });
     const all = options.map((option) => option.key);
     const defaults = options.filter((option) => option.default).map((option) => option.key);
     for (const option of options) {

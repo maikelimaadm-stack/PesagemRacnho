@@ -26,7 +26,7 @@ const SENSITIVE_IDS = getReportDefinition('pesagens.periodo').columns.filter((co
 // Valores exclusivos da venda da massa (o peso 300,00 kg existe e não é segredo).
 // E1B: o segredo da @ de carcaça passou a ser conferido pelo PESO DE CARCAÇA "140,00" (280 kg × 50 % de
 // rendimento, que só existe com o rendimento escondido). O antigo "9,33" (140 ÷ 15) é NUMERICAMENTE igual
-// à @ de peso vivo da mesma venda (280 ÷ 30) — coluna não sensível "Peso em arrobas", que deriva do peso
+// à @ de peso vivo da mesma venda (280 ÷ 30) — coluna não sensível "Peso (@ vivo ÷30)", que deriva do peso
 // visível e não é segredo. A @ de carcaça continua conferida abaixo pela coluna e pelos rótulos.
 const SECRET_VALUES = ['3000', '3.000', '140,00', 'Valor venda', 'Preço/@', '@ carcaça', 'Carcaça', 'Rendimento'];
 
@@ -66,13 +66,14 @@ for (const actor of [OPERADOR, CONSULTA]) {
       for (const id of SENSITIVE_IDS) assert.ok(!new RegExp(`"${id}":`).test(content), `${actor.role} ${format}: nenhum campo ${id}`);
     }
     // E1B: "9,33" no CSV de quem não vê valores só pode ser a @ de PESO VIVO (280 ÷ 30), na coluna
-    // "Peso em arrobas (@)" — nunca numa coluna comercial.
+    // "Peso (@ vivo ÷30)" (M1 §5: o nome diz qual arroba é e o divisor; antes "Peso em arrobas (@)") — nunca numa coluna
+    // comercial.
     const csv = parseCsv((await prepareEmission(vmSemPesquisa, 'csv', actor)).content);
     const header = csv[0];
     for (const row of csv.slice(1)) {
-      row.forEach((cell, index) => { if (cell === '9,33') assert.equal(header[index], 'Peso em arrobas (@)', `${actor.role}: 9,33 só como @ viva (coluna ${header[index]})`); });
+      row.forEach((cell, index) => { if (cell === '9,33') assert.equal(header[index], 'Peso (@ vivo ÷30)', `${actor.role}: 9,33 só como @ viva (coluna ${header[index]})`); });
     }
-    assert.ok(csv.slice(1).some((row) => row[header.indexOf('Peso em arrobas (@)')] === '9,33'), 'controle: a @ viva da venda (280 ÷ 30) é visível para quem vê o peso');
+    assert.ok(csv.slice(1).some((row) => row[header.indexOf('Peso (@ vivo ÷30)')] === '9,33'), 'controle: a @ viva da venda (280 ÷ 30) é visível para quem vê o peso');
     // E1: o Resumido também não vaza valor (métricas de valor nem entram na seleção de quem não vê).
     const vmResumido = await runReport('pesagens', {
       today: TODAY, params: period,
