@@ -1,5 +1,6 @@
 // Fontes dos grãos LOT, LOT_STAY, SHIPMENT_DOCUMENT, AUDIT_ENTRY, DATA_ISSUE, BACKUP_ENTRY e
-// REGISTRY_ITEM. Leituras indexadas quando há índice útil; stores pequenas lidas inteiras.
+// REGISTRY_ITEM e (M1 1.5.0) a lista "Pesagens para conferir" (grão EVENT, aba Controle da Manutenção).
+// Leituras indexadas quando há índice útil; stores pequenas lidas inteiras.
 // Nenhuma fonte devolve credenciais (usuários: só campos seguros, montados aqui).
 import { readByKeys } from './readByKeys.js';
 import { importNumberKey } from '../../../import/domain/animalIdentity.js';
@@ -11,6 +12,10 @@ import { dedupeById, storageRowToEventViewModel } from './eventRows.js';
 import { normalizeText } from '../../domain/filterEngine.js';
 import { storageRecordToViewModel } from '../../../weighing/domain/weighingMapper.js';
 import { compareWeighingEvents, measuredWeightOf } from '../../../weighing/domain/weighingSeries.js';
+import { GMD_DIAS_MINIMOS_PADRAO, GMD_QUALIDADE, classifyGmd, isGmdConfiavel, normalizeGmdDiasMinimos } from '../../../weighing/domain/gmdQuality.js';
+import { classifyWeighing, isPesagemParaConferir, medianAbsoluteDeviation } from '../../../weighing/domain/weightOutliers.js';
+import { getReportSettings } from '../../../settings/application/appConfigService.js';
+import { loadEventRows } from './eventSource.js';
 
 const active = (rows) => rows.filter((row) => !row.deleted_at);
 const byId = (rows) => new Map(rows.map((row) => [row.id, row]));
@@ -237,9 +242,12 @@ const numberOf = (animal) => String(animal.numero_animal ?? animal.identificacao
  * "Manejo sem GMD" com o motivo e "Números parecidos (zeros à esquerda)" (mesmo número e marca escritos de outro
  * jeito: a série pode estar partida em dois animais). Função pura sobre a projeção `animais` e as pesagens (view
  * models de Cadastro e Manejo — animal ativo não tem Saída).
+ * M1 (1.5.0): "Manejo sem GMD" aponta também o GMD gravado de intervalo curto (abaixo de `diasMinimos`, o
+ * gmd_dias_minimos de Configurações › Relatórios; ausente → 21) com o motivo "intervalo curto (N dias)" — ele
+ * aparece em cinza e fica fora de média e agregado (gmdQuality.classifyGmd).
  * @returns {{ area, registro, descricao, categoria_problema, gravidade }[]}
  */
-export function gmdDataIssues({ animais = [], pesagens = [], marcaNames = new Map() } = {}) {
+export function gmdDataIssues({ animais = [], pesagens = [], marcaNames = new Map(), diasMinimos = GMD_DIAS_MINIMOS_PADRAO } = {}) {
   const issues = [];
   const push = (area, registro, descricao, categoria, gravidade) => issues.push({ area, registro, descricao, categoria_problema: categoria, gravidade });
   const byAnimal = new Map();
@@ -260,8 +268,16 @@ export function gmdDataIssues({ animais = [], pesagens = [], marcaNames = new Ma
   }
 
   for (const view of pesagens) {
-    if (view?.tipo_manejo !== 'Manejo' || !isBlankValue(view.gmd)) continue;
+    if (view?.tipo_manejo !== 'Manejo') continue;
     const date = String(view.data_pesagem || '').slice(0, 10);
+    if (!isBlankValue(view.gmd)) {
+      // M1: GMD gravado (o fato não muda), mas de intervalo menor que o mínimo: não é confiável.
+      const { gmdQualidade, gmdMotivo } = classifyGmd({ dias: view.dias, gmd: view.gmd }, diasMinimos);
+      if (gmdQualidade === GMD_QUALIDADE.NAO_CONFIAVEL) {
+        push('pesagens', view.id, `manejo do animal ${view.numero_animal ?? ''} em ${brDate(date)} sem GMD: ${gmdMotivo} — o GMD aparece em cinza e não entra na média`, 'Manejo sem GMD', 'MEDIA');
+      }
+      continue;
+    }
     let motivo;
     // Revisão E1G: motivos sem jargão técnico (nada de "animal_id") — o texto vai para a tela da responsável.
     if (measuredWeightOf(view) === null) motivo = 'pesagem sem peso';
@@ -296,8 +312,22 @@ export function gmdDataIssues({ animais = [], pesagens = [], marcaNames = new Ma
   return issues;
 }
 
+/**
+ * M1: mínimo do GMD confiável (7/14/21/28). O que o serviço passar às fontes vale; senão Configurações ›
+ * Relatórios (gmd_dias_minimos); sem configuração legível, o padrão 21.
+ */
+export async function resolveGmdDiasMinimos(requested, empresaId) {
+  if (requested !== undefined && requested !== null && requested !== '') return normalizeGmdDiasMinimos(requested);
+  try {
+    return normalizeGmdDiasMinimos((await getReportSettings(empresaId || undefined))?.gmd_dias_minimos);
+  } catch {
+    return GMD_DIAS_MINIMOS_PADRAO;
+  }
+}
+
 /** Qualidade dos dados: verificação lógica existente + checagens de dados legados para relatórios. */
-export async function loadDataIssueRows() {
+export async function loadDataIssueRows({ empresaId, gmdDiasMinimos } = {}) {
+  const diasMinimos = await resolveGmdDiasMinimos(gmdDiasMinimos, empresaId);
   const db = await storage.ensureReady();
   const startedAt = now();
   const result = await logicalIntegrity();
@@ -319,8 +349,103 @@ export async function loadDataIssueRows() {
   // E1G (A6): apontamentos do GMD sobre as MESMAS leituras (Cadastro e Manejo; animal ativo não tem Saída).
   const marcaNames = new Map(active(marcas).map((row) => [row.id, row.nome]));
   const views = active(pesagens).map((row) => storageRecordToViewModel(row)).filter(Boolean);
-  for (const issue of gmdDataIssues({ animais, pesagens: views, marcaNames })) push(issue.area, issue.registro, issue.descricao, issue.categoria_problema, issue.gravidade);
+  for (const issue of gmdDataIssues({ animais, pesagens: views, marcaNames, diasMinimos })) push(issue.area, issue.registro, issue.descricao, issue.categoria_problema, issue.gravidade);
   return timed(startedAt, queriedAt, issues, 'health:logicalIntegrity+stores', issues.length);
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// M1 (1.5.0) — "Pesagens para conferir" (docs/plano-mestre/M1-FUNDACAO-NUMERO.md §3). Só APONTA: a lista não
+// grava nada e nenhuma pesagem sai de média, total ou gráfico por estar aqui (excluir é da M2, com a resolução).
+// ---------------------------------------------------------------------------------------------------------------
+
+const measuredKg = (value) => {
+  const number = toFiniteNumber(value);
+  return number !== null && number > 0 ? number : null;
+};
+// Lote da PESAGEM (o do dia): pelo id; registro antigo só com o nome cai no texto normalizado.
+const weighingLotKey = (row) => row.lote_id || (isBlankValue(row.nome_lote) ? null : `txt:${normalizeText(row.nome_lote)}`);
+
+/**
+ * Linhas da lista "Pesagens para conferir" a partir das event rows do período (função pura).
+ * - Só pesagens com peso e pesagem anterior com peso (Manejo e Saída com peso) são classificadas.
+ * - Mediana e MAD do lote: pesagens do MESMO lote no período cujo GMD é CONFIÁVEL (gmd_dias_minimos); GMD de
+ *   intervalo curto não entra em agregado nenhum, nem aqui, e não é comparado com o lote (classifyWeighing recebe null).
+ *   O número de animais do lote (mínimo 8) conta os animais distintos dessas pesagens.
+ * - Animal presente = projeção ATIVO, sem evento de saída e a própria pesagem não é a Saída.
+ * - Devolve só classe ≠ OK, com a classe, o motivo, a qualidade do GMD e a referência do lote usada.
+ * @param {object[]} rows event rows (enrichEventRows)
+ * @param {{ diasMinimos?: number, animalsWithExit?: Set<string> }} [options]
+ */
+export function weighingCheckRows(rows = [], { diasMinimos = GMD_DIAS_MINIMOS_PADRAO, animalsWithExit = new Set() } = {}) {
+  const minimo = normalizeGmdDiasMinimos(diasMinimos);
+  const prepared = rows.map((row) => {
+    const dias = toFiniteNumber(row.dias);
+    const gmd = toFiniteNumber(row.gmd);
+    return {
+      row, dias, gmd,
+      pesoAtual: measuredKg(row.peso),
+      pesoAnterior: measuredKg(row.peso_anterior),
+      lote: weighingLotKey(row),
+      ...classifyGmd({ dias, gmd }, minimo),
+    };
+  }).filter((item) => item.pesoAtual !== null && item.pesoAnterior !== null);
+
+  const lots = new Map();
+  for (const item of prepared) {
+    if (!item.lote || !isGmdConfiavel(item.gmdQualidade)) continue;
+    const lot = lots.get(item.lote) || { values: [], animals: new Set() };
+    lot.values.push(item.gmd);
+    lot.animals.add(item.row.animal_key ?? item.row.animal_id ?? item.row.id);
+    lots.set(item.lote, lot);
+  }
+  const lotStats = new Map([...lots].map(([key, lot]) => [key, { ...medianAbsoluteDeviation(lot.values), animais: lot.animals.size }]));
+
+  const out = [];
+  for (const item of prepared) {
+    const { row } = item;
+    const stats = item.lote ? lotStats.get(item.lote) ?? null : null;
+    const animalId = row.animal_id_resolvido ?? row.animal_id ?? null;
+    const presente = row.tipo_manejo !== 'Saída' && row.situacao_atual === 'ATIVO' && !(animalId && animalsWithExit.has(animalId));
+    const { classe, motivo } = classifyWeighing({
+      pesoAtual: item.pesoAtual,
+      pesoAnterior: item.pesoAnterior,
+      dias: item.dias,
+      gmd: isGmdConfiavel(item.gmdQualidade) ? item.gmd : null,
+      gmdMedianaLote: stats?.mediana ?? null,
+      madLote: stats?.mad ?? null,
+      nLote: stats?.animais ?? 0,
+      presente,
+    });
+    if (!isPesagemParaConferir(classe)) continue;
+    out.push({
+      ...row,
+      gmdQualidade: item.gmdQualidade,
+      gmdMotivo: item.gmdMotivo,
+      classe_conferencia: classe,
+      motivo_conferencia: motivo,
+      animal_presente: presente,
+      gmd_mediana_lote: stats?.mediana ?? null,
+      gmd_mad_lote: stats?.mad ?? null,
+      animais_lote_gmd: stats?.animais ?? 0,
+    });
+  }
+  return out;
+}
+
+/**
+ * Fonte "weighings.check": event rows do período (mesma leitura indexada e mesma transformação dos relatórios de
+ * pesagens) + saídas pelo índice tipo_pesagem (animal com saída não está presente). Só leitura.
+ */
+export async function loadWeighingCheckRows({ period, empresaId, arrobaDivisor, gmdDiasMinimos } = {}) {
+  const startedAt = now();
+  const diasMinimos = await resolveGmdDiasMinimos(gmdDiasMinimos, empresaId);
+  const events = await loadEventRows({ from: period.from, to: period.to, empresaId, arrobaDivisor, gmdDiasMinimos: diasMinimos });
+  const db = await storage.ensureReady();
+  const exits = active(await db.table('pesagens').where('tipo_pesagem').equals('Saída').toArray());
+  const queriedAt = now();
+  const animalsWithExit = new Set(exits.map((row) => row.animal_id).filter(Boolean));
+  const rows = weighingCheckRows(events.rows, { diasMinimos, animalsWithExit });
+  return timed(startedAt, queriedAt, rows, `${events.strategy}+index:pesagens.tipo_pesagem`, events.rowsRead + exits.length);
 }
 
 export async function loadBackupRows() {
