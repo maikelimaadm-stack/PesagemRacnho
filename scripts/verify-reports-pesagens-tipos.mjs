@@ -24,7 +24,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ADMIN, GESTOR, OPERADOR, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
-import { runReport } from '../src/modules/reporting/application/reportService.js';
+import { runReport as runReportService } from '../src/modules/reporting/application/reportService.js';
 import { buildInitialReportState } from '../src/modules/reporting/application/reportInitialState.js';
 import {
   VIEW_TYPES_MIGRATION_ORIGIN, PREFERENCES_MIGRATION_ORIGIN, getFavorites, getRecents, getReportViewState, listTemplates, migrateReportPreferences,
@@ -41,6 +41,11 @@ import { buildPrintDocument } from '../src/modules/reporting/infrastructure/expo
 import { buildPropertyHeader } from '../src/modules/catalog/domain/propertyHeader.js';
 import { PROPRIEDADES } from '../src/modules/catalog/domain/registryDefinitions.js';
 import { emptyFor, headerPreviewFromForm } from '../src/components/cadastros/registryFormModel.js';
+// M1 (1.5.0): a massa de ago–set/2026 (scripts/lib/reportFixtures) tem intervalos de 10 e 20 dias entre pesagens; este
+// gate confere à mão números de outro assunto, então fixa o intervalo mínimo do GMD em 7 (todos os intervalos
+// confiáveis — os números de antes). A regra do mínimo (21 padrão, 28; cinza, aviso, rodapé e contas só com o
+// confiável) tem gate próprio com a MESMA massa: reports:gmd-confiabilidade:verify.
+const runReport = (id, request = {}, actor) => runReportService(id, { gmdDiasMinimos: 7, ...request }, actor);
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const PESAGENS = getReportDefinition('pesagens');

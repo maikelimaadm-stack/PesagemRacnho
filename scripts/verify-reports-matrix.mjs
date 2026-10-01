@@ -31,7 +31,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { ADMIN, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
 import * as weighingService from '../src/modules/weighing/application/weighingService.js';
-import { runReport } from '../src/modules/reporting/application/reportService.js';
+import { runReport as runReportService } from '../src/modules/reporting/application/reportService.js';
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
 import { preparePrint } from '../src/modules/reporting/application/reportPrintService.js';
 import { normalizeTemplateConfig, saveTemplate, templateToRequest } from '../src/modules/reporting/application/reportTemplateService.js';
@@ -49,7 +49,12 @@ import { DEFAULT_DECIMALS, roundTo } from '../src/modules/reporting/domain/repor
 import { groupRows, NONE_GROUP_KEY } from '../src/modules/reporting/domain/groupEngine.js';
 import { renderSheetBody } from '../src/modules/reporting/infrastructure/exporters/sheetHtml.js';
 import { parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
-import { buildSheetRows, columnLetter, crc32, unzipStored, XLSX_MATRIX_KINDS } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
+import { buildSheetRows, columnLetter, crc32, unzipStored, XLSX_FOOTER_KIND, XLSX_MATRIX_KINDS } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
+// M1 (1.5.0): a massa de ago–set/2026 (scripts/lib/reportFixtures) tem intervalos de 10 e 20 dias entre pesagens; este
+// gate confere à mão números de outro assunto, então fixa o intervalo mínimo do GMD em 7 (todos os intervalos
+// confiáveis — os números de antes). A regra do mínimo (21 padrão, 28; cinza, aviso, rodapé e contas só com o
+// confiável) tem gate próprio com a MESMA massa: reports:gmd-confiabilidade:verify.
+const runReport = (id, request = {}, actor) => runReportService(id, { gmdDiasMinimos: 7, ...request }, actor);
 
 // ---- massa: reportFixtures (ago–set/2026) + animais conferíveis à mão em dez/2025–jan/2026 ----
 //  A5 505 macho Nelore: 10/12/2025 200 kg no Lote 02 → 30/12/2025 215 kg no Lote 01 (20 d, +15) → 29/01/2026
@@ -598,7 +603,19 @@ const printedNumber = (text) => (text === '-' ? null : Number(text.replace(/ kg$
 const SHEET_DECIMALS = [0, 0, 3];
 
 /** Compara a planilha (o arquivo) com a folha, célula a célula. Lança na primeira divergência. */
-function checkXlsxAgainstSheet(name, vm, rows) {
+// M1: o rodapé da folha ("GMD de N de M cab.") fecha a planilha, depois de uma linha em branco — conferido contra a
+// folha/PDF e fora da comparação célula a célula da matriz.
+function withoutGmdFooter(vm, rows) {
+  const kinds = buildSheetRows(vm).rows.map((row) => row.kind);
+  const first = kinds.indexOf(XLSX_FOOTER_KIND);
+  if (first < 0) return rows;
+  const { footer } = buildReportDocument(vm);
+  assert.deepEqual(rows.slice(first).map((row) => row.cells[0]?.value ?? null), [footer.gmd, footer.gmdCinza].filter(Boolean), 'rodapé do GMD no XLSX = folha/PDF');
+  return rows.slice(0, first - 1);
+}
+
+function checkXlsxAgainstSheet(name, vm, sheetRows) {
+  const rows = withoutGmdFooter(vm, sheetRows);
   const doc = buildReportDocument(vm, { showEmptyColumns: true });
   const docRows = documentRows(doc);
   const groups = doc.columns.slice(1);
@@ -659,7 +676,7 @@ for (const [name, vm] of xlsxCases) {
   const rows = parseSheet(sheet);
   const built = buildSheetRows(vm);
   assert.equal(rows.length, built.rows.length, `${name}: linhas do arquivo = linhas montadas`);
-  assert.deepEqual(built.rows.slice(HEADER_ROW - 1).map((row) => row.kind), [XLSX_MATRIX_KINDS.HEADER_X, XLSX_MATRIX_KINDS.HEADER_VALUES, ...buildMatrix(vm).rows.map(() => XLSX_MATRIX_KINDS.ROW), XLSX_MATRIX_KINDS.TOTAL], `${name}: cabeçalho em 2 linhas, linhas de Y, TOTAL`);
+  assert.deepEqual(built.rows.slice(HEADER_ROW - 1, withoutGmdFooter(vm, rows).length).map((row) => row.kind), [XLSX_MATRIX_KINDS.HEADER_X, XLSX_MATRIX_KINDS.HEADER_VALUES, ...buildMatrix(vm).rows.map(() => XLSX_MATRIX_KINDS.ROW), XLSX_MATRIX_KINDS.TOTAL], `${name}: cabeçalho em 2 linhas, linhas de Y, TOTAL`);
   const groupCount = buildMatrix(vm).columns.length + 1;
   const merges = [`A${HEADER_ROW}:A${HEADER_ROW + 1}`, ...Array.from({ length: groupCount }, (_, index) => `${columnLetter(1 + index * 3)}${HEADER_ROW}:${columnLetter(3 + index * 3)}${HEADER_ROW}`)];
   assert.ok(sheet.includes(`<mergeCells count="${merges.length}">${merges.map((ref) => `<mergeCell ref="${ref}"/>`).join('')}</mergeCells>`), `${name}: valor de X mesclado sobre as 3 colunas; eixo Y nas 2 linhas`);

@@ -13,7 +13,7 @@
 //      adulterado (valor, rótulo, faixa no Total, Total somado, título removido) é detectado.
 import assert from 'node:assert/strict';
 import { ADMIN, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
-import { runReport } from '../src/modules/reporting/application/reportService.js';
+import { runReport as runReportService } from '../src/modules/reporting/application/reportService.js';
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
 import { getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { SHEET_COLUMN_KEYS, SHEET_TOTALS } from '../src/modules/reporting/definitions/pesagens.js';
@@ -22,7 +22,12 @@ import { buildReportDocument, buildLeafTotalBlock, DOC_ROW_TYPES } from '../src/
 import { buildSummaryLayout } from '../src/modules/reporting/domain/summaryLayout.js';
 import { DEFAULT_DECIMALS, roundTo } from '../src/modules/reporting/domain/reportFormatting.js';
 import { parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
-import { buildSheetRows, crc32, unzipStored, XLSX_BLOCK_KINDS } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
+import { buildSheetRows, crc32, unzipStored, XLSX_BLOCK_KINDS, XLSX_FOOTER_KIND } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
+// M1 (1.5.0): a massa de ago–set/2026 (scripts/lib/reportFixtures) tem intervalos de 10 e 20 dias entre pesagens; este
+// gate confere à mão números de outro assunto, então fixa o intervalo mínimo do GMD em 7 (todos os intervalos
+// confiáveis — os números de antes). A regra do mínimo (21 padrão, 28; cinza, aviso, rodapé e contas só com o
+// confiável) tem gate próprio com a MESMA massa: reports:gmd-confiabilidade:verify.
+const runReport = (id, request = {}, actor) => runReportService(id, { gmdDiasMinimos: 7, ...request }, actor);
 
 await seedReportFixture();
 const P = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
@@ -59,11 +64,24 @@ async function emitXlsx(vm) {
 const valueAt = (row, index) => row.cells[index]?.value ?? null;
 const isBlockTitle = (row) => typeof valueAt(row, 0) === 'string' && valueAt(row, 0).startsWith('TOTAL POR ');
 
+// M1: o rodapé da folha ("GMD de N de M cab." e o que o cinza quer dizer) fecha a planilha, depois de uma linha em
+// branco — conferido aqui contra a folha/PDF e fora da comparação das linhas do Resumido.
+function withoutGmdFooter(vm, rows) {
+  const kinds = buildSheetRows(vm).rows.map((row) => row.kind);
+  const first = kinds.indexOf(XLSX_FOOTER_KIND);
+  if (first < 0) return rows;
+  const { footer } = buildReportDocument(vm);
+  assert.deepEqual(rows.slice(first).map((row) => valueAt(row, 0)), [footer.gmd, footer.gmdCinza].filter(Boolean), 'rodapé do GMD no XLSX = folha/PDF');
+  assert.equal(rows[first - 1].cells.length, 0, 'linha em branco antes do rodapé');
+  return rows.slice(0, first - 1);
+}
+
 /**
  * Compara cada bloco "TOTAL POR" do XLSX com a folha. Lança na primeira divergência.
  * @returns {{ blocks: number, lines: number, cells: number, found: object[] }}
  */
-function checkBlocks(name, vm, rows) {
+function checkBlocks(name, vm, sheetRows) {
+  const rows = withoutGmdFooter(vm, sheetRows);
   const layout = buildSummaryLayout(vm, 'xlsx');
   const { groupHeaders, metrics, headers } = layout;
   const groupCount = groupHeaders.length;
@@ -211,7 +229,7 @@ for (const testCase of cases) {
   assert.ok(result.blocks >= 1, `${testCase.name}: há bloco`);
   // Largura da coluna A: o título do bloco transborda para as células vazias, não alarga a coluna.
   const widthA = Number(sheet.match(/<col min="1" max="1" width="(\d+)"/)[1]);
-  const longestA = Math.max(...rows.slice(TOP_ROWS - 1).filter((row) => !isBlockTitle(row)).map((row) => String(valueAt(row, 0) ?? '').length));
+  const longestA = Math.max(...withoutGmdFooter(vm, rows).slice(TOP_ROWS - 1).filter((row) => !isBlockTitle(row)).map((row) => String(valueAt(row, 0) ?? '').length));
   assert.equal(widthA, Math.min(48, Math.max(10, longestA + 2)), `${testCase.name}: coluna A pela maior célula fora do título do bloco`);
   kept[testCase.name] = { vm, rows, sheet, result };
   results.push({ caso: testCase.name, blocos: result.blocks, linhasBloco: result.lines, celulasComparadas: result.cells });
@@ -290,7 +308,7 @@ for (const [name, id, selection] of noBlock) {
   if (vm.mode === 'RESUMIDO') {
     // O próprio cálculo do bloco recusa menos de 3 níveis (não só quem o chama).
     assert.ok(vm.tree.length > 0 && vm.tree.every((node) => buildLeafTotalBlock(vm, node) === null), `NEGATIVO ${name}: buildLeafTotalBlock devolve null com ${vm.groups.length} nível(is)`);
-    assert.equal(parseSheet(sheet).length, TOP_ROWS + buildSummaryLayout(vm, 'xlsx').rows.length, `NEGATIVO ${name}: uma linha por grupo + Total geral`);
+    assert.equal(withoutGmdFooter(vm, parseSheet(sheet)).length, TOP_ROWS + buildSummaryLayout(vm, 'xlsx').rows.length, `NEGATIVO ${name}: uma linha por grupo + Total geral`);
     assert.equal(checkBlocks(name, vm, parseSheet(sheet)).blocks, 0, `NEGATIVO ${name}: nenhum bloco a comparar`);
   }
 }

@@ -6,13 +6,19 @@
 // conferido em reports:sheet-xlsx-parity:verify; fora dele, as linhas são as mesmas.)
 import assert from 'node:assert/strict';
 import { ADMIN, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
-import { runReport } from '../src/modules/reporting/application/reportService.js';
+import { runReport as runReportService } from '../src/modules/reporting/application/reportService.js';
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
 import { preparePrint } from '../src/modules/reporting/application/reportPrintService.js';
 import { buildSummaryLayout } from '../src/modules/reporting/domain/summaryLayout.js';
 import { DEFAULT_DECIMALS, roundTo } from '../src/modules/reporting/domain/reportFormatting.js';
 import { parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
-import { buildSheetRows, unzipStored, XLSX_BLOCK_KINDS } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
+import { buildSheetRows, unzipStored, XLSX_BLOCK_KINDS, XLSX_FOOTER_KIND } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
+import { buildReportDocument } from '../src/modules/reporting/domain/reportDocument.js';
+// M1 (1.5.0): a massa de ago–set/2026 (scripts/lib/reportFixtures) tem intervalos de 10 e 20 dias entre pesagens; este
+// gate confere à mão números de outro assunto, então fixa o intervalo mínimo do GMD em 7 (todos os intervalos
+// confiáveis — os números de antes). A regra do mínimo (21 padrão, 28; cinza, aviso, rodapé e contas só com o
+// confiável) tem gate próprio com a MESMA massa: reports:gmd-confiabilidade:verify.
+const runReport = (id, request = {}, actor) => runReportService(id, { gmdDiasMinimos: 7, ...request }, actor);
 
 await seedReportFixture();
 const P = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
@@ -125,7 +131,12 @@ for (const testCase of cases) {
   const blockRows = xlsx.filter((_, index) => blockKinds.has(kinds[index]));
   assert.equal(blockRows.length > 0, vm.groups.length === 3, `${testCase.name}: bloco TOTAL POR no XLSX só com 3 níveis`);
   assert.equal(blockRows.filter((row) => String(row.cells[0] ?? '').startsWith('TOTAL POR ')).length, vm.groups.length === 3 ? vm.tree.length : 0, `${testCase.name}: um título de bloco por nó de nível 1`);
-  const xlsxBody = xlsx.slice(7).filter((_, index) => !blockKinds.has(kinds[index + 7])).map((row) => row.cells);
+  // M1: o rodapé da folha ("GMD de N de M cab.") também no XLSX, no fim da planilha — o MESMO texto da folha/PDF.
+  const footerKinds = new Set([XLSX_FOOTER_KIND, 'BLANK']);
+  const footer = xlsx.filter((_, index) => kinds[index] === XLSX_FOOTER_KIND).map((row) => row.cells[0]);
+  const docFooter = buildReportDocument(vm).footer;
+  assert.deepEqual(footer, [docFooter.gmd, docFooter.gmdCinza].filter(Boolean), `${testCase.name}: rodapé do GMD no XLSX = folha/PDF`);
+  const xlsxBody = xlsx.slice(7).filter((_, index) => !blockKinds.has(kinds[index + 7]) && !footerKinds.has(kinds[index + 7])).map((row) => row.cells);
   assert.ok(xlsxBody.flat().filter((cell, index) => typeof cell === 'string' && /^\d+([.,]\d+)?$/.test(cell) && index >= groupCount).length === 0, `${testCase.name}: XLSX com números de verdade`);
   assert.deepEqual(normalizeRows(xlsxBody, groupCount, metrics, (cell) => (cell === null ? null : Number(cell))), expected, `${testCase.name}: XLSX = tela`);
   assert.ok(String(xlsx[3].cells[1]).includes('Resumido'), `${testCase.name}: XLSX informa o modo`);

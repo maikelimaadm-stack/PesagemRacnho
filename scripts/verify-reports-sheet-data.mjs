@@ -13,7 +13,7 @@
 //   7. Colunas novas não sensíveis e nenhum valor comercial vaza para quem não vê.
 import assert from 'node:assert/strict';
 import { ADMIN, CONSULTA, OPERADOR, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
-import { runReport } from '../src/modules/reporting/application/reportService.js';
+import { runReport as runReportService } from '../src/modules/reporting/application/reportService.js';
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
 import { getReportDefinition, listAllReportDefinitions, LEGACY_REPORT_ALIASES } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { EVENT_COLUMNS } from '../src/modules/reporting/definitions/columns/eventColumns.js';
@@ -32,6 +32,11 @@ import { buildEventLookups, enrichEventRows, normalizeLiveArrobaDivisor } from '
 import { getReportSettings, updateAppConfig } from '../src/modules/settings/application/appConfigService.js';
 import storage from '../src/storage/storageAdapter.js';
 import { can } from '../src/modules/auth/domain/permissionService.js';
+// M1 (1.5.0): a massa de ago–set/2026 (scripts/lib/reportFixtures) tem intervalos de 10 e 20 dias entre pesagens; este
+// gate confere à mão números de outro assunto, então fixa o intervalo mínimo do GMD em 7 (todos os intervalos
+// confiáveis — os números de antes). A regra do mínimo (21 padrão, 28; cinza, aviso, rodapé e contas só com o
+// confiável) tem gate próprio com a MESMA massa: reports:gmd-confiabilidade:verify.
+const runReport = (id, request = {}, actor) => runReportService(id, { gmdDiasMinimos: 7, ...request }, actor);
 
 const PERIOD = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
 const PESAGENS = getReportDefinition('pesagens');

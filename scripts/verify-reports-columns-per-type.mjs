@@ -17,7 +17,7 @@ import assert from 'node:assert/strict';
 import { ADMIN, CONSULTA, GESTOR, OPERADOR, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
 import * as weighingService from '../src/modules/weighing/application/weighingService.js';
 import { readAppSetting, writeAppSetting } from '../src/storage/indexedDb/repositories/index.js';
-import { runReport } from '../src/modules/reporting/application/reportService.js';
+import { runReport as runReportService } from '../src/modules/reporting/application/reportService.js';
 import { getReportViewState, getTypeColumnPrefs, saveReportViewState, saveTypeColumnPrefs, typeColumnsKey } from '../src/modules/reporting/application/reportTemplateService.js';
 import { getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
 import {
@@ -34,6 +34,11 @@ import { buildReportDocument, documentRows } from '../src/modules/reporting/doma
 import { PESAGENS_SHEET_HEADERS } from '../src/modules/reporting/definitions/pesagens.js';
 import { buildReportLines } from '../src/modules/reporting/infrastructure/exporters/reportLayout.js';
 import { buildSheetRows } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
+// M1 (1.5.0): a massa de ago–set/2026 (scripts/lib/reportFixtures) tem intervalos de 10 e 20 dias entre pesagens; este
+// gate confere à mão números de outro assunto, então fixa o intervalo mínimo do GMD em 7 (todos os intervalos
+// confiáveis — os números de antes). A regra do mínimo (21 padrão, 28; cinza, aviso, rodapé e contas só com o
+// confiável) tem gate próprio com a MESMA massa: reports:gmd-confiabilidade:verify.
+const runReport = (id, request = {}, actor) => runReportService(id, { gmdDiasMinimos: 7, ...request }, actor);
 
 // ---------------------------------------------------------------------------------------------------------
 // Massa: a dos gates (A1 101, A2 202, A3 303, A4 404) + 4 animais para as ordenações ("2", "7", "9", "10"),
@@ -258,8 +263,10 @@ const RESUMO_DATA = {
   data_asc: { datas: [...DATAS].reverse(), dia10: ['Lote 01', 'Lote 02', 'Lote 03'], dia12: ['Lote 01', 'Lote 02'], summarySort: null },
   peso_desc: { datas: DATAS, dia10: ['Lote 03', 'Lote 01', 'Lote 02'], dia12: ['Lote 01', 'Lote 02'], summarySort: { key: 'peso_medio', direction: 'desc', columnId: 'nome_lote' } },
   peso_asc: { datas: DATAS, dia10: ['Lote 02', 'Lote 01', 'Lote 03'], dia12: ['Lote 02', 'Lote 01'], summarySort: { key: 'peso_medio', direction: 'asc', columnId: 'nome_lote' } },
-  // E1G: em 12/09 as duas vendas têm GMD (Lote 02 x3 5,0; Lote 01 x8 2,5) — o GMD ordena os lotes do dia.
-  gmd_desc: { datas: DATAS, dia10: ['Lote 01', 'Lote 02', 'Lote 03'], dia12: ['Lote 02', 'Lote 01'], summarySort: { key: 'gmd_medio', direction: 'desc', columnId: 'nome_lote' } },
+  // E1G: em 12/09 as duas vendas têm GMD (Lote 02 x3 5,0; Lote 01 x8 2,5). M1 (1.5.0): são 2 dias depois da pesagem de
+  // 10/09 — intervalo curto (cinza), FORA do GMD médio do lote: o dia fica sem GMD confiável e os lotes vão na ordem
+  // natural (antes da M1 o 5,0 de 2 dias punha o Lote 02 na frente). O GMD continua ordenando os lotes de 10/09.
+  gmd_desc: { datas: DATAS, dia10: ['Lote 01', 'Lote 02', 'Lote 03'], dia12: ['Lote 01', 'Lote 02'], summarySort: { key: 'gmd_medio', direction: 'desc', columnId: 'nome_lote' } },
   gmd_asc: { datas: DATAS, dia10: ['Lote 02', 'Lote 01', 'Lote 03'], dia12: ['Lote 01', 'Lote 02'], summarySort: { key: 'gmd_medio', direction: 'asc', columnId: 'nome_lote' } },
   animal_asc: { datas: DATAS, dia10: ['Lote 01', 'Lote 02', 'Lote 03'], dia12: ['Lote 01', 'Lote 02'], summarySort: null },
   lote_asc: { datas: DATAS, dia10: ['Lote 01', 'Lote 02', 'Lote 03'], dia12: ['Lote 01', 'Lote 02'], summarySort: null },
@@ -282,7 +289,7 @@ for (const [choice, expected] of Object.entries(RESUMO_DATA)) {
 }
 const totalPorLote = (vm) => buildReportDocument(vm, { showEmptyColumns: true }).sections[0].leafTotal.rows.filter((row) => row.type === 'LEAF_TOTAL').map((row) => row.cells[0].text);
 assert.deepEqual(totalPorLote(await run({ view: 'por-apartacao-data', sortChoice: 'peso_desc' })), ['Lote 03', 'Lote 01', 'Lote 02'], 'TOTAL POR LOTE pelo peso médio (400; 342,86; 276,25)');
-assert.deepEqual(totalPorLote(await run({ view: 'por-apartacao-data', sortChoice: 'gmd_asc' })), ['Lote 02', 'Lote 01', 'Lote 03'], 'TOTAL POR LOTE pelo GMD (0,796; 1,452; — — E1G: com as saídas com peso)');
+assert.deepEqual(totalPorLote(await run({ view: 'por-apartacao-data', sortChoice: 'gmd_asc' })), ['Lote 02', 'Lote 01', 'Lote 03'], 'TOTAL POR LOTE pelo GMD (Lote 02 < Lote 01 1,417; Lote 03 sem GMD — M1: as vendas de 2 dias ficam fora)');
 
 // Por Apartação/Lote: sem nível de data — "Data" = ordem natural; peso/GMD como acima.
 const APARTACAO_LOTE = {
@@ -430,27 +437,29 @@ const lote01 = porLote.tree[0];
 assert.deepEqual(porLote.aggregates.map((spec) => spec.id), ['animais', 'peso_medio', 'gmd_medio'], 'subtotal do Analítico: animais, peso médio, GMD médio');
 assert.equal(lote01.aggregates.animais.value, 3, 'Lote 01: 3 animais distintos em 8 pesagens');
 close(lote01.aggregates.peso_medio.value, 2400 / 7, 'Lote 01: peso médio');
-// E1G: a venda x8 (350 → 355 em 2 d) entra no GMD do Lote 01: (85 + 5) ÷ (60 + 2).
-close(lote01.aggregates.gmd_medio.value, 90 / 62, 'Lote 01: GMD ponderado (nunca média simples dos GMD)');
+// E1G: a venda x8 (350 → 355 em 2 d) entrava no GMD do Lote 01: (85 + 5) ÷ (60 + 2). M1 (1.5.0): 2 dias é intervalo
+// curto (cinza, fora da média) — o GMD do lote fica 85 ÷ 60; o de antes (90 ÷ 62) é o NEGATIVO.
+close(lote01.aggregates.gmd_medio.value, 85 / 60, 'Lote 01: GMD ponderado (nunca média simples dos GMD), sem o intervalo curto');
+assert.ok(Math.abs(lote01.aggregates.gmd_medio.value - 90 / 62) > 1e-6, 'NEGATIVO (M1): a venda de 2 dias não puxa mais o GMD do lote');
 assert.equal(porLote.totals.animais.value, 8, 'Total geral: 8 animais (recalculado, não soma)');
 // E1D visual: na folha (cara do MAKGESTAO) o grupo é o próprio valor ("LOTE 01") e o subtotal é a linha de
-// texto do antigo — "Subtotal: 3 animais | Peso Médio: 342,9 kg | GMD Médio: 1,452 kg/dia" — com os números do
+// texto do antigo — "Subtotal: 3 animais | Peso Médio: 342,9 kg | GMD Médio: 1,417 kg/dia" (M1: sem a venda de 2 dias) — com os números do
 // motor (animais distintos, GMD ponderado); o TOTAL GERAL leva também o Ganho Total, como o antigo.
 const folhaPorLote = buildReportDocument(porLote, { showEmptyColumns: true });
 assert.deepEqual(folhaPorLote.sections.map((section) => section.title), ['LOTE 01', 'LOTE 02', 'LOTE 03', 'NÃO INFORMADO'], 'folha: título do grupo = o valor, como no antigo');
 const linhas = documentRows(folhaPorLote).filter((row) => row.line);
 assert.deepEqual(linhas.map((row) => row.line.items[0].label), ['Subtotal', 'Subtotal', 'Subtotal', 'Subtotal', 'TOTAL GERAL'], 'folha: subtotal por grupo + TOTAL GERAL');
-assert.deepEqual(linhas[0].line.items.map((item) => item.text), ['3 animais', '342,9 kg', '1,452 kg/dia'], 'folha: Lote 01');
+assert.deepEqual(linhas[0].line.items.map((item) => item.text), ['3 animais', '342,9 kg', '1,417 kg/dia'], 'folha: Lote 01');
 assert.deepEqual(linhas[0].line.items.map((item) => item.raw), [lote01.aggregates.animais.value, lote01.aggregates.peso_medio.value, lote01.aggregates.gmd_medio.value], 'folha: Lote 01 = motor (animais distintos, GMD ponderado)');
 assert.deepEqual(linhas[2].line.items.map((item) => item.text), ['1 animal', '400,0 kg', '-'], 'folha: Lote 03 sem GMD = "-"');
 assert.equal(linhas.at(-1).line.items[0].raw, porLote.totals.animais.value, 'folha: TOTAL GERAL = animais distintos da população (8), não soma');
 assert.equal(linhas.at(-1).line.items.at(-1).label, 'Ganho Total', 'folha: TOTAL GERAL com o Ganho Total do antigo');
 const csvSub = buildReportLines(porLote, 'csv').lines.filter((line) => line.type === 'SUBTOTAL' && line.group === 'Lote 01');
-assert.deepEqual(csvSub.map((line) => line.value), ['3', '342,9', '1,452'], 'CSV: subtotal do Lote 01');
+assert.deepEqual(csvSub.map((line) => line.value), ['3', '342,9', '1,417'], 'CSV: subtotal do Lote 01');
 const xlsxSub = buildSheetRows(porLote).rows.filter((row) => row.kind === 'SUBTOTAL' && row.cells[1][0] === 'Lote 01').map((row) => row.cells[3][0]);
 assert.equal(xlsxSub.length, 3, 'XLSX: 3 linhas de subtotal do Lote 01');
 // Número de verdade, com as casas da folha (kg agregado com 1 casa, GMD com 3) — como os demais totais do XLSX.
-assert.deepEqual(xlsxSub, [3, 342.9, 1.452], 'XLSX: animais, peso médio e GMD ponderado do Lote 01 (números)');
+assert.deepEqual(xlsxSub, [3, 342.9, 1.417], 'XLSX: animais, peso médio e GMD ponderado do Lote 01 (números)');
 
 await resetDb();
 console.log(JSON.stringify({

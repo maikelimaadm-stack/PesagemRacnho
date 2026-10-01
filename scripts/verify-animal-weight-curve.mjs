@@ -12,10 +12,16 @@
 //   f) o SVG sai sem preserveAspectRatio="none" (o defeito antigo), sem script, com uma marca por pesagem; a Ficha
 //      usa a curva nova, com as cores por token (tema escuro) e sem as cores fixas antigas;
 //   g) revisão: duas pesagens no MESMO dia caem no mesmo x (o mouse só alcança a primeira) — a dica mostra as duas
-//      (NEGATIVO: a dica antiga, só do ponto, escondia a segunda).
+//      (NEGATIVO: a dica antiga, só do ponto, escondia a segunda);
+//   h) M1 (1.5.0): qualidade do GMD do trecho (contrato gmdQuality, mínimo de Configurações › Relatórios, padrão 21):
+//      intervalo curto com o número, CINZA e o aviso (dica, tabela da curva e tabela/linha do tempo/KPI da Ficha);
+//      28 → o de 21 dias passa a cinza; GMD (regressão) do animal entre o menor e o maior GMD dos intervalos, com a
+//      janela de 120 dias até hoje (NEGATIVO: a curva antiga mostrava o GMD de 10 dias como qualquer outro).
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CURVE_RANGES, buildAnimalWeightCurve, curveCutoff, curveLegend, curvePointTip } from '../src/modules/animals/domain/animalWeightCurve.js';
+import { CURVE_RANGES, buildAnimalWeightCurve, curveCutoff, curveGmdText, curveLegend, curvePointTip } from '../src/modules/animals/domain/animalWeightCurve.js';
+import { GMD_QUALIDADE } from '../src/modules/weighing/domain/gmdQuality.js';
+import { computeWeightedGmd } from '../src/modules/weighing/domain/weightRegression.js';
 import { chartGeometry, chartHoverTargets, dayNumber } from '../src/modules/reporting/domain/chartScale.js';
 import { chartTargetDrill } from '../src/modules/reporting/domain/reportCharts.js';
 import { renderChartSvg } from '../src/modules/reporting/infrastructure/exporters/chartSvg.js';
@@ -65,9 +71,9 @@ const entries = [
   results.push({ caso: 'sem peso fora', pontos: points.length, eventos: withZero.length });
 }
 
-// c) GMD do trecho
+// c) GMD do trecho (mínimo 7: os dois trechos confiáveis — o texto da dica de antes; o padrão 21 está no caso h)
 {
-  const curve = buildAnimalWeightCurve(entries);
+  const curve = buildAnimalWeightCurve(entries, { gmdDiasMinimos: 7 });
   const [first, second, third] = curve.series[0].points;
   assert.equal(first.gmd, null, 'primeira pesagem sem trecho');
   assert.equal(second.dias, 10);
@@ -96,7 +102,9 @@ const entries = [
 {
   const one = buildAnimalWeightCurve([entries[0]]);
   assert.equal(one.series[0].points.length, 1);
-  assert.deepEqual(one.resumo, { pesagens: 1, dias: 0, ganho: null, gmd: null });
+  // M1: o resumo leva também a qualidade do GMD do intervalo e o GMD (regressão) — uma pesagem: SEM_GMD e sem regressão.
+  assert.deepEqual({ ...one.resumo, regressao: one.resumo.regressao?.gmd ?? null }, { pesagens: 1, dias: 0, ganho: null, gmd: null, gmdQualidade: GMD_QUALIDADE.SEM_GMD, gmdMotivo: 'sem pesagem anterior', regressao: null });
+  assert.equal(one.resumo.regressao.qualidade, GMD_QUALIDADE.SEM_GMD, 'uma pesagem: regressão SEM_GMD');
   const legend = curveLegend(one.resumo);
   assert.equal(legend.ganho, '—', 'uma pesagem: ganho "—"');
   assert.equal(legend.pesagens, '1 pesagem com peso');
@@ -140,7 +148,7 @@ const entries = [
   assert.equal(chartTargetDrill(curve, chartHoverTargets(chartGeometry(curve))[0]), null, 'a curva não abre detalhe (só a dica)');
   assert.match(CHART_SCREEN_CSS, /html\.dark \.rpt-charts-host/, 'tokens do tema escuro');
   const ficha = readFileSync(new URL('../src/pages/FichaAnimal.jsx', import.meta.url), 'utf8');
-  assert.match(ficha, /buildAnimalWeightCurve\(selected\?\.entries \?\? \[\], \{ range \}\)/, 'Ficha: curva pela função do domínio');
+  assert.match(ficha, /buildAnimalWeightCurve\(selected\?\.entries \?\? \[\], \{ range, gmdDiasMinimos, hoje: localToday\(\) \}\)/, 'Ficha: curva pela função do domínio (M1: com o mínimo do GMD e hoje)');
   assert.match(ficha, /<ChartPlot chart=\{curve\}/, 'Ficha: o mesmo ChartPlot dos relatórios (SVG + dica)');
   assert.match(ficha, /rpt-charts-host/, 'Ficha: tokens --rc-* com tema escuro');
   assert.match(ficha, /curveLegend\(curve\.resumo\)/, 'Ficha: legenda do mesmo intervalo');
@@ -168,6 +176,50 @@ const entries = [
   const ficha = readFileSync(new URL('../src/pages/FichaAnimal.jsx', import.meta.url), 'utf8');
   assert.match(ficha, /describe={curvePointTip}/, 'a Ficha usa a dica do domínio');
   results.push({ caso: 'mesmo dia', dica: tip.title });
+}
+
+// h) M1 — qualidade do GMD do trecho e GMD (regressão)
+{
+  // Padrão 21: o trecho de 10 dias (1,200) é intervalo curto — o número aparece, cinza, com o aviso; o de 90 dias não.
+  const curve = buildAnimalWeightCurve(entries, { hoje: '2026-05-01' });
+  const [, second, third] = curve.series[0].points;
+  assert.deepEqual([second.gmdQualidade, second.gmdMotivo, second.gmdCinza], [GMD_QUALIDADE.NAO_CONFIAVEL, 'intervalo curto (10 dias)', true], '10 dias < 21: NAO_CONFIAVEL, cinza');
+  close(second.gmd, 1.2, 'o número continua o mesmo (o fato gravado não muda)');
+  assert.equal(second.detalhe.at(-1), 'GMD do trecho: 1,200 kg/dia — intervalo curto (10 dias), fora da média', 'dica com o aviso');
+  assert.deepEqual([third.gmdQualidade, third.gmdCinza], [GMD_QUALIDADE.CONFIAVEL, false], '90 dias: confiável');
+  assert.deepEqual(curve.tabela.cinza, [false, true, false], 'tabela da curva: só o trecho curto em cinza');
+  assert.deepEqual(curve.tabela.avisos, [null, 'intervalo curto (10 dias)', null], 'tabela da curva: o aviso ao lado');
+  assert.deepEqual(curve.tabela.linhas.map((line) => line.at(-1)), ['—', '1,200', '1,000'], 'tabela: o MESMO número (SEM_GMD "—", nunca 0)');
+  // NEGATIVO: a curva da 1.4.2 (sem qualidade) dava o trecho de 10 dias como qualquer outro — sem cinza nem aviso.
+  assert.notEqual(second.detalhe.at(-1), 'GMD do trecho: 1,200 kg/dia', 'NEGATIVO: o texto antigo não avisava o intervalo curto');
+  // Mínimo 28 (Configurações › Relatórios): nada muda aqui (10 e 90); 7: o de 10 dias volta ao normal.
+  assert.deepEqual(buildAnimalWeightCurve(entries, { gmdDiasMinimos: 7 }).tabela.cinza, [false, false, false], 'mínimo 7: nenhum cinza');
+  const twentyOne = [entries[0], { ...animal, id: 'm21', tipo_manejo: 'Manejo', data_pesagem: '2026-01-22', peso: 321 }];
+  assert.deepEqual(buildAnimalWeightCurve(twentyOne).tabela.cinza, [false, false], '21 dias com o mínimo 21: confiável');
+  assert.deepEqual(buildAnimalWeightCurve(twentyOne, { gmdDiasMinimos: 28 }).tabela.cinza, [false, true], 'mínimo 28: o de 21 dias passa a cinza');
+  assert.equal(buildAnimalWeightCurve(twentyOne, { gmdDiasMinimos: 99 }).tabela.cinza[1], false, 'mínimo inválido → 21');
+  // Formatador compartilhado: SEM_GMD "—" (nunca 0), número com 3 casas, cinza só no NAO_CONFIAVEL.
+  assert.deepEqual(curveGmdText({ gmd: null, gmdQualidade: GMD_QUALIDADE.SEM_GMD }), { texto: '—', cinza: false, aviso: null, entraNaMedia: false });
+  assert.deepEqual(curveGmdText({ gmd: 1.2, gmdQualidade: GMD_QUALIDADE.NAO_CONFIAVEL, gmdMotivo: 'intervalo curto (10 dias)' }), { texto: '1,200 kg/dia', cinza: true, aviso: 'intervalo curto (10 dias)', entraNaMedia: false });
+  // GMD (regressão) do animal: janela de 120 dias até hoje — 3 pesagens, entre o menor e o maior GMD dos intervalos.
+  const regressao = curve.resumo.regressao;
+  assert.deepEqual([regressao.n, regressao.diasCobertos, regressao.qualidade], [3, 100, GMD_QUALIDADE.CONFIAVEL], 'regressão: 3 pesagens em 100 dias');
+  assert.ok(regressao.gmd >= 1 && regressao.gmd <= 1.2, `regressão entre o menor (1,000) e o maior (1,200) GMD dos intervalos: ${regressao.gmd}`);
+  assert.equal(regressao.gmd, computeWeightedGmd([{ data: '2026-01-01', peso: 300 }, { data: '2026-01-11', peso: 312 }, { data: '2026-04-11', peso: 402 }], { hoje: '2026-05-01' }).gmd, 'regressão = computeWeightedGmd (interface congelada)');
+  const legend = curveLegend(curve.resumo);
+  assert.match(legend.regressao, /^GMD \(regressão\): \d,\d{3} kg\/dia$/, 'legenda com o GMD (regressão)');
+  // Hoje bem depois (mais de 120 dias da última pesagem): fora da janela, sem regressão ("—").
+  assert.equal(curveLegend(buildAnimalWeightCurve(entries, { hoje: '2026-12-31' }).resumo).regressao, 'GMD (regressão): —', 'fora da janela de 120 dias: "—"');
+  // A Ficha: mínimo de Configurações › Relatórios, cinza do tema e o aviso na tabela, na linha do tempo e no KPI.
+  const ficha = readFileSync(new URL('../src/pages/FichaAnimal.jsx', import.meta.url), 'utf8');
+  assert.match(ficha, /getReportSettings\(\)\.then\(\(settings\) => \{ if \(active\) setGmdDiasMinimos\(normalizeGmdDiasMinimos\(settings\?\.gmd_dias_minimos\)\)/, 'Ficha: mínimo de Configurações › Relatórios');
+  assert.match(ficha, /data-gmd=\{shownGmd\.cinza \? 'NAO_CONFIAVEL' : undefined\}/, 'Ficha: célula do GMD marcada no intervalo curto');
+  assert.match(ficha, /title=\{shownGmd\.cinza \? `GMD não entra na média: \$\{shownGmd\.aviso\}` : undefined\}/, 'Ficha: o motivo no title');
+  assert.match(ficha, /GMD_GRAY_STYLE = Object\.freeze\(\{ color: 'var\(--mb1-text-2, #6b7280\)' \}\)/, 'Ficha: o cinza que o tema já tem');
+  assert.match(ficha, /\.\.\.\(withWarning \? \['Aviso do GMD'\] : \[\]\)/, 'Ficha: CSV com "Aviso do GMD" logo após o GMD quando há intervalo curto');
+  assert.match(ficha, /curveText\.regressao/, 'Ficha: GMD (regressão) na legenda da curva');
+  assert.ok(!/hasNumber\(row\.gmd\) \? n3\.format/.test(ficha), 'NEGATIVO: a tabela não formata mais o GMD sem a qualidade');
+  results.push({ caso: 'M1 qualidade e regressão', cinza: curve.tabela.cinza, regressao: regressao.gmd });
 }
 
 console.log(JSON.stringify({ gate: 'animal:weight-curve:verify', ok: true, cases: results }, null, 2));

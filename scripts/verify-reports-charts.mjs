@@ -18,10 +18,13 @@
 //   h) cor segue a entidade (filtro e detalhe não repintam — NEGATIVO: por posição repintaria); o detalhe de um
 //      grupo recorta as linhas do gráfico; a série segue o 1º nível do tipo; CONSULTA recebe os mesmos gráficos;
 //   i) y null = "-" em todo texto; normalizeChartConfig (desconhecido sai com aviso); geometria (peso sem partir de
-//      0, base 0 nas barras, ≤ 24 px com ponta arredondada, rótulos diretos sem colidir).
+//      0, base 0 nas barras, ≤ 24 px com ponta arredondada, rótulos diretos sem colidir);
+//   j) M1 (1.5.0): GMD por grupo, evolução no modo GMD e faixas de GMD só com o GMD confiável (mínimo padrão 21) e a
+//      cobertura "GMD de N de M cab." contando só ele (NEGATIVO: com o mínimo 7 o intervalo curto entrava). Os
+//      casos a–i fixam o mínimo 7 (os números conferidos à mão de antes).
 import assert from 'node:assert/strict';
 import { ADMIN, CONSULTA, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
-import { runReport } from '../src/modules/reporting/application/reportService.js';
+import { runReport as runReportService } from '../src/modules/reporting/application/reportService.js';
 import { getReportDefinition } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { PESAGENS, SHEET_TOTALS } from '../src/modules/reporting/definitions/pesagens.js';
 import { DESEMPENHO } from '../src/modules/reporting/definitions/desempenho.js';
@@ -38,6 +41,11 @@ import {
   CHART_SLOTS, FAIXAS_GMD, buildReportCharts, chartColumnIds, chartsOf, defineCharts, faixaDe, faixasDePeso, normalizeChartConfig, ultimaPesagemPorAnimal,
 } from '../src/modules/reporting/domain/reportCharts.js';
 import { chartGeometry, dayNumber, niceTicks, spreadLabels } from '../src/modules/reporting/domain/chartScale.js';
+// M1 (1.5.0): a massa de ago–set/2026 (scripts/lib/reportFixtures) tem intervalos de 10 e 20 dias entre pesagens; este
+// gate confere à mão números de outro assunto, então fixa o intervalo mínimo do GMD em 7 (todos os intervalos
+// confiáveis — os números de antes). A regra do mínimo (21 padrão, 28; cinza, aviso, rodapé e contas só com o
+// confiável) tem gate próprio com a MESMA massa: reports:gmd-confiabilidade:verify.
+const runReport = (id, request = {}, actor) => runReportService(id, { gmdDiasMinimos: 7, ...request }, actor);
 
 const results = [];
 const PERIODO = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
@@ -397,6 +405,41 @@ const matrixVm = await runReport('pesagens', { today: TODAY, params: PERIODO, se
   close(pointOf(simChart.series[0], 'LA').y, 130 / 160, 'Lote A: (100 + 30) ÷ (100 + 60)');
   assert.deepEqual(simChart.semValor.itens.map((item) => item.label), ['Lote B'], 'Lote B sem GMD em texto');
   assert.equal(simChart.config.serie, 'lote', 'agrupado pelo lote atual');
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// j) M1 (1.5.0) — gráficos de GMD só com o GMD CONFIÁVEL (o mínimo padrão 21 de Configurações › Relatórios). Na
+//    massa: A1 20 + 20 dias (curtos), A2 10 dias (curto) + venda 21 dias (confiável). NEGATIVO: com o mínimo 7 (os
+//    números de antes, casos c–f) o intervalo curto entrava.
+// ---------------------------------------------------------------------------------------------------------
+{
+  const padrao = await runReportService('pesagens', { today: TODAY, params: PERIODO, selection: { view: 'por-apartacao-lote', aggregates: [...SHEET_TOTALS] } }, ADMIN);
+  assert.equal(padrao.gmdDiasMinimos, 21, 'sem configuração: mínimo 21');
+  const porGrupo = chartOf(buildReportCharts(padrao, PESAGENS, { 'gmd-por-grupo': { serie: 'lote' } }, ADMIN.role), 'gmd-por-grupo');
+  assert.deepEqual(porGrupo.series[0].points.map((point) => point.xKey), ['L2'], 'GMD por grupo: o Lote 01 (só intervalos de 20 dias) não vira barra');
+  close(pointOf(porGrupo.series[0], 'L2').y, 20 / 21, 'Lote 02: só a venda de 21 dias (o intervalo de 10 dias fica fora)');
+  assert.equal(pointOf(porGrupo.series[0], 'L2').y, padrao.tree.flatMap((node) => node.children).find((node) => node.key === 'L2').aggregates.gmd_medio.value, 'barra = GMD médio da folha (a mesma regra)');
+  assert.match(porGrupo.semValor.texto, /Lote 01 \(2 cab\.\)/, 'Lote 01 em "Sem GMD"');
+  assert.equal(porGrupo.cobertura.texto, 'GMD de 1 de 4 cab.', 'cobertura: só o A2 tem GMD confiável');
+  const antigo = chartOf(buildReportCharts(await runReport('pesagens', { today: TODAY, params: PERIODO, selection: { view: 'por-apartacao-lote', aggregates: [...SHEET_TOTALS] } }, ADMIN), PESAGENS, { 'gmd-por-grupo': { serie: 'lote' } }, ADMIN.role), 'gmd-por-grupo');
+  assert.ok(antigo.series[0].points.some((point) => point.xKey === 'L1'), 'NEGATIVO: com o mínimo 7 o Lote 01 tinha barra (1,125)');
+  const evolucao = chartOf(buildReportCharts(padrao, PESAGENS, { 'evolucao-peso': { serie: 'todos', eixo: 'mes', metrica: 'gmd' } }, ADMIN.role), 'evolucao-peso');
+  assert.equal(pointOf(evolucao.series[0], '2026-08').y, null, 'evolução do GMD: ago só tem intervalos curtos → ponto ausente (nunca 0)');
+  close(pointOf(evolucao.series[0], '2026-09').y, 20 / 21, 'evolução do GMD: set = a venda de 21 dias');
+  assert.equal(evolucao.cobertura.texto, 'GMD de 1 de 4 cab.', 'evolução: cobertura só do confiável');
+  // Desempenho: o período de cada animal (A1 40 d, A2 31 d) é longo — nada sai; as faixas continuam com os dois.
+  const desPadrao = await runReportService('desempenho', { today: TODAY, params: PERIODO }, ADMIN);
+  const faixas = chartOf(buildReportCharts(desPadrao, DESEMPENHO, {}, ADMIN.role), 'faixas-gmd');
+  assert.deepEqual(faixas.series[0].points.map((point) => point.y), [0, 0, 0, 0, 2, 0], 'faixas de GMD: períodos de 40 e 31 dias são confiáveis');
+  // Um período curto (só agosto: A1 20 dias, A2 10 dias) fica fora das faixas e do GMD por grupo.
+  const agosto = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-08-21' } };
+  const desCurto = await runReportService('desempenho', { today: TODAY, params: agosto }, ADMIN);
+  const faixasCurto = chartOf(buildReportCharts(desCurto, DESEMPENHO, {}, ADMIN.role), 'faixas-gmd');
+  assert.equal(faixasCurto.series[0].points.reduce((sum, point) => sum + point.y, 0), 0, 'período de 20 e 10 dias: nenhum animal nas faixas');
+  assert.equal(faixasCurto.textoVazio, 'Sem GMD neste período: precisa de uma pesagem anterior.', 'gráfico vazio diz o porquê');
+  const faixasCurto7 = chartOf(buildReportCharts(await runReport('desempenho', { today: TODAY, params: agosto }, ADMIN), DESEMPENHO, {}, ADMIN.role), 'faixas-gmd');
+  assert.equal(faixasCurto7.series[0].points.reduce((sum, point) => sum + point.y, 0), 2, 'NEGATIVO: com o mínimo 7 os dois entravam');
+  results.push({ caso: 'M1 só o confiável', lote02: pointOf(porGrupo.series[0], 'L2').text, cobertura: porGrupo.cobertura.texto });
 }
 
 assert.equal(getReportDefinition('pesagens').charts, PESAGENS.charts, 'catálogo entrega a definição com os gráficos');

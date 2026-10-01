@@ -11,7 +11,9 @@
 //   A4. Rebanho atual: Peso/Data de entrada, Ganho/Dias/GMD desde a entrada, Último GMD; Analítico com Último GMD e GMD
 //       desde a entrada no padrão; resumos com "GMD médio" ponderado; leitura pelo índice (nunca a base inteira);
 //   A6. Qualidade dos dados: "Animal com uma pesagem só", "Manejo sem GMD" (com o motivo) e "Números parecidos (zeros à
-//       esquerda)" — só leitura.
+//       esquerda)" — só leitura;
+//   M1. (1.5.0) Rebanho: o Último GMD de intervalo curto (17 dias) fica com o número, em cinza, com o aviso e FORA do
+//       "GMD médio" do lote; o mínimo 14 o traz de volta (casos completos em reports:gmd-confiabilidade:verify).
 // Cada regra tem caso NEGATIVO: a regra antiga (ou o dado de antes) reprovaria.
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
@@ -367,6 +369,25 @@ assert.equal(totalPesagens - pesagensAntesH1, 31, 'H1: 31 pesagens a mais na bas
 assert.equal(comH1.stats.rowsRead - rebAnalitico.stats.rowsRead, 3, 'A4: o H1 acrescenta 3 linhas lidas (projeção, Cadastro e última pesagem), não 31');
 const h1 = comH1.rows.find((row) => row.animal_id === 'H1');
 assert.deepEqual([h1.peso_entrada, h1.data_entrada, h1.dias_entrada, h1.ganho_entrada, h1.ultimo_gmd], [200, '2026-01-01', 104, 40, Number((11 / 17).toFixed(3))], 'A4: H1 entrada 01/01, última 15/04 (+11 em 17 d desde 29/03)');
+// M1 (1.5.0): o Último GMD do H1 é de 17 dias (< 21, o mínimo padrão) — continua o MESMO número (o fato gravado não
+// muda), mas em cinza, com o aviso, e fora do "GMD médio" do lote; desde a entrada (104 dias) é confiável. Z7 (manejo
+// no mesmo dia do cadastro): SEM_GMD, "-" (nunca 0).
+assert.deepEqual([h1.ultimo_gmd_qualidade, h1.ultimo_gmd_motivo, h1.gmd_entrada_qualidade], ['NAO_CONFIAVEL', 'intervalo curto (17 dias)', 'CONFIAVEL'], 'M1: H1 — Último GMD de intervalo curto; desde a entrada confiável');
+assert.equal(comH1.rows.find((row) => row.animal_id === 'Z7').ultimo_gmd_qualidade, 'SEM_GMD', 'M1: Z7 sem GMD');
+const docH1 = buildReportDocument(comH1);
+const linhaH1 = documentRows(docH1).find((row) => row.type === 'DATA' && row.cells.some((cell) => cell.text === '401'));
+const ultimoH1 = linhaH1.cells.find((cell) => cell.key === 'ultimo_gmd');
+assert.deepEqual([ultimoH1.text, ultimoH1.gmd?.cinza, ultimoH1.gmd?.aviso], ['0,647', true, 'intervalo curto (17 dias)'], 'M1: folha — o mesmo número, em cinza, com o aviso');
+assert.equal(linhaH1.cells.find((cell) => cell.key === 'gmd_entrada').gmd, undefined, 'M1: desde a entrada sem cinza');
+assert.equal(docH1.footer.gmdCinza, 'GMD em cinza = intervalo menor que 21 dias: não entra na média', 'M1: rodapé explica o cinza');
+const loteH1 = await run('rebanho.atual', viewSelection('por-lote', REBANHO));
+const boiadaH1 = loteH1.tree.find((node) => node.label === 'BOIADA');
+const confiaveisL1 = comH1.rows.filter((row) => row.lote_atual_id === 'L1' && row.ultimo_gmd_qualidade === 'CONFIAVEL');
+close(boiadaH1.aggregates.gmd_medio.value, confiaveisL1.reduce((sum, row) => sum + row.ultimo_ganho, 0) / confiaveisL1.reduce((sum, row) => sum + row.ultimo_dias, 0), 'M1: GMD médio da BOIADA só com o Último GMD confiável');
+const todosL1 = comH1.rows.filter((row) => row.lote_atual_id === 'L1' && row.ultimo_dias > 0);
+assert.ok(Math.abs(boiadaH1.aggregates.gmd_medio.value - todosL1.reduce((sum, row) => sum + row.ultimo_ganho, 0) / todosL1.reduce((sum, row) => sum + row.ultimo_dias, 0)) > 1e-6, 'NEGATIVO (M1): com o H1 de 17 dias o GMD médio seria outro');
+const loteH1Min14 = await runReport('rebanho.atual', { today: TODAY, arrobaDivisor: 30, gmdDiasMinimos: 14, selection: viewSelection('por-lote', REBANHO) }, ADMIN);
+close(loteH1Min14.tree.find((node) => node.label === 'BOIADA').aggregates.gmd_medio.value, todosL1.reduce((sum, row) => sum + row.ultimo_ganho, 0) / todosL1.reduce((sum, row) => sum + row.ultimo_dias, 0), 'M1: com o mínimo 14 (Configurações) o H1 de 17 dias volta a entrar');
 const animaisCount = await db.table('animais').count();
 const animalSourceSrc = fs.readFileSync(new URL('../src/modules/reporting/infrastructure/reportSources/animalSource.js', import.meta.url), 'utf8');
 assert.ok(!/for \(const animal[^\n]*\) \{[^}]*await db\.table\('pesagens'\)/.test(animalSourceSrc), 'NEGATIVO: nenhuma consulta de pesagens por animal num laço');

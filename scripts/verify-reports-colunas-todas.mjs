@@ -20,7 +20,7 @@
 import assert from 'node:assert/strict';
 import { ADMIN, CONSULTA, GESTOR, OPERADOR, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
 import * as weighingService from '../src/modules/weighing/application/weighingService.js';
-import { runReport } from '../src/modules/reporting/application/reportService.js';
+import { runReport as runReportService } from '../src/modules/reporting/application/reportService.js';
 import { getReportViewState, getTypeColumnPrefs, saveReportViewState, saveTypeColumnPrefs } from '../src/modules/reporting/application/reportTemplateService.js';
 import { stateFromRequest, typedViewSelection } from '../src/modules/reporting/application/reportInitialState.js';
 import { getReportDefinition, listReportDefinitions } from '../src/modules/reporting/definitions/reportCatalog.js';
@@ -35,6 +35,11 @@ import { LABEL_COLUMN_KEY, MAK_MISSING, buildReportDocument, documentRows } from
 import { renderSheetBody } from '../src/modules/reporting/infrastructure/exporters/sheetHtml.js';
 import { buildSheetRows } from '../src/modules/reporting/infrastructure/exporters/xlsxExporter.js';
 import { buildCsv, parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
+// M1 (1.5.0): a massa de ago–set/2026 (scripts/lib/reportFixtures) tem intervalos de 10 e 20 dias entre pesagens; este
+// gate confere à mão números de outro assunto, então fixa o intervalo mínimo do GMD em 7 (todos os intervalos
+// confiáveis — os números de antes). A regra do mínimo (21 padrão, 28; cinza, aviso, rodapé e contas só com o
+// confiável) tem gate próprio com a MESMA massa: reports:gmd-confiabilidade:verify.
+const runReport = (id, request = {}, actor) => runReportService(id, { gmdDiasMinimos: 7, ...request }, actor);
 
 const { DETALHADO, RESUMIDO } = REPORT_MODES;
 const resumo = { gate: 'reports:colunas-todas:verify', ok: false, regras: [], relatorios: {}, combinacoes: 0 };
@@ -151,12 +156,20 @@ async function check(definition, view, keys, { actor = ADMIN, absent = [], tag =
   // XLSX e CSV: cabeçalhos na ordem escolhida (Resumido: um por métrica — o par são as duas)
   const labels = view.mode === DETALHADO ? vm.columns.map((column) => column.label) : summaryMetrics(vm).map((metric) => metric.label);
   const xlsx = buildSheetRows(vm).dataHeaders;
-  const positions = labels.map((label) => xlsx.findIndex((header) => header === label || header.startsWith(`${label} (`) || header === `${label}`));
+  // M1: "GMD (regressão) (kg/dia)" também começa com "GMD (" — no Detalhado, o cabeçalho exato da coluna (headerLabel)
+  // vem antes do prefixo, senão o GMD acharia a coluna da regressão.
+  const positions = labels.map((label, index) => {
+    const exact = view.mode === DETALHADO ? xlsx.indexOf(headerLabel(vm.columns[index])) : -1;
+    return exact >= 0 ? exact : xlsx.findIndex((header) => header === label || header.startsWith(`${label} (`));
+  });
   assert.ok(positions.every((position) => position >= 0), `${where}: XLSX com ${labels.filter((_, i) => positions[i] < 0).join(', ')} (${xlsx.join(' | ')})`);
   assert.deepEqual([...positions].sort((a, b) => a - b), positions, `${where}: XLSX na ordem escolhida`);
   if (!isVendasDoc(doc)) {
     const csv = parseCsv(buildCsv(vm))[0].map(unquote);
-    const csvPositions = labels.map((label) => csv.findIndex((header) => header === label || header.startsWith(`${label} (`)));
+    const csvPositions = labels.map((label, index) => {
+      const exact = view.mode === DETALHADO ? csv.indexOf(headerLabel(vm.columns[index])) : -1;
+      return exact >= 0 ? exact : csv.findIndex((header) => header === label || header.startsWith(`${label} (`));
+    });
     assert.ok(csvPositions.every((position) => position >= 0), `${where}: CSV com todas as colunas escolhidas`);
     assert.deepEqual([...csvPositions].sort((a, b) => a - b), csvPositions, `${where}: CSV na ordem escolhida`);
   }
