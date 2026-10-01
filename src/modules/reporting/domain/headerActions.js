@@ -127,6 +127,8 @@ export function defaultTotalOp(column) {
   if (!column || DATE_TYPES.has(column.type)) return null;
   const accepted = new Set(column.aggregations ?? []);
   const first = (list) => list.find((op) => accepted.has(op)) ?? null;
+  // E1G: a coluna pode declarar a própria conta (Dias → média).
+  if (column.totalOp && accepted.has(column.totalOp)) return column.totalOp;
   if (column.type === 'gmd') return first(['weightedGmd', 'avg']);
   if (column.type === 'percentage') return first(['avg', 'weightedAvg']);
   if (NUMERIC_TYPES.has(column.type)) return first(['sum', 'avg']);

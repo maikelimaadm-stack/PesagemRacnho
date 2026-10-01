@@ -5,7 +5,8 @@
 // Data)" —; sem tipo padrão, o agrupamento/modo padrão da definição, como antes.
 import { aliasSelection } from '../definitions/legacyAliases.js';
 import { typesByStructure } from '../definitions/legacyViews.js';
-import { applyColumnKeys, filtersForDisplay, getReportView, resolveViewId, viewSelection } from '../domain/reportViews.js';
+import { metricKeysOf, REPORT_MODES } from '../domain/reportDefinition.js';
+import { applyColumnKeys, filtersForDisplay, getReportView, isPreviousAggregates, resolveViewId, viewSelection } from '../domain/reportViews.js';
 import { legacySortChoice } from '../domain/sortChoices.js';
 import { DEFAULT_DISPLAY } from '../domain/reportCharts.js';
 import { templateToRequest } from './reportTemplateService.js';
@@ -20,6 +21,21 @@ import { templateToRequest } from './reportTemplateService.js';
 // (sortChoices.legacySortChoice — nada abre invertido).
 // E1E: a estrutura é conferida com os filtros do estado (filtros da pessoa + condições fixas): tipo com população
 // (Mortes, Perdendo Peso…) só quando o estado já filtra exatamente essa população (reportViews.matchView).
+// E1G: as chaves de totais são exatamente um padrão ANTIGO do tipo (a pessoa nunca escolheu colunas)? Então
+// valem as de hoje — ex.: "Dias Médios" entrou no Desempenho e só apareceria para quem nunca abriu o relatório.
+function isPreviousDefault(view, keys) {
+  const previous = view?.mode === REPORT_MODES.RESUMIDO ? view.columnChoices?.previous : null;
+  if (!previous?.length || !keys?.length) return false;
+  const wanted = [...new Set(keys)].sort().join('|');
+  return previous.some((list) => [...new Set(list)].sort().join('|') === wanted);
+}
+
+function upgradedAggregates(definition, view, aggregates) {
+  if (view?.mode === REPORT_MODES.DETALHADO && isPreviousAggregates(view, aggregates)) return view.aggregates.map((spec) => ({ ...spec }));
+  if (!Array.isArray(aggregates) || !isPreviousDefault(view, metricKeysOf(aggregates, definition.metricPairs ?? []))) return aggregates;
+  return applyColumnKeys(view, definition, view.columnChoices.defaults).aggregates;
+}
+
 export function withTypedState(definition, state) {
   const filters = { ...(state.uiFilters ?? {}), ...(state.fixedFilters ?? {}) };
   const resolved = state.view !== undefined ? state.view : resolveViewId(definition, { ...state, filters });
@@ -29,6 +45,7 @@ export function withTypedState(definition, state) {
   return {
     ...state,
     view,
+    ...(typed && Array.isArray(state.aggregates) ? { aggregates: upgradedAggregates(definition, typed, state.aggregates) } : {}),
     matrix: state.matrix ?? (typed ? typed.matrix ?? null : null),
     sortChoice: state.sortChoice !== undefined ? state.sortChoice : legacySortChoice(definition, typed, state),
   };
@@ -44,6 +61,8 @@ export function typedViewSelection(definition, view, typeColumns) {
   const resolved = typeof view === 'string' ? getReportView(definition, view) : view;
   const selection = viewSelection(resolved, definition);
   const keys = typeColumns?.[resolved.id];
+  // E1G: escolha gravada igual a um padrão antigo do tipo = sem escolha (padrão de hoje).
+  if (isPreviousDefault(resolved, keys)) return selection;
   return keys?.length && resolved.columnChoices ? { ...selection, ...applyColumnKeys(resolved, definition, keys) } : selection;
 }
 

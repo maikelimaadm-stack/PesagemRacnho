@@ -17,11 +17,12 @@ const levels = (groups) => groups.map((group) => (typeof group === 'string' ? { 
  * @param {string} id  id estável (vai para último estado, modelos e manifesto)
  * @param {(string|{columnId, direction?})[]} groups níveis (1 a 3)
  */
-export function resumoTipo(id, label, groups, aggregates, { defaults, ...extra } = {}) {
+export function resumoTipo(id, label, groups, aggregates, { defaults, previousDefaults, ...extra } = {}) {
   const keys = metricKeysOf(aggregates);
   return {
     id, label, mode: 'RESUMIDO', titleKind: 'Sintético', groups: levels(groups), aggregates: aggregates.map((spec) => ({ ...spec })),
-    columnChoices: { available: keys, defaults: defaults ? [...defaults] : keys },
+    // E1G: previous = padrões de versões anteriores; estado gravado com um deles abre com o padrão de hoje.
+    columnChoices: { available: keys, defaults: defaults ? [...defaults] : keys, ...(previousDefaults ? { previous: previousDefaults.map((list) => [...list]) } : {}) },
     ...extra,
   };
 }

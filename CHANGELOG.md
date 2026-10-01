@@ -32,6 +32,9 @@ A 1.4.1 com o pedido de 30/09/2026 (E1G): GMD em todos os relatórios e gráfico
 - **Desempenho:** peso inicial = última pesagem ANTES do período, quando existe — GMD igual ao de Pesagens.
 
 ### Fixed (E1G)
+- **Dias no Desempenho mostrava soma:** os dias agora são média — "Dias Médios" no padrão dos resumos do
+  Desempenho (e em Colunas Painel); qualquer coluna de dias (Pesagens, Rebanho, Movimentação) usa média no
+  "Subtotal/Total desta coluna" e no "Adicionar coluna…" (`totalOp` na definição da coluna).
 - GMD sumia da folha quando nenhuma linha tinha valor: Dias, Ganho e GMD nunca somem ("-" e "GMD de N de M
   cab." no rodapé).
 - Desempenho sem GMD para quem pesa por aparte (precisava de 2 pesagens dentro do período).

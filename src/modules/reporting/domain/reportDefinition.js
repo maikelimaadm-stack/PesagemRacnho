@@ -104,7 +104,7 @@ function assertAggregateList(aggregates, byId, context, grain) {
 //                 por grupo e TOTAL GERAL. Detalhado, com população fixa e agrupado SÓ pela coluna do desenho
 //                 (SHEET_LAYOUT_GROUPS).
 const VIEW_KEYS = new Set(['id', 'label', 'description', 'groups', 'mode', 'aggregates', 'columns', 'sort', 'summarySort', 'filters',
-  'layout', 'matrix', 'population', 'groupChoices', 'columnChoices', 'columnLabels', 'titleKind', 'sheetLayout', 'sheetTitle']);
+  'layout', 'matrix', 'population', 'groupChoices', 'columnChoices', 'columnLabels', 'titleKind', 'sheetLayout', 'sheetTitle', 'previousAggregates']);
 const DIRECTIONS = new Set(['asc', 'desc']);
 export const VIEW_LAYOUTS = Object.freeze({ MATRIX: 'matrix' });
 export const TITLE_KINDS = Object.freeze(['Analítico', 'Sintético']);
@@ -158,12 +158,24 @@ function defineViewExtensions(view, spec, byId, where) {
     if (!Array.isArray(available) || !available.length || !Array.isArray(defaults) || !defaults.length) throw new Error(`${where}: columnChoices exige available e defaults não vazios`);
     if (new Set(available).size !== available.length) throw new Error(`${where}: columnChoices.available repetido`);
     for (const key of defaults) if (!available.includes(key)) throw new Error(`${where}: coluna padrão ${key} fora de columnChoices.available`);
+    // E1G: padrões antigos (só para atualizar estado gravado que nunca foi personalizado).
+    for (const list of view.columnChoices.previous ?? []) {
+      if (!Array.isArray(list) || !list.length) throw new Error(`${where}: columnChoices.previous exige listas não vazias`);
+      for (const key of list) if (!available.includes(key)) throw new Error(`${where}: padrão antigo ${key} fora de columnChoices.available`);
+    }
     if (view.mode === REPORT_MODES.DETALHADO) {
       assertIds(available, byId, `${where} columnChoices`);
     } else {
       const known = metricKeysOf(view.aggregates ?? spec.defaultAggregates ?? [], spec.metricPairs ?? []);
       for (const key of available) if (!known.includes(key)) throw new Error(`${where}: métrica ${key} fora dos totais do tipo (columnChoices)`);
     }
+  }
+  // E1G: totais de versões anteriores de um tipo lista (ids); estado/modelo gravado com eles ainda é o tipo e abre
+  // com os totais de hoje (ex.: o Analítico do Desempenho ganhou Dias Médios).
+  if (view.previousAggregates != null) {
+    const ids = new Set((view.aggregates ?? []).map((item) => item.id));
+    if (!Array.isArray(view.previousAggregates) || view.previousAggregates.some((list) => !Array.isArray(list) || !list.length)) throw new Error(`${where}: previousAggregates exige listas não vazias`);
+    for (const list of view.previousAggregates) for (const id of list) if (!ids.has(id)) throw new Error(`${where}: total antigo ${id} fora dos totais do tipo`);
   }
   if (view.columnLabels != null) {
     if (typeof view.columnLabels !== 'object' || Array.isArray(view.columnLabels)) throw new Error(`${where}: columnLabels deve ser objeto`);

@@ -168,12 +168,23 @@ export function filtersForDisplay(filters, columns = []) {
 const specKey = (spec) => `${spec.id}|${spec.op}|${spec.columnId ?? ''}`;
 const aggregatesKey = (list) => JSON.stringify((list ?? []).map(specKey).sort());
 
+/** E1G: os totais do estado são exatamente os de uma versão anterior do tipo (previousAggregates)? */
+export function isPreviousAggregates(view, aggregates) {
+  if (!view?.previousAggregates?.length || !Array.isArray(aggregates) || !aggregates.length) return false;
+  const pool = new Map((view.aggregates ?? []).map((spec) => [spec.id, specKey(spec)]));
+  if (!aggregates.every((spec) => pool.get(spec.id) === specKey(spec))) return false;
+  const wanted = [...new Set(aggregates.map((spec) => spec.id))].sort().join('|');
+  return view.previousAggregates.some((list) => [...new Set(list)].sort().join('|') === wanted);
+}
+
 // E1E: os totais do estado são os do tipo — iguais aos declarados ou, num tipo resumido com "Colunas"
 // (columnChoices), uma escolha não vazia dentro deles (o que o "Colunas Painel" do tipo produz; os antigos
 // "Rebanho por …", "Saídas por motivo"… tinham parte dos totais do tipo novo).
 function sameMetrics(definition, view, aggregates) {
   const pool = view.aggregates ?? definition?.defaultAggregates ?? [];
   if (aggregatesKey(aggregates) === aggregatesKey(pool)) return true;
+  // E1G: os totais de uma versão anterior do tipo (previousAggregates) — só os ids, todos da lista do tipo.
+  if (isPreviousAggregates(view, aggregates)) return true;
   if (view.mode !== REPORT_MODES.RESUMIDO || !view.columnChoices || !aggregates.length) return false;
   const inPool = new Set(pool.map(specKey));
   return aggregates.every((spec) => inPool.has(specKey(spec)));

@@ -100,7 +100,9 @@ assert.equal(porLote['Lote 01'].ganho_total.value, 45);
 assert.equal(porLote['Lote 01'].gmd_ponderado.value, 45 / 40);
 assert.equal(porLote['Lote 02'].gmd_ponderado.value, 30 / 31);
 assert.equal(desempenho.totals.gmd_ponderado.value, 75 / 71, 'GMD geral ponderado sobre a população (não média dos lotes)');
-assert.deepEqual(buildSummaryLayout(desempenho, 'screen').headers, ['Lote (última pesagem no período)', 'Cabeças', 'Peso inicial médio (kg)', 'Peso final médio (kg)', 'Ganho total (kg)', 'Ganho médio (kg)', 'GMD (kg/dia)']);
+// E1G: Dias médios no padrão do Desempenho (pedido da responsável: dias em média, nunca soma).
+assert.deepEqual(buildSummaryLayout(desempenho, 'screen').headers, ['Lote (última pesagem no período)', 'Cabeças', 'Peso inicial médio (kg)', 'Peso final médio (kg)', 'Ganho total (kg)', 'Ganho médio (kg)', 'Dias médios', 'GMD (kg/dia)']);
+assert.equal(desempenho.totals.dias_medio.value, 71 / 2, 'Dias médios do total = (40 + 31) ÷ 2 = 35,5 (média, não a soma 71)');
 
 // ---- 5. Sem agrupamento + Resumido; ordem por métrica ----
 const semGrupo = await run('pesagens', { mode: 'RESUMIDO', groups: [] });

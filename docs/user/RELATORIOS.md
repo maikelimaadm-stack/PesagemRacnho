@@ -31,7 +31,7 @@ abrindo.
 | Rebanho | **Ocupação de lotes** | Por Apartação | Por Apartação, Por Apartação/Lote, Analítico |
 | Pesagens | **Pesagens** (Relatório de Pesagens Individuais) | Por Apartação (Resumo por Data) | Os 5 tipos do MAKGESTAO: Analítico, Sintético (Matriz), Por Apartação/Lote, Por Apartação (Resumo por Data) e Vendas |
 | Pesagens | **Fechamento do dia** | Por Sessão (Lista) | Por Sessão (Lista), Resumo por Sessão, Por Apartação/Lote, Com Pendências, Analítico |
-| Desempenho | **Desempenho** | Por Lote | Por Lote, Por Apartação/Lote, Por Apartação, Por Categoria, Por Raça, Por Marca, Por Sexo, Por Faixa de Peso, Analítico (Animal por Animal), Perdendo Peso |
+| Desempenho | **Desempenho** (1.4.2: com **Dias Médios** nos resumos; os dias são sempre média, nunca soma) | Por Lote | Por Lote, Por Apartação/Lote, Por Apartação, Por Categoria, Por Raça, Por Marca, Por Sexo, Por Faixa de Peso, Analítico (Animal por Animal), Perdendo Peso |
 | Movimentação | **Movimentação de lotes** | Por Lote | Por Lote, Por Apartação/Lote, Mudanças de Lote, Por Lote Anterior, Por Marca, Por Sexo, Analítico |
 | Saídas | **Saídas** | Por Motivo | Por Motivo, Por Lote, Por Categoria, Por Marca, Por Data, Mortes por Causa, Mortes por Lote, Mortes por Categoria, Analítico, Mortes (Lista) |
 | Comercial | **Comercial** (só ADMIN e GESTOR) | Vendas | **Vendas** (o relatório de venda do MAKGESTAO), **Abates** (por frigorífico) e **Compras** (por origem) |
@@ -270,6 +270,8 @@ Trocar de vista não refaz o relatório.
 
 **GMD no Desempenho (1.4.2):** o peso inicial de cada animal é a **última pesagem antes do período** (quando
 existe). Assim quem pesa por aparte, com meses entre as pesagens, tem GMD, e o número bate com o de Pesagens.
+Os **dias** aparecem como **média** ("Dias Médios"): no título da coluna, **Calcular** troca para Mínimo ou
+Máximo; no Analítico a conta de Dias vem marcada em **Média** (desmarque e marque outra para mudar).
 
 **Ficha do Animal:** a **Curva de peso** usa as datas na escala certa; passe o mouse num ponto para ver peso,
 dias, ganho e GMD daquele trecho.

@@ -232,7 +232,7 @@ export const EVENT_COLUMNS = [
   defineColumn({ id: 'data_anterior', label: 'Data anterior', type: 'date', grains: EVENT_GRAINS, defaultWidth: 108 }),
   defineColumn({ id: 'peso_anterior', label: 'Peso anterior', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, aggregations: ['countValid', 'avg', 'min', 'max'] }),
   // E1G (A3): dias, ganho e GMD nunca somem da folha (keepWhenEmpty; o GMD pelo tipo) — sem valor, "-".
-  defineColumn({ id: 'dias', label: 'Dias', type: 'integer', grains: EVENT_GRAINS, defaultWidth: 82, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
+  defineColumn({ id: 'dias', label: 'Dias', type: 'integer', totalOp: 'avg', grains: EVENT_GRAINS, defaultWidth: 82, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'ganho', label: 'Ganho', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, defaultWidth: 100, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({
     id: 'ganho_arroba', label: 'Ganho em arrobas', unit: '@', type: 'number', decimals: 2, grains: EVENT_GRAINS, source: 'derivado', keepWhenEmpty: true,

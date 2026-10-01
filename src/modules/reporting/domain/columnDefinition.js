@@ -125,6 +125,9 @@ export function defineColumn(spec) {
   if (column.groupable && !CATEGORICAL_TYPES.has(type) && !DATE_TYPES.has(type)) {
     throw new Error(`coluna ${id}: só colunas categóricas ou de data podem agrupar`);
   }
+  // E1G: conta padrão da coluna no "Subtotal/Total desta coluna" e no "Adicionar coluna…" (ex.: Dias = média —
+  // somar dias de animais diferentes não diz nada). Sem ela, a regra geral (headerActions.defaultTotalOp).
+  if (spec.totalOp != null && !aggregations.includes(spec.totalOp)) throw new Error(`coluna ${id}: totalOp ${spec.totalOp} fora das agregações da coluna`);
   column.aggregations = Object.freeze([...aggregations]);
   column.filterType = filterTypeOfColumnType(type);
   column.grains = Object.freeze([...spec.grains]);

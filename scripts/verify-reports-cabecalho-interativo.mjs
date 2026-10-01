@@ -21,14 +21,15 @@ import { runReport } from '../src/modules/reporting/application/reportService.js
 import { preparePrint } from '../src/modules/reporting/application/reportPrintService.js';
 import { buildInitialReportState, typedViewSelection } from '../src/modules/reporting/application/reportInitialState.js';
 import { filterButtonsOf, moreFilterColumnsOf, PREVIOUS_COLUMN } from '../src/modules/reporting/application/reportScreenModel.js';
-import { normalizeTemplateConfig } from '../src/modules/reporting/application/reportTemplateService.js';
+import { normalizeTemplateConfig, templateToRequest } from '../src/modules/reporting/application/reportTemplateService.js';
 import { getReportDefinition, listReportDefinitions } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { applyHeaderAction, clampWidth, headerMenuOf, HEADER_WIDTH, isEmptyHeaderMenu, resizedWidth } from '../src/modules/reporting/domain/headerActions.js';
 import { buildReportDocument, documentRows, DOC_ROW_TYPES } from '../src/modules/reporting/domain/reportDocument.js';
+import { defineColumn } from '../src/modules/reporting/domain/columnDefinition.js';
 import { computeAggregates, aggregateSpecId } from '../src/modules/reporting/domain/reportAggregates.js';
 import { canSeeColumn } from '../src/modules/reporting/domain/reportPermissions.js';
 import { describeFilter } from '../src/modules/reporting/domain/filterEngine.js';
-import { screenFixedFilters } from '../src/modules/reporting/domain/reportScreenState.js';
+import { screenFixedFilters, viewStatePayload } from '../src/modules/reporting/domain/reportScreenState.js';
 import { columnKeysOf, getReportView } from '../src/modules/reporting/domain/reportViews.js';
 import { renderSheetBody } from '../src/modules/reporting/infrastructure/exporters/sheetHtml.js';
 
@@ -218,14 +219,15 @@ assert.ok(!noCount || noCount.options.every((option) => option.op !== 'count'), 
 step = act(ctx, colOf(doc, 'peso'), { type: 'calc', choice: 'sum', layout: doc.layout });
 assert.ok(step.state.aggregates.some((spec) => spec.op === 'sum' && spec.columnId === 'peso'), 'Soma do peso ligada');
 const total = headerMenuOf(ctx, colOf(doc, 'dias'), doc.layout).total;
-assert.deepEqual(total, { op: 'sum', active: false }, 'Dias: total = soma');
+// E1G: Dias = MÉDIA (pedido da responsável; somar dias de animais diferentes não diz nada).
+assert.deepEqual(total, { op: 'avg', active: false }, 'Dias: total = média');
 step = act({ ...ctx, state: step.state }, colOf(doc, 'dias'), { type: 'total', layout: doc.layout });
-assert.ok(step.state.aggregates.some((spec) => spec.op === 'sum' && spec.columnId === 'dias'), 'Total de Dias ligado');
+assert.ok(step.state.aggregates.some((spec) => spec.op === 'avg' && spec.columnId === 'dias'), 'Total de Dias (média) ligado');
 vm = await run(PESAGENS, { ...step.state, groups: [{ columnId: 'nome_lote' }] });
 doc = buildReportDocument(vm);
 const byId = new Map();
 (function walk(nodes) { for (const node of nodes ?? []) { byId.set(node.id, node); walk(node.children); } })(vm.tree);
-const extraKeys = ['sum:peso', 'sum:dias'];
+const extraKeys = ['sum:peso', 'avg:dias'];
 let lines = 0;
 for (const row of documentRows(doc).filter((item) => item.line)) {
   const population = row.type === DOC_ROW_TYPES.GRAND_TOTAL ? vm.rows : byId.get(row.id.replace(/#subtotal$/, ''))?.rows;
@@ -491,5 +493,66 @@ const simFiltro = await run(PESAGENS, { ...state, uiFilters: { [booleanColumn.id
 assert.ok(simFiltro.rows.every((row) => simFiltro.resolve(booleanColumn.id).valueOf(row) === true), `${booleanColumn.label} = Sim filtra pelo valor`);
 assert.equal(describeFilter({ operator: 'in', values: ['true'] }, booleanColumn), 'em Sim', 'rodapé diz "Sim", não "true"');
 ok('Mais filtros');
+
+// ---------------------------------------------------------------------------
+// E1G: Dias é MÉDIA (pedido da responsável: "no Desempenho os dias têm que mostrar média e está mostrando soma")
+// ---------------------------------------------------------------------------
+{
+  const DESEMPENHO = getReportDefinition('desempenho');
+  // Resumido: "Dias Médios" no padrão de todos os tipos resumidos, = (40 + 31) ÷ 2 na massa.
+  for (const viewId of ['por-lote', 'por-categoria', 'por-sexo']) {
+    const resumo = buildReportDocument(await run(DESEMPENHO, screenState(DESEMPENHO, viewId)));
+    const diasCol = colOf(resumo, 'dias_medio');
+    assert.ok(diasCol, `Desempenho ${viewId}: coluna Dias Médios no padrão`);
+    assert.equal(diasCol.label, 'Dias Médios');
+    assert.ok(!resumo.columns.some((column) => column.key === 'sum:dias'), `NEGATIVO ${viewId}: nada de soma de dias`);
+  }
+  const totalPorLote = await run(DESEMPENHO, screenState(DESEMPENHO, 'por-lote'));
+  assert.ok(close(totalPorLote.totals.dias_medio.value, 35.5), 'Dias Médios do total = (40 + 31) ÷ 2');
+  // Analítico: o total da coluna Dias é a média (Calcular › Média marcado), não a soma.
+  const anState = screenState(DESEMPENHO, 'analitico');
+  const anVm = await run(DESEMPENHO, anState);
+  const anDoc = buildReportDocument(anVm);
+  const diasMenu = headerMenuOf(ctxOf(DESEMPENHO, anState, anVm), colOf(anDoc, 'dias'), anDoc.layout);
+  assert.deepEqual(diasMenu.calc.options.filter((option) => option.active).map((option) => option.id), ['avg'], 'Analítico: Dias com Média marcada');
+  assert.equal(diasMenu.total.op, 'avg', 'Subtotal/Total desta coluna: Dias = média');
+  // Trocar de verdade: desmarcar Média e marcar Soma (o menu é de marcar; a pessoa consegue mudar).
+  const semMedia = act(ctxOf(DESEMPENHO, anState, anVm), colOf(anDoc, 'dias'), { type: 'calc', choice: 'avg', layout: 'detail' });
+  assert.ok(!semMedia.state.aggregates.some((spec) => spec.columnId === 'dias'), 'desmarcar Média tira a conta dos dias');
+  const comSoma = act(ctxOf(DESEMPENHO, semMedia.state, anVm), colOf(anDoc, 'dias'), { type: 'calc', choice: 'sum', layout: 'detail' });
+  assert.ok(comSoma.state.aggregates.some((spec) => spec.columnId === 'dias' && spec.op === 'sum'), 'e marcar Soma liga a soma');
+  // Resumido: Calcular troca a conta dos Dias (média → mínimo) e volta.
+  const rState = screenState(DESEMPENHO, 'por-lote');
+  const rVm = await run(DESEMPENHO, rState);
+  const rDoc = buildReportDocument(rVm);
+  const minimo = act(ctxOf(DESEMPENHO, rState, rVm), colOf(rDoc, 'dias_medio'), { type: 'calc', choice: 'min', layout: 'summary' });
+  assert.ok(minimo.state.aggregates.some((spec) => spec.columnId === 'dias' && spec.op === 'min'), 'Resumido: Dias passa a Mínimo');
+  // "Adicionar coluna…" e "Subtotal/Total" de qualquer coluna de dias usam média (Pesagens, Rebanho, Movimentação).
+  for (const [reportId, columnId] of [['pesagens', 'dias'], ['rebanho.atual', 'dias_entrada'], ['rebanho.atual', 'dias_sem_pesagem']]) {
+    const column = getReportDefinition(reportId).columns.find((item) => item.id === columnId);
+    assert.equal(column.totalOp, 'avg', `${reportId} › ${columnId}: conta padrão = média`);
+  }
+  assert.throws(() => defineColumn({ id: 'x_dias', label: 'X', type: 'integer', grains: ['EVENT'], totalOp: 'weightedGmd' }), /totalOp/, 'NEGATIVO: totalOp fora das agregações é recusado');
+  // Quem já abriu o Desempenho na 1.4.0/1.4.1 tem o último estado com o padrão antigo (sem Dias Médios): abre com o de hoje.
+  const fresh = buildInitialReportState(DESEMPENHO, { role: 'ADMIN' }).state;
+  const reopen = (aggregates, typeColumns = null) => {
+    const payload = viewStatePayload(DESEMPENHO, { ...fresh, aggregates }, 'ADMIN');
+    return buildInitialReportState(DESEMPENHO, { savedState: templateToRequest({ ...payload, baseReportId: DESEMPENHO.id }, 'ADMIN'), role: 'ADMIN', typeColumns }).state;
+  };
+  const OLD6 = ['animais', 'peso_inicial_medio', 'peso_final_medio', 'ganho_total', 'ganho_medio', 'gmd_ponderado'];
+  const antigo = reopen(fresh.aggregates.filter((spec) => OLD6.includes(spec.id)));
+  assert.equal(antigo.view, 'por-lote');
+  assert.ok(antigo.aggregates.some((spec) => spec.id === 'dias_medio'), 'último estado da 1.4.1 abre com Dias Médios');
+  const escolhido = reopen(fresh.aggregates.filter((spec) => ['animais', 'gmd_ponderado'].includes(spec.id)));
+  assert.deepEqual(escolhido.aggregates.map((spec) => spec.id), ['animais', 'gmd_ponderado'], 'NEGATIVO: escolha da pessoa (Colunas Painel) não muda');
+  const prefsAntigas = typedViewSelection(DESEMPENHO, 'por-lote', { 'por-lote': OLD6 });
+  assert.ok(prefsAntigas.aggregates.some((spec) => spec.id === 'dias_medio'), '"Colunas" gravada igual ao padrão antigo = padrão de hoje');
+  // Modelo 1.3.x "Desempenho individual" (8 totais antigos): continua sendo o Analítico e ganha Dias Médios.
+  const old8 = DESEMPENHO.views.find((item) => item.id === 'analitico').aggregates.filter((spec) => spec.id !== 'dias_medio');
+  const analitico = buildInitialReportState(DESEMPENHO, { savedState: { params: {}, selection: { mode: 'DETALHADO', groups: [], aggregates: old8, columns: [...getReportView(DESEMPENHO, 'analitico').columns] } }, role: 'ADMIN' }).state;
+  assert.equal(analitico.view, 'analitico', 'totais antigos do Analítico ainda são o tipo');
+  assert.ok(analitico.aggregates.some((spec) => spec.id === 'dias_medio'), 'e abrem com Dias Médios');
+  ok('Dias = média');
+}
 
 console.log(`reports:cabecalho-interativo:verify OK (${checks} blocos)`);

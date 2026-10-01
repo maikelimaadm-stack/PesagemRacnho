@@ -39,7 +39,7 @@ export const ANIMAL_CURRENT_COLUMNS = [
   entity('propriedade', 'Propriedade', 'propriedade_id', 'propriedade_nome', CURRENT),
   defineColumn({ id: 'ultima_pesagem_data', label: 'Última pesagem', type: 'date', grains: CURRENT, groupable: true, defaultVisible: true, defaultWidth: 108 }),
   defineColumn({ id: 'ultimo_peso_kg', label: 'Peso atual', unit: 'kg', type: 'weight', grains: CURRENT, defaultVisible: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max', 'range'] }),
-  defineColumn({ id: 'dias_sem_pesagem', label: 'Dias sem pesagem', type: 'integer', grains: CURRENT, defaultVisible: true, aggregations: ['countValid', 'avg', 'min', 'max'] }),
+  defineColumn({ id: 'dias_sem_pesagem', label: 'Dias sem pesagem', type: 'integer', totalOp: 'avg', grains: CURRENT, defaultVisible: true, aggregations: ['countValid', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'data_saida', label: 'Data da saída', type: 'date', grains: CURRENT, groupable: true }),
   defineColumn({ id: 'motivo_saida', label: 'Motivo da saída', type: 'text', grains: CURRENT, groupable: true }),
   defineColumn({ id: 'data_cadastro', label: 'Cadastrado em', type: 'date', grains: CURRENT }),
@@ -48,7 +48,7 @@ export const ANIMAL_CURRENT_COLUMNS = [
   defineColumn({ id: 'peso_entrada', label: 'Peso de entrada', unit: 'kg', type: 'weight', grains: CURRENT, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'data_entrada', label: 'Data de entrada', type: 'date', grains: CURRENT, groupable: true, defaultWidth: 108 }),
   defineColumn({ id: 'ganho_entrada', label: 'Ganho desde a entrada', unit: 'kg', type: 'weight', grains: CURRENT, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
-  defineColumn({ id: 'dias_entrada', label: 'Dias desde a entrada', type: 'integer', grains: CURRENT, keepWhenEmpty: true, aggregations: ['countValid', 'avg', 'min', 'max'] }),
+  defineColumn({ id: 'dias_entrada', label: 'Dias desde a entrada', type: 'integer', totalOp: 'avg', grains: CURRENT, keepWhenEmpty: true, aggregations: ['countValid', 'avg', 'min', 'max'] }),
   defineColumn({
     id: 'gmd_entrada', label: 'GMD desde a entrada', unit: 'kg/dia', type: 'gmd', grains: CURRENT,
     weighted: { gain: 'ganho_entrada', days: 'dias_entrada' }, aggregations: ['countValid', 'avg', 'min', 'max', 'weightedGmd'],
@@ -71,7 +71,7 @@ export const ANIMAL_PERIOD_COLUMNS = [
   defineColumn({ id: 'data_final', label: 'Data final', type: 'date', grains: PERIOD, defaultWidth: 108 }),
   defineColumn({ id: 'peso_final', label: 'Peso final', unit: 'kg', type: 'weight', grains: PERIOD, defaultVisible: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   // E1G (A3): dias, ganho e GMD nunca somem da folha (keepWhenEmpty; o GMD pelo tipo) — sem valor, "-".
-  defineColumn({ id: 'dias', label: 'Dias', type: 'integer', grains: PERIOD, defaultVisible: true, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
+  defineColumn({ id: 'dias', label: 'Dias', type: 'integer', totalOp: 'avg', grains: PERIOD, defaultVisible: true, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'ganho', label: 'Ganho', unit: 'kg', type: 'weight', grains: PERIOD, defaultVisible: true, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max', 'range'] }),
   defineColumn({
     id: 'gmd', label: 'GMD', unit: 'kg/dia', type: 'gmd', grains: PERIOD, defaultVisible: true,
