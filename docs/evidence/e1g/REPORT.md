@@ -78,6 +78,7 @@ Capturas (massa de TESTE):
 | `npm run test:quick` (102 passos) | verde, depois do build e da correção do `reports:charts` |
 | Gates novos | `reports:gmd`, `import:identity`, `reports:charts`, `reports:charts-print`, `reports:charts-state`, `animal:weight-curve` — verdes, com casos negativos |
 | `dist:unsigned` / `release:current-only:verify` / `release:version-contract:verify` | OK |
+| Passos só do test:full (`storage:all`, `weighing:mapper`, `maintenance:ui`, `maintenance:dialog`, `e2e:installed:verify:dev`, `import:performance` — 31 min) | 6/6 verdes no código do build |
 
 **Instalador 1.4.2:**
 - `C:\Users\maike\Desktop\projeto\INSTALAR-ESTE-1.4.2\Pesagens Individuais Setup 1.4.2.exe`
