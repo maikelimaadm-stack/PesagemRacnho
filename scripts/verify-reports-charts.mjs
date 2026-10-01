@@ -166,7 +166,9 @@ const matrixVm = await runReport('pesagens', { today: TODAY, params: PERIODO, se
   assert.equal(des.referencia.text, '1,056');
   close(pointOf(des.series[0], 'L1').y, 1.125, 'Desempenho Lote 01');
   assert.match(des.subtitle, /período/, 'subtítulo diz a definição (Desempenho: do período)');
-  assert.notEqual(des.referencia.text, chart.referencia.text, 'as duas definições de GMD dão números diferentes na massa — por isso o subtítulo');
+  // E1G (integração): com a venda pesada recebendo GMD (A1) e o Desempenho partindo da pesagem anterior ao período (A2),
+  // as duas definições coincidem nesta massa — (45 + 30) ÷ (40 + 31) nos dois. O subtítulo continua dizendo qual é.
+  assert.equal(des.referencia.text, chart.referencia.text, 'Pesagens e Desempenho dão o mesmo GMD geral nesta massa (A1 + A2)');
   results.push({ caso: 'GMD por grupo', pesagens: bars.map((bar) => `${bar.xLabel} ${bar.text}`), geralPesagens: chart.referencia.text, desempenho: des.referencia.text });
 }
 
