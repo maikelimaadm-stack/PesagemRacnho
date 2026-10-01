@@ -1,0 +1,540 @@
+PLANO DE MELHORIAS — PESAGENS INDIVIDUAIS
+Gerado em 01/10/2026. Base: versão 1.4.2 instalada (Dexie v8, backup formato 3) + pesquisa
+tecnica de 01/10/2026 (peso, previsao, sazonalidade, sanidade, balancas).
+Complementa o PLANO-MESTRE-COMPLETO.txt: onde houver conflito de ESCOPO, este documento prevalece;
+os contratos tecnicos antigos (auth, migracoes, backup, versionamento, ModeloBase1) continuam valendo.
+
+REGRA DE OURO DESTE PLANO
+  TRILHA A (funcional / configuracao / calculo) e TRILHA B (visual / UI) NUNCA no mesmo prompt
+  do Claude Code. A Trilha B so comeca quando voce disser a palavra "visual".
+
+
+==================================================================
+0. RESUMO EM UMA PAGINA
+==================================================================
+
+O app ja e forte em RELATORIO (cabecalho interativo, colunas, relatorio do usuario, graficos SVG
+proprios, modo resumido) e em COMERCIAL (@ de carcaca correta, rendimento com origem).
+O ponto fraco esta na BASE DO NUMERO e na PREVISAO:
+
+  - O GMD e calculado entre as DUAS ultimas pesagens, com QUALQUER intervalo. Um intervalo de
+    7 dias carrega ate 5% do peso vivo de ruido de enchimento (20 a 26 kg num sobreano), o que
+    vira +/- 3 kg/dia de "GMD falso" no relatorio. Isso contamina folha, grafico, Excel e PDF.
+  - Nao existe campo de CONDICAO da pesagem (cheio / jejum). Sem ele, comparar duas pesagens e
+    comparar coisas diferentes.
+  - Nao existe PREVISAO: nem peso numa data, nem data em que o animal atinge o peso/@ alvo, nem
+    previsao de embarque. E o que o produtor mais quer ver.
+  - A sanidade esta no minimo (v8): tem carencia_dias cadastrada, mas nao tem data de liberacao
+    calculada por animal, nem bloqueio de embarque, nem alerta da IN 48/2011, nem brucelose de MT.
+  - A distribuicao do app ainda e manual (tres pastas INSTALAR-ESTE no Desktop).
+
+O plano organiza tudo em 6 blocos funcionais (M1 a M6) e 1 trilha visual (V1 a V9).
+Ordem recomendada: M1 -> M2 -> M3, com M5 e M6 correndo em paralelo desde o inicio.
+
+  M1  Fundacao do numero (regra de intervalo, regressao, outlier)     SEM esquema novo
+  M2  Esquema v9: condicao da pesagem, metas por epoca, estado        Dexie v9
+  M3  Previsao, farol e previsao de embarque (E7 ampliada)            sem esquema
+  M4  Sanidade com dentes (E8 + carencia + IN 48 + brucelose MT)      Dexie v10
+  M5  Balanca: importador Data Link + leitor serial + EID             sem esquema
+  M6  Atualizador Supabase (E2) — para parar de instalar na mao       sem esquema
+  V1..V9  Trilha visual (so com a sua palavra "visual")
+
+
+==================================================================
+1. DIAGNOSTICO — O QUE JA ESTA BOM E O QUE ESTA FRAGIL
+==================================================================
+
+JA ESTA BOM (nao mexer sem motivo)
+  - Arroba: commercialCalculations.js usa 1 @ = 15 kg de CARCACA, rendimento com ordem de origem
+    (informado > padrao empresa > padrao parceiro) e devolve null quando nao sabe. Esta correto e
+    bate com a pesquisa. Nao trocar por "divide por 30".
+  - Graficos: SVG proprio, sem biblioteca, offline, com tema claro/escuro e paridade com a folha.
+    Base pronta para receber faixa de meta e projecao tracejada.
+  - Relatorios: cabecalho interativo, Mais filtros, relatorio do usuario, modo Resumido, paridade
+    CSV/XLSX/PDF. E o diferencial do produto hoje.
+  - Qualidade dos dados ja tem os ganchos certos: "Animal com uma pesagem so", "Manejo sem GMD
+    (com o motivo)", "Numeros parecidos".
+  - Curva de peso da ficha ja foi corrigida para eixo por DATA (1.4.2).
+
+ESTA FRAGIL (e cada item abaixo vira tarefa)
+  F1  weighingCalculations.calculateWeightGain nao tem piso de intervalo: gmd = ganho/dias para
+      dias >= 1. Pesagem de confirmacao no dia seguinte gera GMD absurdo.
+  F2  GMD usa so 2 pontos (a pesagem atual e a anterior mais recente). Com 3+ pesagens, a
+      regressao e muito mais estavel e e o que a pesquisa recomenda.
+  F3  Nenhum tratamento de outlier. Um "480" digitado como "48" ou "4800" entra na curva, no
+      grafico e no GMD medio do lote.
+  F4  Sem condicao de pesagem (cheio / jejum parcial / jejum total, horas de jejum). Perda de 4 a
+      5% do peso vivo em 12 a 20 h de jejum e documentada; sem o campo nao ha como comparar.
+  F5  Sem previsao. Nao existe peso projetado, data de alvo, nem faixa de incerteza.
+  F6  Meta de GMD (meta_gmd_kg da E3) e um numero unico por categoria. Na pratica a meta da seca
+      e a meta das aguas sao diferentes — a mesma meta nos dois periodos pinta o lote de vermelho
+      na seca inteira sem motivo.
+  F7  Sem estado materializado por animal. Previsao e farol para 36 mil animais recalculados na
+      abertura da tela nao vao caber no orcamento de 1 segundo.
+  F8  Sanidade: aplicacoesSanidade tem carencia_dias, mas nao existe liberado_em por animal, nem
+      bloqueio de venda/embarque, nem agenda de doses, nem dose por peso.
+  F9  Sem nada de balanca: toda pesagem e digitada.
+  F10 LancamentoPesagensIndividuais.jsx com 2.534 linhas. Qualquer mexida visual ali e arriscada
+      enquanto o arquivo nao for quebrado em componentes.
+
+
+==================================================================
+2. TRILHA A — FUNCIONAL (M1 a M6)
+==================================================================
+
+Legenda: IMPACTO = o que muda no curral / no bolso. ESFORCO = P pequeno, M medio, G grande.
+RISCO = risco de quebrar dado ou comportamento existente.
+
+------------------------------------------------------------------
+M1 — FUNDACAO DO NUMERO  (sem mudanca de esquema, versao alvo 1.5.0)
+------------------------------------------------------------------
+Objetivo: nenhum numero mentiroso sai do app. Tudo aqui e regra pura de dominio + apresentacao.
+
+M1.1  Regra de intervalo minimo no GMD                     IMPACTO alto   ESFORCO P   RISCO baixo
+      - intervalo < 14 dias: GMD NAO e exibido (mostra "-" e motivo "intervalo curto").
+      - 14 a 20 dias: exibe com marca de aviso (cinza) e motivo "intervalo curto".
+      - >= 21 dias: GMD confiavel, exibicao normal.
+      - O valor continua gravado no fato; o que muda e a EXIBICAO e a entrada em medias/agregados.
+      - Media de GMD do grupo passa a ignorar os nao confiaveis e o rodape diz "GMD de N de M cab."
+        (padrao que a 1.4.2 ja usa).
+      - Por que: o enchimento do rumem chega a ~5% do peso vivo; em 7 dias isso e +/- 3 kg/dia de
+        GMD inventado; em 28 dias cai para ~0,8; em 56 dias ~0,4. A propria Datamars, com varias
+        pesagens por dia, usa janela de 21 dias e so mostra o ADG depois de 28.
+
+M1.2  GMD por regressao quando houver 3+ pesagens          IMPACTO alto   ESFORCO M   RISCO baixo
+      - Mantem o GMD "entre pesagens consecutivas" (ja existe, e o que bate com a folha hoje).
+      - Acrescenta GMD_regressao = inclinacao de peso x dia, ponderada por recencia
+        (peso w = exp(-idade_em_dias / 60)), sobre a janela dos ultimos 120 dias.
+      - Os dois convivem como COLUNAS diferentes, com rotulo claro. Nada sobrescreve o atual.
+
+M1.3  Deteccao de pesagem suspeita (outlier)               IMPACTO alto   ESFORCO M   RISCO medio
+      - Marca como SUSPEITA (nunca apaga, nunca corrige sozinho) quando:
+        a) |GMD do intervalo - mediana do lote no periodo| > 3,5 x 1,4826 x MAD do lote; ou
+        b) |variacao de peso| > 25% do peso anterior; ou
+        c) perda > 10% do peso vivo em menos de 14 dias.
+      - Suspeita nao entra em media/GMD/previsao enquanto nao for resolvida.
+      - A tela de Qualidade dos dados ganha a lista "Pesagens para conferir" com dois botoes:
+        "Perda real (manter)" e "Erro de digitacao (corrigir)" — a correcao gera NOVO evento com
+        substitui_id, com auditoria. Nunca edita o fato antigo.
+      - Perda < 5% do peso vivo em 28 dias, com animal presente, e classificada como
+        "perda possivel - verificar sanidade", nao como erro.
+
+M1.4  Repesagem do mesmo dia                               IMPACTO medio  ESFORCO P   RISCO baixo
+      - Hoje o calculo ignora registros do mesmo dia (correto). Falta a acao explicita:
+        ao gravar segunda pesagem do mesmo animal no mesmo dia, perguntar em botao grande
+        "Repesar? (a anterior de hoje vira repesagem)" e manter uma so como oficial.
+
+M1.5  @ produzida com a formula canonica                   IMPACTO medio  ESFORCO P   RISCO baixo
+      - O E7 do Plano Mestre 2 diz "@ produzidas = ganho total / 30". Isso assume rendimento de 50%
+        e contradiz o commercialCalculations.js, que ja faz @ = peso x rendimento / 100 / 15.
+      - Decisao proposta: @ produzida = ganho_kg x rendimento% / 100 / 15, rotulada "@ de carcaca",
+        usando o rendimento configurado (padrao sugerido: inteiro 53%, castrado 52%, femea 49%).
+        Se algum relatorio precisar da arroba de peso vivo, ela aparece com rotulo proprio
+        ("@ de peso vivo") e nunca no mesmo total.
+
+M1.6  Gates novos                                           IMPACTO alto   ESFORCO P   RISCO baixo
+      - weighing:interval-rule:verify   (14 / 21 dias, mesmo dia, intervalo negativo)
+      - weighing:regression:verify      (2, 3 e 6 pontos; ponderacao; janela de 120 dias)
+      - weighing:outlier:verify         (MAD, 25%, 10% em 14 dias, resolucao sem perder dado)
+      - reports:gmd-confiabilidade:verify (media ignora nao confiavel; rodape N de M)
+
+------------------------------------------------------------------
+M2 — ESQUEMA v9: CONDICAO, METAS POR EPOCA E ESTADO  (versao alvo 1.6.0)
+------------------------------------------------------------------
+Objetivo: dar ao app os campos que a previsao e o farol precisam. E a unica etapa com migracao.
+
+M2.1  Condicao da pesagem                                  IMPACTO alto   ESFORCO M   RISCO medio
+      - pesagens ganha: condicao ('CHEIO' | 'JEJUM_PARCIAL' | 'JEJUM_TOTAL'), horas_jejum (opcional).
+      - Padrao de preenchimento por sessao (a sessao inteira costuma ser igual) com troca por animal.
+      - Backfill idempotente: tudo que existe hoje vira CHEIO (e o caso normal de curral), com
+        marcador de migracao e auditoria como "Sistema".
+      - GMD so e calculado entre pesagens de MESMA condicao; condicoes diferentes geram aviso
+        "condicoes diferentes" e, se a conversao estiver ligada, usam fator configuravel
+        (padrao sugerido jejum -> cheio x 1,04).
+      - No comercial, campo separado desconto_comercial_% (padrao 0), porque desconto de negocio
+        nao e correcao de jejum. Nunca misturar os dois.
+
+M2.2  Meta de GMD por categoria x epoca                    IMPACTO alto   ESFORCO M   RISCO baixo
+      - categoriasAnimal ganha tabela de metas: { epoca: SECA | TRANSICAO | AGUAS, meta_gmd_kg }.
+      - Cadastro de epocas do ano-pecuario por propriedade (padrao MT: aguas out-mar, transicao
+        abr-mai e set, seca jun-ago), editavel, porque muda por regiao e por ano.
+      - Valores de partida (EDITAVEIS, consolidados da pesquisa; nao sao norma — calibrar com o
+        historico da fazenda depois de uma safra):
+            Recria macho   seca so mineral -0,10 a 0,15 | seca proteinado 0,15 a 0,30
+                           aguas mineral 0,50 a 0,65    | aguas proteico 0,60 a 0,75
+            Recria femea   seca -0,10 a 0,10            | aguas 0,40 a 0,65
+            Engorda macho  seca 0,10 a 0,25             | aguas 0,50 a 0,85
+            Semi/TIP 0,8 a 1,4   Confinamento 1,2 a 1,7
+      - Fatores sazonais por mes (multiplicador do GMD medio anual), tambem editaveis:
+            jan 1,25  fev 1,25  mar 1,20  abr 1,05  mai 0,75  jun 0,50
+            jul 0,40  ago 0,40  set 0,55  out 0,85  nov 1,15  dez 1,25
+
+M2.3  Estado materializado por animal                      IMPACTO alto   ESFORCO G   RISCO medio
+      - Nova store animal_estado: ultimo_peso, ultima_data, penultimo_peso, gmd_final, erro_padrao,
+        farol, previsao_peso_30/60/90, previsao_data_alvo, liberado_em, dias_sem_pesar, qualidade
+        ('BOA' | 'FRACA' | 'SEM_DADO').
+      - Recalculo INCREMENTAL: cada evento gravado atualiza so os animais afetados.
+      - Recalculo total em Web Worker, em lotes de 2.000, com barra de progresso, acionado por
+        migracao, restauracao de backup e importacao grande.
+      - Indices compostos [animal_id+data_pesagem] e liberado_em.
+      - Sem isso, M3 nao passa no gate de performance com 36 mil animais.
+
+M2.4  Gates                                                 IMPACTO alto   ESFORCO M   RISCO baixo
+      - migration:v9:verify (contagens antes/depois, backup pre-migracao valido, restore de v8)
+      - weighing:condition:verify (GMD entre condicoes iguais, aviso, fator de conversao)
+      - goals:season:verify (epoca correta por data, meta por categoria x epoca, sem meta -> cinza)
+      - state:materialized:verify (incremental igual ao recalculo total; 36 mil animais < 1 s)
+
+------------------------------------------------------------------
+M3 — PREVISAO, FAROL E PREVISAO DE EMBARQUE  (E7 ampliada, alvo 1.7.0, sem esquema)
+------------------------------------------------------------------
+Objetivo: responder as tres perguntas do dono — quanto esse boi vai pesar, quando ele bate o alvo,
+e quantas cabecas eu embarco em cada mes.
+
+M3.1  Motor de previsao                                    IMPACTO altissimo ESFORCO G  RISCO medio
+      Algoritmo (por animal, offline, tudo em JS):
+        1. Limpa: ignora canceladas e suspeitas; consolida repesagem do dia; normaliza condicao.
+        2. GMD do animal: regressao ponderada dos ultimos 120 dias (M1.2); com 2 pontos, formula
+           simples; guarda a variancia residual.
+        3. GMD do lote no mesmo periodo: MEDIANA dos GMDs individuais (robusta a outlier).
+        4. Encolhimento para o lote (o ponto central, porque no pasto sao 4 a 6 pesagens por ciclo):
+              GMD_final = (n_ef x GMD_animal + k x GMD_lote) / (n_ef + k)
+              n_ef = dias cobertos / 28, limitado a 6;  k = 2 (calibravel pelo backtest).
+           Com UMA pesagem so: usa o GMD do lote; sem lote, usa a meta da categoria na epoca.
+        5. Sazonalidade: GMD do mes = GMD_final x fator(mes) / fator(mes de referencia).
+        6. Projeta mes a mes somando o GMD do mes.
+        7. Data do alvo: itera ate alcancar o peso alvo (kg ou @), limite de 720 dias; acima disso
+           mostra "mais de 2 anos - revisar".
+        8. Faixa: pessimista e otimista a 1 erro padrao, com piso de 0,08 kg/dia. Datas sempre em
+           "semana de dd/mm", nunca em dia exato — previsao em dia exato vira promessa.
+        9. Qualidade FRACA (icone cinza) quando: uma pesagem so, ultima pesagem > 120 dias, ou
+           intervalo util < 21 dias. Previsao fraca nunca entra em total de embarque sem aviso.
+      Casos especiais:
+        - Troca de lote/dieta: a movimentacao cria "quebra de regime"; a regressao usa as pesagens
+          depois da quebra + a ultima antes como ancora.
+        - Quem ganhou menos de 0,1 kg/dia na seca recebe bonus de compensacao nas aguas, limitado a
+          +20% e por periodo igual ao da restricao (ganho compensatorio e parcial, nao total).
+        - Nunca extrapolar GMD de seca para aguas, nem o contrario.
+
+M3.2  Farol de metas                                       IMPACTO alto   ESFORCO M   RISCO baixo
+      - Cores: verde >= meta da epoca; amarelo 70% a 100%; vermelho < 70%; roxo GMD < 0;
+        CINZA = sem dado confiavel (novo, e o mais importante: hoje o app nao distingue "ruim" de
+        "nao sei").
+      - Mesmo farol, mesma regra, em Lancamento, ficha do animal, Desempenho, Rebanho atual e
+        futura tela de curral. Uma definicao, um arquivo.
+      - Farol de PESO PROJETADO na data de embarque: verde se a projecao pessimista bate o alvo;
+        amarelo se so a realista bate; vermelho se nem a otimista bate.
+      - DECISAO PENDENTE: o E7 escreveu verde >= 100% da meta; a pesquisa sugere verde >= 90%.
+        Recomendo 90%, senao quase nada fica verde. Sua palavra.
+
+M3.3  Relatorio desempenho.evolucao (matriz do E7)         IMPACTO alto   ESFORCO M   RISCO baixo
+      - Linhas = grupo, colunas = periodos (mes / sessao / semana), celula = peso medio + GMD.
+      - Categoria no INICIO do periodo (senao o animal que engorda troca de linha).
+      - Grafico de linhas por grupo em cima da matriz, com FAIXA DE META sombreada.
+
+M3.4  Relatorio previsao.embarque (novo)                   IMPACTO altissimo ESFORCO M  RISCO baixo
+      - Pergunta: alvo em kg ou @, rendimento, data limite.
+      - Resposta: quantas cabecas atingem o alvo por semana e por mes, por lote e por dono, com
+        peso projetado medio, @ projetadas e valor estimado no preco informado.
+      - Tres cenarios na mesma folha (pessimista / realista / otimista).
+      - E o relatorio que decide venda. Vale mais que qualquer outro item deste plano.
+
+M3.5  Listas de acao                                       IMPACTO medio  ESFORCO P   RISCO baixo
+      - "Animais para olhar": perdendo peso ou vermelho em 2 pesagens seguidas (acessivel do
+        Fechamento do dia).
+      - "Prontos para venda": peso atual >= alvo.
+      - "Sem pesagem ha mais de 60 dias" (ja existe; passa a mostrar a previsao fraca).
+
+M3.6  Backtest como gate                                   IMPACTO alto   ESFORCO M   RISCO baixo
+      - Script que, para cada animal com 4+ pesagens, esconde a ultima, preve e mede MAE, RMSE,
+        erro em dias e cobertura da faixa, por categoria e epoca.
+      - Compara com o "baseline ingenuo" (GMD do ultimo intervalo). O motor so vale se o MAE for
+        pelo menos 10% menor que o ingenuo. Se nao for, o motor esta errado e o gate reprova.
+      - Metas de partida (propostas de engenharia, nao norma): 60 dias MAE <= 12 kg; 120 dias
+        MAE <= 20 kg; data de abate +/- 15 dias em 90 dias; cobertura da faixa 60% a 75%.
+      - Depois de uma safra, recalibrar k e os fatores de mes com o historico da propria fazenda.
+
+------------------------------------------------------------------
+M4 — SANIDADE COM DENTES  (E8 ampliada, alvo 1.8.0, Dexie v10)
+------------------------------------------------------------------
+Objetivo: a sanidade deixa de ser cadastro e passa a impedir prejuizo.
+
+M4.1  Carencia que bloqueia                                IMPACTO altissimo ESFORCO M  RISCO medio
+      - liberado_em por animal = MAIOR (data_aplicacao + carencia_dias) entre os eventos ativos.
+      - carencia_dias e congelada no evento no momento da aplicacao (se a bula mudar depois, o
+        passado nao muda).
+      - Romaneio/embarque/venda com destino abate BLOQUEIA quando a data e anterior a liberado_em.
+        Liberacao so com senha de gerente + justificativa gravada na auditoria.
+      - Nova aba Sanidade > Carencia: animais bloqueados e a data de liberacao de cada um.
+      - Por que: carga reprovada no frigorifico e residuo em carne. Carencias reais vao de 31 dias
+        (doramectina 1%) a 92 e ate 133 dias (avermectina de longa acao). A bula sempre prevalece,
+        por isso carencia_dias e campo OBRIGATORIO no cadastro do medicamento.
+
+M4.2  Alerta da IN 48/2011                                 IMPACTO alto   ESFORCO P   RISCO baixo
+      - Ao aplicar avermectina com carencia de rotulo > 28 dias em animal de lote marcado como
+        confinamento / semiconfinamento / terminacao, mostrar alerta da IN SDA 48/2011 e exigir
+        confirmacao. Registrar a confirmacao na auditoria.
+      - Lote ganha o campo sistema ('PASTO' | 'SEMI' | 'CONFINAMENTO' | 'TERMINACAO').
+
+M4.3  Campanhas oficiais de MT                             IMPACTO alto   ESFORCO M   RISCO baixo
+      - BRUCELOSE: obrigatoria para FEMEAS de 3 a 8 meses, dose unica, por veterinario ou vacinador
+        cadastrado no Indea. Duas etapas por ano (1 jan a 30 jun e 1 jul a 31 dez), com comunicacao
+        ao Indea. O app precisa: lista "femeas que entram na idade nesta etapa", bloqueio de
+        registro para macho e para femea com mais de 8 meses, campo da marca "V" + ultimo algarismo
+        do ano, anexo do atestado e aviso de prazo da etapa.
+      - AFTOSA: MT nao vacina mais (livre sem vacinacao, reconhecido pelo MAPA em 2024 e pela OMSA
+        em 2025). Tratar como VIGILANCIA, nao como vacina obrigatoria — se o app sugerir campanha
+        de aftosa, esta ensinando errado.
+      - Clostridioses, raiva, IBR/BVD e leptospirose: protocolo do veterinario, nunca rotulado como
+        obrigacao legal pelo app.
+
+M4.4  Protocolo, agenda e dose por peso                    IMPACTO alto   ESFORCO G   RISCO medio
+      - protocolosSanidade com doses ({ordem, medicamento, dias_apos_anterior, FIXA|POR_KG, via}).
+      - agendaSanidade: aplicar a dose N gera a dose N+1; animal que entra no alvo recebe a dose 1
+        pendente; previsto_para < hoje = ATRASADA.
+      - Dose por peso: usa o peso da sessao; se a ultima pesagem tiver mais de 30 dias, usa o peso
+        PROJETADO (M3) e avisa. Mostra a conta na tela: "6,5 ml (325 kg x 2 ml/100 kg)" e arredonda
+        para a graduacao configurada (0,5 ml).
+      - ocorrenciasSanidade: doenca/lesao -> tratamento -> desfecho (curado, cronico, morte,
+        descarte); desfecho MORTE leva a saida com causa.
+
+M4.5  Sanidade x peso                                      IMPACTO medio  ESFORCO M   RISCO baixo
+      - Efeito do manejo: GMD de 28 a 56 dias antes x depois do evento, comparado com os animais
+        NAO tratados do mesmo lote (diferenca das diferencas). Sem o grupo de comparacao, o numero
+        engana.
+      - Alerta "perdeu peso + evento sanitario nos ultimos 30 dias".
+      - Lote-problema: mais de 15% dos animais com GMD < 0 no periodo.
+
+------------------------------------------------------------------
+M5 — BALANCA, BASTAO E BRINCO  (E4/E9 fase A, sem esquema, paralelo total)
+------------------------------------------------------------------
+Objetivo: parar de digitar peso. A pesquisa mudou a ordem: arquivo primeiro, serial depois, BLE
+por ultimo (o protocolo Bluetooth da Tru-Test S3 NAO e publico).
+
+M5.1  Importador de sessao Tru-Test / Data Link PC         IMPACTO alto   ESFORCO M   RISCO baixo
+      - Le .csv, .xls e .xlsx do Data Link PC. O CSV usa o separador regional do Windows: em PC
+        brasileiro espere ";" e virgula decimal — detectar, nao assumir.
+      - Mapeamento de colunas na tela, com memoria por equipamento (as colunas mudam por aparelho e
+        nao existe especificacao publica). EID SEMPRE lido como texto, nunca como numero.
+      - Idempotencia: hash = sha1(animal_ou_EID + data_hora + peso + equipamento), com indice unico.
+        Importar o mesmo arquivo duas vezes nao duplica pesagem.
+      - Primeira acao pratica: pedir ao cliente um arquivo REAL exportado da balanca dele.
+
+M5.2  Leitor serial generico configuravel                  IMPACTO alto   ESFORCO M   RISCO medio
+      - Um driver para muitas balancas: porta COM, baud (padrao 9600, 8N1), e um REGEX para extrair
+        o peso e a flag de estavel/instavel. Cobre Coimma KM3, Tru-Test XR5000 e indicadores
+        industriais (Alfa, Toledo, A&D), que nao publicam a string exata.
+      - Biblioteca serialport no processo main do Electron, nunca no renderer.
+      - Perfis salvos por equipamento, com botao "Testar" mostrando o que chega cru na porta.
+
+M5.3  Regras de captura em curral                          IMPACTO alto   ESFORCO M   RISCO baixo
+      - Peso estavel: aceita quando 5 leituras consecutivas (~1 s) variam <= max(1 kg; 0,5%), ou
+        quando o indicador sinaliza estavel.
+      - Gravacao automatica: estavel + peso > 30 kg + animal identificado. Exige que o peso volte
+        abaixo de 20 kg (plataforma vazia) antes de aceitar o proximo animal.
+      - Debounce de EID: ignora o mesmo EID repetido por 3 a 5 s.
+      - Duplicidade na sessao: botao grande "Repesar? (substitui)".
+
+M5.4  Bastao / brinco eletronico (EID)                     IMPACTO medio  ESFORCO M   RISCO baixo
+      - Modo HID primeiro (o bastao "digita" o numero e da Enter) — funciona sem driver.
+        Depois serial / Bluetooth SPP (porta COM virtual).
+      - Validacao: 15 digitos, prefixo de pais 076 (Brasil) ou de fabricante 9xx (ISO 11784/11785).
+      - Tabela de vinculo EID x brinco visual COM HISTORICO (data de inicio e fim). Ao ler EID
+        desconhecido, oferecer "Vincular ao brinco n ___".
+
+M5.5  Simulador de balanca                                 IMPACTO medio  ESFORCO P   RISCO baixo
+      - Gerador de stream com ruido, picos e estabilizacao, para desenvolver e TREINAR peao sem
+        equipamento. Vira gate: scale:simulator:verify.
+
+------------------------------------------------------------------
+M6 — ATUALIZADOR SUPABASE (E2)  (paralelo total, pode comecar hoje)
+------------------------------------------------------------------
+M6.1  Atualizacao automatica                               IMPACTO alto   ESFORCO M   RISCO baixo
+      - Supabase Storage + electron-updater, canais windows/beta (so o seu PC) e windows/stable.
+      - Promocao para stable apos 7 dias no beta sem erro grave.
+      - Por que agora: existem tres pastas INSTALAR-ESTE no Desktop. Cada correcao hoje custa uma
+        instalacao na mao em cada PC. Isso nao escala e e o unico item do plano que melhora a SUA
+        vida em vez da do peao.
+      - Projeto Supabase dedicado "pesagens-individuais" (ja decidido, estava adiado).
+
+
+==================================================================
+3. TRILHA B — VISUAL  (so com a sua palavra "visual")
+==================================================================
+Nada daqui entra em prompt junto com a Trilha A. Ordem sugerida dentro da trilha:
+
+V0  PREPARACAO (tecnica, sem mudar 1 pixel — pode ir na Trilha A)
+    Quebrar LancamentoPesagensIndividuais.jsx (2.534 linhas) em componentes, com gate de
+    PARIDADE VISUAL: captura de tela antes e depois, diferenca zero. Sem isso, qualquer melhoria
+    visual na tela mais importante do app e roleta.
+
+V1  MODO CURRAL na tela de Lancamento                      IMPACTO altissimo
+    Peso atual, peso anterior, dias, GMD e farol em numero GRANDE, legivel a 1,5 m, alto contraste,
+    sem mouse. Hoje isso existe como faixa pequena (d17d-animal-performance). Gallagher e Datamars
+    mostram exatamente isso durante a pesagem e e o maior valor percebido no curral.
+
+V2  FAROL COMO LINGUAGEM UNICA                             IMPACTO alto
+    Cinco estados (verde, amarelo, vermelho, roxo, cinza) com FORMA ou ICONE alem da cor — nunca
+    cor sozinha (daltonismo e sol batendo na tela). Um unico arquivo define cor, icone e rotulo.
+
+V3  CONSOLIDAR O CSS                                       IMPACTO medio (manutencao)
+    Hoje: 10 arquivos em src/styles + 5 em src/styles/modelobase1 + modelo-base1-components.css.
+    Propor um arquivo unico de tokens (cor, densidade, raio, sombra, tipografia) e os demais apenas
+    consumindo os tokens. Reduz divergencia entre telas e facilita o tema escuro.
+
+V4  CABECALHO DE INDICADORES na folha                      IMPACTO alto
+    Seis numeros grandes no topo (cabecas, peso medio, GMD, ganho total, @ produzidas, farol do
+    lote), depois o grafico, depois a tabela. Cabe em A4 retrato.
+
+V5  GRAFICOS COM META E PROJECAO                           IMPACTO alto
+    Faixa de meta sombreada, projecao tracejada com leque (pessimista/otimista), barra de GMD com a
+    cor do farol. Regras: barra sempre com eixo no zero; nunca ligar animais diferentes na mesma
+    linha; nada de pizza.
+
+V6  CURRAL SEM MOUSE                                       IMPACTO alto
+    F2 nova sessao, Enter confirma, Esc cancela, + e - corrigem peso, setas trocam categoria.
+    Alvo de toque >= 44 px. Foco visivel sempre.
+
+V7  FICHA DO ANIMAL COMO HISTORIA                          IMPACTO medio
+    Curva de peso com meta e projecao, eventos sanitarios marcados na propria curva, carencia e
+    data de liberacao em destaque, movimentacoes de lote como marcas verticais.
+
+V8  IMPRESSAO                                              IMPACTO medio
+    A4 retrato: cabecalho (fazenda, lote, periodo, filtros), 6 numeros, 1 grafico, top e bottom 10.
+
+V9  TEMA ESCURO E CONTRASTE NO SOL                         IMPACTO medio
+    Revisar contraste real das cores do farol no claro e no escuro; curral tem sol na tela.
+
+
+==================================================================
+4. ORDEM DE EXECUCAO — DEPENDENCIA DURA x PARALELO
+==================================================================
+
+DEPENDENCIA DURA (nao pode inverter)
+    M1  -->  M2  -->  M3
+    M1 define as regras do numero. M2 cria os campos (condicao, meta por epoca, estado).
+    M3 (previsao) depende dos dois: sem condicao e sem estado materializado, a previsao e
+    imprecisa e lenta.
+    M4.4 (dose por peso projetado) depende de M3.1.
+    M4.1 (bloqueio) depende so do fluxo de romaneio que JA existe — nao precisa esperar E5.
+
+PARALELO (equipes/agentes diferentes, arquivos diferentes, sem conflito)
+    M6 (atualizador)      paralelo com tudo, desde agora.    Toca electron/, scripts/, versioning/.
+    M5 (balanca)          paralelo com M1, M2, M3.           Toca electron/, modules/weighing/import.
+    M4.2 e M4.3 (IN 48, brucelose)  paralelo com M2 e M3.    Toca modules/sanity.
+    V3 (CSS) e V0 (quebra do Lancamento)  podem correr sozinhos em qualquer momento.
+
+CAMINHO CRITICO (o que decide o prazo)
+    M1 -> M2 -> M3.1 -> M3.4 (previsao de embarque). Tudo o mais pende fora do caminho critico.
+
+
+==================================================================
+5. ORGANIZACAO DOS AGENTES DENTRO DE CADA PROMPT
+==================================================================
+Cada prompt do Claude Code abre varios agentes em paralelo, com arquivos SEM interseccao, e um
+agente integrador no fim. Modelo que vale para todos:
+
+    AGENTE 1  DOMINIO      regras puras em src/modules/**/domain/ (sem Dexie, sem React)
+    AGENTE 2  APLICACAO    services, adapters, migracao, backfill
+    AGENTE 3  APRESENTACAO componentes e paginas que consomem o dominio
+    AGENTE 4  GATES        scripts/verify-*.mjs + registro no test:quick
+    AGENTE 5  DOCS         docs/user/, CHANGELOG, docs/release/<versao>/, REPORT da etapa
+    INTEGRADOR  roda test:quick completo, concilia, escreve docs/evidence/<etapa>/REPORT.md
+
+Regra de conflito: dois agentes nunca editam o mesmo arquivo. Quem precisa de um arquivo de outro
+declara a necessidade no REPORT e o integrador resolve. Nunca merge em main sem sua autorizacao.
+
+
+==================================================================
+6. MAPA DE PROMPTS PARA O CLAUDE CODE
+==================================================================
+Um prompt por vez, no chat unico, uma PR por vez. O proximo prompt sai somente depois do REPORT
+do anterior.
+
+    PROMPT-M1   Fundacao do numero                 branch program/m1-fundacao-numero      1.5.0
+    PROMPT-M2   Esquema v9 + metas + estado        branch program/m2-esquema-v9           1.6.0
+    PROMPT-M3   Previsao, farol e embarque         branch program/m3-previsao             1.7.0
+    PROMPT-M4   Sanidade com dentes                branch program/m4-sanidade             1.8.0
+    PROMPT-M5   Balanca fase A                     branch program/m5-balanca              MINOR
+    PROMPT-M6   Atualizador Supabase               branch program/m6-atualizador          MINOR
+    PROMPT-V0   Quebra do Lancamento (paridade)    branch program/v0-split-lancamento     PATCH
+    PROMPT-V1+  Trilha visual                      somente com a sua palavra "visual"
+
+Dois prompts podem estar abertos ao mesmo tempo APENAS se forem de trilhas que nao se cruzam
+(exemplo: M1 e M6). Se preferir um unico de cada vez, o caminho critico manda: M1 primeiro.
+
+
+==================================================================
+7. GATES NOVOS QUE ESTE PLANO CRIA
+==================================================================
+    weighing:interval-rule     weighing:regression       weighing:outlier
+    weighing:condition         reports:gmd-confiabilidade
+    migration:v9               state:materialized        goals:season
+    forecast:engine            forecast:backtest         reports:embarque
+    migration:v10              sanity:withdrawal-block   sanity:in48-alert
+    sanity:brucelose-mt        sanity:protocol-schedule  sanity:dose-by-weight
+    scale:file-import          scale:serial-reader       scale:simulator
+    eid:validation             updater:channels          ui:visual-parity (V0)
+
+
+==================================================================
+8. DECISOES — JA TOMADAS EM 01/10/2026 (delegadas pela responsavel)
+==================================================================
+D1  Farol: VERDE >= 90% da meta da epoca. Amarelo 70 a 89%. Vermelho < 70%. Roxo GMD < 0.
+    CINZA = sem dado confiavel. (Substitui o "verde >= meta" do E7.)
+D2  As duas arrobas CONTINUAM existindo e nunca se somam:
+      @ de peso vivo  = peso / divisor (15 ou 30, padrao 30, Configuracoes > Relatorios)
+      @ de carcaca    = peso x rendimento% / 100 / 15   (comercial, quantidade_arrobas)
+    O trabalho e de ROTULO e de proibir total misto, nao de unificar formula. O codigo da 1.4.2 ja
+    faz as duas contas certas (ARROBA_DIVISORS e commercialCalculations.js).
+    "@ produzida" dos relatorios de desempenho = ganho_kg x rendimento / 100 / 15, rotulada
+    "@ de carcaca produzida".
+D3  Jejum: por padrao o app apenas AVISA que as condicoes sao diferentes. A conversao
+    (jejum -> cheio x 1,04) nasce DESLIGADA e configuravel. (M2)
+D4  Metas: tabela por CATEGORIA x EPOCA (seca / transicao / aguas), nao valor unico. (M2)
+D5  Ordem: M1 agora. M6 (atualizador Supabase) fica para depois — decisao da responsavel em
+    01/10/2026. M5 (balanca) entra em paralelo quando a M1 estiver no REPORT.
+D6  Previsao de embarque (M3): alvo configuravel, padrao em @ de carcaca, sugestao inicial 18 @,
+    com opcao em kg. A responsavel confirma o alvo real da fazenda no REPORT da M3.
+D7  Intervalo minimo do GMD: configuravel (7, 14, 21, 28), PADRAO 21. Abaixo do minimo o GMD
+    aparece em cinza, com aviso, e fica fora de media e agregado. (M1)
+D8  Pesagem suspeita: na M1 e apontada, nao excluida das medias. A exclusao entra na M2, junto com
+    a gravacao da resolucao ("perda real" x "erro de digitacao"). Motivo: excluir antes de poder
+    resolver deixaria uma perda REAL fora da conta para sempre.
+
+
+==================================================================
+9. O QUE A PESQUISA MUDA NO PLANO MESTRE 2
+==================================================================
+C1  E7 dizia "@ produzidas = ganho total / 30". Trocar pela formula de carcaca (ver D2).
+C2  E7 dizia verde >= meta. A pesquisa sugere verde >= 90% da meta (ver D1).
+C3  E7 nao tinha PREVISAO nenhuma — so farol. A previsao (peso futuro, data do alvo, previsao de
+    embarque) entra como M3 e passa a ser o centro da etapa.
+C4  E7 nao tinha cinza para "sem dado confiavel". Entra, e e essencial.
+C5  E8 tratava sanidade sem distinguir campanha oficial de protocolo do veterinario. MT nao vacina
+    mais contra aftosa; brucelose tem regra de idade, etapa e comunicacao ao Indea.
+C6  E8 nao previa a IN 48/2011 (avermectina com carencia > 28 dias em confinamento/semi/terminacao).
+C7  E4 assumia a balanca S3 como primeiro caminho. O protocolo Bluetooth da S3 nao e publico:
+    comecar por IMPORTACAO DE ARQUIVO do Data Link PC e por LEITOR SERIAL generico. BLE fica como
+    P&D, com captura real no equipamento.
+C8  Nenhuma etapa previa estado materializado por animal. Sem ele a previsao nao passa no gate de
+    performance com 36 mil animais.
+
+
+==================================================================
+10. O QUE EU NAO RECOMENDO FAZER (para nao gastar tempo)
+==================================================================
+N1  Ajustar curva de Brody/Gompertz POR ANIMAL. Esses modelos precisam de centenas de pontos do
+    nascimento ao abate. Com 4 a 6 pesagens o ajuste e instavel e da peso assintotico sem sentido
+    (o mesmo rebanho da 650 kg no Brody e 439 kg no Gompertz). Usar curva so como formato do LOTE.
+N2  NDVI, satelite e serie climatica dentro do app offline. Em vez disso: campo manual de chuva
+    mensal (mm) por propriedade e recalibracao dos fatores de mes com o historico da propria fazenda.
+N3  Correcao de P205 por idade da vaca. Exige tabelas proprias da raca. Calcular P205/P365/P450 so
+    quando houver data de nascimento real e pesagem a +/- 45 dias da idade padrao; fora disso, "-".
+N4  Descontar um percentual fixo de jejum achando que resolve. A perda varia por animal; o certo e
+    registrar a condicao e comparar igual com igual.
+N5  Rastreabilidade oficial / SISBOV. Continua fora do escopo, como ja estava decidido.
+N6  Custo por @ e @/ha/ano agora. Dependem de custos e de area cadastrada, que o app nao tem.
+    Fica para depois de M4 e M6.
+
+FIM DO PLANO
