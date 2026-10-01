@@ -182,7 +182,9 @@ const auditorias = (await db.table('auditoria').toArray()).filter((row) => row.o
 assert.equal(await db.table('auditoria').count(), auditoriaAntes + 1, 'uma linha de auditoria');
 assert.deepEqual([auditorias.length, auditorias[0].usuario_id, auditorias[0].entidade, auditorias[0].acao], [1, null, 'pesagens', 'ATUALIZAR'], 'auditoria como ação do sistema (sem usuário)');
 assert.deepEqual(auditorias[0].campos_alterados, DERIVED, 'auditoria: só os campos derivados');
-const trilha = await run('controle.auditoria', {}, P('2026-01-01', TODAY));
+// A auditoria leva o relógio real (não o TODAY da massa): o período vai até amanhã para não depender do dia em que o gate roda.
+const ateAmanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+const trilha = await run('controle.auditoria', {}, P('2026-01-01', ateAmanha > TODAY ? ateAmanha : TODAY));
 assert.ok(trilha.rows.some((row) => row.origem === SAIDA_DERIVED_ORIGIN && row.usuario_nome === 'Sistema'), 'Trilha de auditoria: "Sistema"');
 
 // Idempotente: com o marcador não roda de novo; sem o marcador, rodar de novo não muda nada.

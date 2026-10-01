@@ -2,6 +2,7 @@
 // REGISTRY_ITEM. Leituras indexadas quando há índice útil; stores pequenas lidas inteiras.
 // Nenhuma fonte devolve credenciais (usuários: só campos seguros, montados aqui).
 import { readByKeys } from './readByKeys.js';
+import { importNumberKey } from '../../../import/domain/animalIdentity.js';
 import storage from '../../../../storage/storageAdapter.js';
 import { logicalIntegrity } from '../../../../storage/indexedDb/health/health.js';
 import { daysBetween } from '../../domain/reportPeriod.js';
@@ -221,13 +222,10 @@ function classifyIssue(text) {
   return { area, registro, descricao, categoria_problema: rule[1], gravidade: rule[2] };
 }
 
-// E1G (A6): número de brinco só com algarismos (e ",0"/".0" do Excel) sem os zeros à esquerda — "07", "7" e "7,0"
-// viram "7". Texto com letra não tem forma numérica (null). Só para APONTAR parecidos; nada é regravado.
+// E1G (A6): mesma regra da importação (importNumberKey) — "07", "7" e "7,0" viram "7", mas "1.000" (milhar do
+// Excel) não vira "1". Texto com letra não tem forma numérica (null). Só para APONTAR parecidos; nada é regravado.
 export function similarNumberKey(numero) {
-  const text = String(numero ?? '').trim();
-  const match = /^(\d+)(?:[.,]0+)?$/.exec(text);
-  if (!match) return null;
-  return match[1].replace(/^0+(?=\d)/, '');
+  return importNumberKey(numero);
 }
 
 const isBlankValue = (value) => value === null || value === undefined || (typeof value === 'string' && value.trim() === '');
