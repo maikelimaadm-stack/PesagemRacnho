@@ -8,6 +8,8 @@ import { buildReportDocument, describeReportFilters, SHEET_PAGE } from '../../do
 import { SYSTEM_NAME } from '../../../catalog/domain/propertyHeader.js';
 import { SHEET_CSS, pageCss } from './sheetStyles.js';
 import { escapeHtml, renderSheetBody } from './sheetHtml.js';
+import { CHART_CSS } from './chartStyles.js';
+import { renderChartsBlock } from './chartSvg.js';
 
 export { escapeHtml };
 
@@ -36,11 +38,16 @@ function organizationHeader(organization) {
 /**
  * @param viewModel resultado de runReport
  * @param {{ orientation?: 'auto'|'portrait'|'landscape', header?: object|null, organization?: string,
- *   showEmptyColumns?: boolean, widths?: object, showDetails?: boolean }} options header = buildPropertyHeader(...)
- *   já resolvido; showDetails = "Mostrar Detalhes" do relatório de Vendas (E1D)
+ *   showEmptyColumns?: boolean, widths?: object, showDetails?: boolean, charts?: object[]|null, chartsOnly?: boolean }} options
+ *   header = buildPropertyHeader(...) já resolvido; showDetails = "Mostrar Detalhes" do relatório de Vendas (E1D).
+ *   E1G: charts = gráficos JÁ calculados (domain/reportCharts.buildReportCharts, a mesma função da tela) — entram
+ *   ANTES da folha, no mesmo documento (SVG inline; a folha começa em página nova); chartsOnly = só os gráficos
+ *   (sem a folha; o aviso "muitas colunas" da folha não vale — os gráficos sempre cabem).
  * @returns {{ html: string, layout: object, stats: object, document: object }}
  */
 export function buildPrintDocument(viewModel, options = {}) {
+  const charts = Array.isArray(options.charts) ? options.charts : null;
+  const chartsOnly = Boolean(charts && options.chartsOnly);
   const header = options.header ?? (options.organization ? organizationHeader(options.organization) : null);
   const doc = buildReportDocument(viewModel, {
     header,
@@ -49,30 +56,32 @@ export function buildPrintDocument(viewModel, options = {}) {
     widths: options.widths ?? {},
     showDetails: Boolean(options.showDetails),
   });
+  // E1G: bloco de gráficos (tokens claros fixos — o PDF nunca sai escuro); sem gráficos, o documento não muda.
+  const prelude = charts ? renderChartsBlock(charts, { orientation: doc.print.orientation, mode: 'print', breakAfter: !chartsOnly }) : '';
   const html = `<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="${PRINT_CSP}">
-<title>${escapeHtml(doc.title)}</title>
+<title>${escapeHtml(chartsOnly ? `${doc.title} — Gráficos` : doc.title)}</title>
 <style>
-${SHEET_CSS}
+${SHEET_CSS}${charts ? `\n${CHART_CSS}` : ''}
 ${pageCss({ orientation: doc.print.orientation })}
 </style>
 </head>
 <body>
-${renderSheetBody(doc, { mode: 'print' })}
+${renderSheetBody(doc, { mode: 'print', prelude, sheet: !chartsOnly })}
 </body>
 </html>`;
   const layout = {
     orientation: doc.print.orientation,
-    fits: doc.print.fits,
+    fits: chartsOnly ? true : doc.print.fits,
     sizeClass: doc.print.sizeClass,
     columnCount: doc.print.columnCount,
     totalWidth: doc.print.totalWidth,
     widths: doc.print.widths,
-    warning: doc.print.warning,
+    warning: chartsOnly ? null : doc.print.warning,
   };
-  const stats = { ...doc.stats, summaryRows: doc.layout === 'summary' ? doc.stats.groupRows : 0 };
+  const stats = { ...doc.stats, summaryRows: doc.layout === 'summary' ? doc.stats.groupRows : 0, ...(charts ? { charts: charts.length, chartsOnly } : {}) };
   return { html, layout, stats, document: doc, systemName: SYSTEM_NAME };
 }

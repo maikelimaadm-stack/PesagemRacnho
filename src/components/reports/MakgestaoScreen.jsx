@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowLeft, ChevronLeft, FileJson, FileSpreadsheet, FileText, FolderOpen, ListFilter, MoreHorizontal, PencilLine, RefreshCw, Save, Settings, Trash2, Users } from "lucide-react";
+import { ArrowLeft, ChartColumnBig, ChevronLeft, FileJson, FileSpreadsheet, FileText, FolderOpen, ListFilter, MoreHorizontal, PencilLine, Printer, RefreshCw, Save, ScrollText, Settings, Trash2, Users } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -220,6 +220,8 @@ export function MakgestaoMoreFilters({ columns, onChange }) {
  * E1F (relatório do usuário aberto — "Meus relatórios"): baseNote = "base · quem vê" no subtítulo;
  *   onSaveChanges = "Salvar alterações" ao lado do Imprimir (só com alteração não salva e permissão); no ⋯,
  *   onSaveAs "Salvar como…" (no lugar de "Salvar modelo…"), onRename "Renomear…" e o Excluir (deleteLabel).
+ * E1G (vista Gráficos): chartsView = Imprimir/PDF saem "gráficos + folha" e o Excel leva a aba Gráficos;
+ *   onPrintCharts/onPdfCharts = "Imprimir só os gráficos" / "PDF só dos gráficos" no ⋯ (null fora da vista).
  */
 export function MakgestaoTopBar({
   title, templateName = null, loading = false, backLabel = "Relatórios", onBack = null,
@@ -227,6 +229,7 @@ export function MakgestaoTopBar({
   onSaveTemplate = null, onDeleteTemplate = null,
   baseNote = null, onSaveChanges = null, savingChanges = false, onSaveAs = null, onRename = null, deleteLabel = null,
   onRefresh, showEmptyColumns, onToggleEmptyColumns,
+  chartsView = false, onPrintCharts = null, onPdfCharts = null,
 }) {
   return (
     <header className="rpt-mak__top">
@@ -246,10 +249,10 @@ export function MakgestaoTopBar({
         ) : null}
         {canExport ? (
           <>
-            <button type="button" className="rpt-mak-ghost" disabled={disabled} onClick={onExcel} title="Planilha Excel (XLSX) com a mesma tabela da folha">
+            <button type="button" className="rpt-mak-ghost" disabled={disabled} onClick={onExcel} title={chartsView ? "Planilha Excel (XLSX) com a folha e a aba Gráficos" : "Planilha Excel (XLSX) com a mesma tabela da folha"}>
               <FileSpreadsheet aria-hidden="true" />Excel
             </button>
-            <button type="button" className="rpt-mak-ghost" disabled={disabled} onClick={onPdf} title="PDF A4 da folha">
+            <button type="button" className="rpt-mak-ghost" disabled={disabled} onClick={onPdf} title={chartsView ? "PDF A4 com os gráficos e a folha" : "PDF A4 da folha"}>
               <FileText aria-hidden="true" />PDF
             </button>
           </>
@@ -266,6 +269,9 @@ export function MakgestaoTopBar({
                 <DropdownMenuLabel className="text-xs">{menuLabel}</DropdownMenuLabel>
                 <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onCsv}><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />CSV (Excel pt-BR)</DropdownMenuItem>
                 <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onJson}><FileJson className="h-3.5 w-3.5" aria-hidden="true" />JSON com manifesto</DropdownMenuItem>
+                {/* E1G: na vista Gráficos, imprimir/PDF só dos gráficos (sem a folha). */}
+                {onPrintCharts ? <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onPrintCharts}><Printer className="h-3.5 w-3.5" aria-hidden="true" />Imprimir só os gráficos</DropdownMenuItem> : null}
+                {onPdfCharts ? <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onPdfCharts}><FileText className="h-3.5 w-3.5" aria-hidden="true" />PDF só dos gráficos</DropdownMenuItem> : null}
                 <DropdownMenuSeparator />
               </>
             ) : null}
@@ -286,10 +292,27 @@ export function MakgestaoTopBar({
           </button>
         ) : null}
         {canExport ? (
-          <button type="button" className="rpt-mak-print text-white" disabled={disabled} onClick={onPrint} title="Imprimir a folha (A4)">Imprimir</button>
+          <button type="button" className="rpt-mak-print text-white" disabled={disabled} onClick={onPrint} title={chartsView ? "Imprimir os gráficos e a folha (A4)" : "Imprimir a folha (A4)"}>Imprimir</button>
         ) : null}
       </div>
     </header>
+  );
+}
+
+/**
+ * E1G: alternador "Folha | Gráficos" (faixa de ferramentas da área do papel, só nos relatórios com gráficos).
+ * Período, filtros e detalhe valem para as duas vistas; trocar de vista não roda o relatório de novo.
+ */
+export function MakgestaoDisplaySwitch({ value, onChange }) {
+  const options = [["folha", "Folha", ScrollText, "A folha do relatório (o que sai na impressão)"], ["graficos", "Gráficos", ChartColumnBig, "Gráficos de peso e de ganho com os mesmos números da folha"]];
+  return (
+    <div className="rpt-mak-switch" role="group" aria-label="Ver como">
+      {options.map(([id, label, Icon, title]) => (
+        <button key={id} type="button" className={`rpt-mak-btn rpt-mak-btn--icon rpt-mak-switch__btn${value === id ? " is-on" : ""}`} aria-pressed={value === id} title={title} onClick={() => value !== id && onChange(id)}>
+          <Icon aria-hidden="true" />{label}
+        </button>
+      ))}
+    </div>
   );
 }
 

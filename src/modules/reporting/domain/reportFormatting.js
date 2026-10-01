@@ -47,10 +47,23 @@ function civilDateBr(value) {
   return { date: `${iso[3]}/${iso[2]}/${iso[1]}`, time: iso[4] ? `${iso[4]}:${iso[5]}` : null };
 }
 
+// Revisão E1G: um Intl.NumberFormat por (casas, moeda) em vez de toLocaleString a cada número — o mesmo texto
+// (toLocaleString usa o mesmo formatador), ~25× mais rápido; os gráficos formatam milhares de pontos por vez.
+const NUMBER_FORMATS = new Map();
+function numberFormat(decimals, money) {
+  const key = `${decimals}|${money ? 'brl' : ''}`;
+  let format = NUMBER_FORMATS.get(key);
+  if (!format) {
+    const options = { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
+    format = new Intl.NumberFormat('pt-BR', money ? { style: 'currency', currency: 'BRL', ...options } : options);
+    NUMBER_FORMATS.set(key, format);
+  }
+  return format;
+}
+
 function screenNumber(number, decimals, type) {
-  const options = { minimumFractionDigits: decimals, maximumFractionDigits: decimals };
-  if (type === 'money') return number.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', ...options });
-  const text = number.toLocaleString('pt-BR', options);
+  if (type === 'money') return numberFormat(decimals, true).format(number);
+  const text = numberFormat(decimals, false).format(number);
   return type === 'percentage' ? `${text} %` : text;
 }
 

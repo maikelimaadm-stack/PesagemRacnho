@@ -262,6 +262,36 @@ Gates: `reports:print-contract:verify` (estrutura, CSP, escape, cabeçalho/rodap
 colunas vazias, GMD "—", 0–3 níveis, Detalhado como folha), `reports:summary-export-parity:verify` (mesmos
 números em folha, CSV, XLSX e JSON), `reports:sheet-xlsx-parity:verify` (bloco TOTAL POR folha × XLSX).
 
+### 9.1 Gráficos na impressão, no PDF e no XLSX (E1G 1.4.2)
+
+- **Mesma conta da folha**: `domain/reportCharts.buildReportCharts(viewModel, definition, config, role)` é a MESMA
+  função da tela, sobre o MESMO view model (sem voltar ao banco), com os MESMOS specs dos totais da folha
+  (`groupRows`/`computeAggregates`). Texto de número = `sheetNumberText` (o da folha); sem valor = `-`, nunca 0.
+- **Impressão/PDF**: `preparePrint(viewModel, actor, { chartsConfig, chartsOnly })`. Com `chartsConfig` (objeto;
+  `{}` = os padrões) sai "gráficos + folha": o bloco de gráficos entra ANTES da folha, no mesmo documento
+  (`renderSheetBody(doc, { prelude })`), e a folha começa em página nova (`.rc-break`). `chartsOnly` = só os
+  gráficos (sem a folha; o aviso "muitas colunas" não vale — os gráficos sempre cabem). Sem `chartsConfig`, o
+  documento é exatamente o de antes.
+- **SVG inline** (`exporters/chartSvg.js`): nunca `<img src=data:…>`, sem `<script>`, sem `foreignObject`, sem
+  `href`; todo texto por `escapeHtml`; ids gerados (`rc-<n>`). A CSP do documento não muda. Retrato: 718 × 260,
+  um por linha; paisagem: 515 × 230, grade 2 × 2 (o gráfico cuja tabela de dados tem mais de 8 colunas — ex.: um
+  ano de meses — ocupa a linha inteira, 1047 px, para a tabela não vazar do cartão). No papel não há hover: rótulo
+  de valor em toda barra, rótulo no fim das linhas (por cima das linhas, com contorno claro) e a tabela de dados
+  embaixo de cada gráfico. Cores só por tokens `--rc-*`; a impressão usa
+  sempre os tokens CLAROS (`CHART_CSS` não tem regra de tema escuro).
+- **Permissão**: imprimir/exportar os gráficos passa pelo mesmo `assertCanExport`, com as colunas dos gráficos
+  (`chartColumnIds`); a definição recusa coluna sensível em gráfico (`defineCharts`).
+- **Manifesto**: `display: 'graficos'`, `chartsOnly` e `charts: [{ id, kind, title, config, series, points }]`.
+- **XLSX**: `prepareEmission(viewModel, 'xlsx', actor, { chartsConfig })` → 3ª aba "Gráficos" com a tabela de
+  dados de cada gráfico (números como números, nos formatos da coluna — os mesmos da tela e do PDF). Sem
+  `chartsConfig` o arquivo não muda. O gráfico nativo do Excel (DrawingML) fica para depois. CSV e JSON não mudam.
+
+Gates: `reports:charts:verify` (números × folha, "Demais", cores, histogramas, halteres, validação),
+`reports:charts-print:verify` (documento, CSP, escape, tamanhos, tema claro, manifesto, permissão, XLSX),
+`reports:charts-state:verify` (vista "Folha | Gráficos" e gráficos no estado da tela, nos modelos e no último
+estado; a configuração da tela chega ao PDF e ao Excel; "Imprimir só os gráficos"/"PDF só dos gráficos" no menu ⋯).
+Na tela, Imprimir/PDF na vista Gráficos saem "gráficos + folha" e o Excel leva a aba Gráficos; na vista Folha, como antes.
+
 ## 10. Segurança do IPC (`electron/ipc/reportIpc.cjs`)
 
 | Canal | Função |

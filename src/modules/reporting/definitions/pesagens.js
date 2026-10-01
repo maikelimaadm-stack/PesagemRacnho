@@ -213,6 +213,82 @@ export const PESAGENS_SHEET_LINES = Object.freeze({
     total: Object.freeze([lineItem(null, specById(VENDAS_TOTALS, 'animais_vendidos'), 'animais'), PESO_TOTAL, PESO_MEDIO, lineItem('Média (@)', specById(VENDAS_TOTALS, 'media_arroba'), null), lineItem('Valor Total', specById(VENDAS_TOTALS, 'valor_total'), null)]),
   }),
 });
+// ---------------------------------------------------------------------------------------------------
+// E1G — gráficos de Pesagens (domain/reportCharts; vista "Gráficos" da tela, impressão/PDF e aba do Excel).
+// Os números são os da folha: os MESMOS specs de SHEET_TOTALS (Qtd, Peso médio, GMD médio ponderado, Ganho
+// total em kg e em @) sobre as MESMAS linhas — Lote × Mês = as células do Sintético (Matriz).
+// ---------------------------------------------------------------------------------------------------
+const CHART_CAB = specById(SHEET_TOTALS, 'qtd');
+// Cobertura do GMD: animais com ao menos uma pesagem com anterior válida (a base da nota "GMD de N de M cab.").
+const CHART_COM_GMD = Object.freeze({ id: 'com_gmd', columnId: 'animais_com_anterior', op: 'countDistinct' });
+const CHART_SERIES = Object.freeze([
+  { id: 'todos', label: 'Todos', columnId: null },
+  { id: 'lote', label: 'Lote', columnId: 'nome_lote' },
+  { id: 'apartacao', label: 'Apartação', columnId: 'nome_apartacao' },
+  { id: 'sexo', label: 'Sexo', columnId: 'sexo' },
+  { id: 'raca', label: 'Raça', columnId: 'raca' },
+  { id: 'marca', label: 'Marca', columnId: 'marca' },
+]);
+// Categoria fica fora da evolução do peso: a categoria dela É faixa de peso (automática por sexo + peso).
+const CHART_GROUPS = Object.freeze([
+  { id: 'lote', label: 'Lote', columnId: 'nome_lote' },
+  { id: 'apartacao', label: 'Apartação', columnId: 'nome_apartacao' },
+  { id: 'sexo', label: 'Sexo', columnId: 'sexo' },
+  { id: 'raca', label: 'Raça', columnId: 'raca' },
+  { id: 'categoria', label: 'Categoria', columnId: 'categoria' },
+  { id: 'marca', label: 'Marca', columnId: 'marca' },
+]);
+const CHART_TIME_AXES = Object.freeze([
+  { id: 'mes', label: 'Mês', columnId: 'mes_pesagem', tempo: 'mes' },
+  { id: 'data', label: 'Data', columnId: 'data_pesagem', tempo: 'data' },
+  { id: 'sessao', label: 'Sessão', columnId: 'sessao', tempo: 'sessao' },
+]);
+export const CHART_BAND_WIDTHS = Object.freeze([
+  { id: 'auto', label: 'Automática', largura: 'auto' },
+  ...[10, 15, 20, 25, 30, 50].map((largura) => ({ id: String(largura), label: `${largura} kg`, largura })),
+]);
+const GMD_PESAGENS = 'GMD das pesagens contra a pesagem anterior (soma dos ganhos ÷ soma dos dias)';
+export const PESAGENS_CHARTS = Object.freeze([
+  {
+    id: 'evolucao-peso', kind: 'linha', title: 'Evolução do peso médio', cab: CHART_CAB,
+    controls: {
+      serie: { label: 'Série', default: 'lote', choices: CHART_SERIES },
+      eixo: { label: 'Eixo', default: 'mes', choices: CHART_TIME_AXES },
+      metrica: {
+        label: 'Mostrar', default: 'peso', choices: [
+          { id: 'peso', label: 'Peso médio', valor: specById(SHEET_TOTALS, 'peso_medio'), unidade: 'kg', titulo: 'Evolução do peso médio', nota: 'Peso médio das pesagens de cada ponto: ele cai quando animais pesados saem do lote (veja as cabeças de cada ponto). O GMD médio mostra o ganho sem esse efeito.' },
+          { id: 'gmd', label: 'GMD médio', valor: specById(SHEET_TOTALS, 'gmd_medio'), cobertura: CHART_COM_GMD, unidade: 'kg/dia', yZero: true, titulo: 'Evolução do GMD médio', nota: `${GMD_PESAGENS}.` },
+        ],
+      },
+    },
+  },
+  {
+    id: 'gmd-por-grupo', kind: 'barras', title: 'GMD médio por grupo', subtitle: GMD_PESAGENS, unidade: 'kg/dia',
+    controls: { serie: { label: 'Agrupar por', default: 'lote', choices: CHART_GROUPS } },
+    valor: specById(SHEET_TOTALS, 'gmd_medio'), cab: CHART_CAB, cobertura: CHART_COM_GMD, semValor: 'Sem GMD',
+    notas: ['Sem GMD = nenhuma pesagem do grupo tem uma pesagem anterior com peso para comparar.'],
+  },
+  {
+    id: 'ganho-por-mes', kind: 'colunas', title: 'Ganho de peso por mês', cab: CHART_CAB, maxSeries: 3,
+    controls: {
+      eixo: { label: 'Eixo', default: 'mes', choices: [CHART_TIME_AXES[0]] },
+      metrica: {
+        label: 'Medida', default: 'kg', choices: [
+          { id: 'kg', label: 'kg', valor: specById(SHEET_TOTALS, 'ganho_total'), cobertura: CHART_COM_GMD, unidade: 'kg', titulo: 'Ganho de peso por mês' },
+          { id: 'arroba', label: '@', valor: specById(SHEET_TOTALS, 'ganho_total_arroba'), cobertura: CHART_COM_GMD, unidade: '@', titulo: '@ produzidas por mês', nota: '@ = peso vivo ÷ {divisor} (Configurações › Relatórios).' },
+        ],
+      },
+      serie: { label: 'Série', default: 'todos', choices: [CHART_SERIES[0], CHART_SERIES[1]] },
+    },
+    notas: ['O ganho de cada pesagem conta no mês em que o animal foi pesado; ele cobre o intervalo desde a pesagem anterior.'],
+  },
+  {
+    id: 'distribuicao-peso', kind: 'histograma', title: 'Distribuição do peso', subtitle: 'Última pesagem com peso de cada animal no período',
+    valorAnimal: 'peso', porAnimal: 'ultima', unidade: 'kg', semValor: 'Sem peso no período',
+    controls: { faixa: { label: 'Faixa', default: 'auto', choices: CHART_BAND_WIDTHS } },
+  },
+]);
+
 export const PESAGENS_DEFAULT_VIEW = 'por-apartacao-data';
 const SHEET_CHOICES = { available: [...SHEET_COLUMN_KEYS], defaults: [...SHEET_DEFAULT_KEYS] };
 export const PESAGENS_VIEWS = Object.freeze([
@@ -277,6 +353,8 @@ export const PESAGENS = defineReport({
   // A faixa exigida é do LOTE: só aparece quando o último nível de agrupamento é o lote (e no "TOTAL POR
   // LOTE"); em qualquer outro agrupamento as duas métricas saem da folha e das exportações.
   metricPairs: [{ id: 'faixa', label: 'Faixa exigida (kg)', from: 'faixa_min', to: 'faixa_max', leafOnly: true, leafColumnId: 'nome_lote', unit: 'kg' }],
+  // E1G: vista "Gráficos".
+  charts: PESAGENS_CHARTS,
   classification: DATA_CLASSIFICATION.CANONICAL,
   notes: ['Uma linha por pesagem: um animal pesado 3 vezes aparece 3 vezes; "Cabeças" conta cada animal uma vez.'],
 });

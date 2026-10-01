@@ -31,6 +31,10 @@
 // chave = de columnChoices.available do tipo (id de coluna no Detalhado; chave de métrica no Resumido), na
 // ordem escolhida. Validada contra o tipo e o papel ao gravar e ao ler (nunca amplia permissão); sem escolha
 // (ou lista vazia) = colunas padrão do tipo.
+//
+// E1G (1.4.2): modelos e último estado guardam também a vista "Folha | Gráficos" (`display`) e a configuração dos
+// gráficos (`charts`) — SÓ quando diferentes do padrão (domain/reportCharts.chartsStateOf): modelo sem gráficos
+// continua com as mesmas chaves; ao abrir, gráfico/opção que deixou de existir sai com aviso.
 import { readAppSetting, writeAppSetting } from '../../../storage/indexedDb/repositories/index.js';
 import { ensureStorageReady } from '../../../storage/indexedDb/db.js';
 import { can, forbiddenError } from '../../auth/domain/permissionService.js';
@@ -46,6 +50,7 @@ import { PERIOD_PRESETS } from '../domain/reportPeriod.js';
 import { getReportView } from '../domain/reportViews.js';
 import { isKnownSortChoice } from '../domain/sortChoices.js';
 import { hasTypeColumns, sanitizeTypeColumnKeys, typeColumnDefaults } from '../domain/typeColumns.js';
+import { chartsStateOf } from '../domain/reportCharts.js';
 
 export const TEMPLATE_VERSION = 1;
 export const TEMPLATE_SCOPES = Object.freeze({ PERSONAL: 'PERSONAL', SHARED: 'SHARED' });
@@ -497,10 +502,17 @@ export function normalizeTemplateConfig(definition, config = {}) {
   }
   // E1D: tipo explícito, eixos da matriz e opção fixa de "Ordenar por" (contrato §2). Ausentes = como antes.
   const typed = normalizeTypedConfig(definition, config);
+  // E1G: vista "Folha | Gráficos" e configuração dos gráficos — chaves SÓ quando diferentes do padrão (o modelo sem
+  // gráficos continua com exatamente as chaves de antes). Vista desconhecida é erro ao salvar; gráfico/opção que
+  // não existe fica fora (a tela só grava o que a definição declara).
+  const charted = chartsStateOf(definition, { display: config.display, charts: config.charts });
+  const invalidDisplay = charted.warnings.find((warning) => warning.code === 'CHART_DISPLAY_INVALID');
+  if (invalidDisplay) throw templateError(`Vista inválida (${config.display})`);
   return {
     columns, filters, ...(Object.keys(fixedFilters).length ? { fixedFilters } : {}), groups, aggregates, sort, mode, summarySort, period, params,
     search: String(config.search ?? ''), widths, orientation: ['portrait', 'landscape', 'auto'].includes(config.orientation) ? config.orientation : 'auto',
     ...typed,
+    ...charted.values,
   };
 }
 
@@ -686,7 +698,11 @@ export function templateToRequest(source, role) {
   } catch (error) {
     warnings.push({ code: 'TEMPLATE_TYPE_REMOVED', message: `${error.message}: o modelo abre sem ele` });
   }
+  // E1G: vista e gráficos guardados; o que deixou de existir (gráfico, opção, vista) sai com aviso.
+  const charted = chartsStateOf(definition, { display: template.display, charts: template.charts });
+  for (const warning of charted.warnings) warnings.push({ code: warning.code, message: warning.message });
   return {
+    ...charted.values,
     reportId: definition.id,
     params: { ...(template.period ? { periodo: template.period } : {}), ...(template.params || {}) },
     selection: {

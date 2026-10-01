@@ -366,6 +366,8 @@ function makNumberText(column, value, { op = null, decimals = null, unit = true 
   if (text === MISSING_SCREEN || text === '') return MAK_MISSING;
   return unit && isWeight && column.unit ? `${text} ${column.unit}` : text;
 }
+// E1G: o mesmo texto de número nos gráficos (rótulos, tooltip e tabela de dados) — idêntico ao da folha.
+export { makNumberText as sheetNumberText };
 
 /**
  * Colunas das tabelas por lote no estilo do antigo (rótulo, alinhamento e o que é monoespaçado/negrito).

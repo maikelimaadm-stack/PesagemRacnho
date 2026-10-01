@@ -3,6 +3,7 @@
 // E1 (1.4.0): "Desempenho" substitui individual, por lote, as seis dimensões, "Animais perdendo peso"
 // e "Distribuição por faixa de peso" (aliases em legacyAliases.js).
 import { defineReport } from '../domain/reportDefinition.js';
+import { FAIXAS_GMD } from '../domain/chartDefinition.js';
 import { GRAINS } from '../domain/reportGrain.js';
 import { ANIMAL_PERIOD_COLUMNS } from './columns/animalColumns.js';
 import { listaTipo, resumoTipo } from './tipos.js';
@@ -55,6 +56,48 @@ export const DESEMPENHO_VIEWS = Object.freeze([
   listaTipo('perdendo-peso', 'Perdendo Peso', { from: ANIMAL_PERIOD_COLUMNS, columns: PERDENDO_PESO_COLUMNS, aggregates: PERFORMANCE_TYPE_TOTALS, sort: [{ columnId: 'ganho', direction: 'asc' }], population: PERDENDO_PESO_POPULATION }),
 ]);
 
+// E1G — gráficos do Desempenho (domain/reportCharts): mesmos specs dos totais da folha (PERFORMANCE_TOTALS), um
+// valor por animal. GMD = o gmd_ponderado da folha (soma dos ganhos ÷ soma dos dias dos animais com par).
+const CHART_CAB = byId('animais');
+const CHART_GROUPS = Object.freeze([
+  { id: 'lote', label: 'Lote', columnId: 'lote' },
+  { id: 'apartacao', label: 'Apartação', columnId: 'apartacao' },
+  { id: 'sexo', label: 'Sexo', columnId: 'sexo' },
+  { id: 'raca', label: 'Raça', columnId: 'raca' },
+  { id: 'categoria', label: 'Categoria', columnId: 'categoria' },
+  { id: 'marca', label: 'Marca', columnId: 'marca' },
+  { id: 'faixa-peso', label: 'Faixa de peso', columnId: 'faixa_peso' },
+]);
+const CHART_BAND_WIDTHS = Object.freeze([
+  { id: 'auto', label: 'Automática', largura: 'auto' },
+  ...[10, 15, 20, 25, 30, 50].map((largura) => ({ id: String(largura), label: `${largura} kg`, largura })),
+  { id: 'categorias', label: 'Faixas das categorias', largura: 'categorias' },
+]);
+const GMD_PERIODO = 'GMD do período de cada animal (ganho ÷ dias), ponderado';
+export const DESEMPENHO_CHARTS = Object.freeze([
+  {
+    id: 'gmd-por-grupo', kind: 'barras', title: 'GMD médio por grupo', subtitle: GMD_PERIODO, unidade: 'kg/dia',
+    controls: { serie: { label: 'Agrupar por', default: 'lote', choices: CHART_GROUPS } },
+    valor: byId('gmd_ponderado'), cab: CHART_CAB, semValor: 'Sem GMD',
+    notas: ['Sem GMD = animal sem duas pesagens com peso para comparar.'],
+  },
+  {
+    id: 'peso-inicial-final', kind: 'halteres', title: 'Peso inicial × peso final', subtitle: 'Só animais com duas pesagens com peso: a diferença é o ganho médio da folha',
+    controls: { serie: { label: 'Agrupar por', default: 'lote', choices: CHART_GROUPS } },
+    inicio: byId('peso_inicial_medio'), fim: byId('peso_final_medio'), ganho: byId('ganho_medio'), gmd: byId('gmd_ponderado'), cab: CHART_CAB,
+    semValor: 'Sem duas pesagens',
+  },
+  {
+    id: 'faixas-gmd', kind: 'histograma', title: 'Animais por faixa de GMD', subtitle: GMD_PERIODO,
+    valorAnimal: 'gmd', porAnimal: 'linha', faixasFixas: FAIXAS_GMD, unidade: 'kg/dia', semValor: 'Sem GMD',
+  },
+  {
+    id: 'distribuicao-peso', kind: 'histograma', title: 'Distribuição do peso final', subtitle: 'Peso final (última pesagem com peso no período) de cada animal',
+    valorAnimal: 'peso_final', porAnimal: 'linha', unidade: 'kg', semValor: 'Sem peso',
+    controls: { faixa: { label: 'Faixa', default: 'auto', choices: CHART_BAND_WIDTHS } },
+  },
+]);
+
 export const DESEMPENHO = defineReport({
   id: 'desempenho',
   family: 'desempenho',
@@ -88,5 +131,7 @@ export const DESEMPENHO = defineReport({
   ],
   views: DESEMPENHO_VIEWS,
   defaultView: DESEMPENHO_DEFAULT_VIEW,
+  // E1G: vista "Gráficos".
+  charts: DESEMPENHO_CHARTS,
   notes: [...PERFORMANCE_NOTES],
 });
