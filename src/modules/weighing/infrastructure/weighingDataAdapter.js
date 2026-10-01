@@ -488,8 +488,59 @@ export async function updateEntry(id, payload) {
   return storageRecordToViewModel(updated);
 }
 
-export async function deleteEntry(id) {
-  return bulkDeleteEntries([id]);
+export async function deleteEntry(id, { motivo } = {}) {
+  return bulkDeleteEntries([id], { motivo });
+}
+
+// M1 (1.5.0) — Repesagem no mesmo dia (M1-FUNDACAO-NUMERO.md §4). Cancela a(s) pesagem(ns) de hoje do animal e grava
+// a nova numa ÚNICA transação: se qualquer parte falhar, nada muda e a de hoje continua valendo — o animal nunca fica
+// sem nenhuma das duas. Sem campo novo: nada de esquema.
+// Ordem dentro da transação:
+//   1. cancelamento pelo fluxo de sempre (bulkDeleteEntries: deleted_at + auditoria CANCELAR, com o motivo informado;
+//      aplicações de sanidade vinculadas canceladas junto — ADR-049; permanência em lote reconstruída);
+//   2. se o animal ficou sem nenhuma pesagem (só tinha a de hoje, sem Cadastro — dado antigo), desfaz tudo: o
+//      cancelamento o removeria (removeOrphanAnimal) e a nova ficaria presa a um animal excluído;
+//   3. grava a nova (createEntry), que gera o próprio movimento quando muda de lote em relação ao lote reconstruído;
+//   4. o movimento que a pesagem substituída gerou (Mudança de lote) não fica apontando para pesagem cancelada:
+//      passa para a nova quando ela não gerou o dela e vai para o mesmo lote (repesagem retroativa, em que o
+//      createEntry compara com o lote atual); senão sai junto. O cancelamento comum ainda deixa esse movimento ativo
+//      (limitação conhecida, docs/evidence/operational-reconciliation-preflight); a repesagem não.
+// createEntry e bulkDeleteEntries abrem transações com subconjuntos destas tabelas, que o Dexie aninha nesta.
+const REWEIGH_TABLES = Object.freeze([
+  'pesagens', 'auditoria', 'sessoesPesagem', 'animalLotes', 'categoriasAnimal', 'animais', 'movimentosAnimais',
+  'animalIdentificadores', 'marcas', 'racas', 'propriedades', ...LAUNCH_SANITY_TABLES,
+]);
+
+export async function replaceEntries(previousIds, payload, { motivo, aplicacoesSanidade = [] } = {}) {
+  const ids = [...new Set((previousIds || []).filter(Boolean).map(String))];
+  if (!ids.length) throw new Error('Repesagem sem a pesagem de hoje a substituir.');
+  storage.assertWritable('Repesagem');
+  const db = await storage.ensureReady();
+  const ui = typeof payload?.legacy_payload === 'object' ? payload.legacy_payload : {};
+  const animalId = payload?.animal_id || ui.animal_id || null;
+  const activeMovementsOf = async () => (animalId
+    ? (await db.table('movimentosAnimais').where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at)
+    : []);
+  let created = null;
+  await db.transaction('rw', REWEIGH_TABLES.map((name) => db.table(name)), async () => {
+    const cancelled = await bulkDeleteEntries(ids, { motivo });
+    // Já cancelada (outra tela, outro operador) ou inexistente: nada é gravado.
+    if (cancelled !== ids.length) throw new Error('A pesagem de hoje deste animal não está mais ativa. Nada foi gravado; confira a lista do dia.');
+    const animal = animalId ? await db.table('animais').where('id').equals(animalId).first() : null;
+    if (animal?.deleted_at) throw new Error('Esse animal só tem a pesagem de hoje, sem cadastro. Para trocar o peso, use Editar na lista do dia.');
+    const previousMovements = (await activeMovementsOf()).filter((row) => ids.includes(String(row.pesagem_id)));
+    created = await createEntry(payload, { aplicacoesSanidade });
+    if (previousMovements.length) {
+      const ts = new Date().toISOString();
+      let ownMovement = (await activeMovementsOf()).some((row) => row.pesagem_id === created.id);
+      for (const row of previousMovements) {
+        const handOver = !ownMovement && Boolean(payload.lote_id) && row.lote_destino_id === payload.lote_id;
+        await db.table('movimentosAnimais').update(row.localId, handOver ? { pesagem_id: created.id, updated_at: ts } : { deleted_at: ts, updated_at: ts });
+        if (handOver) ownMovement = true;
+      }
+    }
+  });
+  return created;
 }
 
 export async function bulkCreateEntries(payloads, { importMetadata = null } = {}) {
@@ -927,9 +978,15 @@ export async function bulkUpdateAnimalProfiles(items, { audit = true, origin = '
   return updatedCount;
 }
 
+// Motivo da auditoria CANCELAR quando quem cancela não informa outro (o texto de sempre).
+export const MOTIVO_CANCELAMENTO_PADRAO = 'Exclusão lógica pela interface';
+const cancellationReason = (motivo) => (typeof motivo === 'string' && motivo.trim() ? motivo.trim() : MOTIVO_CANCELAMENTO_PADRAO);
+
 // Cancelar a pesagem cancela, na mesma transação, as aplicações de sanidade
 // vinculadas por pesagem_id (cancelled_at + motivo "pesagem cancelada"; ADR-049).
-export async function bulkDeleteEntries(ids) {
+// M1: `motivo` opcional vai para a auditoria (ex.: "repesagem"); sem ele, o texto de sempre.
+export async function bulkDeleteEntries(ids, { motivo } = {}) {
+  const reason = cancellationReason(motivo);
   storage.assertWritable('Exclusão de pesagens');
   const db = await storage.ensureReady();
   const ts = new Date().toISOString();
@@ -943,7 +1000,7 @@ export async function bulkDeleteEntries(ids) {
       if (!existing) continue;
       if (existing.animal_id) affectedAnimals.add(existing.animal_id);
       await db.table('pesagens').update(existing.localId, { deleted_at: ts, updated_at: ts });
-      await db.table('auditoria').add(auditRow({ entidade: 'pesagens', entidade_id: id, acao: 'CANCELAR', antes: existing, motivo: 'Exclusão lógica pela interface', created_at: ts }));
+      await db.table('auditoria').add(auditRow({ entidade: 'pesagens', entidade_id: id, acao: 'CANCELAR', antes: existing, motivo: reason, created_at: ts }));
       removedIds.push(existing.id);
       removed += 1;
     }
