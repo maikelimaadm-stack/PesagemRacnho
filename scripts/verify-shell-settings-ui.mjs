@@ -12,7 +12,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deleteDbForTests, ensureStorageReady } from '../src/storage/indexedDb/db.js';
-import { APP_CONFIG_DEFAULTS, AUTH_POLICY_DEFAULTS, getAppConfig, updateAppConfig } from '../src/modules/settings/application/appConfigService.js';
+import { APP_CONFIG_DEFAULTS, AUTH_POLICY_DEFAULTS, getAppConfig, getReportSettings, updateAppConfig } from '../src/modules/settings/application/appConfigService.js';
+import { GMD_DIAS_MINIMOS_OPCOES, normalizeGmdDiasMinimos } from '../src/modules/weighing/domain/gmdQuality.js';
 import { parseBrazilianNumber } from '../src/modules/weighing/domain/brazilianValues.js';
 
 const root = join(fileURLToPath(new URL('..', import.meta.url)));
@@ -155,6 +156,19 @@ function checkSettings(s) {
   assert.match(page, /id: 'arroba_divisor',\s*label: 'Divisor da arroba \(kg de peso vivo\)',\s*kind: 'choice'/, 'divisor da @ como escolha fixa (não texto livre)');
   assert.match(page, /options: \[\{ value: '30', label: '30 — @ de peso vivo \(padrão\)' \}, \{ value: '15', label: '15' \}\]/, 'opções 30 (padrão) e 15');
   assert.ok(page.includes('Não muda a @ de carcaça do Comercial'), 'ajuda separa @ de peso vivo da @ de carcaça');
+  // M1 (1.5.0): "Intervalo mínimo do GMD" (gmd_dias_minimos) na seção Relatórios — mesma permissão settings.reports do
+  // divisor da @ (ADMIN e GESTOR), lista fixa 7/14/21/28 do contrato (gmdQuality), padrão 21 — e as duas linhas de
+  // ajuda da §5.3 e da §1 (a do GMD com o N escolhido).
+  const relatorios = page.slice(page.indexOf("id: 'relatorios',"), page.indexOf('const ALL_FIELDS'));
+  assert.match(relatorios, /^id: 'relatorios',\s*title: 'Relatórios',\s*permission: 'settings\.reports'/, 'M1: o campo do GMD fica na seção Relatórios (settings.reports)');
+  assert.match(relatorios, /id: 'gmd_dias_minimos',\s*label: 'Intervalo mínimo do GMD',\s*kind: 'choice'/, 'M1: intervalo mínimo do GMD como escolha fixa (não texto livre)');
+  assert.match(relatorios, /options: GMD_DIAS_MINIMOS_OPCOES\.map\(/, 'M1: opções vêm do contrato (7, 14, 21, 28)');
+  assert.match(relatorios, /defaultValue: String\(GMD_DIAS_MINIMOS_PADRAO\)/, 'M1: sem valor carregado, o select mostra o padrão 21 (não a primeira opção)');
+  assert.match(page, /import \{ GMD_DIAS_MINIMOS_OPCOES, GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinimos \} from '@\/modules\/weighing\/domain\/gmdQuality'/, 'M1: página usa o contrato congelado da qualidade do GMD');
+  assert.ok(relatorios.includes("'@ de peso vivo é o peso do boi dividido por 30 (ou 15). @ de carcaça é o que o frigorífico paga: peso × rendimento ÷ 15.'"), 'M1 §5.3: linha de ajuda das duas arrobas');
+  assert.ok(relatorios.includes('`GMD de intervalo menor que ${normalizeGmdDiasMinimos(form.gmd_dias_minimos)} dias aparece em cinza e não entra na média, porque o enchimento do boi atrapalha a conta.`'), 'M1: linha de ajuda do mínimo do GMD com o N escolhido');
+  assert.match(page, /description=\{typeof section\.description === 'function' \? section\.description\(form\) : section\.description\}/, 'M1: a ajuda acompanha o valor escolhido no formulário');
+  assert.ok(page.includes("value={form[field.id] || field.defaultValue || field.options[0].value}"), 'M1: escolha sem valor usa o padrão declarado do campo');
   assert.ok(page.includes("{renderSection('relatorios')}"), 'seção Relatórios renderizada');
   assert.match(page, /<form className="aux-modelobase1-form" onSubmit=\{save\}/, 'Enter salva (form onSubmit=save)');
   assert.match(page, /emp-toolbar-btn emp-toolbar-btn-save d17c-launch-button aux-form-action" onClick=\{save\}/, 'Salvar na barra de ações');
@@ -218,6 +232,14 @@ const negatives = [
   ['sectionById sem o filtro (GESTOR vê as seções do ADMIN)', mutated('settings', 'const sectionById = (id) => sections.find(', 'const sectionById = (id) => SECTIONS.find(')],
   ['hasSection sempre verdadeiro (linhas vazias no GESTOR)', mutated('settings', 'const hasSection = (...ids) => ids.some((id) => sectionById(id));', 'const hasSection = () => true;')],
   ['cadastros lidos sem withRefs', mutated('settings', 'withRefs ? brandService.list({ empresaId, incluirInativos: true }) : [],', 'brandService.list({ empresaId, incluirInativos: true }),')],
+  // M1: o intervalo mínimo do GMD.
+  ['M1: sem o campo do GMD', mutated('settings', "id: 'gmd_dias_minimos',", "id: 'gmd_minimo',")],
+  ['M1: GMD como texto livre', mutated('settings', "label: 'Intervalo mínimo do GMD',\n        kind: 'choice',", "label: 'Intervalo mínimo do GMD',\n        kind: 'integer',")],
+  ['M1: opções do GMD fora do contrato', mutated('settings', 'options: GMD_DIAS_MINIMOS_OPCOES.map(', 'options: [7, 14].map(')],
+  ['M1: select do GMD abre na primeira opção (7)', mutated('settings', 'value={form[field.id] || field.defaultValue || field.options[0].value}', 'value={form[field.id] || field.options[0].value}')],
+  ['M1: sem a linha de ajuda das duas arrobas', mutated('settings', "'@ de peso vivo é o peso do boi dividido por 30 (ou 15).", "'@ de peso vivo ÷ 30.")],
+  ['M1: ajuda do GMD com o N fixo', mutated('settings', '${normalizeGmdDiasMinimos(form.gmd_dias_minimos)} dias aparece', '21 dias aparece')],
+  ['M1: ajuda que não acompanha o formulário', mutated('settings', "section.description(form) : section.description", "'' : section.description")],
 ];
 for (const [name, mutatedSources] of negatives) {
   assert.throws(() => runAll(mutatedSources), `mutação deveria falhar: ${name}`);
@@ -248,6 +270,34 @@ function checkToPatch(toPatch) {
   assert.throws(() => toPatch({ rendimento_padrao: 'abc' }, config, [RENDIMENTO]), (err) => err.code === 'CONFIG_INVALID' && err.field === 'rendimento_padrao', 'NEGATIVO: texto inválido no opcional recusado');
 }
 checkToPatch(loadToPatch(sources.settings));
+
+// ---------------------------------------------------------------------------
+// 5c. M1: a linha de ajuda do GMD (função da seção, extraída do fonte) segue o valor escolhido — sem valor ou
+//     inválido, 21 (contrato) —, e o toPatch da página grava o número escolhido e recusa valor fora da lista.
+//     Negativo: com o N fixo a ajuda não acompanha a escolha de 28.
+// ---------------------------------------------------------------------------
+function loadRelatoriosDescription(page) {
+  const start = page.indexOf('description: (form) => [');
+  const end = page.indexOf('\n    ],', start);
+  assert.ok(start > 0 && end > start, 'linhas de ajuda da seção Relatórios encontradas');
+  return new Function('normalizeGmdDiasMinimos', `return ${page.slice(start + 'description: '.length, end)}\n];`)(normalizeGmdDiasMinimos);
+}
+function checkGmdHelp(descricao) {
+  assert.equal(descricao({ gmd_dias_minimos: '21' })[0], '@ de peso vivo é o peso do boi dividido por 30 (ou 15). @ de carcaça é o que o frigorífico paga: peso × rendimento ÷ 15.', 'M1 §5.3: linha das duas arrobas');
+  assert.equal(descricao({ gmd_dias_minimos: '28' })[1], 'GMD de intervalo menor que 28 dias aparece em cinza e não entra na média, porque o enchimento do boi atrapalha a conta.', 'M1: a ajuda mostra o mínimo escolhido (28)');
+  assert.match(descricao({ gmd_dias_minimos: '7' })[1], /menor que 7 dias/, 'M1: 7 dias');
+  assert.match(descricao({})[1], /menor que 21 dias/, 'M1: sem valor → 21');
+  assert.match(descricao({ gmd_dias_minimos: '10' })[1], /menor que 21 dias/, 'M1: valor fora da lista → 21');
+}
+checkGmdHelp(loadRelatoriosDescription(sources.settings));
+assert.throws(() => checkGmdHelp(loadRelatoriosDescription(sources.settings.replace('${normalizeGmdDiasMinimos(form.gmd_dias_minimos)} dias aparece', '21 dias aparece'))), 'mutação deveria falhar: ajuda do GMD com N fixo');
+{
+  const toPatch = loadToPatch(sources.settings);
+  const GMD_FIELD = { id: 'gmd_dias_minimos', label: 'Intervalo mínimo do GMD', kind: 'choice', options: GMD_DIAS_MINIMOS_OPCOES.map((dias) => ({ value: String(dias), label: `${dias} dias` })) };
+  assert.deepEqual(toPatch({ gmd_dias_minimos: '28' }, { gmd_dias_minimos: 21 }, [GMD_FIELD]), { gmd_dias_minimos: 28 }, 'M1: 28 escolhido vira o número 28 no patch');
+  assert.deepEqual(toPatch({ gmd_dias_minimos: '21' }, { gmd_dias_minimos: 21 }, [GMD_FIELD]), {}, 'M1: sem mudança, nada a gravar');
+  assert.throws(() => toPatch({ gmd_dias_minimos: '10' }, { gmd_dias_minimos: 21 }, [GMD_FIELD]), (err) => err.code === 'CONFIG_INVALID' && err.field === 'gmd_dias_minimos', 'NEGATIVO M1: valor fora da lista recusado apontando o campo');
+}
 const OPTIONAL_BRANCH = "} else if (field.optional && String(raw ?? '').trim() === '') {";
 assert.ok(sources.settings.includes(OPTIONAL_BRANCH), 'ramo do campo opcional presente em toPatch');
 assert.throws(() => checkToPatch(loadToPatch(sources.settings.replace(OPTIONAL_BRANCH, '} else if (false) {'))), 'mutação deveria falhar: opcional em branco recusado de novo');
@@ -293,6 +343,19 @@ for (const actor of [{ id: 'op', nome: 'Op', role: 'OPERADOR' }, { id: 'c', nome
 assert.equal((await getAppConfig()).arroba_divisor, 30, 'recusas não gravaram o divisor');
 assert.equal((await updateAppConfig({ id: 'g', nome: 'Gestor', role: 'GESTOR' }, { arroba_divisor: 15 })).arroba_divisor, 15, 'GESTOR grava o divisor (settings.reports)');
 assert.equal((await getAppConfig()).arroba_divisor, 15, 'divisor 15 persistido');
+// M1: gmd_dias_minimos no mesmo grupo e com a mesma permissão do divisor (settings.reports): GESTOR grava;
+// OPERADOR, CONSULTA e sem ator não. O valor gravado é o que o Lançamento e os relatórios leem (getReportSettings).
+const gestor = { id: 'g', nome: 'Gestor', role: 'GESTOR' };
+assert.equal((await getReportSettings()).gmd_dias_minimos, 21, 'M1: padrão 21');
+assert.equal((await updateAppConfig(gestor, { gmd_dias_minimos: 28 })).gmd_dias_minimos, 28, 'M1: GESTOR grava o intervalo mínimo do GMD');
+for (const actor of [{ id: 'op', nome: 'Op', role: 'OPERADOR' }, { id: 'c', nome: 'Consulta', role: 'CONSULTA' }, null]) {
+  const recusa = await updateAppConfig(actor, { gmd_dias_minimos: 7 }).then(() => null, (err) => err);
+  assert.equal(recusa?.code, 'AUTH_FORBIDDEN', `M1: ${actor?.role ?? 'sem ator'} não grava o intervalo mínimo do GMD`);
+  assert.equal(recusa?.action, 'settings.reports', 'M1: recusa aponta settings.reports');
+}
+assert.equal((await getReportSettings()).gmd_dias_minimos, 28, 'M1: 28 persistido (recusas não gravaram)');
+assert.equal((await updateAppConfig(gestor, { arroba_divisor: 30 })).gmd_dias_minimos, 28, 'M1: trocar o divisor não derruba o mínimo do GMD');
+assert.equal((await getReportSettings()).arroba_divisor, 30, 'M1: e o divisor trocou');
 await deleteDbForTests();
 
 console.log('OK verify-shell-settings-ui');
@@ -308,4 +371,5 @@ console.log(JSON.stringify({
   settingsEnterSaves: true,
   negativeMutations: negatives.length,
   serviceContract: { configInvalidHasField: true, operatorForbidden: true, gestorForbiddenAuthPolicy: true, gestorWritesArrobaDivisor: true, persisted: true },
+  gmdDiasMinimos: { field: 'gmd_dias_minimos', section: 'relatorios', permission: 'settings.reports', options: [...GMD_DIAS_MINIMOS_OPCOES], default: 21, helpFollowsChoice: true, gestorWrites: true },
 }, null, 2));

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronDown, HardDriveDownload, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
@@ -12,6 +12,7 @@ import { brandService, breedService, propertyService } from '@/modules/catalog/a
 import { listApartacoes } from '@/modules/auxiliary/application/apartacaoService';
 import { DEFAULT_EMPRESA_ID, getAppConfig, updateAppConfig } from '@/modules/settings/application/appConfigService';
 import { parseBrazilianNumber } from '@/modules/weighing/domain/brazilianValues';
+import { GMD_DIAS_MINIMOS_OPCOES, GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinimos } from '@/modules/weighing/domain/gmdQuality';
 import { describeVersions } from '@/versioning/versionInfo';
 import '@/styles/auxiliary-registries.css';
 
@@ -76,7 +77,11 @@ const SECTIONS = [
     id: 'relatorios',
     title: 'Relatórios',
     permission: 'settings.reports',
-    description: 'Arroba de peso vivo usada na folha dos relatórios (Média @, Total @, ganho em @) e mostrada no rodapé. Não muda a @ de carcaça do Comercial (carcaça ÷ 15, com rendimento).',
+    // M1 (1.5.0): uma linha para as duas arrobas (que nunca se somam) e uma para o mínimo do GMD, com o N escolhido.
+    description: (form) => [
+      '@ de peso vivo é o peso do boi dividido por 30 (ou 15). @ de carcaça é o que o frigorífico paga: peso × rendimento ÷ 15.',
+      `GMD de intervalo menor que ${normalizeGmdDiasMinimos(form.gmd_dias_minimos)} dias aparece em cinza e não entra na média, porque o enchimento do boi atrapalha a conta.`,
+    ],
     fields: [
       {
         id: 'arroba_divisor',
@@ -84,7 +89,17 @@ const SECTIONS = [
         kind: 'choice',
         width: 'CAMPO_PRINCIPAL',
         options: [{ value: '30', label: '30 — @ de peso vivo (padrão)' }, { value: '15', label: '15' }],
-        help: 'Média (@) = peso médio ÷ divisor. O rodapé da folha mostra qual foi usado, por exemplo "@ = peso vivo ÷ 30".',
+        help: 'Média (@) = peso médio ÷ divisor. O rodapé da folha mostra qual foi usado, por exemplo "@ = peso vivo ÷ 30". Não muda a @ de carcaça do Comercial (carcaça ÷ 15, com rendimento).',
+      },
+      {
+        // M1: gmd_dias_minimos (report-settings, mesma permissão settings.reports do divisor). Lista fixa do contrato.
+        id: 'gmd_dias_minimos',
+        label: 'Intervalo mínimo do GMD',
+        kind: 'choice',
+        width: 'CAMPO_PRINCIPAL',
+        options: GMD_DIAS_MINIMOS_OPCOES.map((dias) => ({ value: String(dias), label: dias === GMD_DIAS_MINIMOS_PADRAO ? `${dias} dias (padrão)` : `${dias} dias` })),
+        defaultValue: String(GMD_DIAS_MINIMOS_PADRAO),
+        help: 'GMD entre duas pesagens com menos dias que isso aparece em cinza na folha, na ficha e no Lançamento, e fica fora da média e dos totais.',
       },
     ],
   },
@@ -188,12 +203,15 @@ function SelectField({ field, value, options, onChange, error }) {
   );
 }
 
+// `description`: texto ou lista de linhas (M1: Relatórios tem uma linha para as arrobas e uma para o GMD), no mesmo
+// parágrafo de ajuda do cartão.
 function FormCard({ title, description, children, full = false }) {
+  const lines = Array.isArray(description) ? description : [description].filter(Boolean);
   return (
     <div className={`emp-form-card-slot${full ? ' emp-form-card-slot--full' : ' emp-form-card-slot--half'}`}>
       <section className="emp-form-card mg-emp-card p-4 aux-model-card">
         <h3 className="emp-form-card-title mb-1 text-sm font-semibold">{title}</h3>
-        {description ? <p className="app-config__description mb-3 text-[11px] leading-snug" style={{ color: 'var(--mb1-text-2)' }}>{description}</p> : null}
+        {lines.length ? <p className="app-config__description mb-3 text-[11px] leading-snug" style={{ color: 'var(--mb1-text-2)' }}>{lines.map((line, index) => <Fragment key={index}>{index ? <br /> : null}{line}</Fragment>)}</p> : null}
         <div className="emp-form-card-body grid grid-cols-1 gap-3">
           <div className="emp-form-card-rows">
             <div className="emp-form-card-row">
@@ -339,7 +357,7 @@ function ConfiguracoesContent() {
       return <SelectField key={field.id} field={field} value={form[field.id] || 'false'} options={booleanOptions} onChange={setField(field.id)} error={error} />;
     }
     if (field.kind === 'choice') {
-      return <SelectField key={field.id} field={field} value={form[field.id] || field.options[0].value} options={field.options} onChange={setField(field.id)} error={error} />;
+      return <SelectField key={field.id} field={field} value={form[field.id] || field.defaultValue || field.options[0].value} options={field.options} onChange={setField(field.id)} error={error} />;
     }
     return <TextField key={field.id} field={field} value={form[field.id]} onChange={setField(field.id)} error={error} />;
   };
@@ -350,7 +368,7 @@ function ConfiguracoesContent() {
     const section = sectionById(id);
     if (!section) return null;
     return (
-      <FormCard title={section.title} description={section.description}>
+      <FormCard title={section.title} description={typeof section.description === 'function' ? section.description(form) : section.description}>
         {section.fields.map(renderField)}
       </FormCard>
     );
