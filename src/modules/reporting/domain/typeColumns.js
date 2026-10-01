@@ -8,6 +8,7 @@ import { aggregateSpecId } from './reportAggregates.js';
 import { summaryMetricLabels } from './aggregateLabels.js';
 import { canSeeColumn } from './reportPermissions.js';
 import { headerLabel } from './reportFormatting.js';
+import { definitionForDivisor } from './arrobaColumns.js';
 
 /** O tipo tem seletor "Colunas" próprio? */
 export function hasTypeColumns(view) {
@@ -53,10 +54,14 @@ export function typeColumnDefaults(definition, view, role) {
 /**
  * Opções do seletor "Colunas" do tipo, na ordem de columnChoices.available: { key, label, default }.
  * Detalhado: cabeçalho da coluna no tipo (columnLabels) ou o da coluna, com a unidade ("Peso (kg)").
- * Resumido: rótulo de curral da folha ("Qtd", "Média (@)", "Faixa exigida (kg)").
+ * Resumido: rótulo de curral da folha ("Qtd", "Média (@ vivo ÷30)", "Faixa exigida (kg)").
+ * M1 §5: options.arrobaDivisor = o divisor do view model em uso (a marca da @ de peso vivo leva ele: "(@ vivo ÷30)");
+ * sem ele, "(@ vivo)" — nunca um divisor que talvez não seja o em uso.
  */
-export function typeColumnOptions(definition, view, role) {
-  if (!hasTypeColumns(view)) return [];
+export function typeColumnOptions(rawDefinition, rawView, role, { arrobaDivisor = rawDefinition?.arrobaDivisor ?? null } = {}) {
+  if (!hasTypeColumns(rawView)) return [];
+  const definition = definitionForDivisor(rawDefinition, arrobaDivisor);
+  const view = (definition.views ?? []).find((item) => item.id === rawView.id) ?? rawView;
   const defaults = view.columnChoices.defaults;
   const keys = view.columnChoices.available.filter((key) => typeColumnKeyVisible(definition, view, key, role));
   if (view.mode === REPORT_MODES.DETALHADO) {

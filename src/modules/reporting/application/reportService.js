@@ -26,6 +26,7 @@ import { GMD_DIAS_MINIMOS_OPCOES, GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinim
 import { annotateGmdQuality, hasGmdQuality } from '../domain/gmdColumns.js';
 import { GMD_REGRESSAO_COLUMN_ID } from '../definitions/columns/animalColumns.js';
 import { loadAnimalRegression } from '../infrastructure/reportSources/animalSource.js';
+import { definitionForDivisor, metricLabelsFor } from '../domain/arrobaColumns.js';
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -304,6 +305,9 @@ function publicColumn(accessor) {
     ...(column.zeroAsEmpty ? { zeroAsEmpty: true } : {}),
     // E1B: coluna só de cálculo (base de Machos/Fêmeas/nota do GMD) — a tela não a oferece como dado.
     ...(column.metricOnly ? { metricOnly: true } : {}),
+    // M1 §5: qual arroba é ('vivo' | 'carcaca') e a marca com o divisor em uso ("@ vivo ÷30") — rótulos da folha, do
+    // CSV/XLSX, dos totais e dos gráficos saem dela.
+    ...(column.arroba ? { arroba: column.arroba, arrobaTag: column.arrobaTag } : {}),
   };
 }
 
@@ -395,16 +399,18 @@ export async function runReport(definitionOrId, request = {}, actor) {
   const startedAt = now();
   const today = request.today || localToday();
   const params = resolveParams(definition, request.params, today);
-  const selection = resolveSelection(definition, mergeAliasSelection(resolved.alias, request.selection, request.params), role);
+  const empresaId = request.empresaId ?? 'local';
+  // O divisor da @ vai para as linhas (peso_arroba/ganho_arroba): entra no sourceKey para o reuse
+  // nunca servir linhas calculadas com o divisor anterior. M1 §5: e para os RÓTULOS — a definição sai com a marca da
+  // @ de peso vivo com o divisor em uso ("Peso (@ vivo ÷30)", "Média (@ vivo ÷15)") em todas as colunas e totais.
+  const arrobaDivisor = await resolveArrobaDivisor(request.arrobaDivisor, empresaId);
+  const labelled = definitionForDivisor(definition, arrobaDivisor);
+  const selection = resolveSelection(labelled, mergeAliasSelection(resolved.alias, request.selection, request.params), role);
   // Condição fixa do relatório (ex.: motivo = Venda em "Vendas do período"): sempre aplicada, sempre
   // exibida. Mais as condições fixas de um modelo convertido (o catálogo garante que um relatório
   // com visões antigas de condição fixa não tem lockedFilters próprias, então as chaves não colidem).
   const lockedFilters = { ...(definition.lockedFilters ? serializeFilters(definition.lockedFilters(params)) : {}), ...selection.fixedFilters };
   const source = getReportSource(definition.source);
-  const empresaId = request.empresaId ?? 'local';
-  // O divisor da @ vai para as linhas (peso_arroba/ganho_arroba): entra no sourceKey para o reuse
-  // nunca servir linhas calculadas com o divisor anterior.
-  const arrobaDivisor = await resolveArrobaDivisor(request.arrobaDivisor, empresaId);
   // M1: o mínimo do GMD decide a qualidade gravada nas linhas (derivada na leitura): também entra no sourceKey.
   const gmdDiasMinimos = await resolveGmdDiasMinimos(request.gmdDiasMinimos, empresaId);
   const sourceKey = JSON.stringify([definition.id, definition.version, empresaId, today, params, role, arrobaDivisor, gmdDiasMinimos]);
@@ -502,7 +508,7 @@ export async function runReport(definitionOrId, request = {}, actor) {
     columns: selection.columns.map(typedColumn),
     // E1F: colunas/totais em uso escolhidos pela pessoa (≠ padrão): a folha não esconde as vazias.
     columnsChosen: selection.columnsChosen,
-    availableColumns: definition.columns.filter((column) => canSeeColumn(column, role)).map((column) => typedColumn(column.id)),
+    availableColumns: labelled.columns.filter((column) => canSeeColumn(column, role)).map((column) => typedColumn(column.id)),
     hiddenByPermission: selection.hiddenByPermission,
     search: selection.search,
     filters: selection.filters,
@@ -515,7 +521,9 @@ export async function runReport(definitionOrId, request = {}, actor) {
     arrobaDivisor,
     // M1: intervalo mínimo do GMD usado nas linhas (abaixo dele: cinza, aviso e fora das contas).
     gmdDiasMinimos,
-    metricLabels: definition.metricLabels ?? {},
+    // M1 §5: {@} de cada rótulo = a marca da arroba da coluna do total EM USO (a seleção manda; depois os totais da
+    // definição) — um total de carcaça nunca sai com o nome da @ viva, nem vindo de um modelo com o id trocado.
+    metricLabels: metricLabelsFor(definition.metricLabels, [...selection.aggregates, ...(labelled.defaultAggregates ?? []), ...(labelled.views ?? []).flatMap((view) => view.aggregates ?? [])], (columnId) => selection.resolve(columnId)?.column ?? null),
     metricPairs: pairsPresent(definition.metricPairs ?? [], selection.aggregates, tree.levels).active,
     // Métricas de um par que não vale neste agrupamento (ex.: faixa do lote agrupando por data): fora da folha e das exportações.
     hiddenMetrics: pairsPresent(definition.metricPairs ?? [], selection.aggregates, tree.levels).hiddenMetrics,

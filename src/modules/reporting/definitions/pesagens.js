@@ -47,19 +47,21 @@ export const SHEET_TOTALS = Object.freeze([
 // diferentes inventaria uma faixa que ninguém exige).
 export const SHEET_TOTALS_SEM_FAIXA = Object.freeze(SHEET_TOTALS.filter((spec) => !['faixa_min', 'faixa_max'].includes(spec.id)));
 
-// Rótulos de curral da folha (cabeçalho do Resumido quando a métrica com o id está na seleção).
+// Rótulos de curral da folha (cabeçalho do Resumido quando a métrica com o id está na seleção). M1 §5: {@} = a marca da
+// arroba da COLUNA do total ("Média (@ vivo ÷30)", com o divisor em uso; "(@ carcaça)" na @ de carcaça) — nunca "(@)"
+// sozinho (domain/arrobaColumns). Vale para todo rótulo com {@} deste arquivo (folha, linhas de total, Vendas, gráfico).
 export const SHEET_METRIC_LABELS = Object.freeze({
   qtd: 'Qtd',
   menor: 'Menor (kg)',
   maior: 'Maior (kg)',
   peso_medio: 'Peso médio (kg)',
-  media_arroba: 'Média (@)',
+  media_arroba: 'Média ({@})',
   peso_total: 'Peso total (kg)',
-  total_arroba: 'Total (@)',
+  total_arroba: 'Total ({@})',
   ganho_medio: 'Ganho médio (kg)',
-  ganho_medio_arroba: 'Ganho médio (@)',
+  ganho_medio_arroba: 'Ganho médio ({@})',
   ganho_total: 'Ganho total (kg)',
-  ganho_total_arroba: 'Ganho total (@)',
+  ganho_total_arroba: 'Ganho total ({@})',
   dias_medios: 'Dias médios',
   gmd_medio: 'GMD médio (kg/dia)',
   machos: 'Machos',
@@ -117,7 +119,7 @@ export const VENDAS_POPULATION = Object.freeze({
   motivo_saida: { operator: 'in', values: ['Venda'], match: 'code' },
 });
 // Colunas da tabela "Mostrar Detalhes" do antigo (COLUNAS_DETALHES_VENDAS), na ordem dele; as opcionais ficam
-// no seletor "Colunas". "Qtd @" = @ de PESO VIVO (peso ÷ divisor de Configurações › Relatórios, 30 como o
+// no seletor "Colunas". "Qtd (@ vivo ÷30)" (o "Qtd @" do antigo, M1 §5) = @ de PESO VIVO (peso ÷ divisor de Configurações › Relatórios, 30 como o
 // antigo) — não é a @ de carcaça do Comercial; "Valor @" = preço da @ digitado no lançamento; "Valor Total" =
 // valor_venda_calc: o valor digitado quando > 0, senão Qtd @ × Valor @ (regra do antigo — conta no PDF da
 // responsável: 40.968 kg ÷ 30 × R$ 383 = R$ 523.024,80); sem Valor @ nem valor digitado, "-" e fora da soma.
@@ -129,7 +131,7 @@ export const VENDAS_COLUMNS = Object.freeze(['comprador', 'data_pesagem', 'numer
 // do desenho W3 não muda).
 export const VENDAS_AVAILABLE_COLUMNS = Object.freeze([...VENDAS_COLUMNS, 'destino_venda', 'nome_lote', 'nome_apartacao', 'sexo', 'raca', 'era', 'marca', 'observacao', 'dias', 'ganho', 'gmd']);
 // Cabeçalhos do antigo (grade, folha, CSV, XLSX e seletor "Colunas").
-export const VENDAS_COLUMN_LABELS = Object.freeze({ peso_arroba: 'Qtd @', valor_arroba: 'Valor @', valor_venda_calc: 'Valor Total' });
+export const VENDAS_COLUMN_LABELS = Object.freeze({ peso_arroba: 'Qtd ({@})', valor_arroba: 'Valor @', valor_venda_calc: 'Valor Total' });
 // Totais do tipo = os dos blocos do relatório de venda (domain/vendasLayout.js — Métrica/Valor, Totais por
 // marca, por comprador, cartão do comprador e TOTAL GERAL leem estes ids): animais DISTINTOS (o antigo contava
 // linhas), peso total, peso médio, Média (@) viva, Média valor da arroba (Valor @ ponderado pela Qtd @) e
@@ -165,9 +167,9 @@ export const PESAGENS_VIEW_IDS = Object.freeze(['analitico', 'sintetico-matriz',
 export const PESAGENS_SHEET_HEADERS = Object.freeze({
   // Tabelas por lote (COLUNAS_PAINEL_APARTACAO do antigo), por id de total; "faixa" = o par Faixa exigida.
   metrics: Object.freeze({
-    qtd: 'Qtd', faixa: 'Faixa Exigida', menor: 'Menor', maior: 'Maior', peso_medio: 'Peso Médio', media_arroba: 'Média (@)',
-    peso_total: 'Peso Total', total_arroba: 'Total (@)', ganho_medio: 'Ganho Médio', ganho_medio_arroba: 'Ganho Médio (@)',
-    ganho_total: 'Ganho Total', ganho_total_arroba: 'Ganho Total (@)', dias_medios: 'Dias Médios', gmd_medio: 'GMD Médio',
+    qtd: 'Qtd', faixa: 'Faixa Exigida', menor: 'Menor', maior: 'Maior', peso_medio: 'Peso Médio', media_arroba: 'Média ({@})',
+    peso_total: 'Peso Total', total_arroba: 'Total ({@})', ganho_medio: 'Ganho Médio', ganho_medio_arroba: 'Ganho Médio ({@})',
+    ganho_total: 'Ganho Total', ganho_total_arroba: 'Ganho Total ({@})', dias_medios: 'Dias Médios', gmd_medio: 'GMD Médio',
     machos: 'Machos', femeas: 'Fêmeas',
   }),
   // Colunas de dados do Analítico do antigo (também no detalhe de um grupo).
@@ -178,7 +180,7 @@ export const PESAGENS_SHEET_HEADERS = Object.freeze({
   }),
   // Vendas (COLUNAS_DETALHES_VENDAS do antigo): "Peso (kg)" com a unidade no cabeçalho, como lá.
   vendas: Object.freeze({
-    comprador: 'Comprador', data_pesagem: 'Data', numero_animal: 'Animal', peso: 'Peso (kg)', peso_arroba: 'Qtd @',
+    comprador: 'Comprador', data_pesagem: 'Data', numero_animal: 'Animal', peso: 'Peso (kg)', peso_arroba: 'Qtd ({@})',
     valor_arroba: 'Valor @', valor_venda_total: 'Valor Total', destino_venda: 'Destino', nome_lote: 'Lote',
     nome_apartacao: 'Apartação', sexo: 'Sexo', raca: 'Raça', era: 'Era', marca: 'Marca', observacao: 'Obs',
     dias: 'Dias', ganho: 'Ganho', gmd: 'GMD',
@@ -201,7 +203,7 @@ const GMD_MEDIO = lineItem('GMD Médio', specById(SHEET_TOTALS, 'gmd_medio'), 'k
 const LOTES = Object.freeze({ key: 'lotes', label: 'Lotes', lotes: true });
 export const PESAGENS_SHEET_LINES = Object.freeze({
   'por-apartacao-data': Object.freeze([ANIMAIS, PESO_MEDIO, PESO_TOTAL, GMD_MEDIO, LOTES]),
-  'por-apartacao-lote': Object.freeze([ANIMAIS, PESO_MEDIO, lineItem('Média (@)', specById(SHEET_TOTALS, 'media_arroba'), '@'), PESO_TOTAL, lineItem('Total (@)', specById(SHEET_TOTALS, 'total_arroba'), '@'), LOTES]),
+  'por-apartacao-lote': Object.freeze([ANIMAIS, PESO_MEDIO, lineItem('Média ({@})', specById(SHEET_TOTALS, 'media_arroba'), '@'), PESO_TOTAL, lineItem('Total ({@})', specById(SHEET_TOTALS, 'total_arroba'), '@'), LOTES]),
   // Analítico (e detalhe de um grupo): subtotal e TOTAL GERAL (o antigo somava também o ganho no TOTAL GERAL).
   analitico: Object.freeze({
     subtotal: Object.freeze([ANIMAIS, PESO_MEDIO, GMD_MEDIO]),
@@ -209,8 +211,8 @@ export const PESAGENS_SHEET_LINES = Object.freeze({
   }),
   // Vendas: por comprador (acima da tabela) e TOTAL GERAL; a Média (@) sem unidade, como no antigo.
   vendas: Object.freeze({
-    subtotal: Object.freeze([lineItem(null, specById(VENDAS_TOTALS, 'animais_vendidos'), 'animais'), PESO_MEDIO, PESO_TOTAL, lineItem('Média (@)', specById(VENDAS_TOTALS, 'media_arroba'), null), lineItem('Valor Total', specById(VENDAS_TOTALS, 'valor_total'), null)]),
-    total: Object.freeze([lineItem(null, specById(VENDAS_TOTALS, 'animais_vendidos'), 'animais'), PESO_TOTAL, PESO_MEDIO, lineItem('Média (@)', specById(VENDAS_TOTALS, 'media_arroba'), null), lineItem('Valor Total', specById(VENDAS_TOTALS, 'valor_total'), null)]),
+    subtotal: Object.freeze([lineItem(null, specById(VENDAS_TOTALS, 'animais_vendidos'), 'animais'), PESO_MEDIO, PESO_TOTAL, lineItem('Média ({@})', specById(VENDAS_TOTALS, 'media_arroba'), null), lineItem('Valor Total', specById(VENDAS_TOTALS, 'valor_total'), null)]),
+    total: Object.freeze([lineItem(null, specById(VENDAS_TOTALS, 'animais_vendidos'), 'animais'), PESO_TOTAL, PESO_MEDIO, lineItem('Média ({@})', specById(VENDAS_TOTALS, 'media_arroba'), null), lineItem('Valor Total', specById(VENDAS_TOTALS, 'valor_total'), null)]),
   }),
 });
 // ---------------------------------------------------------------------------------------------------
@@ -278,7 +280,7 @@ export const PESAGENS_CHARTS = Object.freeze([
       metrica: {
         label: 'Medida', default: 'kg', choices: [
           { id: 'kg', label: 'kg', valor: specById(SHEET_TOTALS, 'ganho_total'), cobertura: CHART_COM_GMD, unidade: 'kg', titulo: 'Ganho de peso por mês' },
-          { id: 'arroba', label: '@', valor: specById(SHEET_TOTALS, 'ganho_total_arroba'), cobertura: CHART_COM_GMD, unidade: '@', titulo: '@ produzidas por mês', nota: '@ = peso vivo ÷ {divisor} (Configurações › Relatórios).' },
+          { id: 'arroba', label: '{@}', valor: specById(SHEET_TOTALS, 'ganho_total_arroba'), cobertura: CHART_COM_GMD, unidade: '@', titulo: '@ produzidas por mês ({@})', nota: '@ = peso vivo ÷ {divisor} (Configurações › Relatórios).' },
         ],
       },
       serie: { label: 'Série', default: 'todos', choices: [CHART_SERIES[0], CHART_SERIES[1]] },

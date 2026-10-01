@@ -161,8 +161,9 @@ export const EVENT_COLUMNS = [
     id: 'peso', label: 'Peso', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, defaultVisible: true, defaultWidth: 108,
     aggregations: ['countValid', 'sum', 'avg', 'min', 'max', 'range'],
   }),
+  // M1 §5: "Peso (@ vivo ÷30)" — a marca {@} diz que é a @ de PESO VIVO e o divisor em uso (domain/arrobaColumns).
   defineColumn({
-    id: 'peso_arroba', label: 'Peso em arrobas', unit: '@', type: 'number', decimals: 2, grains: EVENT_GRAINS, source: 'derivado',
+    id: 'peso_arroba', label: 'Peso ({@})', arroba: 'vivo', unit: '@', type: 'number', decimals: 2, grains: EVENT_GRAINS, source: 'derivado',
     accessor: liveArrobaOf('peso'), aggregations: ['countValid', 'sum', 'avg', 'min', 'max'],
     description: '@ de peso vivo: peso ÷ divisor da arroba (30 ou 15, Configurações › Relatórios). Não é a @ de carcaça do Comercial.',
   }),
@@ -200,7 +201,13 @@ export const EVENT_COLUMNS = [
     id: 'valor_arroba', label: 'Preço/@ carcaça', type: 'money', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL,
     weightedBy: 'quantidade_arrobas', aggregations: ['countValid', 'avg', 'min', 'max', 'weightedAvg'],
   }),
-  defineColumn({ id: 'quantidade_arrobas', label: '@ carcaça estimada', type: 'number', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
+  // M1 §5: "Carcaça estimada (@ carcaça)" — a @ de CARCAÇA gravada no lançamento (peso × rendimento ÷ 100 ÷ 15; sem
+  // rendimento válido, vazio — eventRows). Nunca somada com a @ de peso vivo (arrobaColumns).
+  defineColumn({
+    id: 'quantidade_arrobas', label: 'Carcaça estimada ({@})', arroba: 'carcaca', type: 'number', grains: EVENT_GRAINS, sensitive: SENSITIVITY.COMMERCIAL,
+    aggregations: ['countValid', 'sum', 'avg', 'min', 'max'],
+    description: '@ de carcaça: peso × rendimento ÷ 100 ÷ 15, gravada no lançamento (rendimento informado, senão o padrão). Sem rendimento, vazio. Não é a @ de peso vivo.',
+  }),
   // E1D Vendas: valor total da venda (digitado > 0, senão @ viva × Valor @ — saleValueOf). Coluna derivada: a
   // conta mora aqui, nunca na folha/planilha.
   defineColumn({
@@ -241,7 +248,7 @@ export const EVENT_COLUMNS = [
   defineColumn({ id: 'dias', label: 'Dias', type: 'integer', totalOp: 'avg', grains: EVENT_GRAINS, defaultWidth: 82, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({ id: 'ganho', label: 'Ganho', unit: 'kg', type: 'weight', grains: EVENT_GRAINS, defaultWidth: 100, keepWhenEmpty: true, aggregations: ['countValid', 'sum', 'avg', 'min', 'max'] }),
   defineColumn({
-    id: 'ganho_arroba', label: 'Ganho em arrobas', unit: '@', type: 'number', decimals: 2, grains: EVENT_GRAINS, source: 'derivado', keepWhenEmpty: true,
+    id: 'ganho_arroba', label: 'Ganho ({@})', arroba: 'vivo', unit: '@', type: 'number', decimals: 2, grains: EVENT_GRAINS, source: 'derivado', keepWhenEmpty: true,
     accessor: liveArrobaOf('ganho'), aggregations: ['countValid', 'sum', 'avg', 'min', 'max'],
     description: '@ de peso vivo do ganho: ganho ÷ divisor da arroba (só pesagens com pesagem anterior).',
   }),

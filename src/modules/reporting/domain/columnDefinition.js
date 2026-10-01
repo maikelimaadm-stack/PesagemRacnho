@@ -3,6 +3,7 @@
 // como filtrar, se agrupa, quais agregações fazem sentido e se é sensível. Tela, CSV, JSON,
 // impressão, PDF e XLSX leem a MESMA definição — não há formatter paralelo na tela.
 import { GRAIN_LIST } from './reportGrain.js';
+import { arrobaTag, hasArrobaToken, isArrobaKind, mentionsArroba, resolveArrobaLabel } from './arrobaColumns.js';
 
 export const COLUMN_TYPES = Object.freeze([
   'text', 'identifier', 'number', 'integer', 'weight', 'gmd', 'percentage', 'money',
@@ -111,6 +112,20 @@ export function defineColumn(spec) {
     if (!quality || typeof quality !== 'object' || !(typeof quality.dias === 'string' || typeof quality.dias === 'function')) throw new Error(`coluna ${id}: gmdQuality exige dias (campo ou função)`);
     if (typeof quality.qualidade !== 'string' || !quality.qualidade || typeof quality.motivo !== 'string' || !quality.motivo) throw new Error(`coluna ${id}: gmdQuality exige os campos qualidade e motivo`);
   }
+  // M1 §5 (domain/arrobaColumns.js): coluna de arroba declara QUAL é (arroba: 'vivo' | 'carcaca') e o rótulo leva o
+  // lugar da marca ({@} → "(@ vivo ÷30)" / "(@ carcaça)"); quantidade em arroba sem o tipo é recusada (o preço da @ é
+  // dinheiro e não precisa). Peso/razão de uma coluna de arroba é outra COLUNA (id): o motor confere que não mistura.
+  if (spec.arroba != null) {
+    if (!isArrobaKind(spec.arroba)) throw new Error(`coluna ${id}: arroba inválida (${spec.arroba}) — 'vivo' ou 'carcaca'`);
+    if (type !== 'number') throw new Error(`coluna ${id}: arroba só em coluna numérica (tipo ${type})`);
+    if (!hasArrobaToken(label)) throw new Error(`coluna ${id}: o rótulo de uma coluna de arroba diz qual é — use {@} ("Peso ({@})")`);
+    for (const part of [spec.weightedBy, spec.ratio?.numerator, spec.ratio?.denominator]) {
+      if (part != null && typeof part !== 'string') throw new Error(`coluna ${id}: peso/razão de uma coluna de arroba tem de ser outra coluna (id)`);
+    }
+  } else {
+    if (hasArrobaToken(label)) throw new Error(`coluna ${id}: {@} só em coluna de arroba (declare arroba: 'vivo' ou 'carcaca')`);
+    if (mentionsArroba(label) && type !== 'money') throw new Error(`coluna ${id}: coluna de arroba sem dizer qual (declare arroba: 'vivo' ou 'carcaca')`);
+  }
   const column = {
     source: 'historico',
     sortable: true,
@@ -137,6 +152,13 @@ export function defineColumn(spec) {
   // somar dias de animais diferentes não diz nada). Sem ela, a regra geral (headerActions.defaultTotalOp).
   if (spec.totalOp != null && !aggregations.includes(spec.totalOp)) throw new Error(`coluna ${id}: totalOp ${spec.totalOp} fora das agregações da coluna`);
   column.aggregations = Object.freeze([...aggregations]);
+  // M1 §5: o rótulo com {@} fica guardado (labelTemplate); fora de um view model a @ viva sai sem divisor ("(@ vivo)") —
+  // o runReport põe o divisor em uso (arrobaColumns.definitionForDivisor).
+  if (column.arroba) {
+    column.labelTemplate = label;
+    column.arrobaTag = arrobaTag(column.arroba);
+    column.label = resolveArrobaLabel(label, column);
+  }
   if (column.gmdQuality) column.gmdQuality = Object.freeze({ ...column.gmdQuality });
   column.filterType = filterTypeOfColumnType(type);
   column.grains = Object.freeze([...spec.grains]);

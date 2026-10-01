@@ -20,6 +20,7 @@ import { canRunReport, canSeeColumn } from './reportPermissions.js';
 import { dayNumber } from './chartScale.js';
 import { compareWeighingEvents, measuredWeightOf } from '../../weighing/domain/weighingSeries.js';
 import { entersGmdMath } from './gmdColumns.js';
+import { arrobaKindOf, viewModelArrobaLabel } from './arrobaColumns.js';
 
 export { CHART_KINDS, FAIXAS_GMD, chartColumnIds, defineCharts };
 
@@ -158,6 +159,11 @@ function limitSeries(nodes, cabId, max, order) {
 }
 
 const columnOf = (viewModel, columnId) => viewModel.resolve(columnId)?.column ?? null;
+// M1 §5: {@} de um rótulo do gráfico ("@ produzidas por mês ({@})") = a marca da arroba da coluna do valor, com o divisor
+// do view model ("(@ vivo ÷30)") — o gráfico de @ diz qual arroba é, como a folha.
+const arrobaText = (viewModel, text, spec) => viewModelArrobaLabel(viewModel, text, spec?.columnId);
+// Título do eixo da unidade: "@" sozinho não diz qual arroba é — vai a marca da coluna ("@ vivo ÷30").
+const axisUnit = (unit, valueColumn) => (unit === '@' && arrobaKindOf(valueColumn) ? valueColumn.arrobaTag ?? unit : unit);
 const valueColumnOf = (viewModel, spec) => aggregateValueColumn(spec, spec.columnId ? [columnOf(viewModel, spec.columnId)].filter(Boolean) : []);
 
 function periodText(viewModel) {
@@ -231,11 +237,11 @@ export function inLegend(series) {
 }
 
 function baseChart(viewModel, chart, options, extra) {
-  const controls = Object.entries(chart.controls).map(([id, control]) => ({ id, label: control.label, value: options[id]?.id ?? null, choices: control.choices.map((choice) => ({ id: choice.id, label: choice.label })) }));
+  const controls = Object.entries(chart.controls).map(([id, control]) => ({ id, label: control.label, value: options[id]?.id ?? null, choices: control.choices.map((choice) => ({ id: choice.id, label: arrobaText(viewModel, choice.label, choice.valor) })) }));
   const config = Object.fromEntries(Object.keys(chart.controls).map((id) => [id, options[id]?.id ?? null]));
   if (options.oculto.length) config.oculto = [...options.oculto];
   const out = {
-    id: chart.id, kind: chart.kind, title: options.metrica?.titulo ?? chart.title,
+    id: chart.id, kind: chart.kind, title: options.metrica?.titulo ? arrobaText(viewModel, options.metrica.titulo, options.metrica.valor) : arrobaText(viewModel, chart.title, chart.valor),
     config, controls, notas: [...chart.notas], referencia: null, cobertura: null, semValor: null,
     ...extra,
   };
@@ -338,7 +344,7 @@ function buildTimeChart(viewModel, chart, options) {
   const nota = metrica.nota ? metrica.nota.replace('{divisor}', String(viewModel.arrobaDivisor ?? 30)) : null;
   return baseChart(viewModel, chart, options, {
     unit, valueColumn: valor.columnId, xType: chart.kind === CHART_KINDS.LINHA ? 'tempo' : 'categoria', yZero: chart.kind !== CHART_KINDS.LINHA || metrica.yZero,
-    eixos: { x: { titulo: eixo.label, categorias }, y: { titulo: unit } },
+    eixos: { x: { titulo: eixo.label, categorias }, y: { titulo: axisUnit(unit, valueColumn) } },
     series,
     referencia: chart.kind === CHART_KINDS.LINHA && total != null ? { label: 'Média geral', valor: total, text: fmt(total) } : null,
     total: { valor: total, text: fmt(total), cab: valueOfNode({ aggregates: totals }, cab) },
@@ -393,7 +399,7 @@ function buildBarChart(viewModel, chart, options) {
   valores.push([null, total, valueOfNode({ aggregates: totals }, cab), validOf({ aggregates: totals })]);
   return baseChart(viewModel, chart, options, {
     unit, valueColumn: valor.columnId, xType: 'categoria', yZero: true,
-    eixos: { x: { titulo: unit }, y: { titulo: dimension.label, categorias: points.map((point) => ({ key: point.xKey, label: point.xLabel })) } },
+    eixos: { x: { titulo: axisUnit(unit, valueColumn) }, y: { titulo: dimension.label, categorias: points.map((point) => ({ key: point.xKey, label: point.xLabel })) } },
     series: [{ key: 'barras', label: chart.title, slot: CHART_SLOTS.POS, oculto: false, cab: valueOfNode({ aggregates: totals }, cab), points }],
     referencia: total != null ? { label: `${prefix} geral`, valor: total, text: fmt(total) } : null,
     total: { valor: total, text: fmt(total), cab: valueOfNode({ aggregates: totals }, cab) },

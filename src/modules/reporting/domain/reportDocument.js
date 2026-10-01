@@ -36,6 +36,7 @@ import { formatCell, headerLabel, MISSING_SCREEN } from './reportFormatting.js';
 import { formatGroupLabel, summaryMetrics, SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC } from './summaryLayout.js';
 import { entersGmdMath, gmdCellOf, gmdGrayNote, hasGmdQuality } from './gmdColumns.js';
 import { buildVendasBlocks, isVendasViewModel, vendasDocumentBody } from './vendasLayout.js';
+import { ARROBA_KINDS, viewModelArrobaLabel } from './arrobaColumns.js';
 
 export const DOCUMENT_KIND = 'pesagens.report-document';
 export const DOC_ROW_TYPES = Object.freeze({
@@ -76,6 +77,9 @@ const collator = new Intl.Collator('pt-BR', { sensitivity: 'base', numeric: true
 const upper = (text) => String(text ?? '').toLocaleUpperCase('pt-BR');
 const isMissingValue = (value) => value === null || value === undefined || (typeof value === 'number' && !Number.isFinite(value));
 const COUNT_OPS = new Set(['count', 'countValid', 'countDistinct']);
+// M1 §5: coluna (ou coluna de valor de um total) da @ de PESO VIVO — a do divisor de Configurações › Relatórios.
+// (Coluna sem a marca — view model montado à mão: a @ viva é a de unidade "@"; a de carcaça não tem unidade.)
+const isLiveArroba = (column) => (column?.arroba ? column.arroba === ARROBA_KINDS.VIVO : column?.unit === '@');
 
 function brDate(iso) {
   return String(iso ?? '').slice(0, 10).split('-').reverse().join('/');
@@ -235,9 +239,12 @@ function makTitleCase(text) {
   }).join(' ');
 }
 
-/** Cabeçalho no jeito do antigo: sem "(unidade)" no fim (menos "(@)") e em Title Case ("Peso médio (kg)" → "Peso Médio"). */
+/**
+ * Cabeçalho no jeito do antigo: sem "(unidade)" no fim e em Title Case ("Peso médio (kg)" → "Peso Médio"). A marca da
+ * arroba fica (M1 §5: "(@ vivo ÷30)", "(@ carcaça)" — sem ela a coluna não diria qual arroba é).
+ */
 export function makHeaderLabel(label) {
-  return makTitleCase(String(label ?? '').replace(/\s*\((?!@\))[^)]*\)\s*$/, '').trim());
+  return makTitleCase(String(label ?? '').replace(/\s*\((?!@)[^)]*\)\s*$/, '').trim());
 }
 
 /**
@@ -250,7 +257,8 @@ export function makHeaderLabel(label) {
 export function makGenericLabel(label, column = null, unit = null) {
   // Parêntese que só explica a coluna sai ("Lote (última pesagem no período)" → "Lote", "Dias no lote (no
   // período) — média" → "Dias no Lote — Média"); os que mudam o sentido do número ficam.
-  const text = String(label ?? '').replace(/\s*\((?!mais antiga\)|mais recente\)|com valor\))[^()]*\s[^()]*\)/g, '').trim();
+  // M1 §5: a marca da arroba ("(@ vivo ÷30)", "(@ carcaça)") nunca sai — sem ela a coluna não diria qual arroba é.
+  const text = String(label ?? '').replace(/\s*\((?!mais antiga\)|mais recente\)|com valor\)|@)[^()]*\s[^()]*\)/g, '').trim();
   const shown = new Set(unit ? [unit] : []);
   if (column?.unit && ['weight', 'percentage'].includes(column.type)) shown.add(column.unit);
   if (column?.type === 'money') shown.add('R$');
@@ -375,7 +383,7 @@ export { makNumberText as sheetNumberText };
  * Resumo por Data: centralizado, números em fonte mono, Lote/Peso Médio/GMD Médio semi e Qtd em negrito; Por
  * Apartação/Lote: grade com bordas, tudo à esquerda e sem destaque (como o antigo desenhava esse tipo).
  */
-function makSummaryColumns(columns, variant) {
+function makSummaryColumns(columns, variant, viewModel) {
   const plain = variant === 'apartacao-lote';
   const generic = isGenericVariant(variant);
   const align = plain ? 'left' : 'center';
@@ -394,7 +402,8 @@ function makSummaryColumns(columns, variant) {
       const weight = column.key === firstMetric && COUNT_OPS.has(column.op) ? 'bold' : averageWeight || valueColumn?.type === 'gmd' ? 'semibold' : null;
       return { ...column, label: makGenericLabel(column.label, valueColumn), align, mk: { mono, weight } };
     }
-    const label = PESAGENS_SHEET_HEADERS.metrics[id] ?? makHeaderLabel(column.label);
+    // M1 §5: {@} do cabeçalho do antigo ("Média ({@})") = a marca da arroba da coluna da métrica.
+    const label = PESAGENS_SHEET_HEADERS.metrics[id] ? viewModelArrobaLabel(viewModel, PESAGENS_SHEET_HEADERS.metrics[id], column.metric?.spec?.columnId) : makHeaderLabel(column.label);
     return { ...column, label, align, mk: { mono, weight: plain ? null : MAK_EMPHASIS[column.key] ?? null } };
   });
 }
@@ -451,8 +460,10 @@ function makLine(mak, items, source, { lead, layout, lotes = null, leafLevel = f
       // Valor total digitado só em parte das vendas: a linha diz quantas (decisão da E1D, como na E1B).
       if (column.type === 'money' && result.n_validos > 0 && result.n_validos < result.n_total) text = `${text} (${result.n_validos} de ${result.n_total})`;
     }
-    // arroba: a linha mostra @ (o rodapé explica "@ = peso vivo ÷ N" mesmo sem a coluna de @ na tabela).
-    out.push({ key: item.key, label: item.label ?? lead, text, raw: value, ...(column.unit === '@' ? { arroba: true } : {}) });
+    // arroba: a linha mostra a @ de PESO VIVO (o rodapé explica "@ = peso vivo ÷ N" mesmo sem a coluna de @ na tabela).
+    // M1 §5: {@} do rótulo ("Média ({@})") = a marca da arroba da coluna do total.
+    const label = item.label == null ? lead : viewModelArrobaLabel(mak.viewModel, item.label, item.spec?.columnId);
+    out.push({ key: item.key, label, text, raw: value, ...(isLiveArroba(column) ? { arroba: true } : {}) });
   }
   // Resumo genérico em grade: o 1º item ("Subtotal <grupo>: N …") na largura dele, sem quebrar; os outros dividem o resto.
   return layout === 'grid' && mak.variant === MAK_GENERIC_VARIANTS.RESUMO ? { layout, items: out, leadFit: true } : { layout, items: out };
@@ -782,7 +793,7 @@ function detailColumns(viewModel) {
  * Valor Total em semi-negrito; Animal em peso médio (font-medium). Lista genérica (E1E): o rótulo da coluna
  * em Title Case, sem a unidade que a célula já mostra (headerLabel → makGenericLabel), e o kg com 1 casa da folha.
  */
-function makDetailColumns(columns, variant) {
+function makDetailColumns(columns, variant, viewModel) {
   const generic = isGenericVariant(variant);
   const labels = variant === 'vendas' ? PESAGENS_SHEET_HEADERS.vendas : PESAGENS_SHEET_HEADERS.columns;
   return columns.map((column) => {
@@ -797,7 +808,7 @@ function makDetailColumns(columns, variant) {
     };
     // Genérico: sem o parêntese que só explica a coluna ("Lote (última pesagem no período)" → "Lote" — o título
     // do grupo e a tela já dizem); o de uma palavra fica ("Destino/frigorífico (texto)", "Tamanho (bytes)").
-    const label = generic ? makGenericLabel(headerLabel(source), source) : labels[source.id] ?? makHeaderLabel(source.label);
+    const label = generic ? makGenericLabel(headerLabel(source), source) : labels[source.id] ? viewModelArrobaLabel(viewModel, labels[source.id], source.id) : makHeaderLabel(source.label);
     return { ...column, label, mk };
   });
 }
@@ -1236,7 +1247,7 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const variant = style === SHEET_STYLES.MAKGESTAO ? makVariant(viewModel, layout) : null;
   const mak = variant ? { variant, viewModel, available: viewModel.availableColumns ?? viewModel.columns ?? [], ...makLinesOf(viewModel, variant) } : null;
   let allColumns = matrix ? matrixColumns(matrix) : summary ? summaryColumns(viewModel) : detailColumns(viewModel);
-  if (mak) allColumns = layout === 'detail' ? makDetailColumns(allColumns, variant) : makSummaryColumns(allColumns, variant);
+  if (mak) allColumns = layout === 'detail' ? makDetailColumns(allColumns, variant, viewModel) : makSummaryColumns(allColumns, variant, viewModel);
   const hasRows = (viewModel.rowCount ?? 0) > 0;
   // E1F: colunas escolhidas pela pessoa ("Colunas Painel/Detalhes/Visíveis/Colunas" ≠ padrão, reportService
   // columnsChosen) aparecem todas, mesmo vazias ("-") — marcar faz a coluna aparecer, como no MAKGESTAO.
@@ -1264,10 +1275,11 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
 
   // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
   // Sem linhas a folha é só "Nenhum registro…" (nenhuma coluna aparece): nada em @ para explicar.
-  const usesArroba = hasRows && (columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
-    || Boolean(matrix?.metrics.some((metric) => metric.column?.unit === '@')) || Boolean(vendas?.liveArroba)
+  // M1 §5: só a @ de PESO VIVO (arroba 'vivo') pede "@ = peso vivo ÷ N"; a @ de carcaça não tem divisor de configuração.
+  const usesArroba = hasRows && (columns.some((column) => isLiveArroba(column.column) || isLiveArroba(column.metric?.column))
+    || Boolean(matrix?.metrics.some((metric) => isLiveArroba(metric.column))) || Boolean(vendas?.liveArroba)
     || (mak && !vendas ? bodyRows.some((row) => row.line?.items.some((item) => item.arroba)) : false)
-    || (!summary && !mak && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@')));
+    || (!summary && !mak && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => isLiveArroba(metric.column))));
   const divisor = viewModel.arrobaDivisor ?? 30;
   const omitted = viewModel.hiddenByPermission?.length ?? 0;
   // E1G (A3): quantos animais têm GMD, quando falta para alguém (curto, no rodapé — não é nota longa).
