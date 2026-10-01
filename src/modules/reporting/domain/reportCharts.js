@@ -19,6 +19,7 @@ import { sheetNumberText } from './reportDocument.js';
 import { canRunReport, canSeeColumn } from './reportPermissions.js';
 import { dayNumber } from './chartScale.js';
 import { compareWeighingEvents, measuredWeightOf } from '../../weighing/domain/weighingSeries.js';
+import { entersGmdMath } from './gmdColumns.js';
 
 export { CHART_KINDS, FAIXAS_GMD, chartColumnIds, defineCharts };
 
@@ -417,6 +418,8 @@ function buildHistogram(viewModel, chart, options) {
   } else {
     items = [];
     for (const row of rows) {
+      // M1: faixas de GMD só com o GMD CONFIAVEL — o do intervalo curto fica fora (conta como "Sem GMD").
+      if (!entersGmdMath(valueColumn, row)) continue;
       const raw = accessor.valueOf(row);
       const value = isWeight ? measuredWeightOf({ peso: raw }) : toFiniteNumber(raw);
       if (value !== null) items.push({ key: row.id ?? String(items.length), row, value });

@@ -219,8 +219,11 @@ export const PESAGENS_SHEET_LINES = Object.freeze({
 // total em kg e em @) sobre as MESMAS linhas — Lote × Mês = as células do Sintético (Matriz).
 // ---------------------------------------------------------------------------------------------------
 const CHART_CAB = specById(SHEET_TOTALS, 'qtd');
-// Cobertura do GMD: animais com ao menos uma pesagem com anterior válida (a base da nota "GMD de N de M cab.").
+// Cobertura do ganho: animais com ao menos uma pesagem com anterior válida ("Ganho de N de M cab.").
 const CHART_COM_GMD = Object.freeze({ id: 'com_gmd', columnId: 'animais_com_anterior', op: 'countDistinct' });
+// M1: cobertura do GMD = animais com ao menos um GMD CONFIÁVEL (intervalo ≥ mínimo) — o intervalo curto não entra no
+// GMD do gráfico, então não conta no "GMD de N de M cab." (o mesmo da folha).
+const CHART_COM_GMD_CONFIAVEL = Object.freeze({ id: 'com_gmd_confiavel', columnId: 'animais_com_gmd', op: 'countDistinct' });
 const CHART_SERIES = Object.freeze([
   { id: 'todos', label: 'Todos', columnId: null },
   { id: 'lote', label: 'Lote', columnId: 'nome_lote' },
@@ -257,7 +260,7 @@ export const PESAGENS_CHARTS = Object.freeze([
       metrica: {
         label: 'Mostrar', default: 'peso', choices: [
           { id: 'peso', label: 'Peso médio', valor: specById(SHEET_TOTALS, 'peso_medio'), unidade: 'kg', titulo: 'Evolução do peso médio', nota: 'Peso médio das pesagens de cada ponto: ele cai quando animais pesados saem do lote (veja as cabeças de cada ponto). O GMD médio mostra o ganho sem esse efeito.' },
-          { id: 'gmd', label: 'GMD médio', valor: specById(SHEET_TOTALS, 'gmd_medio'), cobertura: CHART_COM_GMD, unidade: 'kg/dia', yZero: true, titulo: 'Evolução do GMD médio', nota: `${GMD_PESAGENS}.` },
+          { id: 'gmd', label: 'GMD médio', valor: specById(SHEET_TOTALS, 'gmd_medio'), cobertura: CHART_COM_GMD_CONFIAVEL, unidade: 'kg/dia', yZero: true, titulo: 'Evolução do GMD médio', nota: `${GMD_PESAGENS}.` },
         ],
       },
     },
@@ -265,8 +268,8 @@ export const PESAGENS_CHARTS = Object.freeze([
   {
     id: 'gmd-por-grupo', kind: 'barras', title: 'GMD médio por grupo', subtitle: GMD_PESAGENS, unidade: 'kg/dia',
     controls: { serie: { label: 'Agrupar por', default: 'lote', choices: CHART_GROUPS } },
-    valor: specById(SHEET_TOTALS, 'gmd_medio'), cab: CHART_CAB, cobertura: CHART_COM_GMD, semValor: 'Sem GMD',
-    notas: ['Sem GMD = nenhuma pesagem do grupo tem uma pesagem anterior com peso para comparar.'],
+    valor: specById(SHEET_TOTALS, 'gmd_medio'), cab: CHART_CAB, cobertura: CHART_COM_GMD_CONFIAVEL, semValor: 'Sem GMD',
+    notas: ['Sem GMD = nenhuma pesagem do grupo tem uma pesagem anterior com peso para comparar, ou só intervalos curtos (GMD em cinza na folha, fora da média).'],
   },
   {
     id: 'ganho-por-mes', kind: 'colunas', title: 'Ganho de peso por mês', cab: CHART_CAB, maxSeries: 3,
