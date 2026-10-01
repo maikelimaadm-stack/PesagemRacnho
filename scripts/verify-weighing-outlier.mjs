@@ -25,7 +25,7 @@ import {
 import { GMD_QUALIDADE, classifyGmd } from '../src/modules/weighing/domain/gmdQuality.js';
 import { listReports, runReport } from '../src/modules/reporting/application/reportService.js';
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
-import { parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
+import { CSV_BOM, parseCsv } from '../src/modules/reporting/infrastructure/exporters/csvExporter.js';
 import { getReportDefinition, listReportDefinitions } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { PESAGENS_CONFERIR_ACOES, PESAGENS_CONFERIR_COLUMN_IDS, PESAGENS_CONFERIR_ID } from '../src/modules/reporting/definitions/controle.js';
 import { gmdDataIssues, loadWeighingCheckRows, weighingCheckRows } from '../src/modules/reporting/infrastructure/reportSources/controlSources.js';
@@ -311,7 +311,7 @@ assert.deepEqual(porPeso.rows.slice(0, 2).map((row) => row.id), ['E-m', 'LEG-m']
 const porClasse = await conferir({ groups: [{ columnId: 'classe_conferencia' }], mode: 'DETALHADO' });
 assert.deepEqual(porClasse.tree.map((node) => node.label), ['Suspeita de erro', 'Fora da curva do lote', 'Perda possível'], 'agrupar por classe segue a ordem das regras');
 const csv = await prepareEmission(lista, 'csv', ADMIN);
-const [cabecalho, ...corpo] = parseCsv(csv.content.replace(/^﻿/, ''));
+const [cabecalho, ...corpo] = parseCsv(csv.content.startsWith(CSV_BOM) ? csv.content.slice(CSV_BOM.length) : csv.content);
 for (const titulo of ['Animal', 'Data', 'Peso', 'Peso anterior', 'Dias', 'Ganho', 'GMD', 'Classe', 'Motivo', 'Lote', 'Operador', 'Origem do registro']) {
   assert.ok(cabecalho.some((cell) => cell.startsWith(titulo)), `CSV: coluna ${titulo}`);
 }
