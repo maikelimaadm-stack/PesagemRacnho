@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import * as maintenanceService from "@/modules/maintenance/application/maintenanceService";
@@ -18,6 +18,7 @@ import MaintenanceControlReports from "@/components/reports/MaintenanceControlRe
 import ReportView from "@/components/reports/ReportView";
 import { useReportActor } from "@/components/reports/reportUi";
 import { resolveReportId } from "@/modules/reporting/definitions/reportCatalog";
+import { PESAGENS_CONFERIR_ACOES, PESAGENS_CONFERIR_ID } from "@/modules/reporting/definitions/controle";
 import { createPageUrl } from "@/utils";
 
 // Abas (E1 1.4.0): "Sistema" = banco, backup, migração e diagnóstico (como antes); "Controle" =
@@ -781,11 +782,31 @@ export default function ManutencaoSistema() {
   const location = useLocation();
   const navigate = useNavigate();
   const actor = useReportActor();
+  const auth = useAuth();
   const query = new URLSearchParams(location.search);
   const aba = query.get("aba") === "controle" ? "controle" : "sistema";
   const base = createPageUrl("ManutencaoSistema");
   const report = aba === "controle" && query.get("r") ? resolveReportId(query.get("r")) : null;
   const reportOpen = Boolean(report?.definition && actor);
+  const openReportId = report?.definition?.id ?? null;
+  // M1: "Pesagens para conferir" — Corrigir (Lançamento com a pesagem aberta para edição) e Ver ficha do animal,
+  // por linha, só as ações que o perfil pode (o Lançamento e a ficha repetem a verificação).
+  const rowActions = useMemo(() => {
+    if (openReportId !== PESAGENS_CONFERIR_ID) return null;
+    const allowed = (action) => (auth ? auth.can(action) : true);
+    return {
+      title: (row) => `Ações da pesagem do animal ${row?.numero_animal ?? ""}`.trim(),
+      items: PESAGENS_CONFERIR_ACOES.filter((action) => allowed(action.permission)).map((action) => ({
+        id: action.id,
+        label: action.label,
+        enabled: (row) => Boolean(action.page(row)),
+        onSelect: (row) => {
+          const page = action.page(row);
+          if (page) navigate(createPageUrl(page));
+        },
+      })),
+    };
+  }, [openReportId, auth, navigate]);
   // O painel continua montado (só escondido) enquanto o relatório está aberto: voltar não refaz a
   // verificação de integridade nem perde simulação/diagnóstico em andamento.
   return (
@@ -806,6 +827,7 @@ export default function ManutencaoSistema() {
           backLabel="Manutenção"
           allowPreferences={false}
           onBack={() => navigate(`${base}?aba=controle`)}
+          rowActions={rowActions}
         />
       ) : null}
     </>
