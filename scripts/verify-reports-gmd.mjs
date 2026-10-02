@@ -437,7 +437,14 @@ const umaSo = porCategoria('Animal com uma pesagem só');
 assert.deepEqual(umaSo.map((row) => row.registro).sort(), ['U1'], 'A6: "Animal com uma pesagem só" = U1 (ativo pesado uma vez)');
 assert.match(umaSo[0].descricao, /animal 301 tem uma pesagem só \(28\/09\/2026\): sem pesagem anterior, fica sem GMD/, 'A6: descrição');
 const semGmd = Object.fromEntries(porCategoria('Manejo sem GMD').map((row) => [row.registro, row.descricao]));
-assert.deepEqual(Object.keys(semGmd).sort(), ['LEG-m', 'Z7-m', 'Z9-m'], 'A6: "Manejo sem GMD" = mesmo dia, GMD apagado e legado sem animal_id');
+// M1 (§1.2 item 7): "Manejo sem GMD" aponta também o GMD gravado de intervalo curto (mínimo 21) — o H1 (pesagens
+// diárias de 02 a 29/03 e a de 15/04, 17 dias depois) entra com "intervalo curto"; o H1-m1 (59 dias) não.
+const curtosA6 = Object.keys(semGmd).filter((id) => /intervalo curto/.test(semGmd[id])).sort();
+assert.deepEqual(curtosA6, [...Array.from({ length: 28 }, (_, index) => `H1-m${index + 2}`), 'H1-u'].sort(),'M1: intervalo curto (1 dia em março; 17 dias em 15/04)');
+assert.ok(semGmd['H1-m2'].includes('sem GMD: intervalo curto (1 dia) — o GMD aparece em cinza e não entra na média'), 'M1: motivo do intervalo curto');
+assert.ok(semGmd['H1-u'].includes('sem GMD: intervalo curto (17 dias)'), 'M1: 17 dias < 21');
+assert.ok(!semGmd['H1-m1'], 'M1: 59 dias é confiável');
+assert.deepEqual(Object.keys(semGmd).filter((id) => !curtosA6.includes(id)).sort(), ['LEG-m', 'Z7-m', 'Z9-m'], 'A6: "Manejo sem GMD" = mesmo dia, GMD apagado e legado sem animal_id');
 assert.match(semGmd['Z7-m'], /mesma data da pesagem anterior/, 'A6: motivo — mesma data do Cadastro');
 assert.match(semGmd['Z9-m'], /há pesagem anterior, mas o GMD não foi gravado/, 'A6: motivo — série não recalculada');
 assert.match(semGmd['LEG-m'], /registro antigo sem ligação com o cadastro do animal/, 'A6: motivo — registro legado');

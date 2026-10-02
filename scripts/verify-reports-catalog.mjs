@@ -23,7 +23,7 @@ assert.ok(catalog.every((d) => d.status !== 'blocked'), 'nenhum bloqueado no cat
 for (const family of ['rebanho', 'pesagens', 'desempenho', 'movimentacao', 'saidas', 'comercial', 'embarques']) {
   assert.ok(catalog.some((d) => d.family === family), `família ${family} no catálogo`);
 }
-assert.deepEqual(maintenance.map((d) => d.id).sort(), ['controle.auditoria', 'controle.backups', 'controle.qualidade-dados', 'pesagens.pendencias'], 'aba Controle da Manutenção');
+assert.deepEqual(maintenance.map((d) => d.id).sort(), ['controle.auditoria', 'controle.backups', 'controle.pesagens-conferir', 'controle.qualidade-dados', 'pesagens.pendencias'], 'aba Controle da Manutenção (M1: + Pesagens para conferir)');
 
 // Itens "PRONTO" da auditoria (doc 10) continuam executáveis — pelo relatório novo ou pelo alias
 for (const id of [

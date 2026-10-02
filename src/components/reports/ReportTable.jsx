@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Table, TableBody, TableCell, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import MakTh, { makRowClass } from "@/components/mak/MakTh";
@@ -12,7 +12,9 @@ import { aggregateChips, headerLabel, screenCell, screenGmd } from "./reportUi";
 // Tabela do relatório (ModeloBase1 `.emp-table-pro`): linhas de grupo, dados e subtotal vindas da
 // árvore do view model; paginação SOMENTE de apresentação — subtotais e total geral são sempre da
 // população inteira filtrada.
-export default function ReportTable({ viewModel, sort, onSort, widths = {}, filters = {}, onFilter, onHide, optionsFor, filterTypeFor }) {
+// M1: rowActions { label, render(row) } = coluna de ações por linha (ex.: "Pesagens para conferir": Corrigir / Ver ficha).
+const ROW_ACTIONS_WIDTH = 36;
+export default function ReportTable({ viewModel, sort, onSort, widths = {}, filters = {}, onFilter, onHide, optionsFor, filterTypeFor, rowActions = null }) {
   const [page, setPage] = useState(1);
   const [menuColumn, setMenuColumn] = useState(null);
   const [pageSize, setPageSize] = useState(100);
@@ -24,7 +26,8 @@ export default function ReportTable({ viewModel, sort, onSort, widths = {}, filt
   const totalPages = Math.max(1, Math.ceil(lines.length / pageSize));
   const current = Math.min(page, totalPages);
   const visible = lines.slice((current - 1) * pageSize, current * pageSize);
-  const minWidth = columns.reduce((total, column) => total + (widths[column.id] || column.defaultWidth || 120), 0);
+  const minWidth = columns.reduce((total, column) => total + (widths[column.id] || column.defaultWidth || 120), 0) + (rowActions ? ROW_ACTIONS_WIDTH : 0);
+  const span = columns.length + (rowActions ? 1 : 0);
   const sortOf = (columnId) => sort.find((item) => item.columnId === columnId)?.direction ?? null;
   const totals = aggregateChips(viewModel, viewModel.totals);
   // Rótulo do grupo no formato brasileiro (data dd/mm/aaaa, Sim/Não), como na folha e nas exportações.
@@ -38,6 +41,7 @@ export default function ReportTable({ viewModel, sort, onSort, widths = {}, filt
         <Table className="emp-table-pro d17c-data-table rpt-table" style={{ minWidth: `${minWidth}px` }}>
           <colgroup>
             {columns.map((column) => <col key={column.id} style={{ width: `${widths[column.id] || column.defaultWidth || 120}px` }} />)}
+            {rowActions ? <col key="acoes" style={{ width: `${ROW_ACTIONS_WIDTH}px` }} /> : null}
           </colgroup>
           <TableHeader>
             <TableRow className="bg-white border-b">
@@ -60,16 +64,17 @@ export default function ReportTable({ viewModel, sort, onSort, widths = {}, filt
                   }}
                 />
               ))}
+              {rowActions ? <TableHead key="acoes" className="text-xs !p-0 text-center" aria-label={rowActions.label ?? "Ações"} /> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
             {visible.length === 0 ? (
-              <TableRow><TableCell colSpan={columns.length} className="rpt-empty">Nenhum registro para os critérios informados.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={span} className="rpt-empty">Nenhum registro para os critérios informados.</TableCell></TableRow>
             ) : visible.map((line, index) => {
               if (line.kind === "GROUP") {
                 return (
                   <TableRow key={`g-${line.node.id}-${index}`} className={`rpt-group-row rpt-level-${line.node.level}`}>
-                    <TableCell colSpan={columns.length}>
+                    <TableCell colSpan={span}>
                       <span className="rpt-group-label" style={{ paddingLeft: `${(line.node.level - 1) * 16}px` }}>
                         {line.node.columnLabel}: <strong>{groupLabel(line.node)}</strong>
                       </span>
@@ -82,7 +87,7 @@ export default function ReportTable({ viewModel, sort, onSort, widths = {}, filt
                 const chips = aggregateChips(viewModel, line.node.aggregates, line.node.level);
                 return (
                   <TableRow key={`s-${line.node.id}-${index}`} className={`rpt-subtotal-row rpt-level-${line.node.level}`}>
-                    <TableCell colSpan={columns.length}>
+                    <TableCell colSpan={span}>
                       <span className="rpt-subtotal-label" style={{ paddingLeft: `${(line.node.level - 1) * 16}px` }}>Subtotal · {groupLabel(line.node)}</span>
                       {chips.map((chip) => (
                         <span key={chip.id} className="rpt-chip" title={chip.partial ? `Calculado com ${chip.partial} valores (ausentes não contam como zero)` : undefined}>
@@ -111,6 +116,7 @@ export default function ReportTable({ viewModel, sort, onSort, widths = {}, filt
                       </TableCell>
                     );
                   })}
+                  {rowActions ? <TableCell key="acoes" className="text-xs !p-0 text-center">{rowActions.render(line.row)}</TableCell> : null}
                 </TableRow>
               );
             })}

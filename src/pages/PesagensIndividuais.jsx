@@ -57,6 +57,8 @@ import { EVENT_COLUMNS, RELATION_COLUMN_IDS } from "@/modules/reporting/definiti
 import { SENSITIVITY } from "@/modules/reporting/domain/columnDefinition";
 import { relationPopulation, resolveEventColumn } from "@/modules/reporting/application/relationPopulation";
 import { loadEventRows } from "@/modules/reporting/infrastructure/reportSources/eventSource";
+import { getReportSettings } from "@/modules/settings/application/appConfigService";
+import { gmdExibicao, isGmdConfiavel } from "@/modules/weighing/domain/gmdQuality";
 import { EXPORT_PROFILES } from "@/modules/weighing/export/weighingExportContract";
 import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
 import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
@@ -311,7 +313,9 @@ export default function PesagensIndividuais() {
     queryKey: ['pesagens-individuais', empresaSelecionadaId],
     queryFn: async () => {
       // Mesma transformação dos relatórios (deduplicação, nomes de cadastro, doc_qtd).
-      return (await loadEventRows({ empresaId: empresaSelecionadaId })).rows;
+      // M1: qualidade do GMD com o mínimo de Configurações › Relatórios (gmd_dias_minimos).
+      const { gmd_dias_minimos: gmdDiasMinimos } = await getReportSettings(empresaSelecionadaId).catch(() => ({}));
+      return (await loadEventRows({ empresaId: empresaSelecionadaId, gmdDiasMinimos })).rows;
     },
     enabled: !!empresaSelecionadaId,
   });
@@ -372,7 +376,8 @@ export default function PesagensIndividuais() {
       pesoMedio: avgValues(pesagensFiltradas, 'peso').value,
       pesoAtual: sumValues(ativos, 'peso').value,
       pesoMedioAtual: avgValues(ativos, 'peso').value,
-      gmdMedio: weightedGmd(pesagensFiltradas).value,
+      // M1: GMD de intervalo curto (cinza) não entra no GMD médio.
+      gmdMedio: weightedGmd(pesagensFiltradas.filter((p) => isGmdConfiavel(p.gmd_qualidade))).value,
       ganhoMedio: avgValues(pesagensFiltradas, 'ganho').value,
       diasMedio: avgValues(pesagensFiltradas, 'dias').value,
     };
@@ -1066,7 +1071,10 @@ export default function PesagensIndividuais() {
                           return <TableCell key={coluna.id} className="text-xs py-2 px-3 text-right font-mono font-semibold">{texto}</TableCell>;
                         }
                         if (coluna.id === 'gmd') {
-                          return <TableCell key={coluna.id} className={`text-xs py-2 px-3 text-right font-mono ${p.gmd && p.gmd > 0 ? 'text-emerald-600' : p.gmd && p.gmd < 0 ? 'text-red-600' : ''}`}>{texto}</TableCell>;
+                          // M1: intervalo curto = número apagado (cor do tema) com o motivo no title; não entra no GMD médio.
+                          const exibicao = gmdExibicao({ gmd: p.gmd, gmdQualidade: p.gmd_qualidade, gmdMotivo: p.gmd_motivo });
+                          const cor = exibicao.cinza ? 'text-muted-foreground' : p.gmd && p.gmd > 0 ? 'text-emerald-600' : p.gmd && p.gmd < 0 ? 'text-red-600' : '';
+                          return <TableCell key={coluna.id} className={`text-xs py-2 px-3 text-right font-mono ${cor}`} title={exibicao.cinza ? `GMD não entra na média: ${exibicao.aviso ?? 'intervalo curto'}` : undefined} data-gmd={exibicao.cinza ? 'NAO_CONFIAVEL' : undefined}>{texto}</TableCell>;
                         }
                         if (coluna.id === 'placa_carreta') {
                           return <TableCell key={coluna.id} className="text-xs py-2 px-3 uppercase">{texto}</TableCell>;

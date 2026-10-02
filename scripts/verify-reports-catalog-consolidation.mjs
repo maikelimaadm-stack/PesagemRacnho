@@ -30,11 +30,11 @@ const E1E_TYPED_IDS = ['comercial.vendas', 'comercial.abates', 'comercial.compra
 const catalog = listReportDefinitions();
 assert.deepEqual(catalog.map((d) => d.id), EXPECTED_CATALOG, '10 relatórios visíveis, nesta ordem');
 assert.deepEqual([...new Set(catalog.map((d) => d.family))], ['rebanho', 'pesagens', 'desempenho', 'movimentacao', 'saidas', 'comercial', 'embarques'], 'famílias do catálogo');
-assert.deepEqual(listReportDefinitions({ visibility: 'maintenance' }).map((d) => d.id).sort(), ['controle.auditoria', 'controle.backups', 'controle.qualidade-dados', 'pesagens.pendencias']);
+assert.deepEqual(listReportDefinitions({ visibility: 'maintenance' }).map((d) => d.id).sort(), ['controle.auditoria', 'controle.backups', 'controle.pesagens-conferir', 'controle.qualidade-dados', 'pesagens.pendencias']);
 const hidden = listReportDefinitions({ visibility: 'hidden' });
 assert.equal(hidden.filter((d) => d.id.startsWith('cadastros.') && d.status !== 'blocked').length, 7, 'cadastros.* (7) fora da interface');
 assert.equal(hidden.filter((d) => d.status === 'blocked').length, 10, 'os 10 bloqueados fora da interface (backlog)');
-assert.equal(listAllReportDefinitions().length, 10 + 4 + 7 + 10, 'nada foi apagado: 31 definições + aliases (E1E: 3 comerciais viraram 1)');
+assert.equal(listAllReportDefinitions().length, 10 + 5 + 7 + 10, 'nada foi apagado: 32 definições + aliases (E1E: 3 comerciais viraram 1; M1: + Pesagens para conferir)');
 assert.equal(listReports(ADMIN).length, 10, 'ADMIN vê 10 no catálogo');
 
 // ---- 2. Aliases: todo id antigo resolve e equivale ----

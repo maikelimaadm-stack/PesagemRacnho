@@ -89,7 +89,7 @@ const SECTIONS = [
         kind: 'choice',
         width: 'CAMPO_PRINCIPAL',
         options: [{ value: '30', label: '30 — @ de peso vivo (padrão)' }, { value: '15', label: '15' }],
-        help: 'Média (@) = peso médio ÷ divisor. O rodapé da folha mostra qual foi usado, por exemplo "@ = peso vivo ÷ 30". Não muda a @ de carcaça do Comercial (carcaça ÷ 15, com rendimento).',
+        help: 'Média (@ vivo ÷30) = peso médio ÷ divisor; o divisor em uso aparece no nome da coluna e no rodapé da folha ("@ = peso vivo ÷ 30"). Não muda a @ de carcaça do Comercial (carcaça ÷ 15, com rendimento).',
       },
       {
         // M1: gmd_dias_minimos (report-settings, mesma permissão settings.reports do divisor). Lista fixa do contrato.

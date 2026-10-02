@@ -35,7 +35,7 @@ for (const actor of [ADMIN, GESTOR, OPERADOR, CONSULTA]) {
 for (const actor of [OPERADOR, CONSULTA]) {
   assert.equal(can(actor.role, 'maintenance.backup'), false, `${actor.role} não abre a Manutenção`);
   const controle = listReports(actor).filter((item) => item.available && item.family === 'controle').map((item) => item.id).sort();
-  assert.deepEqual(controle, ['controle.qualidade-dados', 'pesagens.pendencias'], `${actor.role}: Pendências de pesagem e Qualidade dos dados em Relatórios › Controle`);
+  assert.deepEqual(controle, ['controle.pesagens-conferir', 'controle.qualidade-dados', 'pesagens.pendencias'], `${actor.role}: Pendências de pesagem, Qualidade dos dados e Pesagens para conferir em Relatórios › Controle`);
   assert.ok(!listReports(actor).some((item) => ['controle.auditoria', 'controle.backups'].includes(item.id)), `${actor.role}: auditoria e backups continuam fora (sem permissão)`);
   assert.equal(await code(() => runReport('pesagens.pendencias', { today: TODAY, params: period }, actor)), 'OK', `${actor.role} abre Pendências de pesagem`);
 }

@@ -357,7 +357,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   };
   // Opções do seletor do tipo (só as chaves de columnChoices.available que o papel vê) e a escolha atual.
   const typeColumnDialog = typeColumnsOn
-    ? { options: typeColumnOptions(definition, currentView, actor.role), current: columnKeysOf(currentView, definition, { columns: state.columns, aggregates: state.aggregates }) }
+    ? { options: typeColumnOptions(definition, currentView, actor.role, { arrobaDivisor: viewModel?.arrobaDivisor ?? null }), current: columnKeysOf(currentView, definition, { columns: state.columns, aggregates: state.aggregates }) }
     : null;
   const hideColumn = (columnId) => {
     const next = state.columns.filter((id) => id !== columnId);

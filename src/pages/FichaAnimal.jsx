@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Search } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { loadOperationalCatalog } from '@/modules/operations/application/operationalInsightsService';
 import { calculateCarcassTrade } from '@/modules/weighing/domain/commercialCalculations';
@@ -72,6 +72,7 @@ function buildProfiles(catalog) {
 
 export default function FichaAnimal() {
   const navigate = useNavigate();
+  const location = useLocation();
   const auth = useAuth();
   const pode = (action) => (auth ? Boolean(auth.can?.(action)) : true);
   const [catalog, setCatalog] = useState({ pesagens: [], apartacoes: [], lotes: [], animais: [], sessoes: [] });
@@ -94,7 +95,15 @@ export default function FichaAnimal() {
 
   const profiles = useMemo(() => buildProfiles(catalog), [catalog]);
   const selected = profiles.find((profile) => profile.key === selectedKey) || profiles[0] || null;
-  useEffect(() => { if (!selectedKey && profiles[0]) setSelectedKey(profiles[0].key); }, [profiles, selectedKey]);
+  // M1: ?animal=<id> (Manutenção › Controle › "Pesagens para conferir" › Ver ficha do animal) abre direto esse animal;
+  // sem o parâmetro (ou animal não encontrado), o primeiro da lista, como antes.
+  const requestedAnimalId = new URLSearchParams(location.search).get('animal');
+  useEffect(() => {
+    if (selectedKey || !profiles.length) return;
+    const requested = requestedAnimalId ? profiles.find((profile) => profile.animalId === requestedAnimalId) : null;
+    setSelectedKey((requested || profiles[0]).key);
+    if (requested) setQuery(requested.number);
+  }, [profiles, selectedKey, requestedAnimalId]);
   useEffect(() => {
     window.dispatchEvent(new CustomEvent('mb1:breadcrumb-detail', { detail: selected ? `Animal ${selected.number} · ${selected.brand}` : 'Ficha do Animal' }));
     return () => window.dispatchEvent(new CustomEvent('mb1:breadcrumb-detail', { detail: '' }));
