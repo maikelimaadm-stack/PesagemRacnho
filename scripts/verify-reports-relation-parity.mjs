@@ -80,7 +80,9 @@ assert.deepEqual(consulta.hiddenByPermission.sort(), ['compra_frete', 'quantidad
 // A tela usa exatamente estas funções.
 const page = readFileSync(new URL('../src/pages/PesagensIndividuais.jsx', import.meta.url), 'utf8');
 assert.match(page, /return relationPopulation\(pesagens, \{ searchTerm, filtrosColuna, sortConfig \}\)/, 'Relação calcula a população pelo núcleo compartilhado');
-assert.match(page, /\(await loadEventRows\(\{ empresaId: empresaSelecionadaId \}\)\)\.rows/, 'Relação carrega as mesmas event rows');
+// M1: com o mínimo do GMD de Configurações › Relatórios (a mesma qualidade dos relatórios).
+assert.match(page, /\(await loadEventRows\(\{ empresaId: empresaSelecionadaId, gmdDiasMinimos \}\)\)\.rows/, 'Relação carrega as mesmas event rows, com o mínimo do GMD');
+assert.match(page, /gmdMedio: weightedGmd\(pesagensFiltradas\.filter\(\(p\) => isGmdConfiavel\(p\.gmd_qualidade\)\)\)/, 'M1: GMD médio da Relação só com intervalo confiável');
 assert.match(page, /formatCell\(accessor\.column/, 'Relação formata células pela definição compartilhada');
 assert.doesNotMatch(page, /matchesMakColumnFilter\(/, 'NEGATIVO: sem predicado paralelo na tela');
 

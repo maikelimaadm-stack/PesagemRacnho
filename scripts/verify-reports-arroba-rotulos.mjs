@@ -285,7 +285,7 @@ async function rotulosDe(definition, vm, view) {
 }
 
 const RELATORIOS_COM_ARROBA = DEFINICOES.filter((definition) => definition.status !== 'blocked' && definition.columns.some((column) => arrobaKindOf(column)));
-assert.deepEqual(RELATORIOS_COM_ARROBA.map((definition) => definition.id).sort(), ['comercial', 'controle.fechamento-dia', 'embarques.romaneio', 'pesagens', 'pesagens.pendencias', 'saidas'], 'os relatórios que têm coluna de arroba');
+assert.deepEqual(RELATORIOS_COM_ARROBA.map((definition) => definition.id).sort(), ['comercial', 'controle.fechamento-dia', 'controle.pesagens-conferir', 'embarques.romaneio', 'pesagens', 'pesagens.pendencias', 'saidas'], 'os relatórios que têm coluna de arroba (M1: + Pesagens para conferir, que usa as colunas de pesagem)');
 const ARROBA_COLUMNS = ['peso_arroba', 'ganho_arroba', 'quantidade_arrobas'];
 for (const definition of RELATORIOS_COM_ARROBA) {
   const report = { tipos: 0, rotulos: 0, marcas: 0 };
