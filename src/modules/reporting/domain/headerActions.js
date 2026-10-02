@@ -59,6 +59,7 @@ const columnOf = (definition, columnId) => (definition?.columns ?? []).find((col
 const labelledCtx = (ctx) => ({ ...ctx, definition: definitionForDivisor(ctx.definition, ctx.viewModel?.arrobaDivisor ?? null) });
 // M1 §5: a lista de totais juntaria @ de peso vivo com @ de carcaça num total só?
 const mixesArroba = (ctx, aggregates) => Boolean(arrobaConflictOf(aggregates, (columnId) => columnOf(ctx.definition, columnId)));
+const ARROBA_MIXED_TITLE = '@ de peso vivo e @ de carcaça não se somam: cada uma tem o seu total';
 
 /** Largura dentro dos limites (px inteiros). */
 export function clampWidth(width) {
@@ -237,7 +238,9 @@ function calcOptions(ctx, docColumn, layout) {
       const next = specFor(op, column.id);
       const active = CHOICE_OF_OP[spec.op] === choice.id;
       const taken = !active && current.some((item) => sameSpec(item, next));
-      return { id: choice.id, label: choice.label, op, active, disabled: taken, title: taken ? 'Essa conta já está numa coluna da folha' : null };
+      // M1 §5: a conta que juntaria @ de peso vivo com @ de carcaça num total só fica desligada.
+      const mixed = !active && !taken && mixesArroba(ctx, current.map((item) => (aggregateSpecId(item) === aggregateSpecId(spec) ? next : item)));
+      return { id: choice.id, label: choice.label, op, active, disabled: taken || mixed, title: taken ? 'Essa conta já está numa coluna da folha' : mixed ? ARROBA_MIXED_TITLE : null };
     }).filter(Boolean);
     return options.length > 1 ? { mode: 'replace', options } : null;
   }
@@ -248,7 +251,10 @@ function calcOptions(ctx, docColumn, layout) {
     const options = CALC_CHOICES.map((choice) => {
       const op = calcOpFor(choice.id, column);
       if (!op || op === 'count') return null; // contagem de registros não é "desta coluna"
-      return { id: choice.id, label: choice.label, op, active: current.some((item) => sameSpec(item, specFor(op, column.id))), disabled: false, title: null };
+      const active = current.some((item) => sameSpec(item, specFor(op, column.id)));
+      // M1 §5: ligar a conta que juntaria @ de peso vivo com @ de carcaça num total só fica desligado.
+      const mixed = !active && mixesArroba(ctx, [...current, specFor(op, column.id)]);
+      return { id: choice.id, label: choice.label, op, active, disabled: mixed, title: mixed ? ARROBA_MIXED_TITLE : null };
     }).filter(Boolean);
     return options.length ? { mode: 'toggle', options } : null;
   }
@@ -286,7 +292,10 @@ function totalOption(ctx, docColumn, layout) {
   // Ligado = a conta padrão da coluna já está nos totais (a média do tipo, ex. Peso Médio, não conta: é outra conta).
   // E1G: numa coluna de média (Dias), a soma gravada antes (quando o total era soma) também é o total dela.
   const ops = totalOpsOf(column, op);
-  return { op, active: aggregatesOf(ctx).some((spec) => spec.columnId === column.id && ops.has(spec.op)) };
+  const active = aggregatesOf(ctx).some((spec) => spec.columnId === column.id && ops.has(spec.op));
+  // M1 §5: o total que juntaria @ de peso vivo com @ de carcaça num total só não é oferecido.
+  if (!active && mixesArroba(ctx, [...aggregatesOf(ctx), specFor(op, column.id)])) return null;
+  return { op, active };
 }
 
 const totalOpsOf = (column, op) => new Set([op, ...(column?.totalOp && column.totalOp !== 'sum' ? ['sum'] : [])]);
