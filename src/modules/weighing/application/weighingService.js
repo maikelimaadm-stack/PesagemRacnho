@@ -8,8 +8,9 @@ import { animalIdentityKey, receivesWeightGain, recalculateWeightSeries } from '
 import { calculateWeightGain } from '../domain/weighingCalculations.js';
 import { getCurrentActor, hasActorProvider } from '../../../storage/indexedDb/auditActor.js';
 import { authorize, can, forbiddenError } from '../../auth/domain/permissionService.js';
-import { parseCivilDate } from '../domain/brazilianValues.js';
+import { parseBrazilianNumber, parseCivilDate } from '../domain/brazilianValues.js';
 import { SanityError, validateLaunchApplications } from '../../sanity/domain/sanityRules.js';
+import { MOTIVO_REPESAGEM, planSameDayReweigh } from '../domain/repesagem.js';
 
 // Escrita autorizada no SERVIÇO (não só na tela): com sessão, o papel precisa da ação
 // (weighing.write para lançar/importar; weighing.edit para editar/excluir). Com o módulo de
@@ -69,37 +70,50 @@ export async function detectStorageStatus() {
 // NUNCA vai para o legacy_payload (ADR-027); é validada antes de qualquer leitura e
 // gravada em `aplicacoesSanidade` na MESMA transação da pesagem (animal, data,
 // sessão e pesagem vêm da própria pesagem). Qualquer aplicação inválida: nada é gravado.
-export async function createEntry(rawPayload) {
+// Payload novo do Lançamento: sem valores comerciais para quem não tem commercial.write, validado, e as aplicações de
+// sanidade (payload.aplicacoes_sanidade) validadas antes de qualquer leitura.
+function prepareNewEntry(actor, rawPayload) {
   const { aplicacoes_sanidade: rawApplications, ...payloadWithoutSanity } = rawPayload || {};
-  const uiPayload = withoutCommercialInput(requireWeighingPermission('weighing.write'), payloadWithoutSanity);
+  const uiPayload = withoutCommercialInput(actor, payloadWithoutSanity);
   validateUiPayload(uiPayload);
   const aplicacoesSanidade = validateLaunchApplications(rawApplications, {
     data: parseCivilDate(uiPayload.data_pesagem || uiPayload.dataPesagem || uiPayload.data),
   });
+  return { uiPayload, aplicacoesSanidade };
+}
+
+// Registro de armazenamento com os derivados contra a pesagem anterior (data estritamente menor: a pesagem do mesmo
+// dia nunca é a anterior — calculateWeightGain). Devolve também a série lida (para saber se há pesagens depois).
+async function storageRecordWithDerived(uiPayload) {
+  const animalId = uiPayload.animal_id || uiPayload.animalId || null;
+  const existingSeries = animalId
+    ? await weighingDataAdapter.listAllEntries({ animalId })
+    : [];
+  // E1G: Manejo e Saída com peso (venda/abate) ganham os derivados contra a pesagem anterior; Cadastro não.
+  const derived = receivesWeightGain(uiPayload.tipo_manejo)
+    ? calculateWeightGain({
+      history: existingSeries,
+      date: uiPayload.data_pesagem,
+      weight: uiPayload.peso ?? uiPayload.peso_kg,
+    })
+    : { dataAnterior: null, pesoAnterior: null, dias: null, ganho: null, gmd: null };
+  const enrichedPayload = {
+    ...uiPayload,
+    data_anterior: derived.dataAnterior,
+    peso_anterior: derived.pesoAnterior,
+    dias: derived.dias,
+    ganho: derived.ganho,
+    gmd: derived.gmd,
+  };
+  return { storageRecord: uiToStorageRecord(enrichedPayload), existingSeries };
+}
+
+export async function createEntry(rawPayload) {
+  const { uiPayload, aplicacoesSanidade } = prepareNewEntry(requireWeighingPermission('weighing.write'), rawPayload);
   try {
     const trace = globalThis.__MAK_PERF_TRACE__ === true;
     const startedAt = trace ? performance.now() : 0;
-    const animalId = uiPayload.animal_id || uiPayload.animalId || null;
-    const existingSeries = animalId
-      ? await weighingDataAdapter.listAllEntries({ animalId })
-      : [];
-    // E1G: Manejo e Saída com peso (venda/abate) ganham os derivados contra a pesagem anterior; Cadastro não.
-    const derived = receivesWeightGain(uiPayload.tipo_manejo)
-      ? calculateWeightGain({
-        history: existingSeries,
-        date: uiPayload.data_pesagem,
-        weight: uiPayload.peso ?? uiPayload.peso_kg,
-      })
-      : { dataAnterior: null, pesoAnterior: null, dias: null, ganho: null, gmd: null };
-    const enrichedPayload = {
-      ...uiPayload,
-      data_anterior: derived.dataAnterior,
-      peso_anterior: derived.pesoAnterior,
-      dias: derived.dias,
-      ganho: derived.ganho,
-      gmd: derived.gmd,
-    };
-    const storageRecord = uiToStorageRecord(enrichedPayload);
+    const { storageRecord, existingSeries } = await storageRecordWithDerived(uiPayload);
     const created = await weighingDataAdapter.createEntry(storageRecord, { aplicacoesSanidade });
     const createdAt = trace ? performance.now() : 0;
     const hasLaterEntries = existingSeries.some((entry) =>
@@ -124,6 +138,54 @@ export async function createEntry(rawPayload) {
     if (err instanceof WeighingError || err instanceof SanityError) throw err;
     throw new WeighingError('WEIGHING_SAVE_001', toUserMessage(err));
   }
+}
+
+// Toda falha antes do fim da transação da repesagem deixa o banco como estava: a mensagem diz isso ao operador.
+export const REPESAGEM_NAO_GRAVADA = 'A repesagem não foi gravada; a pesagem de hoje continua valendo.';
+
+/**
+ * M1 (1.5.0) — Repesagem no mesmo dia (M1-FUNDACAO-NUMERO.md §4): cancela a(s) pesagem(ns) de hoje do MESMO animal
+ * com o motivo "repesagem" e grava a nova, numa única transação (weighingDataAdapter.replaceEntries). Se algo
+ * falhar, nada muda: a pesagem de hoje continua valendo. Exige lançar (weighing.write) e cancelar (weighing.edit).
+ * O serviço confere de novo a regra da tela (planSameDayReweigh): só Manejo com peso substitui Manejo com peso;
+ * outro animal, outra data, Cadastro ou Saída são recusados sem gravar nada. Os derivados da nova (anterior, dias,
+ * ganho, GMD) usam a pesagem de data estritamente anterior — nunca a de hoje. Depois, a série do animal é
+ * recalculada (as pesagens seguintes passam a usar o peso novo como anterior).
+ * @param {string[]} previousIds pesagens de hoje a substituir
+ * @param {object} rawPayload mesmo payload do createEntry (inclusive aplicacoes_sanidade)
+ */
+export async function replaceSameDayEntry(previousIds, rawPayload) {
+  const actor = requireWeighingPermission('weighing.write');
+  requireWeighingPermission('weighing.edit');
+  const ids = [...new Set((Array.isArray(previousIds) ? previousIds : [previousIds]).filter(Boolean).map(String))];
+  const { uiPayload, aplicacoesSanidade } = prepareNewEntry(actor, rawPayload);
+  let created;
+  try {
+    const anteriores = (await Promise.all(ids.map((id) => weighingDataAdapter.getEntryById(id)))).filter(Boolean);
+    const plano = planSameDayReweigh({
+      entries: anteriores,
+      animal: uiPayload,
+      date: parseCivilDate(uiPayload.data_pesagem),
+      tipoManejo: uiPayload.tipo_manejo,
+      // Peso como o mapper lê (pt-BR: "335,5"), para a regra valer igual ao createEntry.
+      peso: parseBrazilianNumber(uiPayload.peso ?? uiPayload.peso_kg),
+    });
+    if (!ids.length || anteriores.length !== ids.length || !plano.repesar || plano.anteriores.length !== ids.length) {
+      throw new WeighingError('WEIGHING_SAVE_001', 'Só se repesa pesagem de Manejo com peso do mesmo animal, na mesma data.');
+    }
+    const { storageRecord } = await storageRecordWithDerived(uiPayload);
+    created = await weighingDataAdapter.replaceEntries(ids, storageRecord, { motivo: MOTIVO_REPESAGEM, aplicacoesSanidade });
+  } catch (err) {
+    const code = err instanceof WeighingError ? err.code : 'WEIGHING_SAVE_001';
+    throw new WeighingError(code, `${REPESAGEM_NAO_GRAVADA} ${toUserMessage(err)}`, { cause: err });
+  }
+  try {
+    await recalculateWeightSeriesForKeys(new Set([animalIdentityKey(created)]));
+  } catch (err) {
+    throw new WeighingError('WEIGHING_SAVE_001', `A repesagem foi gravada, mas o recálculo das pesagens seguintes falhou: ${toUserMessage(err)}`, { cause: err });
+  }
+  const result = await weighingDataAdapter.getEntryById(created.id);
+  return { ...result, aplicacoes_sanidade: created.aplicacoes_sanidade || [], substituidas: ids };
 }
 
 export async function bulkCreateEntries(rawItems, options = {}) {
@@ -173,9 +235,10 @@ export async function bulkUpdateAnimalProfiles(rawItems) {
   });
 }
 
-export async function bulkDeleteEntries(ids, { recalculate = true } = {}) {
+// `motivo` (opcional, M1) vai para a auditoria CANCELAR; sem ele, o texto de sempre ("Exclusão lógica pela interface").
+export async function bulkDeleteEntries(ids, { recalculate = true, motivo } = {}) {
   requireWeighingPermission('weighing.edit');
-  const removed = await weighingDataAdapter.bulkDeleteEntries(ids);
+  const removed = await weighingDataAdapter.bulkDeleteEntries(ids, { motivo });
   if (recalculate) await recalculateAllWeightSeries();
   return removed;
 }
@@ -267,13 +330,14 @@ export async function updateEntry(id, rawPayload) {
   }
 }
 
-export async function deleteEntry(pesagemOrId) {
+// `motivo` (opcional, M1) vai para a auditoria CANCELAR; sem ele, o texto de sempre ("Exclusão lógica pela interface").
+export async function deleteEntry(pesagemOrId, { motivo } = {}) {
   requireWeighingPermission('weighing.edit');
   const pesagem = typeof pesagemOrId === 'object' ? pesagemOrId : { id: pesagemOrId };
   const id = pesagem.id;
   try {
     const existing = await weighingDataAdapter.getEntryById(id);
-    const result = await weighingDataAdapter.deleteEntry(id);
+    const result = await weighingDataAdapter.deleteEntry(id, { motivo });
     if (existing) await recalculateWeightSeriesForKeys(new Set([animalIdentityKey(existing)]));
     return result;
   } catch (err) {

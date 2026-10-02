@@ -56,6 +56,9 @@ import { isFutureCivilDate, parseBrazilianNumber, parseCivilDate } from "@/modul
 import { calculateCarcassTrade, normalizeCarcassYield } from "@/modules/weighing/domain/commercialCalculations";
 import { DEFAULT_WEIGHT_WARNING_POLICY, evaluateWeighingWarnings } from "@/modules/weighing/domain/weighingWarnings";
 import { buildWeightPreview } from "@/components/pesagens/weightPreview";
+import { GMD_DIAS_MINIMOS_PADRAO, classifyGmd, gmdExibicao, normalizeGmdDiasMinimos } from "@/modules/weighing/domain/gmdQuality";
+import { TEXTOS_REPESAGEM, planSameDayReweigh, repesagemAvisoSanidade, repesagemResumo } from "@/modules/weighing/domain/repesagem";
+import { getReportSettings } from "@/modules/settings/application/appConfigService";
 import { loadAuxiliaryCatalogs } from "@/modules/auxiliary/application/legacyCatalogBridge";
 import { brandService, breedService, categoryService } from "@/modules/catalog/application/index";
 import { normalizeName } from "@/modules/catalog/domain/normalize";
@@ -115,6 +118,11 @@ const COMMERCIAL_VALUE_FIELDS = new Set(["valor_pago_cabeca", "valor_venda_total
 const NUMBER_COLUMN_IDS = new Set(["numero_registro", "peso", "peso_anterior", "valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "doc_qtd", "dias", "ganho", "gmd"]);
 const DATE_COLUMN_IDS = new Set(["data_pesagem", "data_anterior"]);
 const getColumnFilterType = (id) => DATE_COLUMN_IDS.has(id) ? "date" : NUMBER_COLUMN_IDS.has(id) ? "number" : "text";
+// M1: GMD de intervalo curto (NAO_CONFIAVEL) aparece apagado, como os itens desabilitados do ModeloBase1
+// (.is-disabled = opacidade .45). A faixa do animal fixa a cor do número com !important; a cor própria é da
+// trilha visual.
+const GMD_CINZA_STYLE = Object.freeze({ opacity: 0.45 });
+const mesmasPesagens = (a = [], b = []) => [...a].map(String).sort().join('|') === [...b].map(String).sort().join('|');
 
 export default function LancamentoPesagensIndividuais() {
   const empresaSelecionadaId = ensureEmpresaId();
@@ -251,6 +259,10 @@ export default function LancamentoPesagensIndividuais() {
   const [deleteLaunchRequest, setDeleteLaunchRequest] = useState(null);
   const [outlierDialog, setOutlierDialog] = useState({ open: false, warnings: [], options: null });
   const [outlierJustification, setOutlierJustification] = useState("");
+  // M1 — Repesagem no mesmo dia: { anterioresIds, resumo, avisoSanidade, options } enquanto o diálogo está aberto.
+  const [repesagemDialog, setRepesagemDialog] = useState(null);
+  // M1 — Intervalo mínimo do GMD confiável (Configurações › Relatórios, gmd_dias_minimos; padrão 21).
+  const [gmdDiasMinimos, setGmdDiasMinimos] = useState(GMD_DIAS_MINIMOS_PADRAO);
 
   // Painel direito: modo de visualização (apartacao | venda | abate)
   const [painelResumoTipo, setPainelResumoTipo] = useState('apartacao');
@@ -308,9 +320,9 @@ export default function LancamentoPesagensIndividuais() {
     () => calculateCarcassTrade({ weight: peso, yieldPercent: rendimentoCarcacaAbate, pricePerArroba: valorArrobaAbate }),
     [peso, rendimentoCarcacaAbate, valorArrobaAbate],
   );
-  const { gain: ganhoVisual, trend: sparklinePeso } = useMemo(
-    () => buildWeightPreview({ history: historicoAnimalSelecionado, date: dataPesagem, weight: peso, editingId }),
-    [historicoAnimalSelecionado, dataPesagem, peso, editingId],
+  const { gain: ganhoVisual, gmd: gmdVisual, trend: sparklinePeso } = useMemo(
+    () => buildWeightPreview({ history: historicoAnimalSelecionado, date: dataPesagem, weight: peso, editingId, diasMinimos: gmdDiasMinimos }),
+    [historicoAnimalSelecionado, dataPesagem, peso, editingId, gmdDiasMinimos],
   );
   // Política de avisos de conferência carregada uma vez com a configuração da empresa.
   const weightWarningPolicy = politicas.weightWarningPolicy || DEFAULT_WEIGHT_WARNING_POLICY;
@@ -410,6 +422,15 @@ export default function LancamentoPesagensIndividuais() {
         if (ativo) toast.error(error.message || 'Não foi possível carregar os cadastros e a configuração da empresa.');
       }
     })();
+    return () => { ativo = false; };
+  }, [empresaSelecionadaId]);
+
+  // M1: mínimo de dias do GMD confiável (Configurações › Relatórios); sem leitura possível, o padrão 21.
+  useEffect(() => {
+    let ativo = true;
+    getReportSettings(empresaSelecionadaId)
+      .then((settings) => { if (ativo) setGmdDiasMinimos(normalizeGmdDiasMinimos(settings?.gmd_dias_minimos)); })
+      .catch(() => { if (ativo) setGmdDiasMinimos(GMD_DIAS_MINIMOS_PADRAO); });
     return () => { ativo = false; };
   }, [empresaSelecionadaId]);
 
@@ -999,12 +1020,45 @@ export default function LancamentoPesagensIndividuais() {
       ? getAnimalHistory(pesagens, cadastroSelecionado)
       : pesagens.filter((entry) => normalizeAnimalText(entry.numero_animal) === numeroNorm && normalizeAnimalText(entry.marca) === marcaNorm);
 
+    // M1 — Repesagem no mesmo dia (planSameDayReweigh): o animal já tem lançamento nesta data. Manejo com peso sobre
+    // Manejo com peso abre o diálogo "Esse animal já foi pesado hoje. Repesar?"; os demais casos (Cadastro, Saída,
+    // sem peso) continuam recusados como antes. A busca usa a série inteira do animal na data — não a grade do dia,
+    // que pode estar filtrada por coluna.
+    let repesagemAnterioresIds = null;
     if (!editingId && !isSN) {
-      const duplicado = pesagensDia.find((entry) => getAnimalHistory([entry], cadastroSelecionado || { numero_animal: numeroDigitado, marca: marcaComparacao })[0]);
-      if (duplicado) {
-        setAvisoTela(null);
-        toast.error(`Animal ${numeroDigitado} / Marca ${marcaComparacao || '-'} já possui lançamento hoje. Peso: ${fmtNum(duplicado.peso)}`);
-        return;
+      const planoRepesagem = planSameDayReweigh({
+        entries: registrosMesmaIdentidade,
+        animal: cadastroSelecionado || { numero_animal: numeroDigitado, marca: marcaComparacao },
+        date: dataPesagem,
+        tipoManejo,
+        peso: pesoInformado,
+      });
+      if (planoRepesagem.conflito) {
+        const duplicado = planoRepesagem.anteriores[planoRepesagem.anteriores.length - 1];
+        if (!planoRepesagem.repesar) {
+          setAvisoTela(null);
+          toast.error(`Animal ${numeroDigitado} / Marca ${marcaComparacao || '-'} já possui lançamento hoje. Peso: ${fmtNum(duplicado.peso)}`);
+          return;
+        }
+        const anterioresIds = planoRepesagem.anteriores.map((entry) => entry.id);
+        if (!mesmasPesagens(options?.repesagemConfirmada, anterioresIds)) {
+          // Aplicações de sanidade gravadas com a pesagem de hoje são canceladas junto (ADR-049): o diálogo avisa.
+          let aplicacoesHoje = 0;
+          try {
+            const linhas = await listApplications({ animalId: animalIdSelecionado, from: dataPesagem, to: dataPesagem, empresaId: empresaSelecionadaId });
+            aplicacoesHoje = (linhas || []).filter((linha) => anterioresIds.includes(linha.pesagem_id)).length;
+          } catch {
+            aplicacoesHoje = 0;
+          }
+          setRepesagemDialog({
+            anterioresIds,
+            resumo: repesagemResumo({ pesoAnterior: n(duplicado.peso), pesoNovo: n(pesoInformado) }),
+            avisoSanidade: repesagemAvisoSanidade(aplicacoesHoje),
+            options: { ...options, repesagemConfirmada: anterioresIds },
+          });
+          return;
+        }
+        repesagemAnterioresIds = anterioresIds;
       }
     }
 
@@ -1190,9 +1244,14 @@ export default function LancamentoPesagensIndividuais() {
 
     try {
       if (!editingId) {
-        const savedEntry = await weighingService.createEntry({ ...data, aplicacoes_sanidade: sanidadeValidada.payload });
+        // Repesagem confirmada: grava a nova e cancela a de hoje (motivo "repesagem") numa única transação; se falhar,
+        // nada muda e a pesagem de hoje continua valendo (a mensagem do serviço diz isso).
+        const savedEntry = repesagemAnterioresIds
+          ? await weighingService.replaceSameDayEntry(repesagemAnterioresIds, { ...data, aplicacoes_sanidade: sanidadeValidada.payload })
+          : await weighingService.createEntry({ ...data, aplicacoes_sanidade: sanidadeValidada.payload });
         const aplicacoesGravadas = Array.isArray(savedEntry?.aplicacoes_sanidade) ? savedEntry.aplicacoes_sanidade.length : 0;
-        toast.success(aplicacoesGravadas > 0 ? `✓ Salvo! ${fmtInt(aplicacoesGravadas)} ${aplicacoesGravadas === 1 ? 'aplicação' : 'aplicações'} de sanidade.` : '✓ Salvo!');
+        const salvo = repesagemAnterioresIds ? '✓ Repesado! A pesagem anterior de hoje foi cancelada.' : '✓ Salvo!';
+        toast.success(aplicacoesGravadas > 0 ? `${salvo} ${fmtInt(aplicacoesGravadas)} ${aplicacoesGravadas === 1 ? 'aplicação' : 'aplicações'} de sanidade.` : salvo);
         await refreshAnimalSeries(savedEntry?.animal_id || data.animal_id);
       } else {
         const updatedEntry = await weighingService.updateEntry(editingId, data);
@@ -1708,7 +1767,8 @@ export default function LancamentoPesagensIndividuais() {
                   <span className="d17d-animal-performance__title">Ganho</span>
                   <span className="d17d-animal-performance__metric">Dias <strong>{ganhoVisual.dias !== null ? fmtInt(ganhoVisual.dias) : '-'}</strong></span>
                   <span className="d17d-animal-performance__metric">kg <strong>{ganhoVisual.ganho !== null ? n(ganhoVisual.ganho) : '-'}</strong></span>
-                  <span className="d17d-animal-performance__metric">GMD <strong>{ganhoVisual.gmd !== null ? n(ganhoVisual.gmd, 3) : '-'}</strong></span>
+                  {/* M1: GMD prévio pelo contrato (gmdExibicao): intervalo curto em cinza com o aviso; sem anterior, "-". */}
+                  <span className="d17d-animal-performance__metric" data-gmd-qualidade={gmdVisual.gmdQualidade} title={gmdVisual.aviso || undefined}>GMD <strong style={gmdVisual.cinza ? GMD_CINZA_STYLE : undefined}>{gmdVisual.texto}</strong>{gmdVisual.aviso ? <span style={GMD_CINZA_STYLE}>{gmdVisual.aviso}</span> : null}</span>
                 </section>
                 {sparklinePeso && (
                   <section className="d17d-animal-performance__trend" aria-label={`Tendência das últimas ${fmtInt(sparklinePeso.count)} pesagens`}>
@@ -2353,9 +2413,12 @@ export default function LancamentoPesagensIndividuais() {
                           return <TableCell key={coluna.id} className="text-xs text-right font-mono">{p.ganho != null ? n(p.ganho) : '-'}</TableCell>;
                         }
                         if (coluna.id === 'gmd') {
+                          // M1: GMD gravado com a qualidade derivada na leitura (gmdExibicao): intervalo curto apagado,
+                          // sem a cor de ganho/perda, com o aviso no título; sem cálculo, "-".
+                          const gmdLinha = gmdExibicao({ gmd: p.gmd, ...classifyGmd({ dias: p.dias, gmd: p.gmd }, gmdDiasMinimos) });
                           return (
-                            <TableCell key={coluna.id} className={`text-xs text-right font-mono font-semibold ${p.gmd && p.gmd > 0 ? 'text-emerald-600' : p.gmd && p.gmd < 0 ? 'text-red-600' : ''}`}>
-                                  {p.gmd != null ? n(p.gmd, 3) : '-'}
+                            <TableCell key={coluna.id} title={gmdLinha.aviso || undefined} style={gmdLinha.cinza ? GMD_CINZA_STYLE : undefined} className={`text-xs text-right font-mono font-semibold ${gmdLinha.cinza ? '' : p.gmd && p.gmd > 0 ? 'text-emerald-600' : p.gmd && p.gmd < 0 ? 'text-red-600' : ''}`}>
+                                  {gmdLinha.texto}
                                 </TableCell>);
 
                         }
@@ -2453,6 +2516,22 @@ export default function LancamentoPesagensIndividuais() {
           <DialogFooter className="d17b-standard-dialog__footer">
             <Button variant="outline" onClick={() => setOutlierDialog({ open: false, warnings: [], options: null })}>Cancelar</Button>
             <Button disabled={!outlierJustification.trim()} onClick={() => { const pending = outlierDialog.options || {}; setOutlierDialog({ open: false, warnings: [], options: null }); void handleSalvar({ ...pending, outlierJustification: outlierJustification.trim() }); }}>Confirmar e salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* M1 — Repesagem no mesmo dia (M1-FUNDACAO-NUMERO.md §4). "Repesar (substitui)" segue o salvamento com a
+          confirmação (cancela a pesagem de hoje com o motivo "repesagem" e grava a nova); "Cancelar" não grava nada. */}
+      <Dialog open={Boolean(repesagemDialog)} onOpenChange={(open) => { if (!open) setRepesagemDialog(null); }}>
+        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact d17e-confirm-dialog">
+          <DialogHeader>
+            <DialogTitle>{TEXTOS_REPESAGEM.pergunta}</DialogTitle>
+            <DialogDescription>{repesagemDialog?.resumo}</DialogDescription>
+          </DialogHeader>
+          {repesagemDialog?.avisoSanidade ? <p className="d17e-confirm-dialog__copy">{repesagemDialog.avisoSanidade}</p> : null}
+          <DialogFooter className="d17b-standard-dialog__footer">
+            <Button size="lg" variant="outline" onClick={() => setRepesagemDialog(null)}>{TEXTOS_REPESAGEM.cancelar}</Button>
+            <Button size="lg" onClick={() => { const pending = repesagemDialog?.options || {}; setRepesagemDialog(null); void handleSalvar(pending); }}>{TEXTOS_REPESAGEM.confirmar}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
