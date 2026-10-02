@@ -3,9 +3,41 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
-## [1.5.0] — 2026-10-01
+## [1.5.0] — 2026-10-02
 
-(preenchido na integração da M1)
+M1 — fundação do número (docs/plano-mestre/M1-FUNDACAO-NUMERO.md). Esquema Dexie **8** e backup **formato 3**, sem
+mudança: a qualidade do GMD é derivada na leitura; o que está gravado não muda. Notas em
+.
+
+### Changed — MUDANÇA VISÍVEL
+- **GMD de intervalo curto não entra mais na média.** GMD de intervalo menor que o mínimo (padrão 21 dias) aparece em
+  cinza com o aviso "intervalo curto (N dias)" e fica fora do GMD médio, do weightedGmd, de subtotal, total,
+  "Calcular", Matriz, linhas de resumo e gráficos; o rodapé "GMD de N de M cab." conta só os confiáveis. **Relatórios
+  de períodos com pesagens próximas passam a mostrar GMD médio DIFERENTE da 1.4.2** — é correção: o enchimento do boi
+  (cerca de 5 % do peso vivo) inventa GMD em intervalo curto.
+-  devolve também  (CONFIAVEL | NAO_CONFIAVEL | SEM_GMD) e ;  é
+   (nunca 0) quando não há conta. Contrato em .
+- **As duas arrobas com nome:** toda coluna de arroba diz qual é — "(@ vivo ÷30)" (o divisor em uso no rótulo) ou
+  "(@ carcaça)" — na tela, folha, Excel, CSV e PDF; total misto das duas é recusado no motor e no menu do cabeçalho.
+- Lançamento: o GMD da faixa do animal e da grade do dia aparece apagado com "intervalo curto (N dias)" abaixo do
+  mínimo. Relação de Pesagens: GMD médio só com intervalo confiável.
+
+### Added
+- Configurações › Relatórios: **Intervalo mínimo do GMD** (7, 14, 21 ou 28 dias; padrão 21; ) e a
+  ajuda de uma linha sobre as duas arrobas.
+- **GMD (regressão)**: coluna opcional (Adicionar coluna… no Desempenho e no Rebanho atual, e na Ficha do Animal) —
+  mínimos quadrados ponderados por recência (w = exp(−idade/60)) nos últimos 120 dias; nunca no padrão.
+- **Pesagens para conferir** (Manutenção › Controle; OPERADOR e CONSULTA em Relatórios › Controle): provável erro de
+  balança ou digitação (> 25 % ou perda > 10 % em < 14 dias), fora da curva do lote (MAD robusto, lote ≥ 8) e perda
+  possível (até 5 % em até 28 dias); ações Corrigir (edição auditada no Lançamento) e Ver ficha do animal. Só aponta:
+  nesta versão a pesagem suspeita continua nas médias (a exclusão vem com a resolução gravada, na M2).
+- **Repesagem no mesmo dia** no Lançamento ("Esse animal já foi pesado hoje. Repesar?"): a pesagem de Manejo de hoje
+  é cancelada com o motivo "repesagem" (auditoria) e a nova passa a valer, numa única gravação. O cancelamento
+  (exclusão lógica) aceita motivo opcional; sem motivo, o texto de sempre.
+- CSV/XLSX: coluna "Aviso do GMD" ao lado do GMD quando há intervalo curto; XLSX com o GMD em cinza e o rodapé.
+- Qualidade dos dados: "Manejo sem GMD" mostra também "intervalo curto (N dias)".
+- Gates: , , , ,
+  ,  (no test:quick e no test:full).
 
 ## [1.4.2] — 2026-09-30
 

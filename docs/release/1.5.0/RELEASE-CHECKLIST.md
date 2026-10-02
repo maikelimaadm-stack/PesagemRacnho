@@ -5,7 +5,7 @@ Versão 1.5.0 (1.4.2 + M1 — fundação do número) · esquema Dexie 8 (sem mud
 
 ## Versão
 - [x] `package.json`, `package-lock.json` e `src/lib/appVersion.js` em 1.5.0.
-- [x] CHANGELOG `## [1.5.0] — 2026-10-01`.
+- [x] CHANGELOG `## [1.5.0] — 2026-10-02`.
 - [x] `INSTALACAO-WINDOWS.md` e `TESTE-MAQUINA-LIMPA.md` citam a 1.5.0.
 
 ## Validações automatizadas

@@ -235,6 +235,15 @@ Regras da folha:
   impressão. **Exceção (1.4.2): Dias, Ganho e GMD nunca somem** — sem valor, aparecem "-".
 - **GMD sem pesagem anterior aparece "—", nunca "0,000"**, e fica fora da média. Quando falta GMD para
   alguém, o rodapé diz "GMD de N de M cab.".
+- **GMD de intervalo menor que 21 dias aparece em cinza e não entra na média, porque o enchimento do boi
+  atrapalha a conta (1.5.0).** O número continua lá, apagado, com o aviso "intervalo curto (N dias)" ao passar o
+  mouse; ele fica fora do GMD médio, do subtotal, do total, do "Calcular", da Matriz e dos gráficos, e o rodapé
+  conta só os confiáveis ("GMD de N de M cab."). No CSV e no Excel vem a coluna **Aviso do GMD** ao lado do GMD.
+  O mínimo (7, 14, 21 ou 28 dias; padrão 21) se troca em **Configurações › Relatórios › Intervalo mínimo do GMD**
+  (ADMIN e GESTOR). **Por isso, um período com pesagens muito próximas mostra GMD médio diferente da 1.4.2.**
+- **GMD (regressão)** (1.5.0): coluna opcional em **Adicionar coluna…** do Desempenho e do Rebanho atual, e na
+  Ficha do Animal. Usa todas as pesagens dos últimos 120 dias (as mais novas pesam mais) e só aparece com 3 ou
+  mais pesagens cobrindo 14 dias ou mais. Não entra no padrão de nenhum relatório.
 - **Venda e abate com peso têm GMD (1.4.2)**: contra a última pesagem antes da saída. O Cadastro e a saída
   sem peso (morte, por exemplo) continuam sem GMD.
 - **Faixa exigida** é a faixa de peso do **cadastro atual do lote** e só aparece na linha do lote (nunca
@@ -243,9 +252,14 @@ Regras da folha:
 - **Orientação Automática** tenta retrato; se as colunas não couberem, usa paisagem e letra menor. Se nem
   assim couber, o programa avisa antes de imprimir (nunca corta coluna calado).
 
-**A arroba da folha.** Média (@), Total (@) e o ganho em @ usam a arroba de **peso vivo**: peso ÷ 30 (o
-padrão) ou peso ÷ 15. Quem escolhe é o ADMIN ou o GESTOR em **Configurações › Relatórios › Divisor da
-arroba** (o GESTOR vê em Configurações só essa seção). O divisor usado aparece no rodapé de cada folha. Isso não muda a @ de carcaça do Comercial (carcaça ÷ 15).
+**As duas arrobas (1.5.0).** O programa tem DUAS arrobas, e elas nunca se somam:
+- **@ de peso vivo** = peso do boi ÷ 30 (padrão) ou ÷ 15. É a da folha: as colunas se chamam, por exemplo,
+  **Média (@ vivo ÷30)**, **Total (@ vivo ÷30)** e **Ganho (@ vivo ÷30)** — o divisor em uso está no nome. Quem
+  escolhe o divisor é o ADMIN ou o GESTOR em **Configurações › Relatórios › Divisor da arroba**.
+- **@ de carcaça** = o que o frigorífico paga: peso × rendimento ÷ 15 (Comercial, vendas e abates). As colunas
+  dizem **(@ carcaça)**. Sem rendimento informado, fica vazia — o programa não inventa 50 %.
+Se as duas estiverem na mesma folha, cada uma tem o seu total; o "Calcular" e o "Adicionar coluna…" não deixam
+somar uma com a outra.
 
 ## 7A. Gráficos (1.4.2)
 
@@ -388,15 +402,26 @@ marca "Relatório da aba Controle" ou "Relatório fora da lista") para abrir ou 
 
 Em **Backup e Manutenção**, a aba **Controle** reúne os relatórios de conferência do sistema: **Trilha de
 auditoria** (quem fez o quê), **Qualidade dos dados**, **Histórico de backups** e **Pendências de
-pesagem**. Abrem na mesma tela de relatório, com o botão **Manutenção** para voltar (a tela de
+pesagem** e, desde a 1.5.0, **Pesagens para conferir**. Abrem na mesma tela de relatório, com o botão **Manutenção** para voltar (a tela de
 Manutenção volta como estava, sem refazer a verificação). Ali não há estrela nem "Salvar modelo":
 favoritos e modelos ficam em Relatórios.
 
-Quem não abre Backup e Manutenção (OPERADOR e CONSULTA) encontra **Pendências de pesagem** e
-**Qualidade dos dados** na própria tela de Relatórios, no grupo **Controle**.
+Quem não abre Backup e Manutenção (OPERADOR e CONSULTA) encontra **Pendências de pesagem**,
+**Qualidade dos dados** e **Pesagens para conferir** na própria tela de Relatórios, no grupo **Controle**.
+
+**Pesagens para conferir (1.5.0).** Lista as pesagens que parecem erradas, para alguém conferir — o programa
+**só aponta, não apaga nem corrige sozinho**, e nesta versão elas continuam entrando nas médias:
+- **provável erro de balança ou digitação**: o peso mudou mais de 25 % desde a pesagem anterior, ou caiu mais de
+  10 % em menos de 14 dias (ex.: 480 digitado como 4800);
+- **fora da curva do lote**: o GMD está muito longe do GMD do lote no período (lote com pelo menos 8 animais);
+- **perda possível — verificar sanidade**: perda de até 5 % em até 28 dias com o animal presente (não é erro, é
+  alerta de manejo).
+Em cada linha: **Corrigir** abre a pesagem para editar no Lançamento (com registro na auditoria) e **Ver ficha do
+animal** abre a ficha dele.
 
 **Faltando GMD? (1.4.2)** A **Qualidade dos dados** aponta: **Animal com uma pesagem só** (sem GMD por
-falta de pesagem anterior), **Manejo sem GMD** (com o motivo, ex.: mesma data da anterior, sem peso) e
+falta de pesagem anterior), **Manejo sem GMD** (com o motivo, ex.: mesma data da anterior, sem peso e, desde a 1.5.0, **intervalo curto
+(N dias)**) e
 **Números parecidos** ("07" e "7" da mesma marca — o mesmo animal escrito de dois jeitos, o que parte a
 série de pesagens em dois).
 
@@ -406,7 +431,7 @@ série de pesagens em dois).
 |---|---|---|---|---|---|
 | **ADMIN** | Todos | Sim | Sim | Sim | Sim |
 | **GESTOR** | Todos | Sim | Sim | Sim | Sim |
-| **OPERADOR** | Rebanho, Pesagens, Desempenho, Movimentação, Saídas, Embarques e, no grupo Controle, Pendências de pesagem e Qualidade dos dados | **Não** | Não | Não | Não |
+| **OPERADOR** | Rebanho, Pesagens, Desempenho, Movimentação, Saídas, Embarques e, no grupo Controle, Pendências de pesagem, Qualidade dos dados e Pesagens para conferir | **Não** | Não | Não | Não |
 | **CONSULTA** | Os mesmos do OPERADOR | Sim (sem valores) | Não | Não | Não |
 
 - **Fechamento do dia**, **Histórico de backups** e **Trilha de auditoria**: só ADMIN e GESTOR.

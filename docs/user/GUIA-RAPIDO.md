@@ -34,6 +34,14 @@ Cadastre uma vez e escolha no lançamento: **Marcas**, **Raças**, **Categorias*
 
 Animal novo é cadastrado ali mesmo (cadastro rápido), com raça e categoria escolhidas da lista.
 
+**Repesar no mesmo dia (1.5.0).** Se o animal já foi pesado hoje (Manejo), o programa pergunta **"Esse animal já
+foi pesado hoje. Repesar?"**. **Repesar (substitui)** cancela a pesagem de hoje com o motivo "repesagem" (fica
+na auditoria) e grava a nova, numa única gravação; as aplicações de sanidade da pesagem de hoje são canceladas
+junto (o aviso diz quantas). **Cancelar** não grava nada. Peso errado no Cadastro se corrige com **Editar**.
+
+Na faixa do animal, o GMD de intervalo curto (menor que o mínimo de Configurações › Relatórios, padrão 21 dias)
+aparece apagado com "intervalo curto (N dias)": ele não entra na média.
+
 ## Como consultar registros
 
 1. Abra **Relação de Pesagens**.

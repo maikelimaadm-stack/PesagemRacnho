@@ -35,7 +35,7 @@ alguém tente pelo caminho errado.
 | Limpar dados operacionais / Reset completo | sim | não | não | não |
 | Continuar migração manualmente (Manutenção) | sim | não | não | não |
 | Gerenciar usuários | sim | não | não | não |
-| Configurações › Relatórios (divisor da @ de peso vivo) | sim | sim | não | não |
+| Configurações › Relatórios (divisor da @ de peso vivo e intervalo mínimo do GMD) | sim | sim | não | não |
 | Demais Configurações (Geral, Curral, Comercial, Segurança) | sim | não | não | não |
 
 O GESTOR vê **Sistema › Configurações** no menu, mas a tela mostra para ele só
