@@ -86,7 +86,7 @@ export const DESEMPENHO_CHARTS = Object.freeze([
     id: 'gmd-por-grupo', kind: 'barras', title: 'GMD médio por grupo', subtitle: GMD_PERIODO, unidade: 'kg/dia',
     controls: { serie: { label: 'Agrupar por', default: 'lote', choices: CHART_GROUPS } },
     valor: byId('gmd_ponderado'), cab: CHART_CAB, semValor: 'Sem GMD',
-    notas: ['Sem GMD = animal sem duas pesagens com peso para comparar.'],
+    notas: ['Sem GMD = animal sem duas pesagens com peso para comparar, ou com intervalo curto (GMD em cinza na folha, fora da média).'],
   },
   {
     id: 'peso-inicial-final', kind: 'halteres', title: 'Peso inicial × peso final', subtitle: 'Só animais com duas pesagens com peso: a diferença é o ganho médio da folha',

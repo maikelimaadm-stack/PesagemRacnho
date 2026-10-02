@@ -7,13 +7,15 @@ import { calculateCarcassTrade } from '@/modules/weighing/domain/commercialCalcu
 import { useAuth } from '@/components/auth/useAuth';
 import SanidadeAnimalCard from '@/components/sanidade/SanidadeAnimalCard';
 import { VIA_LABELS, listApplications } from '@/modules/sanity/application/sanityService';
-import { buildAnimalWeightCurve, curveLegend, curvePointTip } from '@/modules/animals/domain/animalWeightCurve';
+import { buildAnimalWeightCurve, curveGmdText, curveLegend, curvePointTip } from '@/modules/animals/domain/animalWeightCurve';
+import { getReportSettings } from '@/modules/settings/application/appConfigService';
+import { GMD_DIAS_MINIMOS_PADRAO, classifyGmd, normalizeGmdDiasMinimos } from '@/modules/weighing/domain/gmdQuality';
+import { localToday } from '@/modules/reporting/domain/reportPeriod';
 import { CHART_SCREEN_CSS } from '@/modules/reporting/infrastructure/exporters/chartStyles';
 import ChartPlot from '@/components/reports/ChartPlot';
 import '@/styles/operational-insights.css';
 
 const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const n3 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 const ni = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 const dateBr = (value) => value ? String(value).split('-').reverse().join('/') : '—';
 const identityKey = (row) => row.animal_id || `${String(row.numero_animal || '').trim().toUpperCase()}::${String(row.marca || '').trim().toUpperCase()}`;
@@ -28,6 +30,13 @@ const download = (name, content, type) => {
   URL.revokeObjectURL(url);
 };
 const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
+// M1: cinza que o tema já tem (texto secundário) para o GMD de intervalo curto — fora da média, com o motivo no title.
+const GMD_GRAY_STYLE = Object.freeze({ color: 'var(--mb1-text-2, #6b7280)' });
+/** M1: qualidade de um GMD gravado (dias × mínimo de Configurações › Relatórios) — o mesmo contrato dos relatórios. */
+const gmdOfRow = (row, diasMinimos) => {
+  const gmd = hasNumber(row?.gmd) ? Number(row.gmd) : null;
+  return { gmd, ...classifyGmd({ dias: row?.dias, gmd }, diasMinimos) };
+};
 
 function buildProfiles(catalog) {
   const groups = new Map();
@@ -71,9 +80,16 @@ export default function FichaAnimal() {
   const [searchOpen, setSearchOpen] = useState(false);
   const [range, setRange] = useState('all');
   const [sanity, setSanity] = useState({ rows: [], loading: false, error: '' });
+  // M1: intervalo mínimo do GMD (Configurações › Relatórios); até ler, o padrão 21.
+  const [gmdDiasMinimos, setGmdDiasMinimos] = useState(GMD_DIAS_MINIMOS_PADRAO);
 
   useEffect(() => {
     loadOperationalCatalog().then((data) => setCatalog(data)).catch((error) => toast.error(error.message || 'Não foi possível carregar a ficha do animal.'));
+  }, []);
+  useEffect(() => {
+    let active = true;
+    getReportSettings().then((settings) => { if (active) setGmdDiasMinimos(normalizeGmdDiasMinimos(settings?.gmd_dias_minimos)); }).catch(() => {});
+    return () => { active = false; };
   }, []);
 
   const profiles = useMemo(() => buildProfiles(catalog), [catalog]);
@@ -109,7 +125,8 @@ export default function FichaAnimal() {
 
   // E1G: curva com eixo de tempo REAL, eixo Y em kg e dica por ponto — o mesmo desenho dos gráficos dos relatórios
   // (chartGeometry/renderChartSvg), só com pesagens COM peso; a legenda sai do mesmo intervalo (curveLegend).
-  const curve = useMemo(() => buildAnimalWeightCurve(selected?.entries ?? [], { range }), [selected, range]);
+  // M1: o GMD de cada trecho com a qualidade (cinza no intervalo curto) e o GMD (regressão) até hoje — o mesmo do Rebanho atual.
+  const curve = useMemo(() => buildAnimalWeightCurve(selected?.entries ?? [], { range, gmdDiasMinimos, hoje: localToday() }), [selected, range, gmdDiasMinimos]);
   const curveText = curveLegend(curve.resumo);
 
   if (!selected) return <main className="op-screen"><section className="op-card"><div className="op-empty">Nenhum animal cadastrado. Faça o primeiro lançamento para gerar a ficha.</div></section></main>;
@@ -125,11 +142,15 @@ export default function FichaAnimal() {
   const averageGmd = totalGain !== null && totalDays > 0 ? totalGain / totalDays : null;
   const carcass = calculateCarcassTrade({ weight: latestWeighed?.peso, yieldPercent: latestWeighed?.rendimento_carcaca });
   const latestGmd = hasNumber(latest?.gmd) ? Number(latest.gmd) : null;
+  // M1: GMD médio (do cadastro à última pesagem) e GMD da última pelos dias de cada um: intervalo curto = cinza + aviso.
+  const averageShown = curveGmdText({ gmd: averageGmd, ...classifyGmd({ dias: totalDays, gmd: averageGmd }, gmdDiasMinimos) }, { unit: false });
+  const latestShown = curveGmdText(gmdOfRow(latest, gmdDiasMinimos), { unit: false });
   const historyRows = [...selected.entries].reverse();
+  const historyGmd = historyRows.map((row) => curveGmdText(gmdOfRow(row, gmdDiasMinimos), { unit: false }));
   const events = historyRows.map((row, index) => ({
     title: `${row.tipo_manejo === 'Cadastro' ? 'Cadastro' : row.tipo_manejo === 'Saída' ? row.motivo_saida || 'Saída' : 'Pesagem'}${hasNumber(row.peso) ? ` ${nf.format(Number(row.peso))} kg` : ''}`,
     date: row.data_pesagem,
-    detail: [row.tipo_manejo, row.nome_lote, hasNumber(row.gmd) ? `GMD ${n3.format(Number(row.gmd))} kg/dia` : null].filter(Boolean).join(' · '),
+    detail: [row.tipo_manejo, row.nome_lote, historyGmd[index].texto !== '—' ? `GMD ${historyGmd[index].texto} kg/dia${historyGmd[index].cinza ? ` (${historyGmd[index].aviso}, fora da média)` : ''}` : null].filter(Boolean).join(' · '),
     color: row.tipo_manejo === 'Saída' ? '#dc2626' : index === historyRows.length - 1 ? '#5b6b80' : '#40de63',
   }));
 
@@ -139,8 +160,10 @@ export default function FichaAnimal() {
     setSearchOpen(false);
   };
   const exportHistory = () => {
-    const headers = ['Data', 'Tipo', 'Peso', 'Dias', 'Ganho', 'GMD', 'Lote', 'Apartação', 'Observação'];
-    const lines = historyRows.map((row) => [dateBr(row.data_pesagem), row.tipo_manejo, hasNumber(row.peso) ? nf.format(Number(row.peso)) : '', row.dias, hasNumber(row.ganho) ? nf.format(Number(row.ganho)) : '', hasNumber(row.gmd) ? n3.format(Number(row.gmd)) : '', row.nome_lote, row.nome_apartacao, row.observacao].map(csvCell).join(';'));
+    // M1: o mesmo número da tela e, quando houver GMD de intervalo curto, "Aviso do GMD" logo após o GMD.
+    const withWarning = historyGmd.some((shown) => shown.cinza);
+    const headers = ['Data', 'Tipo', 'Peso', 'Dias', 'Ganho', 'GMD', ...(withWarning ? ['Aviso do GMD'] : []), 'Lote', 'Apartação', 'Observação'];
+    const lines = historyRows.map((row, index) => [dateBr(row.data_pesagem), row.tipo_manejo, hasNumber(row.peso) ? nf.format(Number(row.peso)) : '', row.dias, hasNumber(row.ganho) ? nf.format(Number(row.ganho)) : '', historyGmd[index].texto === '—' ? '' : historyGmd[index].texto, ...(withWarning ? [historyGmd[index].aviso ?? ''] : []), row.nome_lote, row.nome_apartacao, row.observacao].map(csvCell).join(';'));
     download(`ficha-${selected.number}-${selected.brand}.csv`, `\ufeff${headers.map(csvCell).join(';')}\n${lines.join('\n')}`, 'text/csv;charset=utf-8');
     toast.success('Histórico do animal exportado.');
   };
@@ -148,8 +171,8 @@ export default function FichaAnimal() {
   const kpis = [
     ['Peso atual', latestWeighed ? nf.format(Number(latestWeighed.peso)) : '—', dateBr(latestWeighed?.data_pesagem), ''],
     ['Ganho total', totalGain === null ? '—' : `${totalGain >= 0 ? '+' : ''}${nf.format(totalGain)}`, 'desde o cadastro', 'accent'],
-    ['GMD médio', averageGmd === null ? '—' : n3.format(averageGmd), `kg/dia · ${ni.format(totalDays)} dias`, 'accent'],
-    ['GMD última', latestGmd !== null ? n3.format(latestGmd) : '—', latest?.data_anterior ? `vs. ${dateBr(latest.data_anterior)}` : 'primeira pesagem', 'accent'],
+    ['GMD médio', averageShown.texto, averageShown.cinza ? `${averageShown.aviso} · fora da média` : `kg/dia · ${ni.format(totalDays)} dias`, averageShown.cinza ? '' : 'accent', averageShown.cinza],
+    ['GMD última', latestGmd !== null ? latestShown.texto : '—', latestShown.cinza ? `${latestShown.aviso} · fora da média` : latest?.data_anterior ? `vs. ${dateBr(latest.data_anterior)}` : 'primeira pesagem', latestShown.cinza ? '' : 'accent', latestShown.cinza],
     ...(pode('commercial.values') ? [['@ carcaça est.', carcass.arrobas === null ? '—' : nf.format(carcass.arrobas), carcass.yieldPercent === null ? 'sem rendimento informado' : `rendimento ${nf.format(carcass.yieldPercent)}% · 1 @ = 15 kg`, '']] : []),
     ['Pesagens', ni.format(selected.entries.length), 'série completa', ''],
   ];
@@ -162,14 +185,14 @@ export default function FichaAnimal() {
         <div className="op-toolbar-actions">{pode('reports.export') ? <button className="op-button" type="button" onClick={exportHistory}>Exportar histórico</button> : null}<button className="op-button op-button--primary" type="button" onClick={() => navigate('/LancamentoPesagensIndividuais')}>Lançar pesagem</button></div>
       </div>
 
-      <div className="op-kpis">{kpis.map(([label, value, hint, accent]) => <div key={label} className={`op-kpi ${accent ? `op-kpi--${accent}` : ''}`}><span className="op-kpi__label">{label}</span><strong className="op-kpi__value">{value}</strong><span className="op-kpi__hint">{hint}</span></div>)}</div>
+      <div className="op-kpis">{kpis.map(([label, value, hint, accent, gray]) => <div key={label} className={`op-kpi ${accent ? `op-kpi--${accent}` : ''}`}><span className="op-kpi__label">{label}</span><strong className="op-kpi__value" style={gray ? GMD_GRAY_STYLE : undefined} title={gray ? hint : undefined}>{value}</strong><span className="op-kpi__hint">{hint}</span></div>)}</div>
 
       <div className="op-grid-two">
-        <section className="op-card"><header className="op-card__header"><h2>Curva de peso</h2><div className="op-segmented">{[['90', '90 dias'], ['183', '6 meses'], ['all', 'Tudo']].map(([value, label]) => <button className={range === value ? 'is-active' : ''} type="button" key={value} onClick={() => setRange(value)}>{label}</button>)}</div></header><div className="op-chart op-curve rpt-charts-host"><style>{CHART_SCREEN_CSS}</style>{curve.vazio ? <div className="op-empty">{curve.textoVazio}</div> : <ChartPlot chart={curve} uid="curva-peso" height={220} describe={curvePointTip} label="Curva de peso do animal" />}<div className="op-chart-legend"><span><i />Peso com balança</span><span>{curveText.pesagens} · {curveText.dias} · <strong className={curveText.tone === 'neg' ? 'is-negative' : curveText.tone === 'pos' ? 'is-positive' : ''}>{curveText.ganho}</strong></span></div></div></section>
+        <section className="op-card"><header className="op-card__header"><h2>Curva de peso</h2><div className="op-segmented">{[['90', '90 dias'], ['183', '6 meses'], ['all', 'Tudo']].map(([value, label]) => <button className={range === value ? 'is-active' : ''} type="button" key={value} onClick={() => setRange(value)}>{label}</button>)}</div></header><div className="op-chart op-curve rpt-charts-host"><style>{CHART_SCREEN_CSS}</style>{curve.vazio ? <div className="op-empty">{curve.textoVazio}</div> : <ChartPlot chart={curve} uid="curva-peso" height={220} describe={curvePointTip} label="Curva de peso do animal" />}<div className="op-chart-legend"><span><i />Peso com balança</span><span>{curveText.pesagens} · {curveText.dias} · <strong className={curveText.tone === 'neg' ? 'is-negative' : curveText.tone === 'pos' ? 'is-positive' : ''}>{curveText.ganho}</strong>{curveText.regressao ? <> · <span style={curveText.regressaoCinza ? GMD_GRAY_STYLE : undefined}>{curveText.regressao}</span></> : null}</span></div></div></section>
         <section className="op-card"><header className="op-card__header"><h2>Linha do tempo</h2><span>{ni.format(events.length)} eventos</span></header><div className="op-timeline">{events.map((event, index) => <div className="op-event" key={`${event.date}-${index}`}><div className="op-event__rail"><span className="op-event__dot" style={{ background: event.color }} />{index < events.length - 1 && <span className="op-event__line" />}</div><div className="op-event__body"><strong>{event.title}</strong><time>{dateBr(event.date)}</time><span>{event.detail}</span></div></div>)}</div></section>
       </div>
 
-      <section className="op-card"><header className="op-card__header"><h2>Histórico de pesagens</h2><span>{ni.format(historyRows.length)} registros</span></header><div className="op-table-scroll"><table className="op-table" style={{ minWidth: 820 }}><thead><tr><th>Data</th><th>Tipo</th><th className="is-number">Peso</th><th className="is-number">Dias</th><th className="is-number">Ganho</th><th className="is-number">GMD</th><th>Lote</th><th>Apartação</th><th>Observação</th></tr></thead><tbody>{historyRows.map((row) => { const gain = hasNumber(row.ganho) ? Number(row.ganho) : null; const gmd = hasNumber(row.gmd) ? Number(row.gmd) : null; return <tr key={row.id}><td>{dateBr(row.data_pesagem)}</td><td><span className={`op-type ${row.tipo_manejo === 'Cadastro' ? 'op-type--cadastro' : row.tipo_manejo === 'Saída' ? 'op-type--saida' : ''}`}>{row.tipo_manejo || 'Manejo'}</span></td><td className="is-number"><strong>{nf.format(Number(row.peso) || 0)}</strong></td><td className="is-number">{hasNumber(row.dias) ? ni.format(Number(row.dias)) : '—'}</td><td className={`is-number ${gain > 0 ? 'is-positive' : gain < 0 ? 'is-negative' : ''}`}>{gain !== null ? `${gain > 0 ? '+' : ''}${nf.format(gain)}` : '—'}</td><td className={`is-number ${gmd > 0 ? 'is-positive' : gmd < 0 ? 'is-negative' : ''}`}>{gmd !== null ? n3.format(gmd) : '—'}</td><td>{row.nome_lote || '—'}</td><td>{row.nome_apartacao || '—'}</td><td>{row.observacao || '—'}</td></tr>; })}</tbody></table></div></section>
+      <section className="op-card"><header className="op-card__header"><h2>Histórico de pesagens</h2><span>{ni.format(historyRows.length)} registros</span></header><div className="op-table-scroll"><table className="op-table" style={{ minWidth: 820 }}><thead><tr><th>Data</th><th>Tipo</th><th className="is-number">Peso</th><th className="is-number">Dias</th><th className="is-number">Ganho</th><th className="is-number">GMD</th><th>Lote</th><th>Apartação</th><th>Observação</th></tr></thead><tbody>{historyRows.map((row, index) => { const gain = hasNumber(row.ganho) ? Number(row.ganho) : null; const gmd = hasNumber(row.gmd) ? Number(row.gmd) : null; const shownGmd = historyGmd[index]; return <tr key={row.id}><td>{dateBr(row.data_pesagem)}</td><td><span className={`op-type ${row.tipo_manejo === 'Cadastro' ? 'op-type--cadastro' : row.tipo_manejo === 'Saída' ? 'op-type--saida' : ''}`}>{row.tipo_manejo || 'Manejo'}</span></td><td className="is-number"><strong>{nf.format(Number(row.peso) || 0)}</strong></td><td className="is-number">{hasNumber(row.dias) ? ni.format(Number(row.dias)) : '—'}</td><td className={`is-number ${gain > 0 ? 'is-positive' : gain < 0 ? 'is-negative' : ''}`}>{gain !== null ? `${gain > 0 ? '+' : ''}${nf.format(gain)}` : '—'}</td><td className={`is-number ${shownGmd.cinza ? '' : gmd > 0 ? 'is-positive' : gmd < 0 ? 'is-negative' : ''}`} style={shownGmd.cinza ? GMD_GRAY_STYLE : undefined} title={shownGmd.cinza ? `GMD não entra na média: ${shownGmd.aviso}` : undefined} data-gmd={shownGmd.cinza ? 'NAO_CONFIAVEL' : undefined}>{shownGmd.texto}</td><td>{row.nome_lote || '—'}</td><td>{row.nome_apartacao || '—'}</td><td>{row.observacao || '—'}</td></tr>; })}</tbody></table></div></section>
 
       {canReadSanity ? <SanidadeAnimalCard applications={sanity.rows} loading={sanity.loading} error={sanity.error} viaLabels={VIA_LABELS} /> : null}
     </main>

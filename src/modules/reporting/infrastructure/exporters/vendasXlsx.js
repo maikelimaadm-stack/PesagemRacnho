@@ -5,6 +5,7 @@
 // aqui. O CSV e o JSON continuam o Detalhado (uma linha por lançamento, subtotal por grupo e total geral).
 import { formatCell } from '../../domain/reportFormatting.js';
 import { buildVendasBlocks, VENDAS_FORMATS } from '../../domain/vendasLayout.js';
+import { gmdWarningHeader } from '../../domain/gmdColumns.js';
 
 // Cabeçalho do cartão/TOTAL GERAL na planilha: na folha a unidade vai no valor ("455,20 kg"); aqui, no cabeçalho.
 const headerOf = (total, animais) => (total.unit === 'animais' ? animais : total.unit === 'kg' ? `${total.label} (kg)` : total.label);
@@ -28,6 +29,13 @@ export const XLSX_VENDAS_KINDS = Object.freeze({
 export function buildVendasSheetRows(viewModel, { STYLE, numberStyle, metaRows }) {
   const blocks = buildVendasBlocks(viewModel, { showDetails: true });
   const detailColumns = blocks.grupos.detailColumns ?? [];
+  // M1: colunas dos lançamentos na planilha — as da folha e, logo após um GMD com algum valor em cinza (intervalo
+  // curto), "Aviso do GMD" (paridade com o CSV e a folha).
+  const grayKeys = new Set(blocks.grupos.items.flatMap((entry) => (entry.rows ?? []).flatMap((row) => row.cells.filter((cell) => cell.gmd?.cinza).map((cell) => cell.key))));
+  const sheetColumns = detailColumns.flatMap((column, index) => [
+    { label: column.label, index },
+    ...(grayKeys.has(column.key) ? [{ label: gmdWarningHeader(column.column ?? column), index, aviso: true }] : []),
+  ]);
   const rows = metaRows(viewModel, { grouping: `${blocks.groupLabel} · ${viewModel.view?.label ?? 'Vendas (Detalhado)'}` });
   const blank = () => rows.push({ kind: XLSX_VENDAS_KINDS.BLANK, cells: [] });
   // O título transborda para as células vazias ao lado: não entra na medida da largura da coluna A.
@@ -56,13 +64,17 @@ export function buildVendasSheetRows(viewModel, { STYLE, numberStyle, metaRows }
     // Cartão do grupo: os totais dele numa linha (Total = animais distintos).
     header(['', ...entry.totals.map((total) => headerOf(total, 'Total (animais)'))]);
     totalsRow(`Total ${entry.label}`, entry.totals, XLSX_VENDAS_KINDS.ROW, STYLE.subtotal);
-    header(detailColumns.map((column) => column.label));
+    header(sheetColumns.map((column) => column.label));
     for (const row of entry.rows ?? []) {
       rows.push({
         kind: XLSX_VENDAS_KINDS.DATA,
-        cells: row.cells.map((cell, index) => {
-          const value = formatCell(detailColumns[index].column, cell.raw, 'xlsx');
-          return [value, typeof value === 'number' ? numberStyle(detailColumns[index].column) : STYLE.text];
+        cells: sheetColumns.map((column) => {
+          const cell = row.cells[column.index];
+          // M1: "Aviso do GMD" logo após o GMD (o motivo do cinza) e o número do intervalo curto em cinza.
+          if (column.aviso) return [cell.gmd?.aviso ?? null, STYLE.text];
+          const value = formatCell(detailColumns[column.index].column, cell.raw, 'xlsx');
+          const style = cell.gmd?.cinza && STYLE.gmdGray != null ? STYLE.gmdGray : numberStyle(detailColumns[column.index].column);
+          return [value, typeof value === 'number' ? style : STYLE.text];
         }),
       });
     }
@@ -71,5 +83,5 @@ export function buildVendasSheetRows(viewModel, { STYLE, numberStyle, metaRows }
   header(['', ...blocks.totalGeral.items.map((total) => headerOf(total, 'Animais'))]);
   totalsRow('TOTAL GERAL', blocks.totalGeral.items, XLSX_VENDAS_KINDS.TOTAL, STYLE.total);
   const width = Math.max(2, ...rows.map((row) => row.cells.length));
-  return { rows, width, dataHeaders: detailColumns.map((column) => column.label), freeze: { rows: 6, cols: 0 } };
+  return { rows, width, dataHeaders: sheetColumns.map((column) => column.label), freeze: { rows: 6, cols: 0 } };
 }

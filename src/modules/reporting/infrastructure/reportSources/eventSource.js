@@ -22,7 +22,7 @@ async function readAllActive(table) {
   return (await table.toArray()).filter((row) => !row.deleted_at);
 }
 
-export async function loadEventLookups(db, viewModels, { arrobaDivisor } = {}) {
+export async function loadEventLookups(db, viewModels, { arrobaDivisor, gmdDiasMinimos } = {}) {
   const [marcas, racas, categorias, apartacoes, lotes, usuarios] = await Promise.all([
     readAllActive(db.table('marcas')),
     readAllActive(db.table('racas')),
@@ -43,15 +43,16 @@ export async function loadEventLookups(db, viewModels, { arrobaDivisor } = {}) {
   const salesPolicy = (await readAppSetting('sales-policy:local').catch(() => null)) || {};
   // Usuários: só id e nome saem daqui (buildEventLookups descarta o resto). Lotes: nome e faixa de
   // peso (peso_minimo/peso_maximo) da store já lida — nenhuma leitura nova.
-  return buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais: hasLegacy ? allAnimals : animais, salesPolicy, animalIdentity, arrobaDivisor });
+  return buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais: hasLegacy ? allAnimals : animais, salesPolicy, animalIdentity, arrobaDivisor, gmdDiasMinimos });
 }
 
 /**
- * @param {{ from?: string, to?: string, empresaId?: string, tipos?: string[], arrobaDivisor?: number }} params
+ * @param {{ from?: string, to?: string, empresaId?: string, tipos?: string[], arrobaDivisor?: number, gmdDiasMinimos?: number }} params
  *   arrobaDivisor: divisor da @ de peso vivo (30 ou 15; padrão 30) gravado em cada linha (E1B).
- * @returns {Promise<{ rows: object[], timings: { query: number, transform: number }, strategy: string, rowsRead: number }>}
+ *   gmdDiasMinimos (M1): intervalo mínimo do GMD (7/14/21/28; padrão 21) — a qualidade derivada de cada GMD.
+ * @returns {Promise<{ rows: object[], timings: { query: number, transform: number }, strategy: string, rowsRead: number, gmdDiasMinimos: number }>}
  */
-export async function loadEventRows({ from, to, empresaId, tipos, arrobaDivisor } = {}) {
+export async function loadEventRows({ from, to, empresaId, tipos, arrobaDivisor, gmdDiasMinimos } = {}) {
   const db = await storage.ensureReady();
   const table = db.table('pesagens');
   const startedAt = performance.now();
@@ -79,7 +80,7 @@ export async function loadEventRows({ from, to, empresaId, tipos, arrobaDivisor 
     if (tipos && !tipos.includes(viewModel.tipo_manejo)) continue;
     viewModels.push(viewModel);
   }
-  const lookups = await loadEventLookups(db, viewModels, { arrobaDivisor });
+  const lookups = await loadEventLookups(db, viewModels, { arrobaDivisor, gmdDiasMinimos });
   const rows = enrichEventRows(viewModels, lookups);
   instrumentation.lastQuery = { strategy, from: from ?? null, to: to ?? null, rowsRead: raw.length, rowsOut: rows.length };
   return {
@@ -87,5 +88,7 @@ export async function loadEventRows({ from, to, empresaId, tipos, arrobaDivisor 
     strategy,
     rowsRead: raw.length,
     timings: { query: queriedAt - startedAt, transform: performance.now() - queriedAt },
+    // M1: o mínimo com que a qualidade do GMD foi derivada (o runReport confere com o resolvido).
+    gmdDiasMinimos: lookups.gmdDiasMinimos,
   };
 }

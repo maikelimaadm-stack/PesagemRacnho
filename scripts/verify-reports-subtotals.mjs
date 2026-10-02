@@ -33,13 +33,19 @@ const AGG = [
   { id: 'peso_max', columnId: 'peso_inicial', op: 'max' },
 ];
 
+// M1 (1.5.0): GMD de intervalo menor que o mínimo (21 dias, o padrão — estas linhas não trazem a qualidade gravada pela
+// fonte) não entra em nenhuma conta de GMD. A referência aplica a regra por conta própria (dias ≥ 21), sem o motor.
+const GMD_MINIMO = 21;
+const gmdConfiavel = (row) => typeof row.gmd === 'number' && Number.isFinite(row.gmd) && typeof row.dias === 'number' && row.dias >= GMD_MINIMO;
+
 // Referência ingênua, escrita de forma independente do motor.
 function naive(population) {
-  const valid = (key) => population.map((row) => row[key]).filter((value) => typeof value === 'number' && Number.isFinite(value));
+  const valid = (key, rowsOf = population) => rowsOf.map((row) => row[key]).filter((value) => typeof value === 'number' && Number.isFinite(value));
   const pesos = valid('peso_inicial');
   const ganhos = valid('ganho');
-  const pares = population.filter((row) => typeof row.ganho === 'number' && typeof row.dias === 'number' && row.dias > 0);
-  const gmds = valid('gmd');
+  const confiaveis = population.filter(gmdConfiavel);
+  const pares = confiaveis.filter((row) => typeof row.ganho === 'number' && typeof row.dias === 'number' && row.dias > 0);
+  const gmds = valid('gmd', confiaveis);
   return {
     animais: new Set(population.map((row) => row.animal_id)).size,
     peso_medio: pesos.length ? pesos.reduce((a, b) => a + b, 0) / pesos.length : null,
@@ -68,6 +74,13 @@ const walk = (node) => {
 tree.nodes.forEach(walk);
 assert.equal(tree.nodes.reduce((total, node) => total + node.rowCount, 0), rows.length, 'nível 1 particiona a população');
 assert.ok(tree.nodes.some((node) => node.children.some((child) => child.missing)), 'lote ausente vira "Não informado"');
+
+// NEGATIVO (M1): a conta antiga (todo GMD, até o de 5 dias) dá outro GMD ponderado — o intervalo curto mudaria a média.
+const allPairs = rows.filter((row) => typeof row.ganho === 'number' && typeof row.dias === 'number' && row.dias > 0);
+const antigo = allPairs.reduce((a, r) => a + r.ganho, 0) / allPairs.reduce((a, r) => a + r.dias, 0);
+const geral = naive(rows).gmd_pond;
+assert.ok(rows.some((row) => typeof row.dias === 'number' && row.dias < GMD_MINIMO && typeof row.gmd === 'number'), 'a massa tem GMD de intervalo curto');
+assert.ok(Math.abs(antigo - geral) > 1e-6, `NEGATIVO: com o intervalo curto o GMD ponderado seria ${antigo}, não ${geral}`);
 
 // NEGATIVO: média de subtotais ≠ subtotal do pai quando os grupos têm tamanhos diferentes.
 const pai = tree.nodes[0];

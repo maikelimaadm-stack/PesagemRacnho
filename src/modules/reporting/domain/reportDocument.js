@@ -34,7 +34,9 @@ import { computeAggregate } from './reportAggregates.js';
 import { REPORT_MODES } from './reportDefinition.js';
 import { formatCell, headerLabel, MISSING_SCREEN } from './reportFormatting.js';
 import { formatGroupLabel, summaryMetrics, SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC } from './summaryLayout.js';
+import { entersGmdMath, gmdCellOf, gmdGrayNote, hasGmdQuality } from './gmdColumns.js';
 import { buildVendasBlocks, isVendasViewModel, vendasDocumentBody } from './vendasLayout.js';
+import { ARROBA_KINDS, viewModelArrobaLabel } from './arrobaColumns.js';
 
 export const DOCUMENT_KIND = 'pesagens.report-document';
 export const DOC_ROW_TYPES = Object.freeze({
@@ -75,6 +77,9 @@ const collator = new Intl.Collator('pt-BR', { sensitivity: 'base', numeric: true
 const upper = (text) => String(text ?? '').toLocaleUpperCase('pt-BR');
 const isMissingValue = (value) => value === null || value === undefined || (typeof value === 'number' && !Number.isFinite(value));
 const COUNT_OPS = new Set(['count', 'countValid', 'countDistinct']);
+// M1 §5: coluna (ou coluna de valor de um total) da @ de PESO VIVO — a do divisor de Configurações › Relatórios.
+// (Coluna sem a marca — view model montado à mão: a @ viva é a de unidade "@"; a de carcaça não tem unidade.)
+const isLiveArroba = (column) => (column?.arroba ? column.arroba === ARROBA_KINDS.VIVO : column?.unit === '@');
 
 function brDate(iso) {
   return String(iso ?? '').slice(0, 10).split('-').reverse().join('/');
@@ -234,9 +239,12 @@ function makTitleCase(text) {
   }).join(' ');
 }
 
-/** Cabeçalho no jeito do antigo: sem "(unidade)" no fim (menos "(@)") e em Title Case ("Peso médio (kg)" → "Peso Médio"). */
+/**
+ * Cabeçalho no jeito do antigo: sem "(unidade)" no fim e em Title Case ("Peso médio (kg)" → "Peso Médio"). A marca da
+ * arroba fica (M1 §5: "(@ vivo ÷30)", "(@ carcaça)" — sem ela a coluna não diria qual arroba é).
+ */
 export function makHeaderLabel(label) {
-  return makTitleCase(String(label ?? '').replace(/\s*\((?!@\))[^)]*\)\s*$/, '').trim());
+  return makTitleCase(String(label ?? '').replace(/\s*\((?!@)[^)]*\)\s*$/, '').trim());
 }
 
 /**
@@ -249,7 +257,8 @@ export function makHeaderLabel(label) {
 export function makGenericLabel(label, column = null, unit = null) {
   // Parêntese que só explica a coluna sai ("Lote (última pesagem no período)" → "Lote", "Dias no lote (no
   // período) — média" → "Dias no Lote — Média"); os que mudam o sentido do número ficam.
-  const text = String(label ?? '').replace(/\s*\((?!mais antiga\)|mais recente\)|com valor\))[^()]*\s[^()]*\)/g, '').trim();
+  // M1 §5: a marca da arroba ("(@ vivo ÷30)", "(@ carcaça)") nunca sai — sem ela a coluna não diria qual arroba é.
+  const text = String(label ?? '').replace(/\s*\((?!mais antiga\)|mais recente\)|com valor\)|@)[^()]*\s[^()]*\)/g, '').trim();
   const shown = new Set(unit ? [unit] : []);
   if (column?.unit && ['weight', 'percentage'].includes(column.type)) shown.add(column.unit);
   if (column?.type === 'money') shown.add('R$');
@@ -374,7 +383,7 @@ export { makNumberText as sheetNumberText };
  * Resumo por Data: centralizado, números em fonte mono, Lote/Peso Médio/GMD Médio semi e Qtd em negrito; Por
  * Apartação/Lote: grade com bordas, tudo à esquerda e sem destaque (como o antigo desenhava esse tipo).
  */
-function makSummaryColumns(columns, variant) {
+function makSummaryColumns(columns, variant, viewModel) {
   const plain = variant === 'apartacao-lote';
   const generic = isGenericVariant(variant);
   const align = plain ? 'left' : 'center';
@@ -393,7 +402,8 @@ function makSummaryColumns(columns, variant) {
       const weight = column.key === firstMetric && COUNT_OPS.has(column.op) ? 'bold' : averageWeight || valueColumn?.type === 'gmd' ? 'semibold' : null;
       return { ...column, label: makGenericLabel(column.label, valueColumn), align, mk: { mono, weight } };
     }
-    const label = PESAGENS_SHEET_HEADERS.metrics[id] ?? makHeaderLabel(column.label);
+    // M1 §5: {@} do cabeçalho do antigo ("Média ({@})") = a marca da arroba da coluna da métrica.
+    const label = PESAGENS_SHEET_HEADERS.metrics[id] ? viewModelArrobaLabel(viewModel, PESAGENS_SHEET_HEADERS.metrics[id], column.metric?.spec?.columnId) : makHeaderLabel(column.label);
     return { ...column, label, align, mk: { mono, weight: plain ? null : MAK_EMPHASIS[column.key] ?? null } };
   });
 }
@@ -450,8 +460,10 @@ function makLine(mak, items, source, { lead, layout, lotes = null, leafLevel = f
       // Valor total digitado só em parte das vendas: a linha diz quantas (decisão da E1D, como na E1B).
       if (column.type === 'money' && result.n_validos > 0 && result.n_validos < result.n_total) text = `${text} (${result.n_validos} de ${result.n_total})`;
     }
-    // arroba: a linha mostra @ (o rodapé explica "@ = peso vivo ÷ N" mesmo sem a coluna de @ na tabela).
-    out.push({ key: item.key, label: item.label ?? lead, text, raw: value, ...(column.unit === '@' ? { arroba: true } : {}) });
+    // arroba: a linha mostra a @ de PESO VIVO (o rodapé explica "@ = peso vivo ÷ N" mesmo sem a coluna de @ na tabela).
+    // M1 §5: {@} do rótulo ("Média ({@})") = a marca da arroba da coluna do total.
+    const label = item.label == null ? lead : viewModelArrobaLabel(mak.viewModel, item.label, item.spec?.columnId);
+    out.push({ key: item.key, label, text, raw: value, ...(isLiveArroba(column) ? { arroba: true } : {}) });
   }
   // Resumo genérico em grade: o 1º item ("Subtotal <grupo>: N …") na largura dele, sem quebrar; os outros dividem o resto.
   return layout === 'grid' && mak.variant === MAK_GENERIC_VARIANTS.RESUMO ? { layout, items: out, leadFit: true } : { layout, items: out };
@@ -514,7 +526,7 @@ function makLeafCount(mak, rows) {
  * Texto de uma célula de dados como no antigo: kg nos pesos, R$ no dinheiro, "-" no vazio; Sexo "M"/"F" só
  * no Analítico e em Vendas de Pesagens (na lista genérica fica o nome, "Macho"/"Fêmea").
  */
-function makDataCell(mak, column, raw) {
+function makDataCell(mak, column, raw, row = null) {
   const source = column.column;
   if (source.id === 'sexo' && !isGenericVariant(mak.variant) && !isMissingValue(raw) && String(raw).trim() !== '') {
     const text = String(raw).trim();
@@ -523,13 +535,38 @@ function makDataCell(mak, column, raw) {
   }
   if (MAK_ZERO_AS_MISSING.has(source.id) && Number(raw) === 0) return { text: MAK_MISSING };
   const numeric = MAK_NUMERIC_TYPES.has(source.type);
-  const text = numeric
-    ? makNumberText(source, raw, { decimals: column.mk.decimals, unit: column.mk.unit })
-    : formatCell(source, raw, 'print');
+  const numberText = (value) => makNumberText(source, value, { decimals: column.mk.decimals, unit: column.mk.unit });
+  // M1: GMD pelo formatador compartilhado (gmdExibicao, com o número da folha): SEM_GMD "-" (nunca 0) e o
+  // NAO_CONFIAVEL com o mesmo número, em cinza e com o aviso.
+  const gmd = row ? dataCellGmd(mak.viewModel, source, row, numberText) : null;
+  if (gmd) {
+    if (gmd.texto === '-') return { text: MAK_MISSING, tone: null };
+    if (gmd.cinza) return { text: gmd.texto, tone: null, gmd: gmdMark(gmd) };
+  }
+  const text = numeric ? numberText(raw) : formatCell(source, raw, 'print');
   const shown = text === MISSING_SCREEN || text === '' ? MAK_MISSING : text;
   // GMD verde quando ganha, vermelho quando perde (text-emerald-600 / text-red-600 do antigo).
   const tone = source.type === 'gmd' && typeof raw === 'number' && raw !== 0 ? (raw > 0 ? 'pos' : 'neg') : null;
   return { text: shown, tone };
+}
+
+/** M1: marca da célula de GMD não confiável (a folha desenha cinza, com o motivo no title). */
+const gmdMark = (gmd) => ({ qualidade: gmd.gmdQualidade, cinza: true, aviso: gmd.aviso });
+
+/**
+ * M1: exibição do GMD da linha numa coluna da folha (gmdExibicao do contrato, com o formatador da camada) — null fora
+ * das colunas de GMD com qualidade declarada.
+ */
+function dataCellGmd(viewModel, column, row, format) {
+  const definition = definitionColumnOf(viewModel, column?.id);
+  return hasGmdQuality(definition) ? gmdCellOf(definition, row, format) : null;
+}
+
+/** M1: a folha tem GMD em cinza (intervalo curto) em alguma coluna de dados? (todas as linhas — a impressão leva todas) */
+function hasGrayGmd(viewModel, columns) {
+  const gmdColumns = columns.filter((column) => column.kind === 'data').map((column) => definitionColumnOf(viewModel, column.column?.id ?? column.key)).filter(hasGmdQuality);
+  if (!gmdColumns.length) return false;
+  return (viewModel.rows ?? []).some((row) => gmdColumns.some((column) => gmdCellOf(column, row)?.cinza));
 }
 
 // ---------------------------------------------------------------------------
@@ -756,7 +793,7 @@ function detailColumns(viewModel) {
  * Valor Total em semi-negrito; Animal em peso médio (font-medium). Lista genérica (E1E): o rótulo da coluna
  * em Title Case, sem a unidade que a célula já mostra (headerLabel → makGenericLabel), e o kg com 1 casa da folha.
  */
-function makDetailColumns(columns, variant) {
+function makDetailColumns(columns, variant, viewModel) {
   const generic = isGenericVariant(variant);
   const labels = variant === 'vendas' ? PESAGENS_SHEET_HEADERS.vendas : PESAGENS_SHEET_HEADERS.columns;
   return columns.map((column) => {
@@ -771,7 +808,7 @@ function makDetailColumns(columns, variant) {
     };
     // Genérico: sem o parêntese que só explica a coluna ("Lote (última pesagem no período)" → "Lote" — o título
     // do grupo e a tela já dizem); o de uma palavra fica ("Destino/frigorífico (texto)", "Tamanho (bytes)").
-    const label = generic ? makGenericLabel(headerLabel(source), source) : labels[source.id] ?? makHeaderLabel(source.label);
+    const label = generic ? makGenericLabel(headerLabel(source), source) : labels[source.id] ? viewModelArrobaLabel(viewModel, labels[source.id], source.id) : makHeaderLabel(source.label);
     return { ...column, label, mk };
   });
 }
@@ -831,10 +868,12 @@ function buildDetailBody(viewModel, columns, { maxDataRows = Infinity } = {}, ma
         const raw = dataCellRaw(viewModel, column.column, row);
         const kind = column.align === 'right' ? 'num' : 'txt';
         if (mak) {
-          const { text, tone } = makDataCell(mak, column, raw);
-          return { col, key: column.key, text, raw: null, align: column.align, kind, ...(tone ? { tone } : {}) };
+          const { text, tone, gmd: mark } = makDataCell(mak, column, raw, row);
+          return { col, key: column.key, text, raw: null, align: column.align, kind, ...(tone ? { tone } : {}), ...(mark ? { gmd: mark } : {}) };
         }
-        return { col, key: column.key, text: formatCell(column.column, raw, 'print'), raw: null, align: column.align, kind };
+        const gmd = dataCellGmd(viewModel, column.column, row, (value) => formatCell(column.column, value, 'print'));
+        const text = gmd?.texto === '-' ? MISSING_SCREEN : formatCell(column.column, raw, 'print');
+        return { col, key: column.key, text, raw: null, align: column.align, kind, ...(gmd?.cinza ? { gmd: gmdMark(gmd) } : {}) };
       }),
     };
   };
@@ -1144,11 +1183,36 @@ export function gmdCoverageOf(viewModel, columns = [], matrix = null) {
     const key = animalAccessor.groupKeyOf(row);
     if (key === null || key === undefined || key === '') continue;
     all.add(key);
-    if (toFiniteNumber(gmdAccessor.valueOf(row)) !== null) withGmd.add(key);
+    // M1: só o GMD que ENTRA na conta (CONFIAVEL) conta para o "N" — o do intervalo curto aparece, mas não entra.
+    if (toFiniteNumber(gmdAccessor.valueOf(row)) !== null && entersGmdMath(gmdAccessor.column, row)) withGmd.add(key);
   }
   if (!all.size) return null;
   const missing = withGmd.size < all.size;
   return { columnId, validos: withGmd.size, total: all.size, texto: missing ? `GMD de ${withGmd.size.toLocaleString('pt-BR')} de ${all.size.toLocaleString('pt-BR')} cab.` : null };
+}
+
+/**
+ * M1: a mesma cobertura do GMD ("GMD de N de M cab.") direto do view model — para o XLSX/PDF levarem o rodapé da folha
+ * sem montar o documento: Detalhado = a 1ª coluna de GMD em uso; Resumido = a 1ª métrica de GMD; Matriz = a métrica
+ * de GMD da célula; venda (quadros) = só com "Mostrar Detalhes" (a folha de venda sem detalhe não tem coluna de GMD).
+ */
+export function gmdCoverageOfViewModel(viewModel, { showDetails = false } = {}) {
+  if (!(viewModel?.rowCount > 0) && !(viewModel?.rows ?? []).length) return null;
+  const summary = viewModel.mode === REPORT_MODES.RESUMIDO;
+  const matrix = summary && isMatrixViewModel(viewModel) ? buildMatrix(viewModel, { target: 'xlsx' }) : null;
+  if (matrix) return gmdCoverageOf(viewModel, [], matrix);
+  if (isVendasViewModel(viewModel) && !showDetails) return null;
+  const columns = summary
+    ? summaryMetrics(viewModel).map((metric) => ({ kind: 'metric', key: metric.key, metric }))
+    : (viewModel.columns ?? []).map((column) => ({ kind: 'data', key: column.id, column }));
+  return gmdCoverageOf(viewModel, columns, null);
+}
+
+/** M1: a nota do cinza (intervalo curto) quando o Detalhado tem GMD em cinza — a mesma do rodapé da folha. */
+export function gmdGrayNoteOfViewModel(viewModel) {
+  if (viewModel?.mode === REPORT_MODES.RESUMIDO) return null;
+  const columns = (viewModel?.columns ?? []).map((column) => ({ kind: 'data', key: column.id, column }));
+  return hasGrayGmd(viewModel, columns) ? gmdGrayNote(viewModel.gmdDiasMinimos) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1183,7 +1247,7 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
   const variant = style === SHEET_STYLES.MAKGESTAO ? makVariant(viewModel, layout) : null;
   const mak = variant ? { variant, viewModel, available: viewModel.availableColumns ?? viewModel.columns ?? [], ...makLinesOf(viewModel, variant) } : null;
   let allColumns = matrix ? matrixColumns(matrix) : summary ? summaryColumns(viewModel) : detailColumns(viewModel);
-  if (mak) allColumns = layout === 'detail' ? makDetailColumns(allColumns, variant) : makSummaryColumns(allColumns, variant);
+  if (mak) allColumns = layout === 'detail' ? makDetailColumns(allColumns, variant, viewModel) : makSummaryColumns(allColumns, variant, viewModel);
   const hasRows = (viewModel.rowCount ?? 0) > 0;
   // E1F: colunas escolhidas pela pessoa ("Colunas Painel/Detalhes/Visíveis/Colunas" ≠ padrão, reportService
   // columnsChosen) aparecem todas, mesmo vazias ("-") — marcar faz a coluna aparecer, como no MAKGESTAO.
@@ -1211,15 +1275,19 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
 
   // Detalhado: os totais em texto também podem estar em @ (Média @, Total @) — o rodapé explica o divisor.
   // Sem linhas a folha é só "Nenhum registro…" (nenhuma coluna aparece): nada em @ para explicar.
-  const usesArroba = hasRows && (columns.some((column) => column.unit === '@' || column.column?.unit === '@' || column.metric?.column?.unit === '@')
-    || Boolean(matrix?.metrics.some((metric) => metric.column?.unit === '@')) || Boolean(vendas?.liveArroba)
+  // M1 §5: só a @ de PESO VIVO (arroba 'vivo') pede "@ = peso vivo ÷ N"; a @ de carcaça não tem divisor de configuração.
+  const usesArroba = hasRows && (columns.some((column) => isLiveArroba(column.column) || isLiveArroba(column.metric?.column))
+    || Boolean(matrix?.metrics.some((metric) => isLiveArroba(metric.column))) || Boolean(vendas?.liveArroba)
     || (mak && !vendas ? bodyRows.some((row) => row.line?.items.some((item) => item.arroba)) : false)
-    || (!summary && !mak && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => metric.column?.unit === '@')));
+    || (!summary && !mak && (viewModel.aggregates ?? []).length > 0 && summaryMetrics(viewModel).some((metric) => isLiveArroba(metric.column))));
   const divisor = viewModel.arrobaDivisor ?? 30;
   const omitted = viewModel.hiddenByPermission?.length ?? 0;
   // E1G (A3): quantos animais têm GMD, quando falta para alguém (curto, no rodapé — não é nota longa).
   // No desenho de venda sem "Mostrar Detalhes" não há tabela de colunas: sem GMD na folha, sem nota.
   const gmdCoverage = hasRows ? gmdCoverageOf(viewModel, vendas && !showDetails ? [] : columns, matrix) : null;
+  // M1: GMD de intervalo curto na folha (cinza): o rodapé diz o que o cinza quer dizer — a impressão e o PDF não têm o
+  // "title" da célula. Só no Detalhado (o Resumido mostra contas, que já não levam o intervalo curto).
+  const gmdGray = hasRows && !summary && hasGrayGmd(viewModel, vendas && !showDetails ? [] : columns);
 
   const emitted = formatEmittedAt(viewModel.generatedAt);
   const emitter = viewModel.emittedBy?.nome ?? viewModel.emittedBy?.id ?? '—';
@@ -1230,6 +1298,8 @@ export function buildReportDocument(viewModel, { header = null, orientation = 'a
     filtros: `Filtros: ${describeReportFilters(viewModel)}`,
     arroba: usesArroba ? `@ = peso vivo ÷ ${divisor}` : null,
     gmd: gmdCoverage?.texto ?? null,
+    // M1: "GMD em cinza = intervalo menor que 21 dias: não entra na média" (só quando há GMD em cinza na folha).
+    gmdCinza: gmdGray ? gmdGrayNote(viewModel.gmdDiasMinimos) : null,
     omitidas: omitted ? `${omitted} coluna(s) omitida(s) pelo perfil de quem emitiu` : null,
     emitidoPor: `Emitido por ${emitter} em ${emitted}`,
   };

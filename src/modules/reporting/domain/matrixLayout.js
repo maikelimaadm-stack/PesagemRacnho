@@ -31,7 +31,8 @@ export function isMatrixViewModel(viewModel) {
 }
 
 // "Peso médio (kg)" → "Peso médio": a legenda diz o que está na célula; a unidade vai no próprio valor.
-const shortLabel = (label) => String(label ?? '').replace(/\s*\([^)]*\)\s*$/, '');
+// M1 §5: a marca da arroba ("(@ vivo ÷30)", "(@ carcaça)") fica — sem ela o valor não diria qual arroba é.
+const shortLabel = (label) => String(label ?? '').replace(/\s*\((?!@)[^)]*\)\s*$/, '');
 
 // O nome do lote é único só dentro da apartação (o cadastro aceita "Lote 01" na Engorda e na Recria) e a
 // matriz agrupa pela chave (lote_id): sem contexto sairiam dois cabeçalhos "Lote 01" com números diferentes.

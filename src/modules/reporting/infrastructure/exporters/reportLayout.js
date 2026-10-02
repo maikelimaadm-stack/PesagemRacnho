@@ -7,6 +7,7 @@ import { REPORT_MODES } from '../../domain/reportDefinition.js';
 import { formatCell, headerLabel } from '../../domain/reportFormatting.js';
 import { NONE_GROUP_KEY } from '../../domain/groupEngine.js';
 import { buildSummaryLayout, formatGroupLabel, isLeafGroupLevel, leafOnlyMetricKeys } from '../../domain/summaryLayout.js';
+import { gmdCellOf, gmdWarningHeader, hasGmdQuality } from '../../domain/gmdColumns.js';
 
 export { aggregateLabel, aggregateValueColumn };
 
@@ -47,22 +48,33 @@ export function buildReportLines(viewModel, target) {
     return { mode: REPORT_MODES.RESUMIDO, headers: summary.headers, lines, summary };
   }
 
-  const { columns, aggregates } = viewModel;
+  const { aggregates } = viewModel;
+  // M1: colunas da exportação = as da folha + "Aviso do GMD" logo após o GMD que tem algum valor em cinza.
+  const exportColumns = exportDataColumns(viewModel);
+  const columns = exportColumns.map((entry) => entry.column);
   // Métricas de um par que não vale neste agrupamento (hiddenMetrics) ficam fora também do Detalhado.
   const hidden = new Set(viewModel.hiddenMetrics ?? []);
   const specs = aggregates.filter((spec) => !hidden.has(spec.id));
   // Faixa do lote (par leafOnly) só no subtotal do nível folha — acima dele e no Total geral não sai.
   const leafOnly = leafOnlyMetricKeys(viewModel);
   const specsAt = (level) => specs.filter((spec) => !leafOnly.has(spec.id) || isLeafGroupLevel(viewModel, level));
-  const valueColumns = viewModel.availableColumns ?? columns;
+  const valueColumns = viewModel.availableColumns ?? viewModel.columns;
   const lines = [];
-  const dataLine = (row, level, group) => ({
-    type: LINE_TYPES.DATA,
-    level,
-    group,
-    row,
-    cells: columns.map((column) => formatCell(column, cellRawValue(viewModel, column, row), target)),
-  });
+  const empty = target === 'xlsx' || target === 'json' ? null : '';
+  const missingNumber = formatCell({ type: 'gmd' }, null, target);
+  const dataLine = (row, level, group) => {
+    // gray = índices das células de GMD em cinza (o XLSX pinta o número; o CSV leva o aviso na coluna ao lado).
+    const gray = [];
+    const cells = exportColumns.map((entry, index) => {
+      if (entry.aviso) return gmdCellOf(entry.definition, row)?.aviso ?? empty;
+      if (!entry.definition) return formatCell(entry.column, cellRawValue(viewModel, entry.column, row), target);
+      const gmd = gmdCellOf(entry.definition, row);
+      if (gmd.cinza) gray.push(index);
+      // SEM_GMD sai vazio (nunca 0); com número, o MESMO número da folha (cinza ou não).
+      return gmd.texto === '-' ? missingNumber : formatCell(entry.column, cellRawValue(viewModel, entry.column, row), target);
+    });
+    return { type: LINE_TYPES.DATA, level, group, row, cells, ...(gray.length ? { gray } : {}) };
+  };
   // Rótulo do total: o de curral da definição pelo id (metricLabels — o mesmo da grade e da folha, ex.:
   // Vendas "Animais", "Média (@)", "Valor total"); sem ele, o técnico ("Média simples — Peso (kg)").
   const metricLabels = viewModel.metricLabels ?? {};
@@ -96,5 +108,24 @@ export function buildReportLines(viewModel, target) {
     viewModel.rows.forEach((row) => lines.push(dataLine(row, 0, '')));
   }
   lines.push(...totalLines(LINE_TYPES.GRAND_TOTAL, viewModel.totals, 0, ''));
-  return { mode: REPORT_MODES.DETALHADO, headers: columns.map((column) => headerLabel(column)), lines };
+  return { mode: REPORT_MODES.DETALHADO, headers: exportColumns.map((entry) => entry.label), lines, columns };
+}
+
+/**
+ * M1: colunas de dados do Detalhado na exportação (CSV/XLSX): as visíveis da folha e, logo após cada coluna de GMD com
+ * qualidade declarada que tem ALGUM valor em cinza (intervalo curto), a coluna "Aviso do GMD" com o motivo — paridade
+ * com a folha (que mostra o número em cinza e o motivo). Sem GMD em cinza, as colunas são as de sempre.
+ * @returns {{ column: object, label: string, definition?: object, aviso?: true }[]}
+ */
+export function exportDataColumns(viewModel) {
+  const out = [];
+  for (const column of viewModel.columns ?? []) {
+    const definition = typeof viewModel.resolve === 'function' ? viewModel.resolve(column.id)?.column ?? null : null;
+    const quality = hasGmdQuality(definition) ? definition : null;
+    out.push({ column, label: headerLabel(column), ...(quality ? { definition: quality } : {}) });
+    if (quality && (viewModel.rows ?? []).some((row) => gmdCellOf(quality, row)?.cinza)) {
+      out.push({ column: { id: `${column.id}__aviso`, label: gmdWarningHeader(column), type: 'text' }, label: gmdWarningHeader(column), definition: quality, aviso: true });
+    }
+  }
+  return out;
 }

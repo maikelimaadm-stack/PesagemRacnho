@@ -4,6 +4,9 @@ import { storageRecordToViewModel } from '../../../weighing/domain/weighingMappe
 import { pendenciesOf } from '../../../operations/domain/closingPendencies.js';
 import { normalizeCarcassYield } from '../../../weighing/domain/commercialCalculations.js';
 import { normalizeText } from '../../domain/filterEngine.js';
+import { annotateGmdQuality } from '../../domain/gmdColumns.js';
+import { EVENT_COLUMNS } from '../../definitions/columns/eventColumns.js';
+import { GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinimos } from '../../../weighing/domain/gmdQuality.js';
 
 /**
  * Deduplica por id de domínio mantendo a linha ativa mais recente (maior localId).
@@ -77,10 +80,12 @@ export function buildAnimalIdentityIndex(animals = [], marcaNames = new Map()) {
   return map;
 }
 
-export function buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais, salesPolicy = {}, animalIdentity = null, arrobaDivisor = DEFAULT_LIVE_ARROBA_DIVISOR } = {}) {
+export function buildEventLookups({ marcas, racas, categorias, apartacoes, lotes, sessoes, usuarios, animais, salesPolicy = {}, animalIdentity = null, arrobaDivisor = DEFAULT_LIVE_ARROBA_DIVISOR, gmdDiasMinimos = GMD_DIAS_MINIMOS_PADRAO } = {}) {
   return {
     salesPolicy,
     arrobaDivisor: normalizeLiveArrobaDivisor(arrobaDivisor),
+    // M1: intervalo mínimo do GMD (Configurações › Relatórios, 7/14/21/28; inválido → 21) — a qualidade de cada GMD.
+    gmdDiasMinimos: normalizeGmdDiasMinimos(gmdDiasMinimos),
     loteFaixas: lotRangeMap(lotes),
     // Texto do evento → id do cadastro (grafias diferentes do mesmo cadastro no mesmo grupo).
     marcaIdByName: idByName(marcas),
@@ -107,6 +112,14 @@ export function buildEventLookups({ marcas, racas, categorias, apartacoes, lotes
  */
 export function enrichEventRows(viewModels, lookups = buildEventLookups()) {
   const rows = dedupeById(viewModels);
+  const enriched = enrichDeduped(rows, lookups);
+  // M1: qualidade do GMD derivada na LEITURA pelos dias do intervalo gravado (gmd_qualidade/gmd_motivo) — o fato
+  // gravado não muda; o mínimo é o de Configurações › Relatórios.
+  annotateGmdQuality(enriched, EVENT_COLUMNS, lookups.gmdDiasMinimos ?? GMD_DIAS_MINIMOS_PADRAO);
+  return enriched;
+}
+
+function enrichDeduped(rows, lookups) {
   const documentCounts = new Map();
   for (const row of rows) {
     if (row.documento_embarque_id) documentCounts.set(row.documento_embarque_id, (documentCounts.get(row.documento_embarque_id) || 0) + 1);

@@ -1,5 +1,6 @@
 // Gate reports:weighted-gmd:verify (R2) — GMD simples × GMD ponderado (Σ ganho ÷ Σ dias,
-// só pares válidos) no motor, no grupo e no relatório Desempenho na massa de referência.
+// só pares válidos) no motor, no grupo e no relatório Desempenho na massa de referência. M1 (1.5.0): só intervalos
+// CONFIÁVEIS (dias ≥ mínimo, padrão 21) entram — Pesagens com os intervalos curtos da massa e os mínimos 7/21/28.
 import assert from 'node:assert/strict';
 import { avg, ratio, weightedGmd } from '../src/modules/reporting/domain/aggregateEngine.js';
 import { ADMIN, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
@@ -49,5 +50,25 @@ close(report.totals.gmd_simples.value, (45 / 40 + 30 / 31) / 2, 'simples = médi
 assert.equal(report.totals.gmd_ponderado.n_validos, 2);
 assert.equal(report.totals.ganho_total.value, 75);
 
+// M1 (1.5.0): o GMD ponderado só soma ganho e dias de intervalos CONFIÁVEIS (dias ≥ mínimo de Configurações ›
+// Relatórios, padrão 21). No Desempenho acima os períodos são longos (40 e 31 dias): nada muda. No Pesagens do mesmo
+// período os intervalos consecutivos são curtos (A1 20 + 20, A2 10) — só a venda de 21 dias (A2 +20) entra.
+assert.equal(report.gmdDiasMinimos, 21, 'mínimo padrão 21');
+const eventos = await runReport('pesagens.periodo', { today: TODAY, params: { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } } }, ADMIN);
+const spec = eventos.aggregates.find((item) => item.op === 'weightedGmd');
+close(eventos.totals[spec.id].value, 20 / 21, 'Pesagens: ponderado = só o intervalo de 21 dias');
+assert.deepEqual([eventos.totals[spec.id].n_validos, eventos.totals[spec.id].numerator, eventos.totals[spec.id].denominator], [1, 20, 21], 'Pesagens: 1 par confiável (Σ ganho 20, Σ dias 21)');
+// NEGATIVO: a regra da 1.4.2 (todo par com dias > 0) somava os intervalos curtos: (30 + 15 + 10 + 20) ÷ (20 + 20 + 10 + 21).
+close(weightedGmd(eventos.rows).value, 75 / 71, 'NEGATIVO: o weightedGmd cru (sem a qualidade) dava 75 ÷ 71');
+const eventos7 = await runReport('pesagens.periodo', { today: TODAY, gmdDiasMinimos: 7, params: { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } } }, ADMIN);
+close(eventos7.totals[spec.id].value, 75 / 71, 'mínimo 7: os quatro intervalos entram (75 ÷ 71)');
+const eventos28 = await runReport('pesagens.periodo', { today: TODAY, gmdDiasMinimos: 28, params: { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } } }, ADMIN);
+assert.equal(eventos28.totals[spec.id].value, null, 'mínimo 28: nenhum intervalo confiável → sem GMD (nunca 0)');
+// O GMD simples (média dos GMD) segue a mesma regra: só os confiáveis.
+const des28 = await runReport('desempenho.individual', { today: TODAY, gmdDiasMinimos: 28, params: { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } } }, ADMIN);
+close(des28.totals.gmd_ponderado.value, 75 / 71, 'Desempenho com mínimo 28: 40 e 31 dias continuam confiáveis');
+const desCurto = await runReport('desempenho.individual', { today: TODAY, params: { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-08-21' } } }, ADMIN);
+assert.deepEqual([desCurto.totals.gmd_ponderado.value, desCurto.totals.gmd_simples.value, desCurto.totals.gmd_ponderado.n_validos], [null, null, 0], 'Desempenho de agosto (A1 20 dias, A2 10 dias): ponderado e simples sem GMD');
+
 await resetDb();
-console.log(JSON.stringify({ gate: 'reports:weighted-gmd:verify', ok: true, gmdPonderado: report.totals.gmd_ponderado.value, gmdSimples: report.totals.gmd_simples.value }, null, 2));
+console.log(JSON.stringify({ gate: 'reports:weighted-gmd:verify', ok: true, gmdPonderado: report.totals.gmd_ponderado.value, gmdSimples: report.totals.gmd_simples.value, pesagensConfiavel: eventos.totals[spec.id].value }, null, 2));

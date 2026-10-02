@@ -111,9 +111,11 @@ export function formatCell(column, value, target = 'screen') {
 
 /**
  * Rótulo do cabeçalho com unidade: "Peso (kg)". Rótulo que já termina na unidade (E1D, cabeçalho do antigo
- * "Qtd @" na @ viva) não a repete — "Qtd @ (@)" seria ruído.
+ * "Qtd @" na @ viva) não a repete — "Qtd @ (@)" seria ruído. M1 §5: rótulo de arroba já leva a marca ("Peso (@ vivo
+ * ÷30)", "Qtd (@ carcaça)") — o "(@)" depois dela também seria ruído.
  */
 export function headerLabel(column) {
-  if (!column.unit || String(column.label ?? '').endsWith(` ${column.unit}`)) return column.label;
+  const label = String(column.label ?? '');
+  if (!column.unit || label.endsWith(` ${column.unit}`) || (column.unit === '@' && label.includes('@'))) return column.label;
   return `${column.label} (${column.unit})`;
 }

@@ -30,6 +30,8 @@ import { computeAggregates } from './reportAggregates.js';
 import { REPORT_MODES, SHEET_LAYOUT_GROUPS } from './reportDefinition.js';
 import { formatCell, headerLabel, MISSING_SCREEN } from './reportFormatting.js';
 import { formatGroupLabel } from './summaryLayout.js';
+import { gmdCellOf, hasGmdQuality } from './gmdColumns.js';
+import { ARROBA_KINDS, arrobaKindOf, viewModelArrobaLabel } from './arrobaColumns.js';
 
 export const VENDAS_VIEW_ID = 'vendas';
 // Sem valor: "-" como no antigo (o Valor total de uma venda sem Valor @ nem valor digitado).
@@ -81,24 +83,26 @@ export const VENDAS_FORMATS = Object.freeze({
 });
 
 // Rótulos bloco a bloco ([id do total, rótulo, opções]). strong = negrito (Valor total/Valor Total); unit = unidade
-// no cartão e no TOTAL GERAL ("455,20 kg", "90 animais"). Vendas = os do antigo, texto a texto.
+// no cartão e no TOTAL GERAL ("455,20 kg", "90 animais"). Vendas = os do antigo, texto a texto. M1 §5: {@} = a marca da
+// arroba da coluna do total ("Média (@ vivo ÷30)" em Vendas, "Total (@ carcaça)" em Abates — buildVendasBlocks preenche
+// pela coluna do view model); "Média Valor @" é o PREÇO da @ (dinheiro).
 const STRONG = Object.freeze({ strong: true });
 const CENTER = Object.freeze({ align: 'center' });
 const ANIMAIS = Object.freeze({ unit: 'animais' });
 const KG = Object.freeze({ unit: 'kg' });
 const VENDAS_BLOCKS = Object.freeze({
-  resumo: [['animais_vendidos', 'Animais vendidos'], ['peso_total', 'Peso total (kg)'], ['peso_medio', 'Peso médio (kg)'], ['media_arroba', 'Média (@)'], ['media_valor_arroba', 'Média valor da arroba'], ['valor_total', 'Valor total', STRONG]],
-  porMarca: [['animais_vendidos', 'Qtd', CENTER], ['peso_total', 'Peso Total (kg)'], ['peso_medio', 'Peso Médio (kg)'], ['media_arroba', 'Média (@)'], ['media_valor_arroba', 'Média Valor @'], ['valor_total', 'Valor Total', STRONG]],
+  resumo: [['animais_vendidos', 'Animais vendidos'], ['peso_total', 'Peso total (kg)'], ['peso_medio', 'Peso médio (kg)'], ['media_arroba', 'Média ({@})'], ['media_valor_arroba', 'Média valor da arroba'], ['valor_total', 'Valor total', STRONG]],
+  porMarca: [['animais_vendidos', 'Qtd', CENTER], ['peso_total', 'Peso Total (kg)'], ['peso_medio', 'Peso Médio (kg)'], ['media_arroba', 'Média ({@})'], ['media_valor_arroba', 'Média Valor @'], ['valor_total', 'Valor Total', STRONG]],
   porGrupo: [['animais_vendidos', 'Qtd', CENTER], ['peso_total', 'Peso Total (kg)'], ['valor_total', 'Valor Total', STRONG]],
-  cartao: [['animais_vendidos', 'Total', ANIMAIS], ['peso_medio', 'Peso Médio', KG], ['peso_total', 'Peso Total', KG], ['media_arroba', 'Média (@)'], ['valor_total', 'Valor Total']],
-  totalGeral: [['animais_vendidos', null, ANIMAIS], ['peso_total', 'Peso Total', KG], ['peso_medio', 'Peso Médio', KG], ['media_arroba', 'Média (@)'], ['valor_total', 'Valor Total']],
+  cartao: [['animais_vendidos', 'Total', ANIMAIS], ['peso_medio', 'Peso Médio', KG], ['peso_total', 'Peso Total', KG], ['media_arroba', 'Média ({@})'], ['valor_total', 'Valor Total']],
+  totalGeral: [['animais_vendidos', null, ANIMAIS], ['peso_total', 'Peso Total', KG], ['peso_medio', 'Peso Médio', KG], ['media_arroba', 'Média ({@})'], ['valor_total', 'Valor Total']],
 });
 const ABATES_BLOCKS = Object.freeze({
-  resumo: [['animais_abatidos', 'Animais abatidos'], ['peso_total', 'Peso total (kg)'], ['peso_medio', 'Peso médio (kg)'], ['rendimento_medio', 'Rendimento médio'], ['arrobas_carcaca', 'Total @ carcaça'], ['media_arroba_carcaca', 'Média @ carcaça'], ['media_valor_arroba', 'Média valor da arroba'], ['valor_total', 'Valor total', STRONG]],
-  porMarca: [['animais_abatidos', 'Qtd', CENTER], ['peso_total', 'Peso Total (kg)'], ['peso_medio', 'Peso Médio (kg)'], ['arrobas_carcaca', 'Total @ Carcaça'], ['media_valor_arroba', 'Média Valor @'], ['valor_total', 'Valor Total', STRONG]],
-  porGrupo: [['animais_abatidos', 'Qtd', CENTER], ['peso_total', 'Peso Total (kg)'], ['arrobas_carcaca', 'Total @ Carcaça'], ['valor_total', 'Valor Total', STRONG]],
-  cartao: [['animais_abatidos', 'Total', ANIMAIS], ['peso_medio', 'Peso Médio', KG], ['peso_total', 'Peso Total', KG], ['rendimento_medio', 'Rendimento Médio'], ['arrobas_carcaca', 'Total @ Carcaça'], ['valor_total', 'Valor Total']],
-  totalGeral: [['animais_abatidos', null, ANIMAIS], ['peso_total', 'Peso Total', KG], ['peso_medio', 'Peso Médio', KG], ['arrobas_carcaca', 'Total @ Carcaça'], ['valor_total', 'Valor Total']],
+  resumo: [['animais_abatidos', 'Animais abatidos'], ['peso_total', 'Peso total (kg)'], ['peso_medio', 'Peso médio (kg)'], ['rendimento_medio', 'Rendimento médio'], ['arrobas_carcaca', 'Total ({@})'], ['media_arroba_carcaca', 'Média ({@})'], ['media_valor_arroba', 'Média valor da arroba'], ['valor_total', 'Valor total', STRONG]],
+  porMarca: [['animais_abatidos', 'Qtd', CENTER], ['peso_total', 'Peso Total (kg)'], ['peso_medio', 'Peso Médio (kg)'], ['arrobas_carcaca', 'Total ({@})'], ['media_valor_arroba', 'Média Valor @'], ['valor_total', 'Valor Total', STRONG]],
+  porGrupo: [['animais_abatidos', 'Qtd', CENTER], ['peso_total', 'Peso Total (kg)'], ['arrobas_carcaca', 'Total ({@})'], ['valor_total', 'Valor Total', STRONG]],
+  cartao: [['animais_abatidos', 'Total', ANIMAIS], ['peso_medio', 'Peso Médio', KG], ['peso_total', 'Peso Total', KG], ['rendimento_medio', 'Rendimento Médio'], ['arrobas_carcaca', 'Total ({@})'], ['valor_total', 'Valor Total']],
+  totalGeral: [['animais_abatidos', null, ANIMAIS], ['peso_total', 'Peso Total', KG], ['peso_medio', 'Peso Médio', KG], ['arrobas_carcaca', 'Total ({@})'], ['valor_total', 'Valor Total']],
 });
 const COMPRAS_BLOCKS = Object.freeze({
   resumo: [['animais_comprados', 'Animais comprados'], ['peso_total', 'Peso total (kg)'], ['peso_medio', 'Peso médio (kg)'], ['valor_medio_cabeca', 'Valor médio por cabeça'], ['valor_total', 'Valor total', STRONG]],
@@ -159,15 +163,15 @@ export function vendasText(id, value) {
   return formatCell(VENDAS_FORMATS[id], value, 'print');
 }
 
-function item(aggregates, [id, label, options = {}]) {
+function item(aggregates, [id, label, options = {}], labelOf) {
   const value = aggregates?.[id]?.value ?? null;
   const text = vendasText(id, value);
-  return { key: id, label, value, text, unit: options.unit ?? null, strong: Boolean(options.strong), align: options.align ?? 'right' };
+  return { key: id, label: labelOf(id, label), value, text, unit: options.unit ?? null, strong: Boolean(options.strong), align: options.align ?? 'right' };
 }
 
 /** Células de um bloco (só os totais que o perfil vê — os demais não existem em `aggregates`). */
-function itemsOf(entries, aggregates, visible) {
-  return entries.filter(([id]) => visible.has(id)).map((entry) => item(aggregates, entry));
+function itemsOf(entries, aggregates, visible, labelOf) {
+  return entries.filter(([id]) => visible.has(id)).map((entry) => item(aggregates, entry, labelOf));
 }
 
 /** Texto de um item do cartão/TOTAL GERAL: "Peso Médio: 455,20 kg", "1 animal" (sem valor, só "-"). */
@@ -191,9 +195,14 @@ function detailCell(viewModel, entry, row, emphasis) {
   const accessor = viewModel.resolve(entry.key);
   const raw = entry.column?.type === 'entity' ? accessor.displayOf(row) : accessor.valueOf(row);
   const shown = entry.column?.type === 'weight' ? { ...entry.column, decimals: 0 } : entry.column;
-  const formatted = formatCell(shown, raw, 'print');
-  const text = formatted === MISSING_SCREEN || formatted === '' ? VENDAS_MISSING : formatted;
-  return { key: entry.key, raw: isMissing(raw) ? null : raw, text, align: entry.align, emphasis: emphasis[entry.key] ?? null };
+  // M1: GMD pelo formatador compartilhado — SEM_GMD "-" (nunca 0); intervalo curto com o número, cinza e o aviso.
+  const gmd = hasGmdQuality(accessor.column) ? gmdCellOf(accessor.column, row, (value) => formatCell(shown, value, 'print')) : null;
+  const formatted = gmd ? gmd.texto : formatCell(shown, raw, 'print');
+  const text = formatted === MISSING_SCREEN || formatted === '' || formatted === '-' ? VENDAS_MISSING : formatted;
+  return {
+    key: entry.key, raw: isMissing(raw) || gmd?.texto === '-' ? null : raw, text, align: entry.align, emphasis: emphasis[entry.key] ?? null,
+    ...(gmd?.cinza ? { gmd: { qualidade: gmd.gmdQualidade, cinza: true, aviso: gmd.aviso } } : {}),
+  };
 }
 
 /**
@@ -223,6 +232,8 @@ export function buildVendasBlocks(viewModel, { showDetails = false, columns = nu
   const rows = viewModel.rows ?? [];
   const resolve = viewModel.resolve;
   const columnOf = (columnId) => (viewModel.availableColumns ?? []).find((column) => column.id === columnId) ?? null;
+  // M1 §5: {@} do rótulo = a marca da arroba da coluna do total (com o divisor do view model).
+  const labelOf = (id, label) => viewModelArrobaLabel(viewModel, label, config.totals.find((total) => total.id === id)?.columnId);
   const groupsBy = (columnId) => groupRows(rows, [{ columnId }], resolve, { aggregates: specs }).nodes.map((node) => ({
     node,
     label: formatGroupLabel(columnOf(columnId), node.label, 'print', node.missing),
@@ -231,9 +242,9 @@ export function buildVendasBlocks(viewModel, { showDetails = false, columns = nu
 
   const tableColumns = (first, entries) => [
     { key: '__label__', label: first, align: 'left' },
-    ...entries.filter(([id]) => visible.has(id)).map(([id, label, options = {}]) => ({ key: id, label, align: options.align ?? 'right', strong: Boolean(options.strong) })),
+    ...entries.filter(([id]) => visible.has(id)).map(([id, label, options = {}]) => ({ key: id, label: labelOf(id, label), align: options.align ?? 'right', strong: Boolean(options.strong) })),
   ];
-  const tableRows = (groups, entries) => groups.map(({ node, label }) => ({ id: node.id, key: node.key, label, missing: node.missing, cells: itemsOf(entries, node.aggregates, visible) }));
+  const tableRows = (groups, entries) => groups.map(({ node, label }) => ({ id: node.id, key: node.key, label, missing: node.missing, cells: itemsOf(entries, node.aggregates, visible, labelOf) }));
 
   const porGrupo = groupsBy(config.groupColumn);
   const detailColumns = showDetails ? detailColumnsOf(viewModel, columns) : null;
@@ -247,11 +258,11 @@ export function buildVendasBlocks(viewModel, { showDetails = false, columns = nu
     totals: [...visible],
     emptyText: config.emptyText,
     // A @ VIVA (peso ÷ divisor) só está no desenho de Vendas: o rodapé "@ = peso vivo ÷ N" só vale nele (Abates usa
-    // a @ de carcaça gravada; Compras não tem @).
-    liveArroba: config.totals.some((total) => total.columnId === 'peso_arroba'),
+    // a @ de carcaça gravada; Compras não tem @). M1 §5: pelo TIPO da coluna do total (arroba 'vivo').
+    liveArroba: config.totals.some((total) => arrobaKindOf(resolve(total.columnId)?.column) === ARROBA_KINDS.VIVO),
     resumo: {
       columns: [{ key: '__label__', label: 'Métrica', align: 'left' }, { key: '__value__', label: 'Valor', align: 'right' }],
-      rows: itemsOf(blocks.resumo, totals, visible),
+      rows: itemsOf(blocks.resumo, totals, visible, labelOf),
     },
     porMarca: { title: 'TOTAIS POR MARCA', columns: tableColumns('Marca', blocks.porMarca), rows: tableRows(groupsBy('marca'), blocks.porMarca) },
     porGrupo: { title: config.porGrupoTitle, columns: tableColumns(config.groupLabel, blocks.porGrupo), rows: tableRows(porGrupo, blocks.porGrupo) },
@@ -265,12 +276,12 @@ export function buildVendasBlocks(viewModel, { showDetails = false, columns = nu
         title: `${config.cardPrefix}: ${upper(label)}`,
         missing: node.missing,
         rowCount: node.rowCount,
-        totals: itemsOf(blocks.cartao, node.aggregates, visible).map((entry) => ({ ...entry, display: withUnit(entry) })),
+        totals: itemsOf(blocks.cartao, node.aggregates, visible, labelOf).map((entry) => ({ ...entry, display: withUnit(entry) })),
         rows: detailColumns ? node.rows.map((row, index) => ({ id: String(row.id ?? index), cells: detailColumns.map((entry) => detailCell(viewModel, entry, row, config.emphasis)) })) : null,
       })),
     },
     totalGeral: (() => {
-      const items = itemsOf(blocks.totalGeral, totals, visible).map((entry) => ({ ...entry, display: withUnit(entry) }));
+      const items = itemsOf(blocks.totalGeral, totals, visible, labelOf).map((entry) => ({ ...entry, display: withUnit(entry) }));
       const parts = items.map((entry) => (entry.label ? `${entry.label}: ${entry.display}` : entry.display));
       return { items, text: `TOTAL GERAL: ${parts.join(' | ')}` };
     })(),

@@ -9,6 +9,7 @@ import { MAX_GROUP_LEVELS } from './groupEngine.js';
 import { aggregateSpecId } from './reportAggregates.js';
 import { SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC } from './summaryLayout.js';
 import { defineCharts } from './chartDefinition.js';
+import { arrobaConflictOf, arrobaKindOf, hasArrobaToken } from './arrobaColumns.js';
 
 export const REPORT_FAMILIES = Object.freeze({
   rebanho: 'Rebanho',
@@ -300,6 +301,35 @@ function defineMetricPairs(pairs, spec, views, context) {
 }
 
 /**
+ * M1 §5 — as duas arrobas na definição (domain/arrobaColumns): o mesmo id de total nunca em arrobas diferentes (nem entre
+ * os totais do relatório e os dos tipos); {@} só no rótulo de um total/coluna de arroba e todo rótulo de total/cabeçalho
+ * de arroba diz qual é ({@}); par "de–até" nunca junta @ de peso vivo com @ de carcaça.
+ */
+function assertArrobaDefinition(spec, views, metricLabels, metricPairs, byId, context) {
+  const columnOf = (columnId) => (columnId ? byId.get(columnId) ?? null : null);
+  const all = [...(spec.defaultAggregates || []), ...views.flatMap((view) => view.aggregates || [])];
+  const mixed = arrobaConflictOf(all, columnOf);
+  if (mixed) throw new Error(`${context}: @ de peso vivo e @ de carcaça não se somam — ${mixed}`);
+  const kindOfMetric = (metricId) => arrobaKindOf(columnOf(all.find((item) => aggregateSpecId(item) === metricId)?.columnId));
+  for (const [id, label] of Object.entries(metricLabels)) {
+    const specs = all.filter((item) => aggregateSpecId(item) === id);
+    const arrobas = specs.filter((item) => arrobaKindOf(columnOf(item.columnId)));
+    if (hasArrobaToken(label) && (!specs.length || arrobas.length !== specs.length)) throw new Error(`${context}: rótulo "${label}" com {@} no total ${id}, que não é de arroba`);
+    if (!hasArrobaToken(label) && arrobas.length) throw new Error(`${context}: o rótulo do total ${id} ("${label}") não diz qual arroba é — use {@}`);
+  }
+  for (const view of views) {
+    for (const [id, label] of Object.entries(view.columnLabels ?? {})) {
+      const kind = arrobaKindOf(columnOf(id));
+      if (hasArrobaToken(label) && !kind) throw new Error(`${context} visão ${view.id}: {@} no cabeçalho de ${id}, que não é de arroba`);
+      if (kind && !hasArrobaToken(label)) throw new Error(`${context} visão ${view.id}: o cabeçalho de ${id} ("${label}") não diz qual arroba é — use {@}`);
+    }
+  }
+  for (const pair of metricPairs) {
+    if (kindOfMetric(pair.from) !== kindOfMetric(pair.to)) throw new Error(`${context}: o par ${pair.id} junta arrobas diferentes (${pair.from} × ${pair.to})`);
+  }
+}
+
+/**
  * Valida e congela uma definição. Lança Error na primeira inconsistência — inclusive
  * coluna de outro grão (gate reports:grain:verify).
  */
@@ -362,6 +392,7 @@ export function defineReport(spec) {
   const metricLabels = defineMetricLabels(spec.metricLabels, context);
   const metricPairs = defineMetricPairs(spec.metricPairs, spec, views, context);
   const sortChoices = defineSortChoices(spec.sortChoices, context);
+  assertArrobaDefinition(spec, views, metricLabels, metricPairs, byId, context);
   // E1D: o tipo com que o relatório abre (sem modelo, visão antiga nem último estado). Com ele, o seletor
   // mostra só os tipos declarados (sem o "Resumo por <agrupamento padrão>" gerado).
   if (spec.defaultView != null && !views.some((view) => view.id === spec.defaultView)) throw new Error(`${context}: defaultView desconhecida (${spec.defaultView})`);

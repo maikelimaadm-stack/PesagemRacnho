@@ -13,7 +13,7 @@
 //   7. Colunas novas não sensíveis e nenhum valor comercial vaza para quem não vê.
 import assert from 'node:assert/strict';
 import { ADMIN, CONSULTA, OPERADOR, TODAY, resetDb, seedReportFixture } from './lib/reportFixtures.mjs';
-import { runReport } from '../src/modules/reporting/application/reportService.js';
+import { runReport as runReportService } from '../src/modules/reporting/application/reportService.js';
 import { prepareEmission } from '../src/modules/reporting/application/reportExportService.js';
 import { getReportDefinition, listAllReportDefinitions, LEGACY_REPORT_ALIASES } from '../src/modules/reporting/definitions/reportCatalog.js';
 import { EVENT_COLUMNS } from '../src/modules/reporting/definitions/columns/eventColumns.js';
@@ -32,6 +32,11 @@ import { buildEventLookups, enrichEventRows, normalizeLiveArrobaDivisor } from '
 import { getReportSettings, updateAppConfig } from '../src/modules/settings/application/appConfigService.js';
 import storage from '../src/storage/storageAdapter.js';
 import { can } from '../src/modules/auth/domain/permissionService.js';
+// M1 (1.5.0): a massa de ago–set/2026 (scripts/lib/reportFixtures) tem intervalos de 10 e 20 dias entre pesagens; este
+// gate confere à mão números de outro assunto, então fixa o intervalo mínimo do GMD em 7 (todos os intervalos
+// confiáveis — os números de antes). A regra do mínimo (21 padrão, 28; cinza, aviso, rodapé e contas só com o
+// confiável) tem gate próprio com a MESMA massa: reports:gmd-confiabilidade:verify.
+const runReport = (id, request = {}, actor) => runReportService(id, { gmdDiasMinimos: 7, ...request }, actor);
 
 const PERIOD = { periodo: { preset: 'personalizado', from: '2026-08-01', to: '2026-09-15' } };
 const PESAGENS = getReportDefinition('pesagens');
@@ -377,9 +382,10 @@ assert.throws(() => defineReport({ ...valid, views: [okView], metricPairs: [{ id
 
 // ---- 6. Cabeçalho do Resumido e casas decimais ----
 const layout30 = buildSummaryLayout(porLote30, 'screen');
+// M1 §5 (1.5.0): a @ de peso vivo com a marca e o divisor em uso — "Média (@ vivo ÷30)" (antes "Média (@)").
 assert.deepEqual(layout30.headers, [
-  'Lote', 'Qtd', 'Faixa mínima do lote (kg)', 'Faixa máxima do lote (kg)', 'Menor (kg)', 'Maior (kg)', 'Peso médio (kg)', 'Média (@)', 'Peso total (kg)', 'Total (@)',
-  'Ganho médio (kg)', 'Ganho médio (@)', 'Ganho total (kg)', 'Ganho total (@)', 'Dias médios', 'GMD médio (kg/dia)', 'Machos', 'Fêmeas',
+  'Lote', 'Qtd', 'Faixa mínima do lote (kg)', 'Faixa máxima do lote (kg)', 'Menor (kg)', 'Maior (kg)', 'Peso médio (kg)', 'Média (@ vivo ÷30)', 'Peso total (kg)', 'Total (@ vivo ÷30)',
+  'Ganho médio (kg)', 'Ganho médio (@ vivo ÷30)', 'Ganho total (kg)', 'Ganho total (@ vivo ÷30)', 'Dias médios', 'GMD médio (kg/dia)', 'Machos', 'Fêmeas',
 ], 'rótulos de curral da folha no cabeçalho do Resumido');
 assert.deepEqual(porLote30.metricLabels.qtd, 'Qtd', 'vm.metricLabels');
 const cells = Object.fromEntries(layout30.rows.map((row) => [row.label, row.cells]));
@@ -392,7 +398,7 @@ assert.deepEqual(cells['Não informado'], ['Não informado', '1', '—', '—', 
 // E1G: ganhos 30, 15, 10 e 20 (saída com peso) em 20, 20, 10 e 21 dias → GMD 75/71, o mesmo do Desempenho.
 assert.deepEqual(cells['Total geral'], ['Total geral', '4', '', '', '200,0', '410,0', '296,9', '9,90', '2.375,0', '79,17', '18,8', '0,63', '75,0', '2,50', '17,8', '1,056', '2', '2'], 'Total geral recalculado sobre a população');
 const layout15 = buildSummaryLayout(porLote15, 'screen');
-assert.equal(layout15.rows.at(-1).cells[layout15.headers.indexOf('Total (@)')], '158,33', 'divisor 15: Total (@) = 2.375 ÷ 15');
+assert.equal(layout15.rows.at(-1).cells[layout15.headers.indexOf('Total (@ vivo ÷15)')], '158,33', 'divisor 15: Total (@ vivo ÷15) = 2.375 ÷ 15 (o divisor em uso no rótulo)');
 const metrics = Object.fromEntries(summaryMetrics(porLote30).map((metric) => [metric.key, metric.column]));
 assert.equal(metrics.peso_medio.decimals, 1, 'kg agregado: 1 casa');
 assert.equal(metrics.media_arroba.decimals, 2, '@: 2 casas');
@@ -407,7 +413,7 @@ const arrobaIndex = analitico.columns.findIndex((column) => column.id === 'peso_
 const e1Line = lines.lines.find((line) => line.type === 'DATA' && line.row.id === 'e1');
 assert.equal(e1Line.cells[pesoIndex], '300,00', 'linha de dados: kg com 2 casas (coluna)');
 assert.equal(e1Line.cells[arrobaIndex], '10,00', 'linha de dados: 300 ÷ 30 = 10,00 @');
-assert.ok(lines.headers.includes('Peso em arrobas (@)'), 'cabeçalho da coluna de @');
+assert.ok(lines.headers.includes('Peso (@ vivo ÷30)'), 'cabeçalho da coluna de @ (M1 §5: diz que é a @ de peso vivo e o divisor)');
 assert.equal(lines.lines.find((line) => line.type === 'GRAND_TOTAL' && line.spec.id === 'peso_medio').value, '296,9', 'total do Detalhado: kg agregado com 1 casa');
 // XLSX: kg agregado no formato #,##0.0 (estilo 11), @ com 2 casas (6), GMD com 3 (7).
 const xlsx = unzipStored((await prepareEmission(porLote30, 'xlsx', ADMIN)).content);

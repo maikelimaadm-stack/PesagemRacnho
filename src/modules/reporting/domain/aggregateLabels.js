@@ -4,6 +4,7 @@
 //   aggregateValueColumn → coluna "virtual" com o tipo certo para formatar o valor agregado.
 import { AGGREGATION_LABELS } from './columnDefinition.js';
 import { headerLabel } from './reportFormatting.js';
+import { arrobaKindOf, arrobaTag, hasArrobaToken, resolveArrobaLabel } from './arrobaColumns.js';
 
 /** Rótulo de uma agregação: "Média simples — Peso (kg)"; contagem de registros sem coluna. */
 export function aggregateLabel(spec, columns) {
@@ -79,8 +80,15 @@ const LOT_AVERAGE_LABELS = Object.freeze({
 // Somas de dinheiro que SÃO o valor da operação ("Valor (R$)"); as demais levam o nome da coluna.
 const MAIN_VALUE_COLUMNS = new Set(['valor_venda_total', 'valor_total_abate', 'valor_pago_cabeca']);
 
-// @ de peso vivo (E1B): mesmo rótulo de curral do kg, com a unidade @ ("Peso médio (@)").
-const LIVE_ARROBA_NOUNS = Object.freeze({ peso_arroba: 'Peso', ganho_arroba: 'Ganho' });
+// As duas arrobas (M1 §5): mesmo rótulo de curral do kg, com a MARCA da arroba no lugar da unidade — "Peso médio (@ vivo
+// ÷30)", "Ganho total (@ vivo ÷30)", "Carcaça total (@ carcaça)". A marca vem da coluna (arrobaTag, com o divisor do
+// view model); nunca "(@)" sozinho.
+const ARROBA_NOUNS = Object.freeze({
+  peso_arroba: { noun: 'Peso' },
+  ganho_arroba: { noun: 'Ganho' },
+  quantidade_arrobas: { noun: 'Carcaça', feminine: true },
+});
+const tagOf = (column) => column.arrobaTag ?? arrobaTag(arrobaKindOf(column));
 
 // Faixa exigida do lote (E1B): o mínimo da faixa mínima / o máximo da faixa máxima é a própria faixa.
 const LOT_RANGE_OPS = Object.freeze({ lote_peso_minimo: 'min', lote_peso_maximo: 'max' });
@@ -105,9 +113,16 @@ export function summaryMetricLabel(spec, columns, { grain = null, animalColumnId
   if (spec.op === 'countDistinct') return isAnimal ? 'Cabeças' : `${column.label} (distintos)`;
   if (spec.op === 'countValid') return column.label.includes('(') ? `${column.label} — com valor` : `${column.label} (com valor)`;
   if (column.type === 'gmd') {
+    // M1: "GMD (regressão)" não é o GMD entre pesagens — o rótulo diz qual é ("GMD (regressão) médio (kg/dia)").
+    if (column.id === 'gmd_regressao') return `GMD (regressão) ${WEIGHT_OPS[spec.op] ?? spec.op} (kg/dia)`;
     if (spec.op === 'weightedGmd') return 'GMD (kg/dia)';
     if (spec.op === 'avg') return 'GMD simples (kg/dia)';
     return `GMD ${WEIGHT_OPS[spec.op] ?? spec.op} (kg/dia)`;
+  }
+  if (arrobaKindOf(column) && (WEIGHT_OPS[spec.op] || spec.op === 'range')) {
+    const { noun, feminine = false } = ARROBA_NOUNS[column.id] ?? { noun: String(column.label).replace(/\s*\(@[^)]*\)\s*$/, '') };
+    if (spec.op === 'range') return `Amplitude ${feminine ? 'da' : 'do'} ${noun.toLowerCase()} (${tagOf(column)})`;
+    return `${noun} ${(feminine ? WEIGHT_OPS_FEMININE : WEIGHT_OPS)[spec.op]} (${tagOf(column)})`;
   }
   if (column.id === 'peso_medio_atual' && LOT_AVERAGE_LABELS[spec.op]) return LOT_AVERAGE_LABELS[spec.op];
   if (LOT_RANGE_OPS[column.id]) {
@@ -126,8 +141,6 @@ export function summaryMetricLabel(spec, columns, { grain = null, animalColumnId
     if (spec.op === 'avg') return `${column.label} médio (R$)`;
     return `${column.label} — ${GENERIC_OPS[spec.op] ?? spec.op} (R$)`;
   }
-  if (column.id === 'quantidade_arrobas' && spec.op === 'sum') return 'Arrobas (@)';
-  if (LIVE_ARROBA_NOUNS[column.id] && WEIGHT_OPS[spec.op]) return `${LIVE_ARROBA_NOUNS[column.id]} ${WEIGHT_OPS[spec.op]} (${column.unit || '@'})`;
   if (spec.op === 'ratio') return headerLabel(column);
   // Contagens guardadas como número (pesagens, capacidade, previsto): a soma é o próprio rótulo.
   if (column.type === 'integer' && spec.op === 'sum') return headerLabel(column);
@@ -148,10 +161,20 @@ export function summaryMetricLabels(specs, columns, context = {}) {
   const overrides = context.metricLabels && typeof context.metricLabels === 'object' ? context.metricLabels : {};
   const isAnimalColumn = (columnId) => columnId === context.animalColumnId || ['animal', 'numero_animal'].includes(columnId);
   const distinctAnimals = specs.some((spec) => spec.op === 'countDistinct' && isAnimalColumn(spec.columnId));
+  // M1 §5: rótulo com {@} ("Média ({@})") = a marca da arroba da coluna do TOTAL (nunca a do id); num total que não é
+  // de arroba o rótulo da definição não vale (fica o automático, que diz o que a coluna é).
+  const overrideOf = (spec) => {
+    const label = spec.id ? overrides[spec.id] : undefined;
+    if (typeof label !== 'string') return null;
+    if (!hasArrobaToken(label)) return label;
+    const column = spec.columnId ? columns.find((item) => item.id === spec.columnId) ?? null : null;
+    return arrobaKindOf(column) ? resolveArrobaLabel(label, column) : null;
+  };
   // Rótulos da definição primeiro: um rótulo automático igual a um deles cai no técnico, não o contrário.
-  for (const spec of specs) if (spec.id && typeof overrides[spec.id] === 'string') seen.add(overrides[spec.id]);
+  for (const spec of specs) if (overrideOf(spec) !== null) seen.add(overrideOf(spec));
   return specs.map((spec) => {
-    if (spec.id && typeof overrides[spec.id] === 'string') return overrides[spec.id];
+    const override = overrideOf(spec);
+    if (override !== null) return override;
     let label = summaryMetricLabel(spec, columns, { ...context, distinctAnimals });
     if (seen.has(label)) label = aggregateLabel(spec, columns);
     seen.add(label);

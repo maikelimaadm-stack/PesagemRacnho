@@ -5,6 +5,7 @@ import { AGGREGATION_OPS, aggregate, aggregateAll, avg, count, countDistinct, ma
 import { computeAggregate, computeAggregates } from '../src/modules/reporting/domain/reportAggregates.js';
 import { createColumnResolver } from '../src/modules/reporting/domain/reportDefinition.js';
 import { EVENT_COLUMNS } from '../src/modules/reporting/definitions/columns/eventColumns.js';
+import { annotateGmdQuality } from '../src/modules/reporting/domain/gmdColumns.js';
 
 assert.deepEqual([...AGGREGATION_OPS].sort(), ['avg', 'count', 'countDistinct', 'countValid', 'max', 'min', 'range', 'ratio', 'sum', 'weightedAvg'].sort());
 const rows = [{ v: 2, w: 1, k: 'a' }, { v: 4, w: 3, k: 'b' }, { v: 9, w: 0, k: 'a' }, { v: null, w: 2, k: null }];
@@ -35,6 +36,13 @@ const events = [
 assert.equal(computeAggregate(events, { columnId: 'data_pesagem', op: 'min' }, resolve).value, '2026-08-01', 'data mínima como data');
 assert.equal(computeAggregate(events, { columnId: 'data_pesagem', op: 'max' }, resolve).value, '2026-09-05');
 assert.equal(computeAggregate(events, { columnId: 'valor_arroba', op: 'weightedAvg' }, resolve).value, (300 * 10 + 310 * 30) / 40, 'preço/@ ponderado pelas arrobas');
+// M1: estas linhas não trazem a qualidade gravada pela fonte — o motor classifica com o mínimo padrão (21 dias): os
+// intervalos de 10 e 20 dias ficam FORA de toda conta de GMD (n_total continua a população; ausentes = os de fora).
+const semQualidade = computeAggregate(events, { columnId: 'gmd', op: 'weightedGmd' }, resolve);
+assert.deepEqual([semQualidade.value, semQualidade.n_validos, semQualidade.n_total], [null, 0, 3], 'M1: intervalo curto (< 21 dias) não entra no GMD ponderado');
+// Com a qualidade derivada pela fonte com o mínimo 7 (Configurações › Relatórios), os dois intervalos entram.
+annotateGmdQuality(events, EVENT_COLUMNS, 7);
+assert.deepEqual(events.map((row) => row.gmd_qualidade), ['CONFIAVEL', 'CONFIAVEL', 'SEM_GMD'], 'mínimo 7: 10 e 20 dias confiáveis; sem anterior = SEM_GMD');
 assert.equal(computeAggregate(events, { columnId: 'gmd', op: 'weightedGmd' }, resolve).value, 50 / 30);
 assert.equal(computeAggregate(events, { columnId: 'numero_animal', op: 'countDistinct' }, resolve).value, 2);
 assert.equal(computeAggregate(events, { op: 'count' }, resolve).value, 3);

@@ -12,7 +12,7 @@ import { aggregateSpecId, assertAggregateSpec, computeAggregates } from '../doma
 import { REPORT_MODES, REPORT_VISIBILITY, VIEW_LAYOUTS, createColumnResolver, normalizeReportMode } from '../domain/reportDefinition.js';
 import { getReportView, viewSelection } from '../domain/reportViews.js';
 import { applySortChoice, isKnownSortChoice } from '../domain/sortChoices.js';
-import { GRAIN_LABELS, grainHasAnimal } from '../domain/reportGrain.js';
+import { GRAINS, GRAIN_LABELS, grainHasAnimal } from '../domain/reportGrain.js';
 import { describePeriod, localToday, resolvePeriod } from '../domain/reportPeriod.js';
 import { assertCanRunReport, canRunReport, canSeeColumn, forbiddenColumnIds } from '../domain/reportPermissions.js';
 import { SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC, buildSummaryRows } from '../domain/summaryLayout.js';
@@ -22,6 +22,11 @@ import { aliasSelection, getLegacyAlias } from '../definitions/legacyAliases.js'
 import { getReportSource } from '../infrastructure/reportSources/index.js';
 import { APP_VERSION, DATA_BUILD_ID, DB_SCHEMA_VERSION } from '../../../versioning/versionInfo.js';
 import { ARROBA_DIVISORS, REPORT_SETTINGS_DEFAULTS, getReportSettings } from '../../settings/application/appConfigService.js';
+import { GMD_DIAS_MINIMOS_OPCOES, GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinimos } from '../../weighing/domain/gmdQuality.js';
+import { annotateGmdQuality, hasGmdQuality } from '../domain/gmdColumns.js';
+import { GMD_REGRESSAO_COLUMN_ID } from '../definitions/columns/animalColumns.js';
+import { loadAnimalRegression } from '../infrastructure/reportSources/animalSource.js';
+import { assertSeparateArrobaTotals, definitionForDivisor, metricLabelsFor } from '../domain/arrobaColumns.js';
 
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -152,6 +157,9 @@ export function resolveSelection(definition, selection = {}, role) {
   };
   const defaultAggregates = typeDefaults?.aggregates ?? definition.defaultAggregates;
   const aggregates = (selection.aggregates ?? defaultAggregates).filter(visibleAggregate);
+  // M1 §5 (proibição dura): nenhum total junta @ de peso vivo com @ de carcaça — nem pelo id (um modelo com o mesmo id
+  // nas duas) nem por dentro (média ponderada de uma pela outra). Cada uma tem o seu total.
+  assertSeparateArrobaTotals(aggregates, resolve);
 
   // Condições fixas de um modelo convertido na 1.4.0 (a condição do relatório antigo numa coluna em
   // que o modelo também filtrava): aplicadas como as `lockedFilters` da definição. Nunca são
@@ -300,6 +308,9 @@ function publicColumn(accessor) {
     ...(column.zeroAsEmpty ? { zeroAsEmpty: true } : {}),
     // E1B: coluna só de cálculo (base de Machos/Fêmeas/nota do GMD) — a tela não a oferece como dado.
     ...(column.metricOnly ? { metricOnly: true } : {}),
+    // M1 §5: qual arroba é ('vivo' | 'carcaca') e a marca com o divisor em uso ("@ vivo ÷30") — rótulos da folha, do
+    // CSV/XLSX, dos totais e dos gráficos saem dela.
+    ...(column.arroba ? { arroba: column.arroba, arrobaTag: column.arrobaTag } : {}),
   };
 }
 
@@ -337,6 +348,33 @@ async function resolveArrobaDivisor(requested, empresaId) {
   }
 }
 
+/**
+ * M1: intervalo mínimo do GMD (gmd_dias_minimos) — o da chamada (7, 14, 21 ou 28 — testes) ou o de Configurações ›
+ * Relatórios; sem configuração legível, o padrão 21. Abaixo dele o GMD fica cinza e fora de toda conta.
+ */
+async function resolveGmdDiasMinimos(requested, empresaId) {
+  if (requested !== undefined && requested !== null && requested !== '') {
+    const number = Number(requested);
+    if (!GMD_DIAS_MINIMOS_OPCOES.includes(number)) throw new Error(`relatório: intervalo mínimo do GMD deve ser ${GMD_DIAS_MINIMOS_OPCOES.join(', ')} (recebido ${requested})`);
+    return number;
+  }
+  try {
+    const settings = await getReportSettings(empresaId);
+    return normalizeGmdDiasMinimos(settings?.gmd_dias_minimos);
+  } catch {
+    return GMD_DIAS_MINIMOS_PADRAO;
+  }
+}
+
+/** Colunas que a seleção usa (dados, filtros, condições fixas, ordem e totais) — para saber se a regressão é lida. */
+function selectionUsesColumn(selection, columnId) {
+  return selection.columns.includes(columnId)
+    || Object.prototype.hasOwnProperty.call(selection.filters ?? {}, columnId)
+    || Object.prototype.hasOwnProperty.call(selection.fixedFilters ?? {}, columnId)
+    || selection.sort.some((item) => item.columnId === columnId)
+    || selection.aggregates.some((spec) => spec.columnId === columnId);
+}
+
 // E1F: nome do relatório do usuário para o título da folha (texto; vazio = o nome do relatório).
 const requestedSheetTitle = (value) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, 80) : null);
 
@@ -364,22 +402,41 @@ export async function runReport(definitionOrId, request = {}, actor) {
   const startedAt = now();
   const today = request.today || localToday();
   const params = resolveParams(definition, request.params, today);
-  const selection = resolveSelection(definition, mergeAliasSelection(resolved.alias, request.selection, request.params), role);
+  const empresaId = request.empresaId ?? 'local';
+  // O divisor da @ vai para as linhas (peso_arroba/ganho_arroba): entra no sourceKey para o reuse
+  // nunca servir linhas calculadas com o divisor anterior. M1 §5: e para os RÓTULOS — a definição sai com a marca da
+  // @ de peso vivo com o divisor em uso ("Peso (@ vivo ÷30)", "Média (@ vivo ÷15)") em todas as colunas e totais.
+  const arrobaDivisor = await resolveArrobaDivisor(request.arrobaDivisor, empresaId);
+  const labelled = definitionForDivisor(definition, arrobaDivisor);
+  const selection = resolveSelection(labelled, mergeAliasSelection(resolved.alias, request.selection, request.params), role);
   // Condição fixa do relatório (ex.: motivo = Venda em "Vendas do período"): sempre aplicada, sempre
   // exibida. Mais as condições fixas de um modelo convertido (o catálogo garante que um relatório
   // com visões antigas de condição fixa não tem lockedFilters próprias, então as chaves não colidem).
   const lockedFilters = { ...(definition.lockedFilters ? serializeFilters(definition.lockedFilters(params)) : {}), ...selection.fixedFilters };
   const source = getReportSource(definition.source);
-  const empresaId = request.empresaId ?? 'local';
-  // O divisor da @ vai para as linhas (peso_arroba/ganho_arroba): entra no sourceKey para o reuse
-  // nunca servir linhas calculadas com o divisor anterior.
-  const arrobaDivisor = await resolveArrobaDivisor(request.arrobaDivisor, empresaId);
-  const sourceKey = JSON.stringify([definition.id, definition.version, empresaId, today, params, role, arrobaDivisor]);
+  // M1: o mínimo do GMD decide a qualidade gravada nas linhas (derivada na leitura): também entra no sourceKey.
+  const gmdDiasMinimos = await resolveGmdDiasMinimos(request.gmdDiasMinimos, empresaId);
+  const sourceKey = JSON.stringify([definition.id, definition.version, empresaId, today, params, role, arrobaDivisor, gmdDiasMinimos]);
 
   const reusable = request.reuse && request.reuse.sourceKey === sourceKey && request.reuse.sourceLoaded;
   const loaded = reusable
     ? { ...request.reuse.sourceLoaded, strategy: `${request.reuse.sourceLoaded.strategy}+reuse`, timings: { query: 0, transform: 0 } }
-    : await source({ definition, params, empresaId, today, arrobaDivisor, deps: request.deps });
+    : await source({ definition, params, empresaId, today, arrobaDivisor, gmdDiasMinimos, deps: request.deps });
+  // M1: a fonte classifica o GMD com o mínimo que recebeu (reportSources/index.js repassa gmdDiasMinimos); se ela
+  // classificou com outro (fonte que não repassa — padrão 21), a mesma regra é refeita aqui com o mínimo resolvido.
+  if (!reusable && loaded.gmdDiasMinimos !== gmdDiasMinimos && definition.columns.some(hasGmdQuality)) {
+    annotateGmdQuality(loaded.rows, definition.columns, gmdDiasMinimos);
+  }
+  // M1 §2: "GMD (regressão)" só é lido quando a coluna está em uso (dado, filtro, ordem ou total) — uma consulta pelo
+  // índice de data na janela de 120 dias, nunca uma por animal; reaproveitado enquanto as linhas forem as mesmas.
+  let regressao = loaded.regressao ?? null;
+  const wantsRegression = [GRAINS.ANIMAL_CURRENT, GRAINS.ANIMAL_PERIOD].includes(definition.grain)
+    && definition.columns.some((column) => column.id === GMD_REGRESSAO_COLUMN_ID)
+    && selectionUsesColumn(selection, GMD_REGRESSAO_COLUMN_ID);
+  if (wantsRegression && !regressao) {
+    const period = Object.values(params).find((value) => value && value.from && value.to) || null;
+    regressao = await loadAnimalRegression(loaded.rows, { period, today, empresaId, gmdDiasMinimos });
+  }
   const afterLoad = now();
   const locked = Object.keys(lockedFilters).length ? applyFilters(loaded.rows, { filters: lockedFilters }, selection.resolve) : loaded.rows;
   const filtered = applyDrill(applyFilters(locked, { search: selection.search, searchColumnIds: selection.searchColumnIds, filters: selection.filters }, selection.resolve), selection.drill, selection.resolve);
@@ -454,7 +511,7 @@ export async function runReport(definitionOrId, request = {}, actor) {
     columns: selection.columns.map(typedColumn),
     // E1F: colunas/totais em uso escolhidos pela pessoa (≠ padrão): a folha não esconde as vazias.
     columnsChosen: selection.columnsChosen,
-    availableColumns: definition.columns.filter((column) => canSeeColumn(column, role)).map((column) => typedColumn(column.id)),
+    availableColumns: labelled.columns.filter((column) => canSeeColumn(column, role)).map((column) => typedColumn(column.id)),
     hiddenByPermission: selection.hiddenByPermission,
     search: selection.search,
     filters: selection.filters,
@@ -465,7 +522,11 @@ export async function runReport(definitionOrId, request = {}, actor) {
     // E1B: divisor da @ de peso vivo usado nas linhas (rodapé "@ = peso vivo ÷ N" e manifesto); rótulos
     // de curral por id de métrica e pares "de–até" da definição (só os pares com as duas métricas).
     arrobaDivisor,
-    metricLabels: definition.metricLabels ?? {},
+    // M1: intervalo mínimo do GMD usado nas linhas (abaixo dele: cinza, aviso e fora das contas).
+    gmdDiasMinimos,
+    // M1 §5: {@} de cada rótulo = a marca da arroba da coluna do total EM USO (a seleção manda; depois os totais da
+    // definição) — um total de carcaça nunca sai com o nome da @ viva, nem vindo de um modelo com o id trocado.
+    metricLabels: metricLabelsFor(definition.metricLabels, [...selection.aggregates, ...(labelled.defaultAggregates ?? []), ...(labelled.views ?? []).flatMap((view) => view.aggregates ?? [])], (columnId) => selection.resolve(columnId)?.column ?? null),
     metricPairs: pairsPresent(definition.metricPairs ?? [], selection.aggregates, tree.levels).active,
     // Métricas de um par que não vale neste agrupamento (ex.: faixa do lote agrupando por data): fora da folha e das exportações.
     hiddenMetrics: pairsPresent(definition.metricPairs ?? [], selection.aggregates, tree.levels).hiddenMetrics,
@@ -480,6 +541,8 @@ export async function runReport(definitionOrId, request = {}, actor) {
       rowsRead: loaded.rowsRead,
       rowsLoaded: loaded.rows.length,
       rowsOut: sorted.length,
+      // M1: GMD (regressão) lido nesta tela — data de referência e pesagens lidas na janela (null sem a coluna).
+      regressao,
       timings: {
         query: loaded.timings?.query ?? null,
         transform: loaded.timings?.transform ?? null,
@@ -496,6 +559,6 @@ export async function runReport(definitionOrId, request = {}, actor) {
     resolve: selection.resolve,
     population: locked,
     sourceKey,
-    sourceLoaded: { rows: loaded.rows, strategy: reusable ? request.reuse.sourceLoaded.strategy : loaded.strategy, rowsRead: loaded.rowsRead, warnings: loaded.warnings },
+    sourceLoaded: { rows: loaded.rows, strategy: reusable ? request.reuse.sourceLoaded.strategy : loaded.strategy, rowsRead: loaded.rowsRead, warnings: loaded.warnings, ...(regressao ? { regressao } : {}) },
   };
 }

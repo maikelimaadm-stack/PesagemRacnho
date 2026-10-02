@@ -52,6 +52,8 @@ ${M} .mk-semibold { font-weight: 600; }
 ${M} .mk-medium { font-weight: 500; }
 ${M} .sheet-table td.mk-pos { color: var(--mk-emerald); }
 ${M} .sheet-table td.mk-neg { color: var(--mk-red); }
+/* M1: GMD de intervalo curto (fora da média) — o cinza que o tema já tem (gray-500); o motivo vai no title. */
+${M} .sheet-table td.mk-gmd-cinza { color: var(--mk-gray-500); }
 ${M} .sheet-table .txt, ${M} .sheet-table .lbl { overflow-wrap: anywhere; }
 /* O antigo corria as seções de página em página (só o título não fica sozinho no pé) e não marcava valor parcial. */
 ${M} .sheet-sec--1.sheet-keep { break-inside: auto; page-break-inside: auto; }
@@ -191,6 +193,8 @@ export const SHEET_CSS = `
 .rpt-sheet .sheet-chip b { font-family: Consolas, "Courier New", monospace; }
 /* Valor calculado só com parte das linhas: marca pontilhada com dica na tela; no papel, sem marca (sem dica). */
 .rpt-sheet.rpt-sheet--screen .sheet-partial { text-decoration: underline dotted; text-underline-offset: 2px; cursor: help; }
+/* M1: GMD de intervalo curto (fora da média) no cinza do tema; o motivo vai no title. */
+.rpt-sheet .sheet-table td.mk-gmd-cinza, .rpt-sheet .sheet-vendas td.mk-gmd-cinza { color: var(--sheet-muted); }
 .rpt-sheet .sheet-grand-block { margin-top: 3.5mm; }
 
 .rpt-sheet .sheet-empty { padding: 6mm 0; text-align: center; color: var(--sheet-muted); }

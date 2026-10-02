@@ -12,6 +12,7 @@
 // Gráfico `opcional` cuja coluna ainda não existe no grão fica FORA, com aviso em definition.chartsSkipped
 // (ex.: GMD do Rebanho atual, que vem da trilha GMD da E1G — o merge funciona nas duas ordens).
 import { grainHasAnimal } from './reportGrain.js';
+import { arrobaKindOf, hasArrobaToken } from './arrobaColumns.js';
 
 export const CHART_KINDS = Object.freeze({ LINHA: 'linha', BARRAS: 'barras', COLUNAS: 'colunas', HISTOGRAMA: 'histograma', HALTERES: 'halteres' });
 
@@ -156,8 +157,13 @@ function defineChart(chart, byId, { where, grain, aggregates }) {
       }
       if (id === 'metrica') {
         if (choice.unidade != null && !CHART_UNITS.includes(choice.unidade)) throw new Error(`${at}: unidade inválida (${choice.unidade})`);
+        const valor = spec(choice.valor, `valor de ${choice.id}`);
+        // M1 §5: "@" e {@} (a marca da arroba) só num valor de coluna de arroba — o gráfico diz qual arroba é.
+        const arroba = arrobaKindOf(valor.columnId ? byId.get(valor.columnId) : null);
+        if ((choice.unidade === '@' || [choice.label, choice.titulo].some(hasArrobaToken)) && !arroba) throw new Error(`${at}: "@"/{@} na opção ${choice.id} sem valor de arroba`);
+        if (arroba && !hasArrobaToken(choice.label)) throw new Error(`${at}: a opção ${choice.id} mostra arroba e o rótulo não diz qual ({@})`);
         return {
-          id: choice.id, label: choice.label, valor: spec(choice.valor, `valor de ${choice.id}`),
+          id: choice.id, label: choice.label, valor,
           ...(choice.cobertura ? { cobertura: spec(choice.cobertura, `cobertura de ${choice.id}`) } : {}),
           unidade: choice.unidade ?? null, titulo: choice.titulo ?? null, nota: choice.nota ?? null, yZero: Boolean(choice.yZero),
         };

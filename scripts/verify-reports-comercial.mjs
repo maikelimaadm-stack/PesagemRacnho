@@ -241,13 +241,15 @@ const blocosAbates = buildReportDocument(vms.abates).vendas;
 const contaAbates = abatesNaMao(ABATES);
 const linhaAbate = (conta) => [String(conta.animais_abatidos), folha(conta.peso_total, 2), folha(conta.peso_medio, 2), folha(conta.rendimento_medio, 2, '%'), folha(conta.arrobas_carcaca, 2), folha(conta.media_arroba_carcaca, 2), folha(conta.media_valor_arroba, 2, 'R$'), folha(conta.valor_total, 2, 'R$')];
 assert.equal(blocosAbates.layout, 'abates');
-assert.deepEqual(blocosAbates.resumo.rows.map((row) => row.label), ['Animais abatidos', 'Peso total (kg)', 'Peso médio (kg)', 'Rendimento médio', 'Total @ carcaça', 'Média @ carcaça', 'Média valor da arroba', 'Valor total'], 'Abates: Métrica | Valor');
+// M1 §5 (1.5.0): a @ de carcaça no padrão único dos rótulos de arroba — "Total (@ carcaça)", "Média (@ carcaça)" (antes
+// "Total @ carcaça"/"Total @ Carcaça"); a @ de peso vivo leva "(@ vivo ÷30)".
+assert.deepEqual(blocosAbates.resumo.rows.map((row) => row.label), ['Animais abatidos', 'Peso total (kg)', 'Peso médio (kg)', 'Rendimento médio', 'Total (@ carcaça)', 'Média (@ carcaça)', 'Média valor da arroba', 'Valor total'], 'Abates: Métrica | Valor');
 assert.deepEqual(textos(blocosAbates.resumo.rows), linhaAbate(contaAbates), 'Abates: Métrica | Valor à mão');
 assert.deepEqual(textos(blocosAbates.resumo.rows), ['4', '1.970,00', '492,50', '51,92 %', '52,61', '17,54', 'R$ 304,94', 'R$ 14.800,00'], 'Abates: os números');
-assert.deepEqual(blocosAbates.porMarca.columns.map((column) => column.label), ['Marca', 'Qtd', 'Peso Total (kg)', 'Peso Médio (kg)', 'Total @ Carcaça', 'Média Valor @', 'Valor Total']);
+assert.deepEqual(blocosAbates.porMarca.columns.map((column) => column.label), ['Marca', 'Qtd', 'Peso Total (kg)', 'Peso Médio (kg)', 'Total (@ carcaça)', 'Média Valor @', 'Valor Total']);
 assert.deepEqual(blocosAbates.porMarca.rows.map((row) => [row.label, ...textos(row.cells)]), porChave(ABATES, 2, MARCAS, abatesNaMao).map((grupo) => [grupo.chave, String(grupo.animais_abatidos), folha(grupo.peso_total, 2), folha(grupo.peso_medio, 2), folha(grupo.arrobas_carcaca, 2), folha(grupo.media_valor_arroba, 2, 'R$'), folha(grupo.valor_total, 2, 'R$')]), 'Abates: TOTAIS POR MARCA à mão');
 assert.equal(blocosAbates.porGrupo.title, 'TOTAIS POR FRIGORÍFICO');
-assert.deepEqual(blocosAbates.porGrupo.columns.map((column) => column.label), ['Frigorífico', 'Qtd', 'Peso Total (kg)', 'Total @ Carcaça', 'Valor Total']);
+assert.deepEqual(blocosAbates.porGrupo.columns.map((column) => column.label), ['Frigorífico', 'Qtd', 'Peso Total (kg)', 'Total (@ carcaça)', 'Valor Total']);
 const porFrigorifico = porChave(ABATES, 1, FRIGORIFICOS, abatesNaMao);
 assert.deepEqual(blocosAbates.porGrupo.rows.map((row) => [row.label, ...textos(row.cells)]), porFrigorifico.map((grupo) => [grupo.chave, String(grupo.animais_abatidos), folha(grupo.peso_total, 2), folha(grupo.arrobas_carcaca, 2), folha(grupo.valor_total, 2, 'R$')]), 'Abates: TOTAIS POR FRIGORÍFICO à mão ("Não informado" por último)');
 assert.deepEqual(textos(blocosAbates.porGrupo.rows[1].cells), ['1', '480,00', '17,28', VENDAS_MISSING], 'Frigorífico Norte: sem valor digitado → "-" (não 0, não @ × Valor @)');
@@ -258,10 +260,10 @@ blocosAbates.grupos.items.forEach((item, index) => {
   const grupo = porFrigorifico[index];
   assert.deepEqual(item.totals.map((total) => `${total.label}: ${spaces(total.display)}`), [
     `Total: ${grupo.animais_abatidos} ${grupo.animais_abatidos === 1 ? 'animal' : 'animais'}`, `Peso Médio: ${folha(grupo.peso_medio, 2)} kg`, `Peso Total: ${folha(grupo.peso_total, 2)} kg`,
-    `Rendimento Médio: ${folha(grupo.rendimento_medio, 2, '%')}`, `Total @ Carcaça: ${folha(grupo.arrobas_carcaca, 2)}`, `Valor Total: ${folha(grupo.valor_total, 2, 'R$')}`,
+    `Rendimento Médio: ${folha(grupo.rendimento_medio, 2, '%')}`, `Total (@ carcaça): ${folha(grupo.arrobas_carcaca, 2)}`, `Valor Total: ${folha(grupo.valor_total, 2, 'R$')}`,
   ], `cartão ${grupo.chave} à mão`);
 });
-assert.equal(spaces(blocosAbates.totalGeral.text), 'TOTAL GERAL: 4 animais | Peso Total: 1.970,00 kg | Peso Médio: 492,50 kg | Total @ Carcaça: 52,61 | Valor Total: R$ 14.800,00', 'Abates: TOTAL GERAL à mão');
+assert.equal(spaces(blocosAbates.totalGeral.text), 'TOTAL GERAL: 4 animais | Peso Total: 1.970,00 kg | Peso Médio: 492,50 kg | Total (@ carcaça): 52,61 | Valor Total: R$ 14.800,00', 'Abates: TOTAL GERAL à mão');
 // Média valor da arroba ponderada pela @ de carcaça ≠ média simples dos Valor @ (o d4 sem rendimento fica fora).
 assert.notEqual(textos(blocosAbates.resumo.rows)[6], folha((310 + 300 + 305 + 300) / 4, 2, 'R$'), 'NEGATIVO: não é a média simples');
 assert.notEqual(textos(blocosAbates.resumo.rows)[7], folha(14800 + 17.28 * 305, 2, 'R$'), 'NEGATIVO: o abate sem valor digitado não vira @ × Valor @');
@@ -462,10 +464,10 @@ assert.deepEqual(valoresDe(buildSheetRows(vms.abates).rows.find((row) => row.kin
 // CSV continua o Detalhado, com os rótulos de curral do tipo.
 const csv = parseCsv((await prepareEmission(vms.abates, 'csv', ADMIN)).content);
 const geral = csv.filter((row) => row[0] === 'GRAND_TOTAL');
-assert.deepEqual(geral.map((row) => row[3]), ['Animais abatidos', 'Peso total (kg)', 'Peso médio (kg)', 'Rendimento médio (%)', 'Total @ carcaça', 'Média @ carcaça', 'Média valor da arroba', 'Valor total'], 'CSV Abates: rótulos do total geral');
+assert.deepEqual(geral.map((row) => row[3]), ['Animais abatidos', 'Peso total (kg)', 'Peso médio (kg)', 'Rendimento médio (%)', 'Total (@ carcaça)', 'Média (@ carcaça)', 'Média valor da arroba', 'Valor total'], 'CSV Abates: rótulos do total geral');
 assert.equal(geral.at(-1)[4], '14800,00', 'CSV Abates: valor total');
 assert.equal(csv.filter((row) => row[0] === 'DATA').length, 4);
-assert.deepEqual(csv[0].slice(5), ['Frigorífico', 'Data', 'Animal', 'Peso (kg)', 'Rendimento (%)', 'Qtd @ Carcaça', 'Valor @', 'Valor Total'], 'CSV Abates: cabeçalhos do tipo (nada começa com @ — o CSV protege a célula)');
+assert.deepEqual(csv[0].slice(5), ['Frigorífico', 'Data', 'Animal', 'Peso (kg)', 'Rendimento (%)', 'Qtd (@ carcaça)', 'Valor @', 'Valor Total'], 'CSV Abates: cabeçalhos do tipo (nada começa com @ — o CSV protege a célula)');
 
 await resetDb();
 console.log(JSON.stringify({

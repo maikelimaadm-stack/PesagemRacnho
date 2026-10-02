@@ -16,6 +16,9 @@
 //     gravada por tipo e usuário); fora dele, as colunas/totais do relatório que o papel vê;
 //   - largura: state.widths[chave da coluna da folha], entre HEADER_WIDTH.MIN e MAX (a folha usa na tela, na
 //     impressão e no PDF — reportDocument.decideSheetLayout).
+//   - M1 §5 (as duas arrobas): os rótulos do menu levam a marca da arroba com o divisor do view model ("Média (@ vivo
+//     ÷30)", "Total (@ carcaça)"), e nenhuma escolha (Calcular, Subtotal/Total, Adicionar coluna…) junta @ de peso vivo
+//     com @ de carcaça num total só — a opção que juntaria nem é oferecida, e aplicada não muda nada.
 import { isCategoricalType } from './columnDefinition.js';
 import { summaryMetricLabels } from './aggregateLabels.js';
 import { MAX_GROUP_LEVELS } from './groupEngine.js';
@@ -29,6 +32,7 @@ import { columnKeysOf, getReportView } from './reportViews.js';
 import { applySortChoice, sortChoiceForColumn, sortChoiceForMetric } from './sortChoices.js';
 import { SUMMARY_LABEL_SORT, SUMMARY_ROWS_METRIC } from './summaryLayout.js';
 import { hasTypeColumns, typeColumnOptions } from './typeColumns.js';
+import { arrobaConflictOf, definitionForDivisor } from './arrobaColumns.js';
 
 /** Limites da largura escolhida arrastando a borda do título (px da folha). */
 export const HEADER_WIDTH = Object.freeze({ MIN: 40, MAX: 600 });
@@ -51,6 +55,11 @@ export const HEADER_LAYOUTS = Object.freeze({ SUMMARY: 'summary', DETAIL: 'detai
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const sameSpec = (left, right) => left.op === right.op && (left.columnId ?? null) === (right.columnId ?? null);
 const columnOf = (definition, columnId) => (definition?.columns ?? []).find((column) => column.id === columnId) ?? null;
+// M1 §5: a definição com a marca da arroba do divisor em uso (o do view model; sem ele, "(@ vivo)").
+const labelledCtx = (ctx) => ({ ...ctx, definition: definitionForDivisor(ctx.definition, ctx.viewModel?.arrobaDivisor ?? null) });
+// M1 §5: a lista de totais juntaria @ de peso vivo com @ de carcaça num total só?
+const mixesArroba = (ctx, aggregates) => Boolean(arrobaConflictOf(aggregates, (columnId) => columnOf(ctx.definition, columnId)));
+const ARROBA_MIXED_TITLE = '@ de peso vivo e @ de carcaça não se somam: cada uma tem o seu total';
 
 /** Largura dentro dos limites (px inteiros). */
 export function clampWidth(width) {
@@ -229,7 +238,9 @@ function calcOptions(ctx, docColumn, layout) {
       const next = specFor(op, column.id);
       const active = CHOICE_OF_OP[spec.op] === choice.id;
       const taken = !active && current.some((item) => sameSpec(item, next));
-      return { id: choice.id, label: choice.label, op, active, disabled: taken, title: taken ? 'Essa conta já está numa coluna da folha' : null };
+      // M1 §5: a conta que juntaria @ de peso vivo com @ de carcaça num total só fica desligada.
+      const mixed = !active && !taken && mixesArroba(ctx, current.map((item) => (aggregateSpecId(item) === aggregateSpecId(spec) ? next : item)));
+      return { id: choice.id, label: choice.label, op, active, disabled: taken || mixed, title: taken ? 'Essa conta já está numa coluna da folha' : mixed ? ARROBA_MIXED_TITLE : null };
     }).filter(Boolean);
     return options.length > 1 ? { mode: 'replace', options } : null;
   }
@@ -240,7 +251,10 @@ function calcOptions(ctx, docColumn, layout) {
     const options = CALC_CHOICES.map((choice) => {
       const op = calcOpFor(choice.id, column);
       if (!op || op === 'count') return null; // contagem de registros não é "desta coluna"
-      return { id: choice.id, label: choice.label, op, active: current.some((item) => sameSpec(item, specFor(op, column.id))), disabled: false, title: null };
+      const active = current.some((item) => sameSpec(item, specFor(op, column.id)));
+      // M1 §5: ligar a conta que juntaria @ de peso vivo com @ de carcaça num total só fica desligado.
+      const mixed = !active && mixesArroba(ctx, [...current, specFor(op, column.id)]);
+      return { id: choice.id, label: choice.label, op, active, disabled: mixed, title: mixed ? ARROBA_MIXED_TITLE : null };
     }).filter(Boolean);
     return options.length ? { mode: 'toggle', options } : null;
   }
@@ -253,6 +267,7 @@ function applyCalc(ctx, docColumn, option) {
   if (option.mode === 'toggle') {
     const spec = specFor(option.op, docColumn.key);
     const aggregates = current.some((item) => sameSpec(item, spec)) ? current.filter((item) => !sameSpec(item, spec)) : [...current, spec];
+    if (mixesArroba(ctx, aggregates)) return null;
     return { aggregates, summarySort: keepSummarySort(state, aggregates) };
   }
   const old = docColumn.metric.spec;
@@ -261,6 +276,7 @@ function applyCalc(ctx, docColumn, option) {
   const oldId = aggregateSpecId(old);
   const newId = aggregateSpecId(next);
   const aggregates = current.map((item) => (aggregateSpecId(item) === oldId ? next : item));
+  if (mixesArroba(ctx, aggregates)) return null;
   const widths = { ...(state.widths ?? {}) };
   // A largura escolhida acompanha a coluna.
   if (widths[oldId] !== undefined) { widths[newId] = widths[oldId]; delete widths[oldId]; }
@@ -276,7 +292,10 @@ function totalOption(ctx, docColumn, layout) {
   // Ligado = a conta padrão da coluna já está nos totais (a média do tipo, ex. Peso Médio, não conta: é outra conta).
   // E1G: numa coluna de média (Dias), a soma gravada antes (quando o total era soma) também é o total dela.
   const ops = totalOpsOf(column, op);
-  return { op, active: aggregatesOf(ctx).some((spec) => spec.columnId === column.id && ops.has(spec.op)) };
+  const active = aggregatesOf(ctx).some((spec) => spec.columnId === column.id && ops.has(spec.op));
+  // M1 §5: o total que juntaria @ de peso vivo com @ de carcaça num total só não é oferecido.
+  if (!active && mixesArroba(ctx, [...aggregatesOf(ctx), specFor(op, column.id)])) return null;
+  return { op, active };
 }
 
 const totalOpsOf = (column, op) => new Set([op, ...(column?.totalOp && column.totalOp !== 'sum' ? ['sum'] : [])]);
@@ -286,6 +305,7 @@ function applyTotal(ctx, docColumn, option) {
   const spec = specFor(option.op, docColumn.key);
   const ops = totalOpsOf(columnOf(ctx.definition, docColumn.key), option.op);
   const aggregates = option.active ? current.filter((item) => !(item.columnId === docColumn.key && ops.has(item.op))) : [...current, spec];
+  if (mixesArroba(ctx, aggregates)) return null;
   return { aggregates, summarySort: keepSummarySort(ctx.state, aggregates) };
 }
 
@@ -432,8 +452,10 @@ function addOptions(ctx, docColumn, layout) {
   const ownSpecs = own.length ? typeSpecsOf(ctx, view, own.map((option) => option.key)) : [];
   const others = reportMetricOptions(ctx)
     .filter((option) => !own.some((item) => item.key === option.key) && !option.specs.every((spec) => ownSpecs.some((item) => sameSpec(item, spec))))
+    .filter((option) => !mixesArroba(ctx, [...aggregatesOf(ctx), ...option.specs]))
     .map(({ key, label }) => ({ key, label, group: 'relatorio' }));
-  return [...own, ...others];
+  // M1 §5: a coluna do tipo que juntaria as duas arrobas num total (mesmo id em outra arroba) não é oferecida.
+  return [...own.filter((option) => !mixesArroba(ctx, [...aggregatesOf(ctx), ...typeSpecsOf(ctx, view, [option.key])])), ...others];
 }
 
 /** Totais do tipo por trás de chaves do seletor "Colunas" (o par vira as duas). */
@@ -469,6 +491,7 @@ function applyAdd(ctx, docColumn, option) {
   const anchor = docColumn.kind === 'label' ? -1 : Math.max(...docSpecs(ctx, docColumn).map((spec) => current.findIndex((item) => aggregateSpecId(item) === aggregateSpecId(spec))), -1);
   const fresh = specs.filter((spec) => !current.some((item) => sameSpec(item, spec)));
   const aggregates = docColumn.kind === 'label' ? [...fresh, ...current] : insertAfter(current, anchor, fresh);
+  if (mixesArroba(ctx, aggregates)) return null;
   return { patch: { aggregates, summarySort: keepSummarySort(state, aggregates) }, typeKeys: typeKeys(ctx, { aggregates }) };
 }
 
@@ -485,8 +508,9 @@ function applyAdd(ctx, docColumn, option) {
  *   total: object|null, hide: object|null, add: { key, label }[], width: number|null }}
  *   null = a coluna não tem menu (valor do eixo X da matriz)
  */
-export function headerMenuOf(ctx, docColumn, layout) {
+export function headerMenuOf(rawCtx, docColumn, layout) {
   if (!docColumn) return null;
+  const ctx = labelledCtx(rawCtx);
   if (layout === HEADER_LAYOUTS.MATRIX && docColumn.kind === 'matrix' && !docColumn.total) return null;
   const menu = {
     key: docColumn.key,
@@ -514,7 +538,8 @@ export function headerMenuOf(ctx, docColumn, layout) {
  * @returns {null | { patch: object, typeKeys: { viewId: string, keys: string[] }|null }} null = nada muda;
  *   typeKeys = a escolha de "Colunas" do tipo a gravar para o usuário (reportTemplateService.saveTypeColumnPrefs)
  */
-export function applyHeaderAction(ctx, docColumn, action) {
+export function applyHeaderAction(rawCtx, docColumn, action) {
+  const ctx = labelledCtx(rawCtx);
   const layout = action.layout ?? HEADER_LAYOUTS.SUMMARY;
   const menu = headerMenuOf(ctx, docColumn, layout);
   const wrap = (patch) => (patch ? { patch, typeKeys: null } : null);

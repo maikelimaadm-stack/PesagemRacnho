@@ -30,7 +30,7 @@ export const ABATES_POPULATION = Object.freeze({ tipo_manejo: pelo(['Saída']), 
 export const ABATES_COLUMNS = Object.freeze(['frigorifico', 'data_pesagem', 'numero_animal', 'peso', 'rendimento_carcaca', 'quantidade_arrobas', 'valor_arroba_abate', 'valor_total_abate']);
 // E1G (A1): a Saída com peso (abate) tem dias, ganho e GMD — em "Colunas", fora do padrão.
 export const ABATES_AVAILABLE_COLUMNS = Object.freeze([...ABATES_COLUMNS, 'peso_carcaca_estimado', 'marca', 'sexo', 'raca', 'era', 'nome_lote', 'nome_apartacao', 'embarque_nome', 'documento_numero', 'observacao', 'dias', 'ganho', 'gmd']);
-export const ABATES_COLUMN_LABELS = Object.freeze({ rendimento_carcaca: 'Rendimento', quantidade_arrobas: 'Qtd @ Carcaça', valor_arroba_abate: 'Valor @', valor_total_abate: 'Valor Total' });
+export const ABATES_COLUMN_LABELS = Object.freeze({ rendimento_carcaca: 'Rendimento', quantidade_arrobas: 'Qtd ({@})', valor_arroba_abate: 'Valor @', valor_total_abate: 'Valor Total' });
 
 // Compras: cadastros com valor pago por cabeça (a mesma população de "Compras do período"), por origem/vendedor.
 export const COMPRAS_POPULATION = Object.freeze({ tipo_manejo: pelo(['Cadastro']), valor_pago_cabeca: { operator: 'not_empty' } });
@@ -57,15 +57,16 @@ export const COMERCIAL_VIEWS = Object.freeze([
 export const COMERCIAL_SORT_CHOICES = Object.freeze(PESAGENS_SORT_CHOICES.filter((choice) => !choice.id.startsWith('gmd_')));
 
 // Rótulos de curral dos totais (grade, CSV e XLSX do Detalhado leem pelo id; o mesmo id tem o mesmo rótulo nos 3 tipos).
+// M1 §5: {@} = a marca da arroba da coluna do total — "Média (@ vivo ÷30)" em Vendas, "Total (@ carcaça)" em Abates.
 export const COMERCIAL_METRIC_LABELS = Object.freeze({
   ...VENDAS_METRIC_LABELS,
   peso_total: 'Peso total (kg)',
   peso_medio: 'Peso médio (kg)',
-  media_arroba: 'Média (@)',
+  media_arroba: 'Média ({@})',
   animais_abatidos: 'Animais abatidos',
   rendimento_medio: 'Rendimento médio (%)',
-  arrobas_carcaca: 'Total @ carcaça',
-  media_arroba_carcaca: 'Média @ carcaça',
+  arrobas_carcaca: 'Total ({@})',
+  media_arroba_carcaca: 'Média ({@})',
   animais_comprados: 'Animais comprados',
   valor_medio_cabeca: 'Valor médio por cabeça',
 });
@@ -84,7 +85,7 @@ export const COMERCIAL = defineReport({
   requires: ['reports.read', 'weighing.read', 'commercial.values'],
   classification: DATA_CLASSIFICATION.LEGACY_EVENT,
   description: 'Vendas por comprador, abates por frigorífico e compras por origem no período, no desenho do relatório de venda do MAKGESTAO.',
-  metrics: ['Cabeças', 'Peso', 'Arrobas', 'Valor', 'Média valor da arroba'],
+  metrics: ['Cabeças', 'Peso', '@ vivo (vendas) e @ carcaça (abates)', 'Valor', 'Média valor da arroba'],
   params: [{ id: 'periodo', type: 'period', label: 'Período', required: true, default: { preset: 'ultimos_90_dias' } }],
   columns: EVENT_COLUMNS,
   animalColumnId: 'numero_animal',
