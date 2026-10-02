@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AlertTriangle, ArrowLeft, Columns3, Eye, EyeOff, FileJson, FileSpreadsheet, FileText, Layers, Lock, MoreHorizontal, Printer, RefreshCw, Save, ScrollText, SearchCheck, Sigma, Star, Table2, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Columns3, Eye, EyeOff, FileJson, FileSpreadsheet, FileText, Layers, Lock, MoreHorizontal, MoreVertical, Printer, RefreshCw, Save, ScrollText, SearchCheck, Sigma, Star, Table2, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -115,8 +115,11 @@ function currentSortValue({ summaryMode, state, definition, options }) {
  *   modelo, depois de excluir o aberto). Sem reportOptions (aba Controle da Manutenção), a tela da 1.4.0.
  * @param onTemplatesChanged E1F: um relatório do usuário foi salvo, renomeado ou excluído (Relatorios.jsx relê
  *   o grupo "Meus relatórios" do seletor). onTemplateSaved(modelo novo): abre o relatório recém-salvo.
+ * @param rowActions M1 (1.5.0): ações por linha da grade da tela da 1.4.0 (aba Controle da Manutenção — "Pesagens
+ *   para conferir"): { title(row) → texto do botão, items: [{ id, label, enabled?(row) → boolean, onSelect(row) }] }.
+ *   O menu é o mesmo das linhas da Relação de Pesagens e do Lançamento (⋮). A folha (impressão/PDF) não tem ações.
  */
-export default function ReportView({ reportId, presetId = null, template, savedState = null, typeColumnPrefs = null, actor, onBack = null, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true, reportOptions = null, onSelectReport = null, onOpenTemplate = null, onTemplatesChanged = null }) {
+export default function ReportView({ reportId, presetId = null, template, savedState = null, typeColumnPrefs = null, actor, onBack = null, backLabel = "Relatórios", onTemplateSaved, initialPeriod = null, allowPreferences = true, reportOptions = null, onSelectReport = null, onOpenTemplate = null, onTemplatesChanged = null, rowActions = null }) {
   const can = useCan();
   const definition = getReportDefinition(reportId);
   // E1E: em Relatórios (tela única, com o campo "Relatório") TODOS abrem na tela "como o MAKGESTAO"
@@ -153,6 +156,26 @@ export default function ReportView({ reportId, presetId = null, template, savedS
   const runSeq = useRef(0);
   const favKey = favoriteKey(definition.id, preset ? presetId : null);
   const views = useMemo(() => listReportViews(definition), [definition]);
+  // M1: menu ⋮ por linha da grade (mesmo desenho das linhas da Relação de Pesagens e do Lançamento).
+  const tableRowActions = useMemo(() => (rowActions?.items?.length ? {
+    label: "Ações",
+    render: (row) => (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" aria-label={rowActions.title?.(row) ?? "Ações da linha"} title={rowActions.title?.(row) ?? "Ações da linha"}>
+            <MoreVertical className="w-3.5 h-3.5 text-slate-600" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {rowActions.items.map((action) => (
+            <DropdownMenuItem key={action.id} className="text-xs" disabled={action.enabled ? !action.enabled(row) : false} onClick={() => action.onSelect(row)}>
+              {action.label}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    ),
+  } : null), [rowActions]);
 
   useEffect(() => {
     if (!allowPreferences) return;
@@ -1048,6 +1071,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
                 onHide={hideColumn}
                 optionsFor={(column) => pillOptions(viewModel, column)}
                 filterTypeFor={pillFilterType}
+                rowActions={tableRowActions}
               />
             )) : <div className="rpt-empty">{loading ? "Calculando o relatório…" : "—"}</div>}
           </CardContent>

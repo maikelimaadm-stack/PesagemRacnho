@@ -2,12 +2,16 @@
 // (classificados na auditoria como "requer nova modelagem" ou "não deve ser feito agora").
 // E1 (1.4.0): auditoria, qualidade dos dados e backups aparecem na aba Controle da Manutenção;
 // cadastros.* (as telas de cadastro já listam e exportam) e os bloqueados saem da interface (backlog).
+// M1 (1.5.0): "Pesagens para conferir" (pesagem fora da curva) também na aba Controle da Manutenção.
 import { REPORT_VISIBILITY, defineReport } from '../domain/reportDefinition.js';
 import { GRAINS } from '../domain/reportGrain.js';
+import { defineColumn } from '../domain/columnDefinition.js';
 import {
   AUDIT_COLUMNS, BACKUP_COLUMNS, DATA_ISSUE_COLUMNS, REGISTRY_BASE_COLUMNS, REGISTRY_EXTRA_COLUMNS, SHIPMENT_DOCUMENT_COLUMNS,
 } from './columns/controlColumns.js';
+import { EVENT_COLUMNS } from './columns/eventColumns.js';
 import { listaTipo, resumoTipo } from './tipos.js';
+import { CLASSE_PESAGEM } from '../../weighing/domain/weightOutliers.js';
 
 // E1E "Tipo Relatório" (definitions/tipos.js); versão 2 = ganhou os tipos (ver rebanho.js).
 const PREVISTO_COLUMNS = Object.freeze(['embarque', 'data_embarque', 'destino', 'tipo_documento', 'numero_gta', 'prev_machos', 'real_machos', 'prev_femeas', 'real_femeas', 'prev_total', 'real_total', 'diferenca_total', 'peso_total_real']);
@@ -66,6 +70,64 @@ export const CONTROLE_BACKUPS = defineReport({
   defaultSort: [{ columnId: 'data_hora', direction: 'desc' }],
   defaultAggregates: [{ id: 'backups', op: 'count' }, { id: 'ultimo', columnId: 'data_hora', op: 'max' }],
 });
+
+// M1 (1.5.0) — "Pesagens para conferir" (docs/plano-mestre/M1-FUNDACAO-NUMERO.md §3). Uma linha por pesagem com
+// classe ≠ OK (weighing/domain/weightOutliers.js; fonte weighings.check em controlSources.js). Só APONTA: a pesagem
+// continua em média, total e gráfico de todos os relatórios — excluir exige gravar a resolução (M2).
+export const PESAGENS_CONFERIR_ID = 'controle.pesagens-conferir';
+const CLASSE_CONFERENCIA_OPTIONS = Object.freeze([
+  { value: CLASSE_PESAGEM.SUSPEITA_ERRO, label: 'Suspeita de erro' },
+  { value: CLASSE_PESAGEM.SUSPEITA_LOTE, label: 'Fora da curva do lote' },
+  { value: CLASSE_PESAGEM.PERDA_POSSIVEL, label: 'Perda possível' },
+]);
+// Agrupar pela classe segue a ordem das regras (erro, lote, perda), não a do alfabeto.
+const CLASSE_ORDEM = Object.freeze(Object.fromEntries(CLASSE_CONFERENCIA_OPTIONS.map((option, index) => [option.value, index + 1])));
+export const PESAGENS_CONFERIR_COLUMNS = Object.freeze([
+  ...EVENT_COLUMNS,
+  defineColumn({
+    id: 'classe_conferencia', label: 'Classe', type: 'enum', options: CLASSE_CONFERENCIA_OPTIONS, grains: [GRAINS.EVENT], groupable: true, defaultVisible: true,
+    source: 'derivado', defaultWidth: 150, groupOrder: (row) => CLASSE_ORDEM[row?.classe_conferencia] ?? null,
+    description: 'Suspeita de erro (variação acima de 25 %, ou perda acima de 10 % em menos de 14 dias), fora da curva do lote (8 animais ou mais) ou perda possível (até 5 % em até 28 dias, animal presente).',
+  }),
+  defineColumn({ id: 'motivo_conferencia', label: 'Motivo', type: 'text', grains: [GRAINS.EVENT], defaultVisible: true, source: 'derivado', defaultWidth: 260 }),
+]);
+export const PESAGENS_CONFERIR_COLUMN_IDS = Object.freeze([
+  'numero_animal', 'data_pesagem', 'peso', 'peso_anterior', 'dias', 'ganho', 'gmd', 'classe_conferencia', 'motivo_conferencia', 'nome_lote', 'operador', 'origem_registro',
+]);
+
+export const CONTROLE_PESAGENS_CONFERIR = defineReport({
+  id: PESAGENS_CONFERIR_ID, family: 'controle', visibility: REPORT_VISIBILITY.MAINTENANCE, grain: GRAINS.EVENT, version: 1, source: 'weighings.check',
+  requires: ['reports.read', 'weighing.read'], columns: PESAGENS_CONFERIR_COLUMNS, title: 'Pesagens para conferir',
+  description: 'Pesagens fora da curva: provável erro de balança ou digitação, fora da curva do lote ou perda possível. Só aponta — nada sai das médias.',
+  params: [{ id: 'periodo', type: 'period', label: 'Período', required: true, default: { preset: 'ultimos_30_dias' } }],
+  metrics: ['Por classe', 'Animais'],
+  animalColumnId: 'numero_animal',
+  defaultColumns: [...PESAGENS_CONFERIR_COLUMN_IDS],
+  searchColumns: ['numero_animal', 'marca', 'nome_lote', 'motivo_conferencia'],
+  defaultSort: [{ columnId: 'data_pesagem', direction: 'desc' }, { columnId: 'numero_animal', direction: 'asc' }],
+  defaultAggregates: [{ id: 'pesagens', op: 'count' }, { id: 'animais', columnId: 'numero_animal', op: 'countDistinct' }],
+  notes: [
+    'A pesagem apontada continua na média, no total e nos gráficos dos relatórios: conferir não exclui nada.',
+    'Fora da curva do lote: só com 8 animais ou mais com GMD confiável no mesmo lote e período.',
+    'GMD de intervalo curto (menor que o mínimo de Configurações › Relatórios) não entra na mediana do lote.',
+  ],
+});
+
+// Ações por linha na aba Controle (o que JÁ existe, sem esquema novo). `page` = createPageUrl(page):
+// - Corrigir → o Lançamento com a pesagem aberta para edição (?editar=<id>, o mesmo link do "Editar" da Relação de
+//   Pesagens): corrigir o peso (auditoria ATUALIZAR, série recalculada) ou Excluir a linha (exclusão lógica com
+//   auditoria CANCELAR) e lançar de novo;
+// - Ver ficha do animal → a Ficha do Animal (?animal=<id do animal>). Registro antigo sem animal: sem ação.
+export const PESAGENS_CONFERIR_ACOES = Object.freeze([
+  Object.freeze({ id: 'corrigir', label: 'Corrigir', permission: 'weighing.edit', page: (row) => (row?.id ? `LancamentoPesagensIndividuais?editar=${encodeURIComponent(row.id)}` : null) }),
+  Object.freeze({
+    id: 'ficha', label: 'Ver ficha do animal', permission: 'animal.read',
+    page: (row) => {
+      const animalId = row?.animal_id_resolvido ?? row?.animal_id ?? null;
+      return animalId ? `FichaAnimal?animal=${encodeURIComponent(animalId)}` : null;
+    },
+  }),
+]);
 
 const REGISTRIES = [
   ['marcas', 'Marcas'], ['racas', 'Raças'], ['categoriasAnimal', 'Categorias'], ['parceiros', 'Parceiros'],

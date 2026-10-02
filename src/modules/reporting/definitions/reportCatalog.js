@@ -1,7 +1,7 @@
 // Catálogo de relatórios (Modelo 1). E1 (1.4.0): 12 relatórios visíveis no catálogo (E1E: 10 — Vendas, Abates
 // e Compras do período viraram os tipos do Comercial, e os 3 ids antigos são aliases); 4 de controle na
-// aba Controle da Manutenção; cadastros.* e os bloqueados (com motivo, nunca simulados) ficam fora da
-// interface como backlog. Os 42 ids antigos consolidados continuam válidos como aliases
+// aba Controle da Manutenção (M1 1.5.0: 5, com "Pesagens para conferir"); cadastros.* e os bloqueados (com
+// motivo, nunca simulados) ficam fora da interface como backlog. Os 42 ids antigos consolidados continuam válidos como aliases
 // (legacyAliases.js): getReportDefinition(idAntigo) devolve a definição nova.
 import { REPORT_VISIBILITY } from '../domain/reportDefinition.js';
 import { PESAGENS } from './pesagens.js';
@@ -11,7 +11,8 @@ import {
 } from './operacional.js';
 import { COMERCIAL } from './comercial.js';
 import {
-  CADASTROS_RELATORIOS, CADASTROS_USUARIOS, CONTROLE_AUDITORIA, CONTROLE_BACKUPS, CONTROLE_QUALIDADE, EMBARQUES_PREVISTO_REALIZADO, RELATORIOS_BLOQUEADOS,
+  CADASTROS_RELATORIOS, CADASTROS_USUARIOS, CONTROLE_AUDITORIA, CONTROLE_BACKUPS, CONTROLE_PESAGENS_CONFERIR, CONTROLE_QUALIDADE, EMBARQUES_PREVISTO_REALIZADO,
+  RELATORIOS_BLOQUEADOS,
 } from './controle.js';
 import { DESEMPENHO } from './desempenho.js';
 import { LEGACY_REPORT_ALIASES, getLegacyAlias } from './legacyAliases.js';
@@ -36,6 +37,8 @@ const DEFINITIONS = [
   CONTROLE_QUALIDADE,
   CONTROLE_BACKUPS,
   PESAGENS_PENDENCIAS,
+  // M1 (1.5.0): pesagem fora da curva — só aponta, nada sai das médias.
+  CONTROLE_PESAGENS_CONFERIR,
   // Fora da interface
   ...CADASTROS_RELATORIOS,
   CADASTROS_USUARIOS,
