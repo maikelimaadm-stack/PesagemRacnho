@@ -82,9 +82,10 @@ export const VENDAS_FORMATS = Object.freeze({
   valor_total: Object.freeze({ type: 'money', decimals: 2 }),
 });
 
-// Rótulos bloco a bloco ([id do total, rótulo, opções]). M1 §5: {@} = a marca da arroba da coluna do total ("Média (@ vivo
-// ÷30)" em Vendas, "Total (@ carcaça)" em Abates — buildVendasBlocks preenche pela coluna do view model). strong = negrito (Valor total/Valor Total); unit = unidade
-// no cartão e no TOTAL GERAL ("455,20 kg", "90 animais"). Vendas = os do antigo, texto a texto.
+// Rótulos bloco a bloco ([id do total, rótulo, opções]). strong = negrito (Valor total/Valor Total); unit = unidade
+// no cartão e no TOTAL GERAL ("455,20 kg", "90 animais"). Vendas = os do antigo, texto a texto. M1 §5: {@} = a marca da
+// arroba da coluna do total ("Média (@ vivo ÷30)" em Vendas, "Total (@ carcaça)" em Abates — buildVendasBlocks preenche
+// pela coluna do view model); "Média Valor @" é o PREÇO da @ (dinheiro).
 const STRONG = Object.freeze({ strong: true });
 const CENTER = Object.freeze({ align: 'center' });
 const ANIMAIS = Object.freeze({ unit: 'animais' });
