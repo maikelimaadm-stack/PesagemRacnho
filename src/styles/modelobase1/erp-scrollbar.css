@@ -338,7 +338,7 @@ html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-she
 ) {
   background: var(--mg-brand-green, #40de63) !important;
   border-color: transparent !important;
-  color: #ffffff !important;
+  color: #111827 !important;
 }
 
 html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
@@ -378,22 +378,23 @@ html body [data-sonner-toast] .erp-toast-panel__icon-badge svg {
   stroke: var(--mg-icon-on-accent-color) !important;
 }
 
-/* Branco obrigatório — qualquer botão com ícone de + */
+/* Branco no + só em botões verdes/primários — não em ícones cinza da barra. */
 html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
   button,
   a,
   [role="button"]
-) :is(svg.lucide-plus, svg[data-lucide="plus"]) {
+):not(.tb-btn-ghost):not(.tb-btn-icon):not(.mg-action-slot__link)
+  :is(svg.lucide-plus, svg[data-lucide="plus"]) {
   color: var(--mg-icon-on-accent-color) !important;
   stroke: var(--mg-icon-on-accent-color) !important;
 }
 
-/* Fundo verde obrigatório — qualquer botão com ícone de + */
+/* Fundo verde no + — exceto link/slot e ícones ghost da action bar (padrão cinza). */
 html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
   button,
   a,
   [role="button"]
-):has(:is(svg.lucide-plus, svg[data-lucide="plus"])):not(:disabled) {
+):has(:is(svg.lucide-plus, svg[data-lucide="plus"])):not(:disabled):not(.tb-btn-ghost):not(.tb-btn-icon):not(.mg-action-slot__link) {
   background: var(--mg-brand-green, #40de63) !important;
   border-color: transparent !important;
   color: var(--mg-icon-on-accent-color) !important;
@@ -403,30 +404,49 @@ html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-she
   button,
   a,
   [role="button"]
-):has(:is(svg.lucide-plus, svg[data-lucide="plus"])):not(:disabled):hover,
+):has(:is(svg.lucide-plus, svg[data-lucide="plus"])):not(:disabled):not(.tb-btn-ghost):not(.tb-btn-icon):not(.mg-action-slot__link):hover,
 html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
   button,
   a,
   [role="button"]
-):has(:is(svg.lucide-plus, svg[data-lucide="plus"])):not(:disabled):focus-visible {
+):has(:is(svg.lucide-plus, svg[data-lucide="plus"])):not(:disabled):not(.tb-btn-ghost):not(.tb-btn-icon):not(.mg-action-slot__link):focus-visible {
   background: var(--mg-brand-green-hover, #36c956) !important;
+}
+
+/* Relação de pesagens: + cinza, sem verde atrás do círculo. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-action-slot__link,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-action-slot__link:hover,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-action-slot__link:focus-visible {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  color: inherit !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-action-slot__link > .tb-btn-icon,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-icon.tb-btn-ghost:has(svg.lucide-plus) {
+  background: #f1f3f4 !important;
+  color: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-icon.tb-btn-ghost:has(svg.lucide-plus) svg {
+  color: #111827 !important;
+  stroke: #111827 !important;
 }
 
 html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
   button,
   a,
   [role="button"]
-) svg.lucide-plus,
+):not(.tb-btn-ghost):not(.tb-btn-icon):not(.mg-action-slot__link) svg.lucide-plus,
 html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
   button,
   a,
   [role="button"]
-):hover:not(:disabled) svg.lucide-plus,
+):not(.tb-btn-ghost):not(.tb-btn-icon):not(.mg-action-slot__link):hover:not(:disabled) svg.lucide-plus,
 html body :is(.cadastro-emp-scope, .cadastro-scope, .mg-empresas-scope, .erp-shell) :is(
   button,
   a,
   [role="button"]
-):focus-visible:not(:disabled) svg.lucide-plus {
+):not(.tb-btn-ghost):not(.tb-btn-icon):not(.mg-action-slot__link):focus-visible:not(:disabled) svg.lucide-plus {
   color: var(--mg-icon-on-accent-color) !important;
   stroke: var(--mg-icon-on-accent-color) !important;
 }

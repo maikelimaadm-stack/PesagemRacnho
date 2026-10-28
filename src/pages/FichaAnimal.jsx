@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Search } from 'lucide-react';
+import { FileSpreadsheet, Scale, Search } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { loadOperationalCatalog } from '@/modules/operations/application/operationalInsightsService';
@@ -13,7 +13,9 @@ import { GMD_DIAS_MINIMOS_PADRAO, classifyGmd, normalizeGmdDiasMinimos } from '@
 import { localToday } from '@/modules/reporting/domain/reportPeriod';
 import { CHART_SCREEN_CSS } from '@/modules/reporting/infrastructure/exporters/chartStyles';
 import ChartPlot from '@/components/reports/ChartPlot';
+import { CSV_BOM, CSV_NEWLINE, csvCell } from '@/modules/reporting/infrastructure/exporters/csvExporter';
 import '@/styles/operational-insights.css';
+import '@/styles/launch-visual.css';
 
 const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const ni = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
@@ -29,7 +31,6 @@ const download = (name, content, type) => {
   link.click();
   URL.revokeObjectURL(url);
 };
-const csvCell = (value) => `"${String(value ?? '').replaceAll('"', '""')}"`;
 // M1: cinza que o tema já tem (texto secundário) para o GMD de intervalo curto — fora da média, com o motivo no title.
 const GMD_GRAY_STYLE = Object.freeze({ color: 'var(--mb1-text-2, #6b7280)' });
 /** M1: qualidade de um GMD gravado (dias × mínimo de Configurações › Relatórios) — o mesmo contrato dos relatórios. */
@@ -76,6 +77,8 @@ export default function FichaAnimal() {
   const auth = useAuth();
   const pode = (action) => (auth ? Boolean(auth.can?.(action)) : true);
   const [catalog, setCatalog] = useState({ pesagens: [], apartacoes: [], lotes: [], animais: [], sessoes: [] });
+  const [catalogState, setCatalogState] = useState({ status: 'loading', error: '' });
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   const [selectedKey, setSelectedKey] = useState('');
   const [query, setQuery] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -85,8 +88,13 @@ export default function FichaAnimal() {
   const [gmdDiasMinimos, setGmdDiasMinimos] = useState(GMD_DIAS_MINIMOS_PADRAO);
 
   useEffect(() => {
-    loadOperationalCatalog().then((data) => setCatalog(data)).catch((error) => toast.error(error.message || 'Não foi possível carregar a ficha do animal.'));
-  }, []);
+    let active = true;
+    setCatalogState({ status: 'loading', error: '' });
+    loadOperationalCatalog()
+      .then((data) => { if (active) { setCatalog(data); setCatalogState({ status: 'ready', error: '' }); } })
+      .catch((error) => { if (active) setCatalogState({ status: 'error', error: error?.message || 'Não foi possível carregar a ficha do animal.' }); });
+    return () => { active = false; };
+  }, [catalogAttempt]);
   useEffect(() => {
     let active = true;
     getReportSettings().then((settings) => { if (active) setGmdDiasMinimos(normalizeGmdDiasMinimos(settings?.gmd_dias_minimos)); }).catch(() => {});
@@ -138,6 +146,8 @@ export default function FichaAnimal() {
   const curve = useMemo(() => buildAnimalWeightCurve(selected?.entries ?? [], { range, gmdDiasMinimos, hoje: localToday() }), [selected, range, gmdDiasMinimos]);
   const curveText = curveLegend(curve.resumo);
 
+  if (catalogState.status === 'loading') return <main className="op-screen" aria-busy="true"><section className="op-card"><div className="op-empty" role="status">Carregando a ficha do animal…</div></section></main>;
+  if (catalogState.status === 'error') return <main className="op-screen"><section className="op-card"><div className="op-empty" role="alert"><p>{catalogState.error} Use Tentar de novo.</p><button type="button" className="op-button" onClick={() => setCatalogAttempt((attempt) => attempt + 1)}>Tentar de novo</button></div></section></main>;
   if (!selected) return <main className="op-screen"><section className="op-card"><div className="op-empty">Nenhum animal cadastrado. Faça o primeiro lançamento para gerar a ficha.</div></section></main>;
 
   // Peso atual, ganho e GMD usam só eventos COM peso (Saída sem peso não vira 0 kg).
@@ -173,13 +183,13 @@ export default function FichaAnimal() {
     const withWarning = historyGmd.some((shown) => shown.cinza);
     const headers = ['Data', 'Tipo', 'Peso', 'Dias', 'Ganho', 'GMD', ...(withWarning ? ['Aviso do GMD'] : []), 'Lote', 'Apartação', 'Observação'];
     const lines = historyRows.map((row, index) => [dateBr(row.data_pesagem), row.tipo_manejo, hasNumber(row.peso) ? nf.format(Number(row.peso)) : '', row.dias, hasNumber(row.ganho) ? nf.format(Number(row.ganho)) : '', historyGmd[index].texto === '—' ? '' : historyGmd[index].texto, ...(withWarning ? [historyGmd[index].aviso ?? ''] : []), row.nome_lote, row.nome_apartacao, row.observacao].map(csvCell).join(';'));
-    download(`ficha-${selected.number}-${selected.brand}.csv`, `\ufeff${headers.map(csvCell).join(';')}\n${lines.join('\n')}`, 'text/csv;charset=utf-8');
+    download(`ficha-${selected.number}-${selected.brand}.csv`, `${CSV_BOM}${headers.map(csvCell).join(';')}${CSV_NEWLINE}${lines.join(CSV_NEWLINE)}${CSV_NEWLINE}`, 'text/csv;charset=utf-8');
     toast.success('Histórico do animal exportado.');
   };
 
   const kpis = [
-    ['Peso atual', latestWeighed ? nf.format(Number(latestWeighed.peso)) : '—', dateBr(latestWeighed?.data_pesagem), ''],
-    ['Ganho total', totalGain === null ? '—' : `${totalGain >= 0 ? '+' : ''}${nf.format(totalGain)}`, 'desde o cadastro', 'accent'],
+    ['Peso atual', latestWeighed ? `${nf.format(Number(latestWeighed.peso))} kg` : '—', dateBr(latestWeighed?.data_pesagem), ''],
+    ['Ganho total', totalGain === null ? '—' : `${totalGain >= 0 ? '+' : ''}${nf.format(totalGain)} kg`, 'desde o cadastro', 'accent'],
     ['GMD médio', averageShown.texto, averageShown.cinza ? `${averageShown.aviso} · fora da média` : `kg/dia · ${ni.format(totalDays)} dias`, averageShown.cinza ? '' : 'accent', averageShown.cinza],
     ['GMD última', latestGmd !== null ? latestShown.texto : '—', latestShown.cinza ? `${latestShown.aviso} · fora da média` : latest?.data_anterior ? `vs. ${dateBr(latest.data_anterior)}` : 'primeira pesagem', latestShown.cinza ? '' : 'accent', latestShown.cinza],
     ...(pode('commercial.values') ? [['@ carcaça est.', carcass.arrobas === null ? '—' : nf.format(carcass.arrobas), carcass.yieldPercent === null ? 'sem rendimento informado' : `rendimento ${nf.format(carcass.yieldPercent)}% · 1 @ = 15 kg`, '']] : []),
@@ -189,9 +199,9 @@ export default function FichaAnimal() {
   return (
     <main className="op-screen" aria-label="Ficha do Animal">
       <div className="op-toolbar op-toolbar--animal">
-        <label className="op-field" style={{ width: 260 }}><Search /><input value={query} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)} placeholder="Brinco, nome ou marca" aria-label="Buscar animal" />{searchOpen && <div className="op-search-results">{results.map((profile) => <button className="op-search-result" type="button" key={profile.key} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(profile)}><span>{profile.number}</span><span className="op-pill">{profile.brand}</span><small>{profile.sex} · {profile.race}</small></button>)}{!results.length && <div className="op-empty">Nenhum animal encontrado.</div>}</div>}</label>
+        <label className="op-field" style={{ width: 260 }}><Search /><input value={query} onChange={(event) => { setQuery(event.target.value); setSearchOpen(true); }} onFocus={() => setSearchOpen(true)} placeholder="Brinco, nome ou marca" aria-label="Buscar animal" />{searchOpen && <div className="op-search-results">{results.map((profile) => <button className="op-search-result" type="button" key={profile.key} onMouseDown={(event) => event.preventDefault()} onClick={() => choose(profile)}><span>{profile.number}</span><span className="op-pill">{profile.brand}</span><small>{profile.sex}, {profile.race}</small></button>)}{!results.length && <div className="op-empty">Nenhum animal encontrado. Confira o brinco, o nome ou a marca.</div>}</div>}</label>
         <div className="op-animal-heading"><div className="op-animal-heading__line"><strong>{selected.number}</strong><span className="op-pill">{selected.brand}</span><span className={`op-pill ${['ATIVO', 'Ativo'].includes(selected.status) ? 'op-pill--active' : ''}`}>{selected.status}</span></div><span className="op-animal-heading__meta">{selected.sex} · {selected.race} · {selected.era} · {selected.lot} · {selected.apartacao}</span></div>
-        <div className="op-toolbar-actions">{pode('reports.export') ? <button className="op-button" type="button" onClick={exportHistory}>Exportar histórico</button> : null}<button className="op-button op-button--primary" type="button" onClick={() => navigate('/LancamentoPesagensIndividuais')}>Lançar pesagem</button></div>
+        <div className="op-toolbar-actions">{pode('reports.export') ? <button className="op-button op-button--icon" type="button" onClick={exportHistory} title="Exportar histórico" aria-label="Exportar histórico"><FileSpreadsheet size={14} aria-hidden="true" /></button> : null}<button className="op-button op-button--icon op-button--primary" type="button" onClick={() => navigate('/LancamentoPesagensIndividuais')} title="Lançar pesagem" aria-label="Lançar pesagem"><Scale size={14} aria-hidden="true" /></button></div>
       </div>
 
       <div className="op-kpis">{kpis.map(([label, value, hint, accent, gray]) => <div key={label} className={`op-kpi ${accent ? `op-kpi--${accent}` : ''}`}><span className="op-kpi__label">{label}</span><strong className="op-kpi__value" style={gray ? GMD_GRAY_STYLE : undefined} title={gray ? hint : undefined}>{value}</strong><span className="op-kpi__hint">{hint}</span></div>)}</div>
@@ -201,9 +211,10 @@ export default function FichaAnimal() {
         <section className="op-card"><header className="op-card__header"><h2>Linha do tempo</h2><span>{ni.format(events.length)} eventos</span></header><div className="op-timeline">{events.map((event, index) => <div className="op-event" key={`${event.date}-${index}`}><div className="op-event__rail"><span className="op-event__dot" style={{ background: event.color }} />{index < events.length - 1 && <span className="op-event__line" />}</div><div className="op-event__body"><strong>{event.title}</strong><time>{dateBr(event.date)}</time><span>{event.detail}</span></div></div>)}</div></section>
       </div>
 
-      <section className="op-card"><header className="op-card__header"><h2>Histórico de pesagens</h2><span>{ni.format(historyRows.length)} registros</span></header><div className="op-table-scroll"><table className="op-table" style={{ minWidth: 820 }}><thead><tr><th>Data</th><th>Tipo</th><th className="is-number">Peso</th><th className="is-number">Dias</th><th className="is-number">Ganho</th><th className="is-number">GMD</th><th>Lote</th><th>Apartação</th><th>Observação</th></tr></thead><tbody>{historyRows.map((row, index) => { const gain = hasNumber(row.ganho) ? Number(row.ganho) : null; const gmd = hasNumber(row.gmd) ? Number(row.gmd) : null; const shownGmd = historyGmd[index]; return <tr key={row.id}><td>{dateBr(row.data_pesagem)}</td><td><span className={`op-type ${row.tipo_manejo === 'Cadastro' ? 'op-type--cadastro' : row.tipo_manejo === 'Saída' ? 'op-type--saida' : ''}`}>{row.tipo_manejo || 'Manejo'}</span></td><td className="is-number"><strong>{nf.format(Number(row.peso) || 0)}</strong></td><td className="is-number">{hasNumber(row.dias) ? ni.format(Number(row.dias)) : '—'}</td><td className={`is-number ${gain > 0 ? 'is-positive' : gain < 0 ? 'is-negative' : ''}`}>{gain !== null ? `${gain > 0 ? '+' : ''}${nf.format(gain)}` : '—'}</td><td className={`is-number ${shownGmd.cinza ? '' : gmd > 0 ? 'is-positive' : gmd < 0 ? 'is-negative' : ''}`} style={shownGmd.cinza ? GMD_GRAY_STYLE : undefined} title={shownGmd.cinza ? `GMD não entra na média: ${shownGmd.aviso}` : undefined} data-gmd={shownGmd.cinza ? 'NAO_CONFIAVEL' : undefined}>{shownGmd.texto}</td><td>{row.nome_lote || '—'}</td><td>{row.nome_apartacao || '—'}</td><td>{row.observacao || '—'}</td></tr>; })}</tbody></table></div></section>
+      <section className="op-card"><header className="op-card__header"><h2>Histórico de pesagens</h2><span>{ni.format(historyRows.length)} registros</span></header><div className="op-table-scroll"><table className="op-table" style={{ minWidth: 820 }}><thead><tr><th>Data</th><th>Tipo</th><th className="is-number">Peso</th><th className="is-number">Dias</th><th className="is-number">Ganho</th><th className="is-number">GMD</th><th>Lote</th><th>Apartação</th><th>Observação</th></tr></thead><tbody>{historyRows.map((row, index) => { const gain = hasNumber(row.ganho) ? Number(row.ganho) : null; const gmd = hasNumber(row.gmd) ? Number(row.gmd) : null; const shownGmd = historyGmd[index]; return <tr key={row.id}><td>{dateBr(row.data_pesagem)}</td><td><span className={`op-type ${row.tipo_manejo === 'Cadastro' ? 'op-type--cadastro' : row.tipo_manejo === 'Saída' ? 'op-type--saida' : ''}`}>{row.tipo_manejo || 'Manejo'}</span></td><td className="is-number"><strong>{hasNumber(row.peso) ? nf.format(Number(row.peso)) : '—'}</strong></td><td className="is-number">{hasNumber(row.dias) ? ni.format(Number(row.dias)) : '—'}</td><td className={`is-number ${gain > 0 ? 'is-positive' : gain < 0 ? 'is-negative' : ''}`}>{gain !== null ? `${gain > 0 ? '+' : ''}${nf.format(gain)}` : '—'}</td><td className={`is-number ${shownGmd.cinza ? '' : gmd > 0 ? 'is-positive' : gmd < 0 ? 'is-negative' : ''}`} style={shownGmd.cinza ? GMD_GRAY_STYLE : undefined} title={shownGmd.cinza ? `GMD não entra na média: ${shownGmd.aviso}` : undefined} data-gmd={shownGmd.cinza ? 'NAO_CONFIAVEL' : undefined}>{shownGmd.texto}</td><td>{row.nome_lote || '—'}</td><td>{row.nome_apartacao || '—'}</td><td>{row.observacao || '—'}</td></tr>; })}</tbody></table></div></section>
 
       {canReadSanity ? <SanidadeAnimalCard applications={sanity.rows} loading={sanity.loading} error={sanity.error} viaLabels={VIA_LABELS} /> : null}
+      <p className="op-report-foot">Série deste animal neste aparelho. Peso ausente aparece como —. Ganho total = último peso com balança − primeiro peso com balança. GMD médio = ganho total ÷ dias entre essas datas. GMD em cinza não entra na média quando o intervalo é menor que o mínimo de Configurações › Relatórios.{pode('commercial.values') ? ' 1 @ = 15 kg de carcaça, só quando a pesagem tem rendimento.' : ''}</p>
     </main>
   );
 }

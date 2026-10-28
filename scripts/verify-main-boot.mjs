@@ -2,7 +2,7 @@
 // Prova que o main process inicializa (whenReady completo) e registra os IPCs
 // esperados — sem precisar abrir a janela. É a rede de segurança para remoções
 // no main (ex.: retirada do SQLite legado).
-import { mkdtempSync, rmSync, existsSync } from 'fs';
+import { mkdtempSync, readdirSync, rmSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
@@ -33,7 +33,17 @@ const electronStub = {
     quit: () => {},
   },
   BrowserWindow: class {
-    constructor(opts) { this.opts = opts; this.webContents = { setWindowOpenHandler: () => {}, on: () => {}, session: {} }; windows.push(this); }
+    constructor(opts) {
+      const listeners = {};
+      this.opts = opts;
+      this.webContents = {
+        setWindowOpenHandler: () => {},
+        on: (event, fn) => { (listeners[event] ||= []).push(fn); },
+        listeners,
+        session: {},
+      };
+      windows.push(this);
+    }
     once() {} on() {} show() {} loadURL() {} loadFile() {}
     static getAllWindows() { return windows; }
     static getFocusedWindow() { return windows[0] || null; }
@@ -95,6 +105,36 @@ try {
   const w = await handlers['app:writeUserFile']({}, { subdir: 'exports', filename: 'boot-test.txt', content: 'ok' });
   const written = w?.data ?? w;
   assert(written?.path && existsSync(written.path), 'app:writeUserFile gravou arquivo');
+  const exportDir = join(userData, 'data', 'exports');
+  assert(written.path.startsWith(exportDir), 'arquivo legítimo fica em data/exports');
+
+  // Nome ".." sobe um nível no path.join e o temporário vaza ao lado de data/.
+  const before = readdirSync(userData);
+  let rejectedDotDot = false;
+  try {
+    await handlers['app:writeUserFile']({}, { subdir: 'exports', filename: '..', content: 'fora' });
+  } catch {
+    rejectedDotDot = true;
+  }
+  const leaked = readdirSync(userData).filter((name) => !before.includes(name) || name.startsWith('data.tmp-'));
+  assert(rejectedDotDot, 'app:writeUserFile recusa filename ..');
+  assert(!leaked.some((name) => name.startsWith('data.tmp-') || name === 'data.tmp'), 'filename .. não deixa arquivo fora de data/');
+
+  const sneaky = await handlers['app:writeUserFile']({}, { subdir: '..', filename: 'ok.txt', content: 'ok' });
+  const sneakyPath = sneaky?.data ?? sneaky;
+  assert(sneakyPath?.path?.startsWith(exportDir), 'subdir .. não grava fora de data/exports');
+
+  const nav = windows[0]?.webContents?.listeners?.['will-navigate']?.[0];
+  assert(typeof nav === 'function', 'will-navigate registrado na janela');
+  const blocked = (url) => {
+    let prevented = false;
+    nav({ preventDefault: () => { prevented = true; } }, url);
+    return prevented;
+  };
+  assert(blocked('file:///C:/Windows/win.ini'), 'navegação file: bloqueada no app instalado');
+  assert(blocked('http://localhost:5173/'), 'localhost de desenvolvimento bloqueado no app instalado');
+  assert(blocked('http://localhost:5173.evil.test/'), 'host parecido com o dev server bloqueado');
+  assert(blocked('https://example.com/'), 'navegação externa bloqueada');
 
   console.log('OK verify-main-boot');
   console.log(JSON.stringify({

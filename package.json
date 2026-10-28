@@ -3,7 +3,7 @@
   "productName": "Pesagens Individuais",
   "description": "Sistema offline de pesagens individuais",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.5.4",
   "main": "electron/main.cjs",
   "author": "MAKGESTAO",
   "type": "module",
@@ -163,7 +163,8 @@
     "reports:gmd-confiabilidade:verify": "node scripts/verify-reports-gmd-confiabilidade.mjs",
     "reports:arroba-rotulos:verify": "node scripts/verify-reports-arroba-rotulos.mjs",
     "import:identity:verify": "node scripts/verify-import-identity.mjs",
-    "weighing:outlier:verify": "node scripts/verify-weighing-outlier.mjs"
+    "weighing:outlier:verify": "node scripts/verify-weighing-outlier.mjs",
+    "equipment:contract:verify": "node scripts/verify-equipment-contract.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",

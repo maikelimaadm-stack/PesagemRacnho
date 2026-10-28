@@ -20,7 +20,7 @@ export default function StepResultado({ resultado, erro, onBaixarResultado, onNo
     return (
       <section className="importacao-step">
         <h2 className="importacao-step__title">Resultado</h2>
-        {erro ? <p className="importacao-alert importacao-alert--erro" role="alert">{erro}</p> : <p className="importacao-empty">Nenhuma importação concluída nesta sessão.</p>}
+        {erro ? <p className="importacao-alert importacao-alert--erro" role="alert">{erro} Volte à conferência e tente gravar de novo.</p> : <p className="importacao-empty">Nenhuma importação concluída nesta sessão. Volte à conferência e conclua a gravação, ou comece de novo pelo arquivo.</p>}
       </section>
     );
   }
@@ -55,7 +55,8 @@ export default function StepResultado({ resultado, erro, onBaixarResultado, onNo
         <Contagem label="Linhas gravadas" valor={(resultado.linhasGravadas || []).length} />
       </div>
 
-      {erro ? <p className="importacao-alert importacao-alert--erro" role="alert">{erro}</p> : null}
+      {resultado.erros > 0 ? <p className="importacao-hint">Há linhas com erro. Baixe o resultado: cada linha do arquivo aparece como gravada ou não gravada.</p> : null}
+      {erro ? <p className="importacao-alert importacao-alert--erro" role="alert">{erro} Volte à conferência e tente gravar de novo.</p> : null}
 
       <div className="importacao-step__tools importacao-step__tools--fim">
         <Button type="button" variant="outline" onClick={onBaixarResultado}>

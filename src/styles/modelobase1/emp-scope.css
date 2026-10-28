@@ -10,7 +10,7 @@
   --mg-icon-color: #5b6b80;
   --emp-form-label-color: var(--mg-ink);
   --emp-control-radius: 8px;
-  --emp-button-radius: 5px;
+  --emp-button-radius: 999px;
   --emp-form-control-height: 26px;
   --emp-form-font-size: 12px;
   --emp-form-border-color: var(--border-color);
@@ -55,13 +55,13 @@
   --erp-toolbar-card-py: 4px;
   --erp-toolbar-inner-py: 2px;
   --erp-toolbar-inner-px: 8px;
-  --erp-toolbar-height: 26px;
-  --erp-toolbar-btn-size: 26px;
+  --erp-toolbar-height: 32px;
+  --erp-toolbar-btn-size: 32px;
   --erp-color-card: var(--background-card);
   --erp-color-card-border: var(--border-color);
   color: var(--emp-text);
 }
-.cadastro-emp-scope :where(.border, input, textarea, [data-radix-select-trigger]) {
+.cadastro-emp-scope :where(.border, input, textarea, [data-radix-select-trigger]):not(button):not([role="button"]) {
   border-radius: var(--emp-control-radius) !important;
 }
 .cadastro-emp-scope :where(button, [role="button"]):not(
@@ -86,6 +86,9 @@
   .mg-filter-pills-rail__nav,
   .mg-topbar-icon-btn,
   .mg-accent-icon-btn,
+  .mb1-shell-topbar-button,
+  .mb1-shell-icon-button,
+  .mb1-shell-user-trigger,
   .filter-panel__close,
   .ios-btn,
   .emp-th-icon-button,
@@ -1311,7 +1314,7 @@
   padding-left: 6px !important;
   padding-right: 6px !important;
   gap: 4px !important;
-  font-size: 12px !important;
+  font-size: 13px !important;
 }
 .cadastro-emp-scope .emp-toolbar-action-icon {
   width: 15px !important;
@@ -1494,12 +1497,13 @@
   background: transparent !important;
 }
 .cadastro-emp-scope .emp-table-pagination .emp-table-pagination-btn {
-  height: 22px !important;
-  min-height: 22px !important;
-  max-height: 22px !important;
-  font-size: 11px !important;
-  line-height: 22px !important;
-  border-radius: 5px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  max-height: 32px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  border-radius: 999px !important;
   box-shadow: none !important;
 }
 .cadastro-emp-scope .emp-table-pagination-btn:not(.emp-table-pagination-page-active) {

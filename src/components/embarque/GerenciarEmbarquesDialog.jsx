@@ -191,7 +191,7 @@ export default function GerenciarEmbarquesDialog({ open, onOpenChange, empresaId
                       <TableCell className="text-xs">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-6 w-6"><MoreVertical className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Ações do embarque ${e.nome || ""}`}><MoreVertical className="w-3.5 h-3.5" aria-hidden="true" /></Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={()=>{setEmbEditingId(e.id);setEmbNome(e.nome||'');setEmbData(e.data||'');setEmbFrigorifico(e.frigorifico||'');setEmbStatus(e.status||'Planejado');}} className="text-xs">Editar</DropdownMenuItem>
@@ -279,9 +279,9 @@ export default function GerenciarEmbarquesDialog({ open, onOpenChange, empresaId
                       <TableCell className="text-xs py-1 border border-gray-300 text-right font-mono">{fmtNum(sumByDoc[d.id]?.totalPeso || 0)}</TableCell>
                       <TableCell className="text-xs py-1 border border-gray-300 text-right font-mono">{fmtNum(sumByDoc[d.id]?.media || 0)}</TableCell>
                       <TableCell className="text-xs py-1 border border-gray-300">
-                        <div className="flex items-center gap-1">{onUseDocument && <Button size="sm" className="h-7 text-xs" onClick={() => { const shipment = embarques.find((item) => item.id === d.embarque_id); onUseDocument(shipment, d); onOpenChange(false); }}>Usar no lançamento</Button>}<DropdownMenu>
+                        <div className="flex items-center gap-1">{onUseDocument && <Button size="sm" onClick={() => { const shipment = embarques.find((item) => item.id === d.embarque_id); onUseDocument(shipment, d); onOpenChange(false); }}>Usar no lançamento</Button>}<DropdownMenu>
                           <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-6 w-6"><MoreVertical className="w-3.5 h-3.5" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Ações do documento ${d.numero_gta || d.numero_nfe || ""}`}><MoreVertical className="w-3.5 h-3.5" aria-hidden="true" /></Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
                             <DropdownMenuItem onClick={()=>{setDocEditingId(d.id);setEmbSelecionado(d.embarque_id);setDocTipo(d.tipo_documento||'GTA');setDocNumeroGTA(d.numero_gta||'');setDocNumeroNfe(d.numero_nfe||'');setDocMotorista(d.motorista_nome||'');setDocPlaca(d.placa_carreta||'');setDocPrevM(String(d.qtd_prev_machos||''));setDocPrevF(String(d.qtd_prev_femeas||''));}} className="text-xs">Editar</DropdownMenuItem>

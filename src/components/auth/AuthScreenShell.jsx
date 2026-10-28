@@ -14,7 +14,7 @@ export default function AuthScreenShell({ title, subtitle, children }) {
             <span className="auth-brand__icon"><Scale aria-hidden="true" /></span>
             <div>
               <strong>Pesagens Individuais</strong>
-              <span>Operação local · offline</span>
+              <span>Uso no curral, sem internet</span>
             </div>
           </header>
           <div className="auth-heading">

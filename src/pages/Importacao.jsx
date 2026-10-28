@@ -47,6 +47,7 @@ import { downloadCsvFile } from '@/modules/weighing/export/csvDownload';
 import { brandService, breedService, categoryService } from '@/modules/catalog/application/index';
 import { listApartacoes, listLoteApartacoes } from '@/modules/auxiliary/application/apartacaoService';
 import '@/styles/importacao.css';
+import '@/styles/launch-visual.css';
 
 // OPERAÇÃO › Importação. Assistente em 7 etapas sobre o motor de importação conciliada
 // (src/modules/import/**): a tela só orquestra — ler o arquivo, conciliar (dry-run) e

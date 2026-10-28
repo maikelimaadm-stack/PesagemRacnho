@@ -14,6 +14,12 @@
 .aux-form-toolbar-actions { gap: 6px; }
 .aux-form-toolbar-commands { gap: 6px; }
 .aux-form-toolbar-end { gap: 8px; }
+/* Cadastro (ícones em mg-action-slot): gap só do --mg-action-slot-gap (4px), como o view-seg. */
+.aux-registry-page .mak-mother-page__toolbar .aux-form-toolbar-actions,
+.aux-registry-page .mak-mother-page__toolbar .aux-form-toolbar-commands { gap: 0; }
+.aux-registry-page .mak-mother-page__toolbar .aux-form-toolbar-commands .mg-action-slot.is-visible:last-child {
+  margin-right: 0;
+}
 .aux-view-seg {
   width: calc((var(--mg-btn-icon-size, 28px) * 3) + (var(--mg-view-seg-track-padding, 1px) * 2)) !important;
   min-width: calc((var(--mg-btn-icon-size, 28px) * 3) + (var(--mg-view-seg-track-padding, 1px) * 2)) !important;
@@ -68,49 +74,53 @@ html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17c-table-footer__
   border-radius: 999px !important;
 }
 html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17e-selection-action {
-  min-width: 78px !important;
-  height: 28px !important;
-  min-height: 28px !important;
-  padding: 0 14px !important;
+  min-width: 0 !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 0 10px !important;
   border-radius: 999px !important;
+  font-size: 12px !important;
 }
 html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17e-selection-action.emp-toolbar-btn-delete {
   border-color: #dc2626 !important;
 }
+.aux-launch-toolbar.mg-action-bar,
 .aux-launch-toolbar.d17c-table-toolbar {
-  min-height: 38px;
-  max-height: 38px;
-  height: 38px;
-  padding: 0 6px !important;
+  min-height: var(--mg-toolbar-row-height, 36px);
+  max-height: var(--mg-toolbar-row-height, 36px);
+  height: var(--mg-toolbar-row-height, 36px);
+  padding: var(--mg-toolbar-row-padding-y, 5.5px) var(--mg-toolbar-gutter, 12px) !important;
   border-top: 1px solid var(--d17b-border) !important;
 }
+.mb1-app-shell .mb1-operational-page > .aux-launch-toolbar.mg-action-bar,
 .mb1-app-shell .mb1-operational-page > .aux-launch-toolbar.d17c-table-toolbar {
-  min-height: 38px !important;
-  max-height: 38px !important;
-  height: 38px !important;
+  min-height: var(--mg-toolbar-row-height, 36px) !important;
+  max-height: var(--mg-toolbar-row-height, 36px) !important;
+  height: var(--mg-toolbar-row-height, 36px) !important;
 }
 .mb1-app-shell .aux-launch-toolbar.d17c-table-toolbar > .mb1-action-cluster {
   flex: 0 0 36px;
   height: 36px;
 }
 .aux-launch-toolbar .d17c-table-toolbar__primary { min-height: 36px; height: 36px; flex-basis: 36px; }
+.aux-launch-toolbar.mg-action-bar .mg-action-bar__end {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+/* Configurações e telas com faixa de contexto separada (não cadastro mãe unificado). */
 .aux-context-panel-wrap {
   flex: 0 0 36px;
   min-height: 36px;
   max-height: 36px !important;
   border: 1px solid var(--d17b-border, #e1e6eb) !important;
-  border-top: 0 !important;
-  border-radius: 0 0 16px 16px !important;
+  border-radius: 12px !important;
   background: var(--bg-card, #fff) !important;
   box-shadow: var(--d17b-card-shadow, 0 2px 7px rgba(15, 23, 42, .05)) !important;
   opacity: 1 !important;
   visibility: visible !important;
   overflow: visible !important;
-}
-.aux-toolbar-stack.is-form-open .aux-launch-toolbar {
-  border-bottom-right-radius: 0 !important;
-  border-bottom-left-radius: 0 !important;
-  box-shadow: none !important;
 }
 .aux-context-panel {
   display: flex !important;
@@ -123,31 +133,131 @@ html body .d17b-shell.cadastro-emp-scope .aux-registry-page .d17e-selection-acti
   border-radius: inherit;
 }
 .aux-context-panel .mg-context-panel__nav { max-width: 320px; opacity: 1; overflow: visible; pointer-events: auto; }
-.aux-context-panel .mg-nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 28px; min-width: 28px; height: 28px; padding: 0; border: 0; border-radius: 999px; background: #f1f3f4; color: #9ca3af; }
-.aux-context-panel .mg-nav-btn:hover:not(:disabled) { background: #e8edf1; color: #25354a; }
-.aux-context-panel .mg-nav-btn:disabled { opacity: .38; cursor: not-allowed; }
-.aux-context-panel .mg-nav-btn svg { width: 13px; height: 13px; }
+.aux-context-panel .mg-nav-btn { display: inline-flex; align-items: center; justify-content: center; width: 25px; min-width: 25px; height: 25px; padding: 0; border: 0; border-radius: 50%; background: #f1f3f4; color: #111827; }
+.aux-context-panel .mg-nav-btn:hover:not(:disabled) { background: #e5e7eb; color: #111827; }
+.aux-context-panel .mg-nav-btn:disabled { opacity: 1; color: #9ca3af; cursor: not-allowed; }
+.aux-context-panel .mg-nav-btn:disabled svg { color: #9ca3af; stroke: #9ca3af; }
+.aux-context-panel .mg-nav-btn svg { width: 14px; height: 14px; }
+.aux-context-panel .mg-nav-btn:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
+/* Identidade do registro vive DENTRO da action-bar (uma só faixa branca). */
+.aux-context-inline.aux-context-panel {
+  display: flex !important;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
+  width: auto;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  margin-left: 8px;
+  padding: 0 !important;
+  gap: 8px;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.aux-context-inline .mg-context-panel__meta {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.aux-context-inline .mg-context-panel__meta-row {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  width: 100%;
+}
+.aux-context-inline .mg-context-panel__meta-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Barra única no Novo/Editar: cantos fechados (não colada à tabela). */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record > .mak-mother-page__toolbar.aux-toolbar--form .mg-action-bar.aux-action-bar--form {
+  border-radius: 12px !important;
+  border: 1px solid #e7eaee !important;
+}
+/* Cancelar: círculo na barra mãe (Registro) ou pílula nomeada (Configurações). */
+html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .mg-action-bar button.aux-cancel-button.aux-form-action.d17c-launch-button {
+  --emp-button-radius: 999px;
+  --erp-radius-button: 999px;
+  --erp-radius-toolbar-btn: 999px;
+  border-color: transparent !important;
+  border-radius: 50% !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .mg-action-bar button.aux-cancel-button.aux-form-action.d17c-launch-button:hover:not(:disabled) {
+  border-color: transparent !important;
+  background: #e5e7eb !important;
+  color: #111827 !important;
+}
 html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button {
   --emp-button-radius: 999px;
   --erp-radius-button: 999px;
   --erp-radius-toolbar-btn: 999px;
-  border-color: #e1e6eb !important;
+  border-color: transparent !important;
   border-radius: 999px !important;
   background: #f1f3f4 !important;
-  color: #26374b !important;
+  color: #111827 !important;
 }
-html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button:hover:not(:disabled) { border-color: #dde3e9 !important; background: #e7ebef !important; color: #1f3045 !important; }
+html body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button:hover:not(:disabled) {
+  border-color: transparent !important;
+  background: #e5e7eb !important;
+  color: #111827 !important;
+}
+/* Pílula nomeada (Configurações) ou círculo ícone (Registro = relação). */
 .aux-form-action {
   display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  min-width: 78px !important;
-  height: 28px !important;
-  min-height: 28px !important;
-  max-height: 28px !important;
-  padding: 0 14px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
   gap: 5px;
   border-radius: 999px !important;
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+}
+.aux-form-action:not(.tb-btn-icon) {
+  min-width: 78px !important;
+  padding: 0 10px !important;
+}
+.aux-form-action.tb-btn-icon {
+  width: 25px !important;
+  min-width: 25px !important;
+  max-width: 25px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+.aux-form-action.tb-btn-icon svg {
+  width: 14px !important;
+  height: 14px !important;
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+.aux-form-action.tb-btn-icon:hover:not(:disabled) {
+  background: #e5e7eb !important;
+  color: #111827 !important;
+}
+.aux-form-action.tb-btn-icon:disabled {
+  color: #9ca3af !important;
+  opacity: 1 !important;
+}
+.aux-form-action.tb-btn-icon:disabled svg {
+  color: #9ca3af !important;
+  stroke: #9ca3af !important;
 }
 .aux-record-identity { color: var(--text-1, #253449); font-size: 13px; line-height: 16px; }
 .aux-required-status { color: #6f7e91; font-size: 10px; white-space: nowrap; }
@@ -190,7 +300,9 @@ html body .d17b-shell.cadastro-emp-scope .d17b-page .aux-record-mode .mg-prototy
   min-width: min(260px, 100%) !important;
   max-width: 100% !important;
   width: auto !important;
-  height: 38px;
+  /* auto + min-height: evita truncar rótulo flutuante e sobrepor o campo vizinho */
+  height: auto;
+  min-height: var(--mg-field-height, 38px);
 }
 .mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field[data-width-type="CODIGO"],
 .mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field[data-width-type="SIM_NAO"] {
@@ -214,10 +326,46 @@ html body .d17b-shell.cadastro-emp-scope .d17b-page .aux-record-mode .mg-prototy
 }
 .aux-model-field--textarea textarea { min-height: 82px !important; }
 .aux-model-field--select { position: relative; }
-.aux-model-cmd-select { width: 100%; height: var(--mg-field-height, 38px); }
-.aux-model-cmd-display { width: 100%; min-height: var(--mg-field-height, 38px) !important; height: var(--mg-field-height, 38px) !important; border-radius: var(--mg-radius-control, 8px) !important; }
+.aux-model-cmd-select { width: 100%; height: var(--mg-field-height, 38px); min-height: var(--mg-field-height, 38px); }
+.aux-model-cmd-display { width: 100%; min-height: var(--mg-field-height, 38px) !important; height: var(--mg-field-height, 38px) !important; max-height: var(--mg-field-height, 38px) !important; border-radius: var(--mg-radius-control, 8px) !important; }
+
+/* launch-visual força 28px em todo input do .d17b-page; no registro o shell
+   flutuante do ModeloBase1 precisa de --mg-field-height (38px) senão rótulo
+   e valor se sobrepõem. */
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode :is(
+  .mg-prototype-field:not(.mg-prototype-field--bare) > input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+  .mg-prototype-field:not(.mg-prototype-field--bare) > select,
+  .aux-model-cmd-select,
+  .aux-model-cmd-display[role="combobox"],
+  .cmd-display.aux-model-cmd-display
+) {
+  height: var(--mg-field-height, 38px) !important;
+  min-height: var(--mg-field-height, 38px) !important;
+  max-height: var(--mg-field-height, 38px) !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode .mg-prototype-field:not(.mg-prototype-field--bare) > textarea {
+  height: auto !important;
+  min-height: 82px !important;
+  max-height: none !important;
+}
 .aux-model-cmd-display > svg { display: none; }
-.aux-model-cmd-select > .cmd-chevron { pointer-events: none; }
+.aux-model-cmd-select > .cmd-chevron {
+  pointer-events: none;
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 12px !important;
+  min-height: 12px !important;
+  margin-right: 8px;
+}
+.aux-registry-page .emp-form .erp-field-select-chevron-btn svg,
+.aux-registry-page .emp-form-fields .erp-field-select-chevron-btn svg,
+.aux-registry-page .mg-prototype-form .erp-field-select-chevron-btn svg,
+.aux-registry-page .aux-record-mode .erp-field-select-chevron-btn svg {
+  width: 12px !important;
+  height: 12px !important;
+  min-width: 12px !important;
+  min-height: 12px !important;
+}
 .aux-model-cmd-panel { min-width: var(--radix-select-trigger-width); }
 
 html.dark .aux-table-card,
@@ -241,17 +389,19 @@ html.tema-escuro .aux-record-mode { background: var(--mb1-bg-page); }
 html.dark .aux-record-tabs,
 html.tema-escuro .aux-record-tabs { border-color: var(--mb1-border); background: var(--mb1-bg-card) !important; }
 html.dark .aux-context-panel-wrap,
-html.dark .aux-context-panel,
+html.dark .aux-context-panel:not(.aux-context-inline),
 html.tema-escuro .aux-context-panel-wrap,
-html.tema-escuro .aux-context-panel { border-color: var(--mb1-border) !important; background: var(--mb1-bg-card) !important; }
+html.tema-escuro .aux-context-panel:not(.aux-context-inline) { border-color: var(--mb1-border) !important; background: var(--mb1-bg-card) !important; }
 html.dark .aux-context-panel .mg-nav-btn,
 html.tema-escuro .aux-context-panel .mg-nav-btn { background: var(--mb1-bg-field); color: var(--mb1-text-2); }
 html.dark .aux-context-panel .mg-nav-btn:hover:not(:disabled),
 html.tema-escuro .aux-context-panel .mg-nav-btn:hover:not(:disabled) { background: var(--mb1-bg-subtle); color: var(--mb1-text-1); }
-html.dark body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button,
-html.tema-escuro body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button { border-color: var(--mb1-border) !important; background: var(--mb1-bg-field) !important; color: var(--mb1-text-1) !important; }
-html.dark body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button:hover:not(:disabled),
-html.tema-escuro body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar button.aux-cancel-button.aux-form-action.d17c-launch-button:hover:not(:disabled) { background: var(--mb1-bg-subtle) !important; color: var(--mb1-text-1) !important; }
+html.dark .aux-context-inline.aux-context-panel,
+html.tema-escuro .aux-context-inline.aux-context-panel { border: 0 !important; background: transparent !important; }
+html.dark body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page :is(.mg-action-bar, .d17b-page-actionbar) button.aux-cancel-button.aux-form-action.d17c-launch-button,
+html.tema-escuro body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page :is(.mg-action-bar, .d17b-page-actionbar) button.aux-cancel-button.aux-form-action.d17c-launch-button { border-color: var(--mb1-border) !important; background: var(--mb1-bg-field) !important; color: var(--mb1-text-1) !important; }
+html.dark body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page :is(.mg-action-bar, .d17b-page-actionbar) button.aux-cancel-button.aux-form-action.d17c-launch-button:hover:not(:disabled),
+html.tema-escuro body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page :is(.mg-action-bar, .d17b-page-actionbar) button.aux-cancel-button.aux-form-action.d17c-launch-button:hover:not(:disabled) { background: var(--mb1-bg-subtle) !important; color: var(--mb1-text-1) !important; }
 html.dark body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-data-table .emp-th-menu-button, .d17c-table-footer__pagination button):hover:not(:disabled),
 html.tema-escuro body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-data-table .emp-th-menu-button, .d17c-table-footer__pagination button):hover:not(:disabled) { background: var(--mb1-bg-subtle) !important; }
 html.dark .aux-record-identity strong,
@@ -311,7 +461,7 @@ html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-r
 html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-model-field input, .aux-model-field textarea)::placeholder {
   color: var(--mb1-text-2) !important;
 }
-html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar.d17c-table-toolbar button.aux-cancel-button.aux-form-action.d17c-launch-button {
+html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page :is(.mg-action-bar, .d17b-page-actionbar.d17c-table-toolbar) button.aux-cancel-button.aux-form-action.d17c-launch-button {
   border-color: var(--mb1-border) !important;
   background: var(--mb1-bg-field) !important;
   color: var(--mb1-text-1) !important;
@@ -323,7 +473,7 @@ html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-r
 html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-registry-page .aux-view-seg__slider {
   background: var(--mb1-bg-card) !important;
 }
-html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .d17b-page-actionbar.d17c-table-toolbar button.aux-cancel-button.aux-form-action.d17c-launch-button {
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page :is(.mg-action-bar, .d17b-page-actionbar.d17c-table-toolbar) button.aux-cancel-button.aux-form-action.d17c-launch-button {
   color: var(--mb1-text-1) !important;
 }
 html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page :is(.aux-record-identity, .mg-context-panel__code, .mg-context-panel__title) {
@@ -355,7 +505,7 @@ html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope 
   color: currentColor !important;
 }
 html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page .mg-filter-pills-rail__toggle.is-active {
-  color: #40de63 !important;
+  color: #e6edf3 !important;
 }
 html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .aux-registry-page div.mg-view-panel.emp-table-root.emp-table-shell.d17c-table-scroll {
   scrollbar-color: #5c6a7d #232a33 !important;
@@ -414,8 +564,11 @@ html:is(.dark, .tema-escuro, .escuro) body .d17b-shell.cadastro-emp-scope .aux-r
   .aux-required-status { display: none; }
   .aux-form-toolbar-actions { gap: 6px; }
   .aux-form-toolbar-commands { gap: 4px; }
+  .aux-registry-page .mak-mother-page__toolbar .aux-form-toolbar-actions,
+  .aux-registry-page .mak-mother-page__toolbar .aux-form-toolbar-commands { gap: 0; }
   .aux-cards-grid { grid-template-columns: minmax(0, 1fr) !important; }
   .mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field,
   .mg-empresas-scope .mg-prototype-cards-layout .aux-model-card-grid > .aux-model-field.is-wide { flex-basis: 100% !important; min-width: 100% !important; }
+  .mb1-app-shell .mb1-operational-page > .aux-launch-toolbar.mg-action-bar,
   .mb1-app-shell .mb1-operational-page > .aux-launch-toolbar.d17c-table-toolbar { min-height: 46px !important; max-height: none !important; height: auto !important; }
 }

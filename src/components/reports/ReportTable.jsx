@@ -69,7 +69,7 @@ export default function ReportTable({ viewModel, sort, onSort, widths = {}, filt
           </TableHeader>
           <TableBody>
             {visible.length === 0 ? (
-              <TableRow><TableCell colSpan={span} className="rpt-empty">Nenhum registro para os critérios informados.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={span} className="rpt-empty">Nenhum registro com esses critérios. Ajuste o período ou os filtros.</TableCell></TableRow>
             ) : visible.map((line, index) => {
               if (line.kind === "GROUP") {
                 return (

@@ -10,6 +10,7 @@ import { getRecents, getReportViewState, getTypeColumnPrefs, listTemplates } fro
 import { initialReportId, reportSelectorOptions, withCurrentOption } from "@/modules/reporting/application/reportScreenModel";
 import { canShareReports, createCustomReport, newReportBases, parseReportOption, withMyReports } from "@/modules/reporting/application/customReports";
 import "@/styles/reports.css";
+import "@/styles/launch-visual.css";
 
 // Relatórios: uma entrada no menu e uma tela só (E1E, decisão da responsável em 30/09/2026): abre direto no
 // relatório, na tela do MAKGESTAO, e o campo "Relatório" do cartão troca de relatório (?r=<id>). Sem `?r=`

@@ -5,8 +5,8 @@
 .rpt-page .rpt-toolbar__left { gap: 8px; }
 .rpt-page .rpt-toolbar__right { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-left: auto; }
 .rpt-breadcrumb { font-size: 12px; color: #5f6f82; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rpt-breadcrumb strong { color: #1f2937; font-weight: 600; }
-.rpt-breadcrumb em { font-style: normal; color: #0f7a3f; }
+.rpt-breadcrumb strong { color: #111827; font-weight: 600; }
+.rpt-breadcrumb em { font-style: normal; color: #111827; }
 
 .rpt-star { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; border: 0; border-radius: 6px; background: transparent; color: #94a3b8; cursor: pointer; }
 .rpt-star:hover { background: rgba(15, 23, 42, 0.06); color: #475569; }
@@ -24,7 +24,7 @@
 .rpt-context { display: flex; flex-wrap: wrap; gap: 14px; padding: 6px 2px; font-size: 12px; color: #5f6f82; }
 .rpt-context strong { color: #334155; font-weight: 600; }
 .rpt-legacy { padding: 1px 8px; border-radius: 999px; background: #fff4e0; color: #8a5300; font-weight: 600; }
-.rpt-loading { color: #0f7a3f; }
+.rpt-loading { color: #111827; }
 .rpt-timing { margin-left: auto; color: #94a3b8; }
 .rpt-warning, .rpt-error { display: flex; align-items: center; gap: 6px; margin: 4px 0; padding: 6px 10px; border-radius: 6px; font-size: 12px; }
 .rpt-warning { background: #fff8e6; color: #7a4d00; border: 1px solid #f2d59b; }
@@ -32,19 +32,23 @@
 .rpt-notes { margin: 2px 0 6px; padding-left: 18px; font-size: 11px; color: #64748b; }
 
 .rpt-table-scroll { max-height: calc(100vh - 290px); }
-.d17b-page .rpt-table tr.rpt-group-row td { background: #f1f5f9; color: #1f2937; font-size: 12px; border-right: 0 !important; }
+.d17b-page .rpt-table tr.rpt-group-row td { background: #f1f5f9; color: #111827; font-size: 12px; border-right: 0 !important; }
 .d17b-page .rpt-table tr.rpt-group-row.rpt-level-2 td { background: #f6f8fb; }
 .d17b-page .rpt-table tr.rpt-group-row.rpt-level-3 td { background: #fafbfd; }
 .rpt-group-label strong { font-weight: 700; }
 .rpt-group-count { margin-left: 12px; color: #64748b; font-size: 11px; }
-.d17b-page .rpt-table tr.rpt-subtotal-row td { background: #eef7f1; color: #14532d; font-size: 11px; border-right: 0 !important; white-space: normal; height: auto !important; padding-top: 3px !important; padding-bottom: 3px !important; }
+.d17b-page .rpt-table tr.rpt-subtotal-row td { background: #eef7f1; color: #111827; font-size: 11px; border-right: 0 !important; white-space: normal; height: auto !important; padding-top: 3px !important; padding-bottom: 3px !important; }
 .rpt-subtotal-label { font-weight: 700; margin-right: 10px; }
 .rpt-chip { display: inline-block; margin: 1px 10px 1px 0; white-space: nowrap; }
 .rpt-chip strong { font-variant-numeric: tabular-nums; }
 .rpt-chip em { font-style: normal; color: #64748b; }
-.rpt-grand-total { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; padding: 6px 10px; border-top: 2px solid #0f7a3f; background: #f3faf6; font-size: 12px; color: #14532d; }
+.rpt-grand-total { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; padding: 6px 10px; border-top: 2px solid #0f7a3f; background: #f3faf6; font-size: 12px; color: #111827; }
 .rpt-grand-total__label { font-weight: 800; margin-right: 10px; text-transform: uppercase; letter-spacing: 0.04em; font-size: 11px; }
-.rpt-empty { padding: 28px 12px; text-align: center; color: #94a3b8; font-size: 12px; }
+.rpt-empty { padding: 28px 12px; text-align: center; color: #4b5563; font-size: 12px; line-height: 1.45; }
+.rpt-empty p { margin: 0 0 8px; }
+.rpt-empty__retry { height: 25px; padding: 0 10px; border: 1px solid transparent; border-radius: 999px; background: #f1f3f4; color: #111827; font: 600 12px/1 "DM Sans", sans-serif; cursor: pointer; }
+.rpt-empty__retry:focus-visible { outline: 2px solid #111827; outline-offset: 2px; }
+.rpt-mak__stamp { color: #4b5563; }
 
 .rpt-dialog__list { display: grid; gap: 8px; margin: 8px 0; }
 .rpt-dialog__list--scroll { max-height: 55vh; overflow: auto; padding-right: 4px; }
@@ -67,19 +71,19 @@ html.dark .rpt-new-report .rpt-new-report__error { color: #f47067; }
 
 .rpt-tabs { display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: #eef2f6; }
 .rpt-tab { height: 28px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; font-size: 12px; color: #475569; cursor: pointer; }
-.rpt-tab.is-active { background: #fff; color: #0f172a; font-weight: 600; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
+.rpt-tab.is-active { background: #fff; color: #111827; font-weight: 600; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08); }
 .rpt-search { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; color: #64748b; }
 .rpt-search input { height: 28px; width: 260px; font-size: 12px; }
 .rpt-catalog__body { padding: 8px 2px 24px; overflow: auto; }
 .rpt-family { margin-bottom: 16px; }
-.rpt-family h2 { margin: 6px 0; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #475569; }
+.rpt-family h2 { margin: 6px 0; font-size: 13px; font-weight: 700; text-transform: none; letter-spacing: 0; color: #334155; }
 .rpt-card-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .rpt-card { display: flex; align-items: flex-start; gap: 4px; border: 1px solid #e3e8ee; border-radius: 8px; background: #fff; }
 .rpt-card:hover { border-color: #b9c6d4; }
 .rpt-card.is-blocked { opacity: 0.6; background: #f8fafc; }
 .rpt-card__main { flex: 1; display: grid; gap: 3px; padding: 9px 10px; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .rpt-card__main:disabled { cursor: not-allowed; }
-.rpt-card__title { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #0f172a; }
+.rpt-card__title { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #111827; }
 .rpt-card__desc { font-size: 12px; color: #5f6f82; line-height: 1.35; }
 .rpt-card__meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: #8290a3; }
 .rpt-card__meta span { display: inline-flex; align-items: center; gap: 3px; }
@@ -95,11 +99,13 @@ html.dark .rpt-tab { color: #adbac7; }
 html.dark .rpt-tab.is-active { background: #2d333b; color: #e6edf3; }
 html.dark .d17b-page .rpt-table tr.rpt-group-row td { background: #1c2128; color: #e6edf3; }
 html.dark .d17b-page .rpt-table tr.rpt-group-row.rpt-level-2 td, html.dark .d17b-page .rpt-table tr.rpt-group-row.rpt-level-3 td { background: #181d24; }
-html.dark .d17b-page .rpt-table tr.rpt-subtotal-row td { background: #13261b; color: #a7f3c4; }
-html.dark .rpt-grand-total { background: #102017; color: #a7f3c4; border-top-color: #2ea043; }
+html.dark .d17b-page .rpt-table tr.rpt-subtotal-row td { background: #13261b; color: #e6edf3; }
+html.dark .rpt-grand-total { background: #102017; color: #e6edf3; border-top-color: #2ea043; }
 html.dark .rpt-locked-pill { background: #161b22; color: #adbac7; border-color: #444c56; }
 html.dark .rpt-warning { background: #2b2111; color: #f0c674; border-color: #5c4a1e; }
 html.dark .rpt-error { background: #2d1416; color: #f5a3a3; border-color: #5c2427; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-empty,
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak__stamp { color: #adbac7; }
 
 @media (max-width: 720px) {
   .rpt-search input { width: 100%; }
@@ -130,25 +136,25 @@ html.dark .rpt-dialog__row--wrap { border-bottom-color: #2d333b; }
 .rpt-group-quick { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: #5f6f82; white-space: nowrap; }
 .rpt-group-quick button[role="combobox"] { height: 28px; min-width: 150px; font-size: 12px; }
 .rpt-quick-filter { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; margin-right: 4px; border: 1px dashed #b9c6d4; border-radius: 999px; background: transparent; color: #475569; font-size: 11px; cursor: pointer; white-space: nowrap; }
-.rpt-quick-filter:hover { border-color: #0f7a3f; color: #0f7a3f; }
-.rpt-quick-filter.is-on { border-style: solid; border-color: #0f7a3f; background: #e8f5ee; color: #0f5132; font-weight: 600; }
+.rpt-quick-filter:hover { border-color: #0f7a3f; color: #111827; }
+.rpt-quick-filter.is-on { border-style: solid; border-color: #0f7a3f; background: #e8f5ee; color: #111827; font-weight: 600; }
 .rpt-drill-pill { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 4px 0 8px; margin-right: 6px; border-radius: 999px; background: #e0efff; color: #0b4a8b; font-size: 11px; font-weight: 600; white-space: nowrap; }
 .rpt-drill-pill button { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border: 0; border-radius: 999px; background: transparent; color: inherit; cursor: pointer; }
 .rpt-drill-pill button:hover { background: rgba(11, 74, 139, 0.12); }
 .rpt-sheet-hint { display: block; margin: 6px 0 0; padding: 8px 10px; border: 1px dashed #b9c6d4; border-radius: 8px; color: #475569; font-size: 12px; }
 html.dark .rpt-sheet-hint { border-color: #444c56; color: #adbac7; }
-.rpt-badge--summary { background: #e8f5ee; color: #0f5132; }
+.rpt-badge--summary { background: #e8f5ee; color: #111827; }
 .rpt-family--favorites h2 { display: inline-flex; align-items: center; gap: 4px; color: #b07d05; }
 .rpt-maintenance { padding: 8px 2px 16px; }
-.rpt-maintenance__title { margin: 4px 0 2px; font-size: 13px; font-weight: 700; color: #1f2937; }
+.rpt-maintenance__title { margin: 4px 0 2px; font-size: 13px; font-weight: 700; color: #111827; }
 .rpt-maintenance__hint { margin: 0 0 10px; font-size: 12px; color: #5f6f82; }
 .manutencao-tabs { margin: 4px 0 8px; }
 html.dark .rpt-group-quick, html.dark .rpt-maintenance__hint { color: #adbac7; }
 html.dark .rpt-maintenance__title { color: #c9d1d9; }
 html.dark .rpt-quick-filter { border-color: #444c56; color: #adbac7; }
-html.dark .rpt-quick-filter.is-on { background: #13261b; border-color: #2ea043; color: #a7f3c4; }
+html.dark .rpt-quick-filter.is-on { background: #13261b; border-color: #2ea043; color: #e6edf3; }
 html.dark .rpt-drill-pill { background: #102a44; color: #9ecbff; }
-html.dark .rpt-badge--summary { background: #13261b; color: #a7f3c4; }
+html.dark .rpt-badge--summary { background: #13261b; color: #e6edf3; }
 
 /* Manutenção (E1): abas e aba Controle ocupam a linha inteira da grade de cartões. */
 .d17b-maintenance-page > .manutencao-tabs, .d17b-maintenance-page > .rpt-maintenance { grid-column: 1 / -1; }
@@ -161,11 +167,11 @@ html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-tabs { backg
 html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-tabs .rpt-tab:not(#rpt-none) { color: #adbac7 !important; }
 html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-tabs .rpt-tab.is-active:not(#rpt-none) { background: #2d333b; color: #e6edf3 !important; }
 html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-quick-filter:not(#rpt-none) { color: #adbac7 !important; }
-html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-quick-filter.is-on:not(#rpt-none) { color: #a7f3c4 !important; }
+html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-quick-filter.is-on:not(#rpt-none) { color: #e6edf3 !important; }
 html:is(.dark, .tema-escuro, .escuro) body .cadastro-emp-scope .rpt-drill-pill button:not(#rpt-none) { color: #9ecbff !important; }
-.cadastro-emp-scope .rpt-quick-filter.is-on:not(#rpt-none) { color: #0f5132 !important; }
+.cadastro-emp-scope .rpt-quick-filter.is-on:not(#rpt-none) { color: #111827 !important; }
 .cadastro-emp-scope .rpt-drill-pill button:not(#rpt-none) { color: #0b4a8b !important; }
-.cadastro-emp-scope .rpt-tabs .rpt-tab.is-active:not(#rpt-none) { color: #0f172a !important; }
+.cadastro-emp-scope .rpt-tabs .rpt-tab.is-active:not(#rpt-none) { color: #111827 !important; }
 
 /* E1: a barra do relatório nunca sobrepõe a faixa de filtros — se não couber, cresce (a altura
    fixa vem de .mg-empresas-scope :is(.mg-action-bar …)); rótulos longos viram reticências. */
@@ -201,7 +207,7 @@ html:is(.dark, .tema-escuro, .escuro) body .rpt-page .rpt-sheet-host { backgroun
 html body #root .cadastro-emp-scope .rpt-sheet :is(button.sheet-drill, button.sheet-sort):not(#rpt-none),
 html body #root .cadastro-emp-scope .rpt-sheet :is(button.sheet-drill, button.sheet-sort):not(#rpt-none) span { color: inherit !important; background: none !important; font-weight: inherit !important; }
 html body #root .cadastro-emp-scope .rpt-sheet button.sheet-drill:not(#rpt-none):hover,
-html body #root .cadastro-emp-scope .rpt-sheet button.sheet-drill:not(#rpt-none):focus-visible { color: #0f5132 !important; }
+html body #root .cadastro-emp-scope .rpt-sheet button.sheet-drill:not(#rpt-none):focus-visible { color: #111827 !important; }
 
 /* ===== E1D (visual): tela "como o MAKGESTAO" (MakgestaoScreen.jsx). E1E: TODOS os relatórios de Relatórios (tela
    única, campo "Relatório" primeiro na grade); só a aba Controle da Manutenção fica na tela da 1.4.0.
@@ -212,33 +218,53 @@ html body #root .cadastro-emp-scope .rpt-sheet button.sheet-drill:not(#rpt-none)
    ligado em emerald-600.
    A shell põe cor/tamanho com !important em botões e campos (.cadastro-emp-scope …): aqui a técnica
    `html body #root … :not(#rpt-none)` do projeto, só dentro de .rpt-mak. */
-.mb1-app-shell .mb1-operational-page.rpt-mak { display: flex; flex-direction: column; gap: 8px; padding: 24px; background: #f8fafc; color: #0f172a; }
+.mb1-app-shell .mb1-operational-page.rpt-mak { display: flex; flex-direction: column; gap: 8px; padding: 24px; background: #f8fafc; color: #111827; }
 .mb1-app-shell .mb1-operational-page.rpt-mak > * { flex-shrink: 0; }
 .rpt-mak__top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
-.rpt-mak__heading { min-width: 0; }
-.rpt-mak .rpt-mak__title { margin: 0; font-size: 20px; line-height: 28px; font-weight: 700; color: #0f172a; letter-spacing: normal; }
+.rpt-mak__heading { min-width: 0; flex: 1 1 200px; }
+.rpt-mak .rpt-mak__title { margin: 0; font-size: 20px; line-height: 28px; font-weight: 700; color: #111827; letter-spacing: normal; }
 .rpt-mak .rpt-mak__subtitle { margin: 0; font-size: 12px; line-height: 16px; color: #475569; }
-.rpt-mak__subtitle em { font-style: normal; color: #047857; }
-.rpt-mak__busy { color: #059669; }
-.rpt-mak__actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-left: auto; }
+.rpt-mak__subtitle em { font-style: normal; color: #111827; }
+.rpt-mak__busy { color: #111827; }
+/* Toolbar de ações: secundários → primário → utilitários no fim; gap uniforme; quebra limpa no estreito. */
+.rpt-mak__actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; margin-left: auto; max-width: 100%; }
+.rpt-mak__exports, .rpt-mak__utils { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 
-html body #root .rpt-mak :is(.rpt-mak-print, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none) {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; height: 32px; min-height: 32px; margin: 0;
-  padding: 0 12px; border-radius: 6px !important; font-family: inherit; font-size: 12px !important; font-weight: 500 !important; line-height: 16px; white-space: nowrap;
+html body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn, .rpt-mak-print):not(#rpt-none) {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; box-sizing: border-box; height: 25px; min-height: 25px; max-height: 25px; margin: 0;
+  font-family: "DM Sans", sans-serif; font-size: 12px !important; font-weight: 600 !important; line-height: 1; white-space: nowrap;
   cursor: pointer; transition: background-color .15s ease, color .15s ease, border-color .15s ease;
 }
-html body #root .rpt-mak :is(.rpt-mak-print, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none):disabled { opacity: .5; cursor: default; }
-html body #root .rpt-mak :is(.rpt-mak-print, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none):focus-visible { outline: none; box-shadow: 0 0 0 1px #0a0a0a; }
+html body #root .rpt-mak :is(.rpt-mak-print, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none):disabled { opacity: .5; cursor: not-allowed; pointer-events: none; }
+html body #root .rpt-mak :is(.rpt-mak-print, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none):focus-visible { outline: 2px solid #111827; outline-offset: 2px; box-shadow: none; }
 html body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none) svg { width: 14px !important; height: 14px !important; flex: 0 0 14px; color: inherit !important; stroke: currentColor !important; }
-/* Imprimir (L514): verde-esmeralda, texto branco, sombra. */
-html body #root .rpt-mak .rpt-mak-print:not(#rpt-none) { margin-left: 4px; border: 0; background: #059669 !important; color: #fff !important; box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); }
-html body #root .rpt-mak .rpt-mak-print:not(#rpt-none):hover:not(:disabled) { background: #047857 !important; }
-/* Excel, PDF e "⋯": discretos (sem contorno), ao lado do Imprimir. */
-html body #root .rpt-mak .rpt-mak-ghost:not(#rpt-none) { padding: 0 8px; border: 0; background: transparent !important; color: #475569 !important; box-shadow: none; }
-html body #root .rpt-mak .rpt-mak-ghost:not(#rpt-none):hover:not(:disabled), html body #root .rpt-mak .rpt-mak-ghost[data-state="open"]:not(#rpt-none) { background: #f1f5f9 !important; color: #0f172a !important; }
-html body #root .rpt-mak .rpt-mak-ghost--icon:not(#rpt-none) { width: 32px; padding: 0; }
-html body #root .rpt-mak .rpt-mak-link:not(#rpt-none) { gap: 4px; padding: 0 8px; border: 0; background: transparent !important; color: #64748b !important; box-shadow: none; }
-html body #root .rpt-mak .rpt-mak-link:not(#rpt-none):hover { color: #0f172a !important; text-decoration: underline; text-underline-offset: 3px; }
+/* Imprimir: círculo 25×25 (só ícone), fundo #f1f3f4 — mesmo padrão do sistema. */
+html body #root .rpt-mak .rpt-mak-print:not(#rpt-none) {
+  flex: 0 0 auto; width: 25px; min-width: 25px; max-width: 25px; padding: 0; border: 1px solid transparent; border-radius: 50% !important;
+  background: #f1f3f4 !important; color: #111827 !important; box-shadow: none;
+}
+html body #root .rpt-mak .rpt-mak-print:not(#rpt-none) svg { width: 14px !important; height: 14px !important; color: #111827 !important; stroke: #111827 !important; }
+html body #root .rpt-mak .rpt-mak-print:not(#rpt-none):hover:not(:disabled) { border-color: transparent; background: #e5e7eb !important; color: #111827 !important; }
+html body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-btn, .rpt-mak-link):not(.rpt-mak-ghost--icon):not(.rpt-mak-btn--icon):not(#rpt-none) {
+  padding: 0 10px; border: 1px solid transparent !important; border-radius: 999px !important;
+  background: #f1f3f4 !important; color: #111827 !important; box-shadow: none;
+}
+html body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-btn, .rpt-mak-link):not(.rpt-mak-ghost--icon):not(.rpt-mak-btn--icon):not(#rpt-none):hover:not(:disabled),
+html body #root .rpt-mak .rpt-mak-ghost[data-state="open"]:not(.rpt-mak-ghost--icon):not(#rpt-none),
+html body #root .rpt-mak .rpt-mak-filter.is-open .rpt-mak-btn:not(.rpt-mak-btn--icon):not(#rpt-none) {
+  background: #e5e7eb !important; border-color: transparent !important; color: #111827 !important;
+}
+/* Utilitário só-ícone (⋯): círculo 25×25, transparente, glifo preto. */
+html body #root .rpt-mak :is(.rpt-mak-ghost--icon, .rpt-mak-btn--icon):not(#rpt-none) {
+  width: 25px; min-width: 25px; max-width: 25px; height: 25px; min-height: 25px; max-height: 25px; padding: 0;
+  border: 1px solid transparent !important; border-radius: 50% !important;
+  background: transparent !important; color: #111827 !important; box-shadow: none;
+}
+html body #root .rpt-mak :is(.rpt-mak-ghost--icon, .rpt-mak-btn--icon):not(#rpt-none) svg { color: #111827 !important; stroke: #111827 !important; }
+html body #root .rpt-mak :is(.rpt-mak-ghost--icon, .rpt-mak-btn--icon):not(#rpt-none):hover:not(:disabled),
+html body #root .rpt-mak .rpt-mak-ghost--icon[data-state="open"]:not(#rpt-none) {
+  background: #f1f3f4 !important; border-color: transparent !important; color: #111827 !important;
+}
 
 /* Cartão de filtros (Card p-4 space-y-3). */
 .rpt-mak__card { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1px solid #e5e5e5; border-radius: 12px; background: #fff; box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); }
@@ -250,23 +276,27 @@ html body #root .rpt-mak .rpt-mak-link:not(#rpt-none):hover { color: #0f172a !im
 .rpt-mak .rpt-bar-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 /* Rótulo (Label text-xs font-medium): no antigo o <label> é inline dentro do div.space-y-1, então a linha tem a
    altura do texto do corpo (16px/24px) com o rótulo de 12px na linha de base — 24px de linha, texto embaixo. */
-html body #root .rpt-mak .rpt-bar-field__label:not(#rpt-none) { display: block; box-sizing: border-box; height: 24px; margin: 0; padding: 6px 0 0; overflow: hidden; color: #0a0a0a; font-size: 12px; font-weight: 500; line-height: 16px; white-space: nowrap; text-overflow: ellipsis; }
-/* Campos (Input/SelectTrigger h-8 text-xs): borda neutra, sombra leve, foco com anel escuro de 1px. */
+html body #root .rpt-mak .rpt-bar-field__label:not(#rpt-none) { display: block; box-sizing: border-box; height: 18px; margin: 0; padding: 0; overflow: hidden; color: #111827 !important; font-size: 11px; font-weight: 600; line-height: 16px; white-space: nowrap; text-overflow: ellipsis; }
+html body #root .rpt-mak label:not(#rpt-none) { color: #111827 !important; }
+/* Campos de filtro: ficam CAMPOS (não botões) — branco, borda verde, letras tinta #111827, ~28px, raio 8px. */
 html body #root .rpt-mak :is(input.rpt-mak-input, span.rpt-mak-static, .rpt-bar-field__control):not(#rpt-none) {
-  box-sizing: border-box; width: 100%; height: 32px !important; min-height: 32px !important; padding: 4px 12px !important; border: 1px solid #e5e5e5 !important; border-radius: 6px !important;
-  background: transparent !important; color: #0a0a0a !important; font-family: inherit; font-size: 12px !important; font-weight: 400; line-height: 16px; box-shadow: 0 1px 2px 0 rgb(0 0 0 / .05) !important; outline: none;
+  box-sizing: border-box; width: 100%; height: 28px !important; min-height: 28px !important; max-height: 28px !important;
+  padding: 0 10px !important; border: 1px solid rgba(64, 222, 99, .42) !important; border-radius: 8px !important;
+  background: #fff !important; color: #111827 !important; font-family: "DM Sans", sans-serif; font-size: 12px !important; font-weight: 500; line-height: 16px;
+  box-shadow: inset 0 0 0 1px rgba(64, 222, 99, .12) !important; outline: none;
 }
-html body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none):is(:focus, :focus-visible, [data-state="open"]) { border-color: #e5e5e5 !important; background: transparent !important; box-shadow: 0 0 0 1px #0a0a0a !important; }
+html body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none):is(:focus, :focus-visible, [data-state="open"]) {
+  border-color: rgba(64, 222, 99, .72) !important; background: #fff !important; box-shadow: 0 0 0 1px rgba(64, 222, 99, .42) !important;
+}
 html body #root .rpt-mak .rpt-bar-field__control:not(#rpt-none) > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit !important; }
-html body #root .rpt-mak .rpt-bar-field__control:not(#rpt-none) > svg { width: 16px; height: 16px; opacity: .5; color: inherit !important; stroke: currentColor !important; }
-/* Input do antigo é "flex": o ícone do calendário fica logo depois da data (não na ponta do campo). */
+html body #root .rpt-mak .rpt-bar-field__control:not(#rpt-none) > svg { width: 14px; height: 14px; opacity: .85; color: #111827 !important; stroke: currentColor !important; }
 html body #root .rpt-mak input.rpt-mak-input:not(#rpt-none) { display: flex; align-items: center; }
 .rpt-mak input.rpt-mak-input { color-scheme: light; }
 /* Sem período (Rebanho atual, Ocupação): "Estado atual (hoje)" no lugar das datas, só leitura. */
-html body #root .rpt-mak span.rpt-mak-static:not(#rpt-none) { display: flex; align-items: center; overflow: hidden; background: #f8fafc !important; color: #475569 !important; white-space: nowrap; text-overflow: ellipsis; cursor: default; }
+html body #root .rpt-mak span.rpt-mak-static:not(#rpt-none) { display: flex; align-items: center; overflow: hidden; background: #f8fafc !important; color: #111827 !important; white-space: nowrap; text-overflow: ellipsis; cursor: default; }
 /* Lista do campo "Relatório" (portal, fora de .rpt-mak): a lista inteira de uma vez quando cabe; título de cada família. */
 .rpt-mak-report-list.erp-select-menu { max-height: min(var(--radix-select-content-available-height, 384px), 640px); }
-.rpt-mak-report-list .rpt-mak-report-list__family { padding: 6px 8px 2px; color: #64748b; font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+.rpt-mak-report-list .rpt-mak-report-list__family { padding: 8px 8px 2px; color: #4b5563; font-size: 12px; font-weight: 650; letter-spacing: 0; text-transform: none; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak-report-list .rpt-mak-report-list__family { color: #8b949e; }
 .rpt-mak input.rpt-mak-input::-webkit-calendar-picker-indicator { cursor: pointer; }
 
@@ -274,17 +304,14 @@ html:is(.dark, .tema-escuro, .escuro) .rpt-mak-report-list .rpt-mak-report-list_
 .rpt-mak-group { display: flex; flex-direction: column; gap: 4px; }
 .rpt-mak-group__buttons { display: flex; flex-wrap: wrap; gap: 4px; }
 
-/* Linha de botões (L620–756): contorno h-8 text-xs, "(n)" quando há seleção. */
-.rpt-mak__buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+/* Linha de filtros nomeados (Lotes, Limpar Filtros…): pílulas secundárias 25px — não misturar com campos. */
+.rpt-mak__buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rpt-mak-filter { position: relative; display: inline-flex; }
-html body #root .rpt-mak .rpt-mak-btn:not(#rpt-none) { border: 1px solid #e5e5e5; background: #fff !important; color: #0a0a0a !important; box-shadow: 0 1px 2px 0 rgb(0 0 0 / .05); }
-html body #root .rpt-mak .rpt-mak-btn:not(#rpt-none):hover:not(:disabled), html body #root .rpt-mak .rpt-mak-filter.is-open .rpt-mak-btn:not(#rpt-none) { background: #f5f5f5 !important; color: #171717 !important; }
-html body #root .rpt-mak .rpt-mak-btn--sm:not(#rpt-none) { height: 28px; min-height: 28px; }
-html body #root .rpt-mak .rpt-mak-btn--icon:not(#rpt-none) { gap: 4px; }
-html body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none) { border-color: #059669; background: #059669 !important; color: #fafafa !important; box-shadow: 0 1px 3px 0 rgb(0 0 0 / .1), 0 1px 2px -1px rgb(0 0 0 / .1); }
-html body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none):hover { background: #047857 !important; color: #fafafa !important; }
+html body #root .rpt-mak .rpt-mak-btn--sm:not(#rpt-none) { height: 25px; min-height: 25px; }
+html body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none) { border-color: #40de63 !important; background: rgba(64, 222, 99, .16) !important; color: #111827 !important; box-shadow: none; }
+html body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none):hover { background: rgba(64, 222, 99, .24) !important; color: #111827 !important; }
 /* "Ocultar Detalhes" de Vendas ligado: o variant "default" (escuro) do botão do antigo (L1447). */
-html body #root .rpt-mak .rpt-mak-btn.is-pressed:not(#rpt-none) { border-color: #171717; background: #171717 !important; color: #fafafa !important; }
+html body #root .rpt-mak .rpt-mak-btn.is-pressed:not(#rpt-none) { border-color: #171717 !important; background: #171717 !important; color: #fafafa !important; }
 html body #root .rpt-mak .rpt-mak-btn.is-pressed:not(#rpt-none):hover { background: #262626 !important; color: #fafafa !important; }
 html body #root .rpt-mak .rpt-mak-btn[aria-disabled="true"]:not(#rpt-none) { opacity: .5; }
 .rpt-mak .rpt-locked-pill { height: 28px; margin: 0; padding: 0 10px; border-radius: 6px; font-size: 12px; }
@@ -314,7 +341,7 @@ html body #root .rpt-mak .rpt-mak-chip button:not(#rpt-none) { display: inline-f
 .rpt-mak-pop .rpt-mak-pop__item > button[role="checkbox"][data-state="checked"] { background: #171717; }
 .rpt-mak-pop .rpt-mak-pop__item > button[role="checkbox"]:focus-visible { outline: none; box-shadow: 0 0 0 1px #0a0a0a; }
 .rpt-mak-pop .rpt-mak-pop__condition { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 8px; border: 1px dashed #cbd5e1; border-radius: 6px; background: #f8fafc; color: #475569; font-size: 12px; }
-.rpt-mak-pop .rpt-mak-pop__condition button { padding: 0; border: 0; background: none; color: #047857; font-size: 12px; font-weight: 600; cursor: pointer; }
+.rpt-mak-pop .rpt-mak-pop__condition button { padding: 0; border: 0; background: none; color: #111827; font-size: 12px; font-weight: 600; cursor: pointer; }
 
 @media (max-width: 767px) {
   .mb1-app-shell .mb1-operational-page.rpt-mak { padding: 16px; }
@@ -325,17 +352,24 @@ html body #root .rpt-mak .rpt-mak-chip button:not(#rpt-none) { display: inline-f
 html:is(.dark, .tema-escuro, .escuro) .mb1-app-shell .mb1-operational-page.rpt-mak { background: #0d1117; color: #e6edf3; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak .rpt-mak__title { color: #e6edf3; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak .rpt-mak__subtitle { color: #8b949e; }
-html:is(.dark, .tema-escuro, .escuro) .rpt-mak__subtitle em { color: #7ee2a8; }
+html:is(.dark, .tema-escuro, .escuro) .rpt-mak__subtitle em { color: #e6edf3; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak__card { border-color: #30363d; background: #161b22; box-shadow: none; }
 html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-bar-field__label:not(#rpt-none) { color: #e6edf3; }
-html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(input.rpt-mak-input, span.rpt-mak-static, .rpt-bar-field__control):not(#rpt-none) { border-color: #30363d !important; background: #0d1117 !important; color: #e6edf3 !important; }
-html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none):is(:focus, :focus-visible, [data-state="open"]) { box-shadow: 0 0 0 1px #8b949e !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(input.rpt-mak-input, span.rpt-mak-static, .rpt-bar-field__control):not(#rpt-none) {
+  border-color: rgba(126, 231, 135, .55) !important; background: #21262d !important; color: #e6edf3 !important; box-shadow: none !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(input.rpt-mak-input, .rpt-bar-field__control):not(#rpt-none):is(:focus, :focus-visible, [data-state="open"]) {
+  box-shadow: 0 0 0 1px rgba(126, 231, 135, .55) !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-bar-field__control:not(#rpt-none) > svg { color: #e6edf3 !important; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak input.rpt-mak-input { color-scheme: dark; }
-html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-btn:not(#rpt-none) { border-color: #30363d; background: #161b22 !important; color: #e6edf3 !important; }
-html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-btn:not(#rpt-none):hover:not(:disabled), html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-filter.is-open .rpt-mak-btn:not(#rpt-none) { background: #21262d !important; color: #e6edf3 !important; }
-html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none) { border-color: #059669; background: #059669 !important; color: #fafafa !important; }
-html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-link):not(#rpt-none) { color: #adbac7 !important; }
-html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(.rpt-mak-ghost, .rpt-mak-link):not(#rpt-none):hover:not(:disabled) { background: #21262d !important; color: #e6edf3 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(.rpt-mak-btn, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-ghost--icon, .rpt-mak-btn--icon):not(#rpt-none) {
+  border-color: rgba(126, 231, 135, .55) !important; background: #21262d !important; color: #e6edf3 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(.rpt-mak-btn, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-ghost--icon, .rpt-mak-btn--icon):not(#rpt-none):hover:not(:disabled),
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-filter.is-open .rpt-mak-btn:not(#rpt-none) { background: #30363d !important; color: #e6edf3 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none) { border-color: #40de63 !important; background: rgba(64, 222, 99, .16) !important; color: #e6edf3 !important; }
+html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak .rpt-mak-print:not(#rpt-none) { border-color: transparent !important; background: #21262d !important; color: #e6edf3 !important; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak__paper { background: #0d1117; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak .rpt-sheet-host .rpt-sheet.rpt-sheet--screen { border: 1px solid #30363d; }
 html:is(.dark, .tema-escuro, .escuro) .rpt-mak-chip { border-color: #444c56; background: #161b22; color: #adbac7; }
@@ -360,10 +394,10 @@ html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__condition { bor
 .rpt-col-guide { position: absolute; top: 0; bottom: 0; z-index: 5; width: 0; border-left: 2px dashed #059669; pointer-events: none; }
 .rpt-col-menu-anchor { position: absolute; display: block; }
 .rpt-col-menu { min-width: 220px; }
-.rpt-col-menu .rpt-col-menu__title { padding: 6px 8px 4px; color: #0a0a0a; font-size: 12px; font-weight: 700; }
+.rpt-col-menu .rpt-col-menu__title { padding: 6px 8px 4px; color: #111827; font-size: 12px; font-weight: 700; }
 .rpt-col-menu .rpt-col-menu__hint { padding: 4px 8px; color: #64748b; font-size: 11px; font-weight: 500; }
 .rpt-col-menu .rpt-col-menu__text { flex: 1 1 auto; }
-.rpt-col-menu .rpt-col-menu__check { margin-left: auto; color: #059669; }
+.rpt-col-menu .rpt-col-menu__check { margin-left: auto; color: #111827; }
 .rpt-col-menu .rpt-col-menu__note { margin-left: auto; color: #94a3b8; font-size: 10px; }
 .rpt-col-menu--list { max-height: 320px; overflow-y: auto; }
 .rpt-col-menu [role="menuitemcheckbox"] { padding-left: 32px !important; }
@@ -374,7 +408,7 @@ html:is(.dark, .tema-escuro, .escuro) .rpt-mak-pop .rpt-mak-pop__condition { bor
 .rpt-mak-pop .rpt-mak-more__item:hover, .rpt-mak-pop .rpt-mak-more__item:focus-visible { background: #f5f5f5; outline: none; }
 .rpt-mak-pop .rpt-mak-more__item.is-on { font-weight: 600; }
 .rpt-mak-pop .rpt-mak-more__count { min-width: 18px; padding: 0 6px; border-radius: 9px; background: #059669; color: #fff; font-size: 11px; line-height: 18px; text-align: center; }
-.rpt-mak-pop .rpt-mak-pop__link { display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none; color: #047857; font-size: 12px; font-weight: 600; cursor: pointer; }
+.rpt-mak-pop .rpt-mak-pop__link { display: inline-flex; align-items: center; gap: 2px; padding: 0; border: 0; background: none; color: #111827; font-size: 12px; font-weight: 600; cursor: pointer; }
 .rpt-mak-pop .rpt-mak-pop__link svg { width: 14px; height: 14px; }
 .rpt-mak-pop .rpt-mak-pop__field { box-sizing: border-box; width: 100%; height: 32px; padding: 4px 8px; border: 1px solid #e5e5e5; border-radius: 6px; background: #fff; color: inherit; font-size: 13px; }
 .rpt-mak-pop .rpt-mak-pop__field:focus { outline: none; box-shadow: 0 0 0 1px #0a0a0a; }
@@ -411,8 +445,8 @@ html body #root .rpt-mak .rpt-mak-switch .rpt-mak-switch__btn:last-child:not(#rp
 html body #root .rpt-mak label.rpt-chart__ctl-label:not(#rpt-none) { margin: 0; color: var(--rc-muted); font-size: 12px; font-weight: 500; }
 .rpt-chart__seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: 6px; background: #f1f5f9; }
 html body #root .rpt-mak .rpt-chart__seg-btn:not(#rpt-none) { display: inline-flex; align-items: center; height: 24px; min-height: 24px; margin: 0; padding: 0 9px; border: 0; border-radius: 4px !important; background: transparent !important; color: #475569 !important; font-size: 12px !important; font-weight: 500 !important; line-height: 16px; box-shadow: none; cursor: pointer; }
-html body #root .rpt-mak .rpt-chart__seg-btn:not(#rpt-none):hover { color: #0f172a !important; }
-html body #root .rpt-mak .rpt-chart__seg-btn.is-on:not(#rpt-none) { background: #fff !important; color: #0f172a !important; box-shadow: 0 1px 2px 0 rgb(0 0 0 / .12); }
+html body #root .rpt-mak .rpt-chart__seg-btn:not(#rpt-none):hover { color: #111827 !important; }
+html body #root .rpt-mak .rpt-chart__seg-btn.is-on:not(#rpt-none) { background: #fff !important; color: #111827 !important; box-shadow: 0 1px 2px 0 rgb(0 0 0 / .12); }
 html body #root .rpt-mak .rpt-chart__seg-btn:not(#rpt-none):focus-visible { outline: none; box-shadow: 0 0 0 1px #0a0a0a; }
 html body #root .rpt-mak select.rpt-chart__select:not(#rpt-none) { height: 28px; min-height: 28px; padding: 0 26px 0 8px !important; border: 1px solid #e5e5e5 !important; border-radius: 6px; background-color: #fff !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important; background-repeat: no-repeat; background-position: right 7px center; background-size: 14px 14px; color: #0a0a0a !important; font-size: 12px; color-scheme: light; cursor: pointer; appearance: none; -webkit-appearance: none; }
 html body #root .rpt-mak select.rpt-chart__select:not(#rpt-none):focus-visible { outline: none; box-shadow: 0 0 0 1px #0a0a0a; }
@@ -438,4 +472,17 @@ html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak select.rpt-chart__sele
 html:is(.dark, .tema-escuro, .escuro) body #root .rpt-mak :is(.rpt-chart__seg-btn, select.rpt-chart__select):not(#rpt-none):focus-visible { box-shadow: 0 0 0 1px #8b949e; }
 @media (max-width: 767px) {
   .rpt-charts__intro { padding-right: 0; padding-top: 40px; }
+}
+@media (max-width: 420px) {
+  .mb1-app-shell .mb1-operational-page.rpt-mak { padding: 12px; }
+  .rpt-mak__top { align-items: flex-start; }
+  .rpt-mak__grid { grid-template-columns: 1fr; }
+  .rpt-mak__grid > :is([data-field="relatorio"], [data-field="tipo"]) { grid-column: auto; }
+  .rpt-mak__actions { width: 100%; margin-left: 0; flex-wrap: wrap; row-gap: 6px; justify-content: flex-start; }
+  .rpt-mak__exports, .rpt-mak__utils { flex: 0 0 auto; }
+  .rpt-mak .rpt-mak-print { order: -1; } /* primário permanece visível na primeira linha */
+  .rpt-mak__sheet-tools { position: static; justify-content: flex-end; padding: 8px 8px 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html body #root .rpt-mak :is(.rpt-mak-print, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-btn):not(#rpt-none) { transition: none; }
 }

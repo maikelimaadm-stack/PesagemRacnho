@@ -572,7 +572,7 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
           <div className="w-full border border-slate-200 rounded-md overflow-hidden">
             <div className="px-3 py-2 text-xs font-semibold bg-slate-50">Backups físicos encontrados</div>
             {backups.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-slate-500">Nenhum backup físico catalogado neste ambiente.</p>
+              <p className="px-3 py-2 text-xs text-slate-500">Nenhum backup neste computador. Use Criar backup do banco para guardar uma cópia.</p>
             ) : backups.slice(0, 10).map((backup) => (
               <div key={backup.path} className="px-3 py-2 border-t border-slate-100 text-xs flex flex-wrap justify-between gap-2">
                 <span className="font-medium break-all">{backup.name}</span>

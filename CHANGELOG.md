@@ -3,6 +3,54 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.5.4] — 2026-10-28
+
+Pesagem automática acompanha o monitor da balança (peso e estabilização) sem zerar ao salvar.
+Esquema Dexie **8** e backup **formato 3**, sem mudança. Notas em `docs/release/1.5.4/RELEASE-NOTES.md`.
+
+### Fixed
+- Após salvar, o campo Peso continua com o valor do monitor (não volta a 0 / vazio).
+- Estabilização espelha o kg inteiro da tela da S3 (não fica “procurando” com o monitor já estável).
+
+## [1.5.3] — 2026-10-28
+
+UX do Lançamento com pesagem automática e atalho de lote; remoção do teste de estabilização.
+Esquema Dexie **8** e backup **formato 3**, sem mudança. Notas em `docs/release/1.5.3/RELEASE-NOTES.md`.
+
+### Changed
+- Campo Peso acompanha a balança sem travamento; estável usa a cor âmbar da Identificação; fundo de
+  bloqueio cinza mais claro.
+- Atalho de lote por **F11/F12/…** (e clique) salva na hora; opções lado a lado com borda dos campos.
+- Ícones de pesagem automática e atalho de lote: só mudam para âmbar quando ativos.
+- Removido o botão temporário **Testar estabilização (demo)**.
+
+## [1.5.2] — 2026-10-28
+
+Correção da leitura de peso da balança S3 (Bluetooth) e empacotamento do trabalho de UX/BT já na 1.5.1.
+Esquema Dexie **8** e backup **formato 3**, sem mudança. Notas em `docs/release/1.5.2/RELEASE-NOTES.md`.
+
+### Fixed
+- Leitura de peso da Tru-Test S3 via Bluetooth: parsing do payload para o campo Peso refletir o valor
+  mostrado no monitor (evitar peso zerado / inconsistente no app).
+
+## [1.5.1] — 2026-10-28
+
+Pesagem com balança Tru-Test S3 Bluetooth e ajustes de UX no Lançamento / Relação. Esquema Dexie **8** e backup
+**formato 3**, sem mudança. Notas em `docs/release/1.5.1/RELEASE-NOTES.md`.
+
+### Added
+- Integração com balança **Tru-Test S3** via Bluetooth: conexão estável, reconexão automática e status **Balança online**.
+
+### Changed
+- Pesagem automática só com balança conectada; botão de pesagem automática sem fundo; Tab não foca o botão.
+- Campo **Peso** auto-preenche sem roubar o foco; tipografia de Identificação/Peso alinhada.
+- Botão **Salvar** verde `#40de63`, formato pílula, com espaçamento igual aos campos.
+- Popup de escolha de marca simplificado (atalhos 1/2/3, caixa estreita, Marca+nome destacado); não reabre se o animal
+  já foi escolhido (só se apagar a identificação).
+- Faixa Animal/Marca com labels na cor do Ganho (`#111827`).
+- Botão **+** da Relação de Pesagens em cinza (sem fundo verde).
+- Ícones do Lançamento iguais aos da Relação (cinza `#f1f3f4`).
+
 ## [1.5.0] — 2026-10-02
 
 M1 — fundação do número (docs/plano-mestre/M1-FUNDACAO-NUMERO.md). Esquema Dexie **8** e backup **formato 3**, sem

@@ -17,6 +17,7 @@ import {
 import { applyMedicamentoToDraft, newSanityDraft } from "@/modules/weighing/domain/launchContext";
 import { createPageUrl } from "@/utils";
 import "@/styles/launch-sanity-panel.css";
+import "@/styles/launch-visual.css";
 
 // Painel de Sanidade do Lançamento (ModeloBase1, mesmo padrão dos painéis de
 // Compra/Venda/Abate). Não é obrigatório: sem aplicação, a pesagem é gravada

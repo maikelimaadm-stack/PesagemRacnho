@@ -4,11 +4,22 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { registerDialogIpc } = require('./ipc/dialogIpc.cjs');
 const { registerReportIpc } = require('./ipc/reportIpc.cjs');
+const { registerEquipmentSessionHandlers, registerEquipmentIpc, attachBluetoothHandlerToContents } = require('./ipc/equipmentIpc.cjs');
 const appLogger = require('./logging/appLogger.cjs');
 const appRuntime = require('./appRuntime.cjs');
 const { buildDiagnosticInfo } = require('./diagnostics.cjs');
 
 const isDev = process.env.ELECTRON_DEV === '1';
+
+function isDevNavigation(url) {
+  if (!isDev) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' && parsed.hostname === 'localhost' && parsed.port === '5173';
+  } catch {
+    return false;
+  }
+}
 
 // Override de userData APENAS para testes automatizados.
 // NÃO é exposto na UI e NÃO é configuração para o usuário final.
@@ -36,6 +47,8 @@ const createWindow = () => {
       ? path.join(getAppRoot(), 'build', 'icon.ico')
       : path.join(process.resourcesPath, 'icon.ico'),
     autoHideMenuBar: true,
+    // F11 fica livre para atalho de lote no lançamento (sem fullscreen do Chromium).
+    fullscreenable: false,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -48,11 +61,13 @@ const createWindow = () => {
   });
 
   win.once('ready-to-show', () => win.show());
+  attachBluetoothHandlerToContents(win.webContents);
   win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  // A carga inicial (loadFile / loadURL) não passa por aqui. No app instalado nenhuma
+  // navegação seguinte é legítima (o router é por hash). Em desenvolvimento só o Vite
+  // local entra; `file:` e hosts parecidos com localhost:5173 ficam de fora.
   win.webContents.on('will-navigate', (event, url) => {
-    if (!url.startsWith('file:') && !url.startsWith('http://localhost:5173')) {
-      event.preventDefault();
-    }
+    if (!isDevNavigation(url)) event.preventDefault();
   });
 
   if (isDev) {
@@ -67,6 +82,8 @@ const createWindow = () => {
 app.whenReady().then(() => {
   // Instalado: sem menu (remove atalhos de recarregar/DevTools).
   if (app.isPackaged) Menu.setApplicationMenu(null);
+  registerEquipmentSessionHandlers();
+  registerEquipmentIpc(ipcMain);
   const userDataPath = app.getPath('userData');
   const dataDir = getDataDir();
 
@@ -115,16 +132,35 @@ app.whenReady().then(() => {
 
   // Persistência de arquivos gerados no renderer (backup/export Dexie).
   // Salva sob userData/data/<subdir> — usuário NÃO escolhe pasta.
-  const safeUserDir = (subdir) => {
-    const safeSub = String(subdir || 'exports').replace(/[^a-zA-Z0-9_-]/g, '');
-    return path.join(dataDir, safeSub);
+  // path.basename('..') continua sendo '..', e path.join(dir, '..') sobe um nível:
+  // o temporário nascia fora de data/ e o rename falhava deixando o arquivo lá.
+  const containedUserDir = (subdir) => {
+    const safeSub = String(subdir || 'exports').replace(/[^a-zA-Z0-9_-]/g, '') || 'exports';
+    const root = path.resolve(dataDir);
+    const dir = path.resolve(root, safeSub);
+    if (!dir.startsWith(`${root}${path.sep}`)) {
+      throw Object.assign(new Error('Pasta de arquivo inválida'), { code: 'PATH_001' });
+    }
+    return dir;
+  };
+
+  const containedUserFile = (subdir, filename) => {
+    const dir = containedUserDir(subdir);
+    const raw = filename == null || String(filename).trim() === '' ? `file-${Date.now()}` : String(filename).replace(/\0/g, '');
+    const safeName = path.basename(raw);
+    if (!safeName || safeName === '.' || safeName === '..' || /[:/\\]/.test(safeName)) {
+      throw Object.assign(new Error('Nome de arquivo inválido'), { code: 'PATH_001' });
+    }
+    const full = path.resolve(dir, safeName);
+    if (!full.startsWith(`${dir}${path.sep}`)) {
+      throw Object.assign(new Error('Nome de arquivo inválido'), { code: 'PATH_001' });
+    }
+    return { dir, full };
   };
 
   ipcMain.handle('app:writeUserFile', (_e, { subdir, filename, content } = {}) => {
-    const dir = safeUserDir(subdir);
+    const { dir, full } = containedUserFile(subdir, filename);
     fs.mkdirSync(dir, { recursive: true });
-    const safeName = path.basename(String(filename || `file-${Date.now()}`));
-    const full = path.join(dir, safeName);
     const temporary = `${full}.tmp-${process.pid}-${Date.now()}`;
     fs.writeFileSync(temporary, content ?? '', 'utf8');
     const descriptor = fs.openSync(temporary, 'r');
@@ -144,7 +180,7 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle('app:listUserFiles', (_e, { subdir, extension } = {}) => {
-    const dir = safeUserDir(subdir);
+    const dir = containedUserDir(subdir);
     if (!fs.existsSync(dir)) return { ok: true, files: [] };
     const normalizedExtension = extension ? String(extension).toLowerCase() : '';
     const result = fs.readdirSync(dir, { withFileTypes: true })

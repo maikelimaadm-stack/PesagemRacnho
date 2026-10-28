@@ -44,6 +44,23 @@ import ReportSheetView from "./ReportSheetView";
 import ReportTable from "./ReportTable";
 import { pillFilterType, pillOptions, toDisplayFilters, toServiceFilters, useCan } from "./reportUi";
 
+function emittedLabel(iso) {
+  const date = iso ? new Date(iso) : null;
+  if (!date || Number.isNaN(date.getTime())) return null;
+  return `Atualizado em ${date.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} (horário deste computador)`;
+}
+
+function reportStandby({ loading, error, onRetry }) {
+  if (loading) return <div className="rpt-empty" role="status">Calculando o relatório…</div>;
+  const forbidden = error?.code === "AUTH_FORBIDDEN";
+  return (
+    <div className="rpt-empty" role={error ? "alert" : "status"}>
+      <p>{forbidden ? "Seu perfil não pode abrir este relatório." : error ? "Não foi possível calcular este relatório. Use Tentar de novo ou ajuste o período." : "Nenhum resultado ainda. Ajuste o período ou os filtros."}</p>
+      {error && !forbidden ? <button type="button" className="rpt-empty__retry" onClick={onRetry}>Tentar de novo</button> : null}
+    </div>
+  );
+}
+
 const NO_GROUP = "__nenhum__";
 // Coluna sim/não no "Mais filtros…": o motor compara o valor (true/false); a lista mostra Sim/Não.
 const BOOLEAN_OPTIONS = Object.freeze([{ value: "true", label: "Sim" }, { value: "false", label: "Não" }]);
@@ -162,8 +179,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     render: (row) => (
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button type="button" variant="ghost" size="icon" className="h-6 w-6" aria-label={rowActions.title?.(row) ?? "Ações da linha"} title={rowActions.title?.(row) ?? "Ações da linha"}>
-            <MoreVertical className="w-3.5 h-3.5 text-slate-600" />
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label={rowActions.title?.(row) ?? "Ações da linha"} title={rowActions.title?.(row) ?? "Ações da linha"}>
+            <MoreVertical className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start">
@@ -773,7 +790,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
     const hideColumnsButton = vendasTools && !state.showDetails;
     const makNotes = [
       ...(viewModel?.warnings ?? []).map((warning) => <div key={warning.code} className="rpt-warning" role="status"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />{warning.message}</div>),
-      ...(error ? [<div key="erro" className="rpt-error" role="alert">{error.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode abrir este relatório." : error.message}</div>] : []),
+          ...(error ? [<div key="erro" className="rpt-error" role="alert">{error.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode abrir este relatório." : `${error.message} Use Atualizar para tentar de novo.`}</div>] : []),
       ...(summaryMode && viewModel && viewId === "custom" && !(viewModel.groups ?? []).length ? [<div key="dica" className="rpt-sheet-hint" role="note">Sem agrupamento a folha mostra só o Total geral. Escolha um <strong>Tipo Relatório</strong> para ver os grupos.</div>] : []),
     ];
     return (
@@ -788,6 +805,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
           onRename={editableTemplate ? () => setMyDialog("rename") : null}
           deleteLabel="Excluir relatório…"
           loading={loading}
+          updatedLabel={!loading && viewModel ? emittedLabel(viewModel.generatedAt) : null}
           backLabel={backLabel}
           onBack={guardLeave(onBack)}
           canExport={can("reports.export")}
@@ -879,7 +897,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
             <div className={`rpt-mak__sheet-tools${showCharts ? " rpt-mak__sheet-tools--charts" : ""}`} role="group" aria-label={chartsAvailable ? "Vista e colunas da folha" : "Colunas da folha"}>
               {chartsAvailable ? <MakgestaoDisplaySwitch value={display} onChange={setDisplay} /> : null}
               {vendasTools && !showCharts ? (
-                <button type="button" className={`rpt-mak-btn rpt-mak-btn--icon${state.showDetails ? " is-pressed" : ""}`} aria-pressed={state.showDetails === true} onClick={() => update({ showDetails: !state.showDetails })}>
+                <button type="button" className={`rpt-mak-btn${state.showDetails ? " is-pressed" : ""}`} aria-pressed={state.showDetails === true} onClick={() => update({ showDetails: !state.showDetails })}>
                   {state.showDetails ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
                   {state.showDetails ? "Ocultar Detalhes" : "Mostrar Detalhes"}
                 </button>
@@ -910,7 +928,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
               onSort={viewModel.mode === REPORT_MODES.RESUMIDO ? onSheetSort : null}
               headerMenu={headerMenu}
             />
-          ) : <div className="rpt-empty">{loading ? "Calculando o relatório…" : "—"}</div>}
+          ) : reportStandby({ loading, error, onRetry: () => execute({ reload: true }) })}
         </div>
         {dialogs}
       </ModeloBase1PageContainer>
@@ -924,8 +942,8 @@ export default function ReportView({ reportId, presetId = null, template, savedS
       <div className="mak-mother-page__toolbar mg-subtoolbar-stack" data-mak-region="toolbar">
         <div data-template-id="action-bar" className="mg-action-bar canva-section flex w-full shrink-0 items-center rpt-toolbar" style={{ background: "var(--bg-card)" }}>
           <div className="mg-action-bar__actions flex min-w-0 items-center rpt-toolbar__left">
-            <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={onBack} title={`Voltar para ${backLabel}`}>
-              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />{backLabel}
+            <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" onClick={onBack} title={`Voltar para ${backLabel}`} aria-label={`Voltar para ${backLabel}`}>
+              <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
             <span className="rpt-breadcrumb" aria-label="Relatório atual">
               <span>{REPORT_FAMILIES[definition.family]}</span> › <strong>{definition.title}</strong>
@@ -964,9 +982,9 @@ export default function ReportView({ reportId, presetId = null, template, savedS
             {allowPreferences ? <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" onClick={() => setDialog("save")} title="Salvar modelo" aria-label="Salvar modelo"><Save className="h-3.5 w-3.5" aria-hidden="true" /></button> : null}
             {can("reports.export") ? (
               <div className="rpt-emit" role="group" aria-label="Imprimir e exportar">
-                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green" disabled={!viewModel || loading} onClick={() => emitDocument("print")} title="Imprimir a folha (A4)"><Printer className="h-3.5 w-3.5" aria-hidden="true" />Imprimir</button>
-                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" disabled={!viewModel || loading} onClick={() => exportAs("xlsx")} title="Planilha Excel (XLSX) com a mesma tabela da tela"><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />Excel</button>
-                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" disabled={!viewModel || loading} onClick={() => emitDocument("pdf")} title="PDF A4 da folha"><FileText className="h-3.5 w-3.5" aria-hidden="true" />PDF</button>
+                <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-green" disabled={!viewModel || loading} onClick={() => emitDocument("print")} title="Imprimir a folha (A4)" aria-label="Imprimir"><Printer className="h-3.5 w-3.5" aria-hidden="true" /></button>
+                <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" disabled={!viewModel || loading} onClick={() => exportAs("xlsx")} title="Planilha Excel (XLSX) com a mesma tabela da tela" aria-label="Excel"><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" /></button>
+                <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" disabled={!viewModel || loading} onClick={() => emitDocument("pdf")} title="PDF A4 da folha" aria-label="PDF"><FileText className="h-3.5 w-3.5" aria-hidden="true" /></button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button type="button" className="ios-btn tb-btn tb-btn-ghost tb-btn-icon" disabled={!viewModel || loading} aria-label="Outros formatos" title="Outros formatos (CSV, JSON)"><MoreHorizontal className="h-3.5 w-3.5" aria-hidden="true" /></button>
@@ -1038,7 +1056,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
                 <span><strong>Período:</strong> {viewModel?.period ? describePeriod(viewModel.period) : periodParam ? "—" : "estado atual (hoje)"}</span>
                 <span>{showSheet ? (summaryMode ? "Folha resumida (o que sai na impressão)" : "Folha com as linhas (o que sai na impressão)") : viewModel?.grainLabel ? viewModel.grainLabel.charAt(0).toUpperCase() + viewModel.grainLabel.slice(1) : "—"}</span>
                 {viewModel?.classification && viewModel.classification !== "CANÔNICO" ? <span className="rpt-legacy">{viewModel.classification}</span> : null}
-                {loading ? <span className="rpt-loading">Calculando…</span> : viewModel ? <span className="rpt-timing" title={`Leitura: ${viewModel.stats.strategy}`}>{viewModel.rowCount.toLocaleString("pt-BR")} registro(s) · {Math.round(viewModel.stats.timings.total)} ms</span> : null}
+                {loading ? <span className="rpt-loading">Calculando…</span> : viewModel ? <span className="rpt-timing" title={`Leitura: ${viewModel.stats.strategy}`}>{viewModel.rowCount.toLocaleString("pt-BR")} registro(s) · {emittedLabel(viewModel.generatedAt) ?? "horário deste computador"}</span> : null}
               </div>
               {(viewModel?.warnings ?? []).map((warning) => (
                 <div key={warning.code} className="rpt-warning" role="status"><AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />{warning.message}</div>
@@ -1048,7 +1066,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
               ) : null}
               {/* E1D: a folha não leva notas (só o essencial no rodapé); na grade, as da definição ficam aqui. */}
               {!showSheet && (definition.notes ?? []).length ? <ul className="rpt-notes">{definition.notes.map((note) => <li key={note}>{note}</li>)}</ul> : null}
-              {error ?<div className="rpt-error" role="alert">{error.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode abrir este relatório." : error.message}</div> : null}
+              {error ?<div className="rpt-error" role="alert">{error.code === "AUTH_FORBIDDEN" ? "Seu perfil não pode abrir este relatório." : `${error.message} Use Atualizar para tentar de novo.`}</div> : null}
             </div>
             {viewModel ? (showSheet && (viewModel.mode === REPORT_MODES.RESUMIDO || state.detailSheet) ? (
               <ReportSheetView
@@ -1073,7 +1091,7 @@ export default function ReportView({ reportId, presetId = null, template, savedS
                 filterTypeFor={pillFilterType}
                 rowActions={tableRowActions}
               />
-            )) : <div className="rpt-empty">{loading ? "Calculando o relatório…" : "—"}</div>}
+            )) : reportStandby({ loading, error, onRetry: () => execute({ reload: true }) })}
           </CardContent>
         </Card>
       </div>

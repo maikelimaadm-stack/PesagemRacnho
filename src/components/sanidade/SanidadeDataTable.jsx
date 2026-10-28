@@ -83,8 +83,8 @@ export default function SanidadeDataTable({ table, totalLabel = 'Totais', totalC
                 </TableRow>
               );
             }) : null}
-            {!loading && !filtered.length ? <TableRow><TableCell colSpan={colSpan} className="d17d-empty-row sanidade-empty-row">{emptyMessage}</TableCell></TableRow> : null}
-            {loading ? <TableRow><TableCell colSpan={colSpan} className="d17d-empty-row sanidade-empty-row">{loadingText}</TableCell></TableRow> : null}
+            {!loading && !filtered.length ? <TableRow><TableCell colSpan={colSpan} className="d17d-empty-row sanidade-empty-row" role="status">{emptyMessage}</TableCell></TableRow> : null}
+            {loading ? <TableRow><TableCell colSpan={colSpan} className="d17d-empty-row sanidade-empty-row" role="status">{loadingText}</TableCell></TableRow> : null}
           </TableBody>
         </Table>
       </div>

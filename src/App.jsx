@@ -23,7 +23,7 @@ function App() {
       <DbBootstrap>
         <AuthGate>
           <Router>
-            <Suspense fallback={<div className="min-h-screen grid place-items-center bg-slate-50 text-sm text-slate-500">Carregando tela…</div>}>
+            <Suspense fallback={<div className="gate-status" role="status"><div className="gate-status__card"><h1>Abrindo a tela</h1><p>Os dados locais continuam neste computador.</p></div></div>}>
             <Routes>
               <Route
                 path="/"

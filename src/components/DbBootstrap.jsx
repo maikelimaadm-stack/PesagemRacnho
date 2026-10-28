@@ -39,17 +39,15 @@ export default function DbBootstrap({ children }) {
         ? 'A migração foi bloqueada porque o backup de segurança não pôde ser gravado e verificado. Nenhum dado foi alterado. Libere espaço em disco ou verifique a pasta de dados e abra o sistema novamente.'
         : null;
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="text-center space-y-3 max-w-lg" role="alert">
-          <p className="text-red-600 font-medium">
-            {migrationBlocked ? 'Atualização do banco bloqueada por segurança' : 'Não foi possível preparar o armazenamento local'}
-          </p>
-          {orientation ? <p className="text-sm text-slate-600">{orientation}</p> : null}
-          <p className="text-sm text-slate-600">
+      <div className="gate-status">
+        <div className="gate-status__card" role="alert">
+          <h1>{migrationBlocked ? 'Atualização do banco bloqueada por segurança' : 'Não foi possível preparar o armazenamento local'}</h1>
+          {orientation ? <p>{orientation}</p> : null}
+          <p>
             Feche e abra o sistema novamente. Se continuar, envie o arquivo de diagnóstico
             em <strong>Manutenção</strong>.
           </p>
-          <p className="text-xs text-slate-400">{erro.message}</p>
+          <p className="gate-status__detail">{erro.message}</p>
         </div>
       </div>
     );
@@ -57,8 +55,11 @@ export default function DbBootstrap({ children }) {
 
   if (!ready) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <p className="text-sm text-slate-500">Preparando o sistema…</p>
+      <div className="gate-status" role="status">
+        <div className="gate-status__card">
+          <h1>Preparando o armazenamento local</h1>
+          <p>O sistema abre em seguida, neste computador.</p>
+        </div>
       </div>
     );
   }

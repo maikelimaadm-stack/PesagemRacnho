@@ -3,6 +3,7 @@ import { FileText, Lock } from "lucide-react";
 import { REPORT_VISIBILITY } from "@/modules/reporting/domain/reportDefinition";
 import { listReports } from "@/modules/reporting/application/reportService";
 import "@/styles/reports.css";
+import "@/styles/launch-visual.css";
 
 // Aba Controle da Manutenção (E1 1.4.0): relatórios de conferência do sistema — trilha de auditoria,
 // qualidade dos dados, histórico de backups e pendências de pesagem. Saíram do catálogo de Relatórios

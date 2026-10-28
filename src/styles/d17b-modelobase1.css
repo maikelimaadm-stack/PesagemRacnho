@@ -58,22 +58,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  flex: 0 0 28px;
+  width: 25px;
+  height: 25px;
+  flex: 0 0 25px;
   border: 0;
-  border-radius: 7px;
+  border-radius: 50%;
   background: rgba(255, 255, 255, .86);
-  color: #334155;
-  transition: background var(--d17b-motion), transform var(--d17b-motion);
+  color: #111827;
+  transition: background var(--d17b-motion);
 }
 
 .d17b-topbar-button:hover,
 .d17b-icon-button:hover { background: rgba(232, 237, 241, .94); }
 .d17b-topbar-button:active,
-.d17b-icon-button:active { transform: scale(.96); }
+.d17b-icon-button:active { background: rgba(232, 237, 241, .94); }
 .d17b-topbar-button svg,
-.d17b-icon-button svg { width: 16px; height: 16px; }
+.d17b-icon-button svg { width: 14px; height: 14px; }
 
 .d17b-breadcrumbs {
   display: flex;
@@ -148,7 +148,7 @@
   border-bottom: 1px solid var(--d17b-border);
 }
 
-.d17b-sidebar-brand__icon { display: inline-grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 10px; background: var(--d17b-accent-soft); color: #15953a; }
+.d17b-sidebar-brand__icon { display: inline-grid; place-items: center; width: 34px; height: 34px; flex: 0 0 34px; border-radius: 10px; background: var(--d17b-accent-soft); color: #111827; }
 .d17b-sidebar-brand__icon svg { width: 18px; height: 18px; }
 .d17b-sidebar-brand > div { display: flex; flex-direction: column; min-width: 0; }
 .d17b-sidebar-brand strong { color: var(--d17b-text); font-size: 12px; font-weight: 700; white-space: nowrap; }
@@ -159,8 +159,8 @@
 .d17b-sidebar-link { display: flex; align-items: center; height: 36px; padding: 0 10px; gap: 9px; border-radius: 8px; color: var(--d17b-text-2); font-size: 12px; font-weight: 550; transition: color var(--d17b-motion), background var(--d17b-motion); }
 .d17b-sidebar-link svg { width: 16px; height: 16px; color: var(--d17b-icon); }
 .d17b-sidebar-link:hover { color: var(--d17b-text); background: #f7f8fa; }
-.d17b-sidebar-link.is-active { color: #118b32; background: var(--d17b-accent-soft); font-weight: 650; }
-.d17b-sidebar-link.is-active svg { color: #15953a; }
+.d17b-sidebar-link.is-active { color: #111827; background: var(--d17b-accent-soft); font-weight: 650; }
+.d17b-sidebar-link.is-active svg { color: #111827; }
 
 .d17b-sidebar-footer { display: flex; align-items: center; width: 220px; min-height: 52px; margin-top: auto; padding: 9px 12px; gap: 9px; border-top: 1px solid var(--d17b-border); color: var(--d17b-icon); }
 .d17b-sidebar-footer svg { width: 16px; height: 16px; }
@@ -218,19 +218,52 @@ html body .d17b-shell .d17b-page .d17b-page-actionbar {
 .d17b-page-actionbar button,
 .d17b-page-actionbar a > button,
 .d17b-page-actionbar label button {
-  height: 28px !important;
-  min-height: 28px !important;
-  border-radius: 8px !important;
-  padding: 0 9px !important;
   gap: 5px;
-  border-color: var(--d17b-border-strong) !important;
-  font-size: 11px !important;
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px !important;
   font-weight: 600;
+  line-height: 1;
   white-space: nowrap;
 }
-
+.d17b-page-actionbar :is(.d17c-new-button, .tb-btn-green, .d17c-launch-button, .tb-btn-labeled) {
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 0 10px !important;
+  border-radius: 999px !important;
+  border-color: transparent !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
+}
+.d17b-page-actionbar :is(.d17c-round-action, .tb-btn-icon, .tb-btn-more),
 .d17b-page-actionbar button[class*="w-8"],
-.d17b-page-actionbar button[class*="size-icon"] { width: 28px !important; min-width: 28px !important; padding: 0 !important; }
+.d17b-page-actionbar button[class*="size-icon"] {
+  width: 25px !important;
+  min-width: 25px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+}
+.d17b-page-actionbar .mak-date-control > button {
+  width: 34px !important;
+  min-width: 34px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+}
+.d17b-page-actionbar .seg-control :is(button, .seg-tab) {
+  width: auto !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 10px !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  font-size: inherit !important;
+  font-weight: inherit !important;
+}
 .d17b-page-actionbar .d17b-actionbar-actions button:not([class*="w-8"]):not([class*="size-icon"]) {
   width: auto !important;
   min-width: max-content !important;
@@ -241,13 +274,13 @@ html body .d17b-shell .d17b-page .d17b-page-actionbar {
 .d17b-dialog-content .bg-primary {
   border-color: var(--d17b-accent) !important;
   background: var(--d17b-accent) !important;
-  color: #fff !important;
+  color: #111827 !important;
 }
 
 html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
   border-color: var(--d17b-accent) !important;
   background: var(--d17b-accent) !important;
-  color: #fff !important;
+  color: #111827 !important;
 }
 
 .d17b-page .emp-toolbar-btn-save:hover,
@@ -333,7 +366,7 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17b-list-page:not(.d17b-filters-open) .d17b-table-card { grid-column: 1; }
 .d17b-filter-card > div { height: 100%; padding: 0 !important; overflow-y: auto; }
 .d17b-filter-card__header { position: sticky; top: 0; z-index: 3; display: flex; align-items: center; justify-content: space-between; height: 36px; padding: 0 9px; border-bottom: 1px solid var(--d17b-border); background: rgba(255, 255, 255, .96); font-size: 11px; font-weight: 700; }
-.d17b-filter-card__header button { width: 28px !important; height: 28px !important; min-height: 28px !important; padding: 0 !important; border-radius: 8px !important; }
+.d17b-filter-card__header button { width: 25px !important; height: 25px !important; min-height: 25px !important; padding: 0 !important; border-radius: 50% !important; }
 .d17b-filter-card__header svg { width: 14px; height: 14px; }
 .d17b-filter-card [class*="grid-cols"] { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; gap: 7px !important; padding: 8px 10px 0; }
 .d17b-filter-card [class*="col-span"] { grid-column: auto !important; }
@@ -402,7 +435,7 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17c-table-toolbar__actions { display: flex; align-items: center; min-width: 0; }
 .d17c-table-toolbar__primary { justify-content: space-between; gap: 6px; }
 .d17c-table-toolbar__primary,
-.d17c-table-toolbar__filters { min-height: 36px; height: 36px; flex: 0 0 36px; }
+.d17c-table-toolbar__filters { min-height: 48px; height: auto; flex: 0 0 auto; }
 .d17c-table-toolbar__left,
 .d17c-table-toolbar__actions { gap: 4px; }
 .d17c-table-toolbar__actions { margin-left: auto; }
@@ -423,7 +456,7 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
   aspect-ratio: 1;
   padding: 0 !important;
   border: 0 !important;
-  border-radius: 999px !important;
+  border-radius: 50% !important;
   background: #f1f3f4 !important;
   color: #5b6f86 !important;
   box-shadow: none !important;
@@ -438,30 +471,30 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17c-new-button {
   width: auto !important;
   min-width: 0 !important;
-  height: var(--mb1-button-height, 28px) !important;
-  min-height: var(--mb1-button-height, 28px) !important;
-  padding: 0 12px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 0 10px !important;
   border: 0 !important;
   border-radius: 999px !important;
-  background: var(--d17b-accent) !important;
-  color: #fff !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
   box-shadow: none !important;
   font-size: 12px !important;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
 }
-.d17c-new-button:hover { background: var(--d17b-accent-hover) !important; }
+.d17c-new-button:hover { background: #e5e7eb !important; }
 .d17c-new-button svg { width: 13px; height: 13px; }
 
-.d17c-quick-search { position: relative; display: flex; align-items: center; flex: 0 0 190px; height: var(--mb1-button-height, 28px); }
+.d17c-quick-search { position: relative; display: flex; align-items: center; flex: 0 0 190px; height: 40px; }
 .d17c-table-toolbar__actions .d17c-quick-search { width: 190px; flex: 0 1 190px; }
 .d17c-quick-search > svg { position: absolute; z-index: 2; left: 10px; width: 13px; height: 13px; color: #667a91; pointer-events: none; }
-.d17b-page .d17c-quick-search > input { width: 100%; height: var(--mb1-button-height, 28px) !important; min-height: var(--mb1-button-height, 28px) !important; padding: 0 10px 0 29px !important; border-radius: 999px !important; background: #f1f3f4 !important; font-size: 11px !important; }
+.d17b-page .d17c-quick-search > input { width: 100%; height: 40px !important; min-height: 40px !important; padding: 0 12px 0 32px !important; border-radius: 8px !important; background: #f1f3f4 !important; font-size: 13px !important; font-weight: 500 !important; }
 .mg-filter-pills-rail {
   display: flex;
   align-items: center;
   width: 100%;
   min-width: 0;
-  height: var(--mb1-button-height, 28px);
+  height: 40px;
   gap: 6px;
 }
 .d17b-page .mg-filter-pills-rail__toggle,
@@ -471,11 +504,11 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
   place-items: center;
   width: var(--mb1-icon-button-size, 28px) !important;
   min-width: var(--mb1-icon-button-size, 28px) !important;
-  height: var(--mb1-button-height, 28px) !important;
-  min-height: var(--mb1-button-height, 28px) !important;
+  height: 25px !important;
+  min-height: 25px !important;
   padding: 0 !important;
   border: 0 !important;
-  border-radius: 999px !important;
+  border-radius: 50% !important;
   background: #f1f3f4 !important;
   color: #637790 !important;
   box-shadow: none !important;
@@ -498,7 +531,7 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
   flex: 1 1 auto;
   min-width: 0;
   max-width: 0;
-  height: 28px;
+  height: 40px;
   gap: 6px;
   overflow: hidden;
   opacity: 0;
@@ -517,13 +550,13 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .mg-filter-pills-rail__viewport {
   flex: 1 1 auto;
   min-width: 0;
-  height: 28px;
+  height: 40px;
   overflow-x: auto;
   overflow-y: hidden;
   scrollbar-width: none;
 }
 .mg-filter-pills-rail__viewport::-webkit-scrollbar { display: none; }
-.mg-filter-pills { display: flex; align-items: center; width: max-content; min-width: max-content; height: 28px; gap: 4px; }
+.mg-filter-pills { display: flex; align-items: center; width: max-content; min-width: max-content; height: 40px; gap: 4px; }
 .mg-filter-pills-rail__divider { width: 1px; min-width: 1px; height: 18px; background: #dfe4e9; }
 .mg-filter-pills-rail__config-slot { display: inline-flex; width: 28px; min-width: 28px; max-width: 28px; height: 28px; flex: 0 0 28px; }
 .d17b-page .mg-filter-pills-rail__config { box-shadow: inset 0 0 0 1px rgba(64, 222, 99, .26) !important; }
@@ -531,25 +564,26 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17b-page .mg-filter-pill__trigger--clear { color: #dc2626 !important; }
 .d17b-page .mg-filter-pill__trigger--clear:hover { color: #b91c1c !important; background: #e8edf1 !important; }
 
-.mg-filter-pill { position: relative; display: inline-flex; flex: 0 0 auto; height: 28px; }
+.mg-filter-pill { position: relative; display: inline-flex; flex: 0 0 auto; height: 40px; }
 .d17b-page .d17c-filter-pill,
-.d17b-page:not(.d17b-list-page--mother) .mg-filter-pill__trigger {
+.d17b-page .mg-filter-pill__trigger {
   display: inline-flex;
   align-items: center;
   justify-content: space-between;
   width: max-content;
   min-width: 82px;
   max-width: 190px;
-  height: var(--mb1-button-height, 28px) !important;
-  min-height: var(--mb1-button-height, 28px) !important;
+  height: 40px !important;
+  min-height: 40px !important;
   padding: 0 26px 0 12px !important;
   gap: 7px;
   border: 0 !important;
-  border-radius: 999px !important;
+  border-radius: 8px !important;
   background: #f1f3f4 !important;
   box-shadow: none !important;
-  color: #17243a !important;
-  font-size: 11px !important;
+  color: #111827 !important;
+  font-family: "DM Sans", sans-serif;
+  font-size: 13px !important;
   font-weight: 500 !important;
   white-space: nowrap;
 }
@@ -620,7 +654,7 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17c-filter-data-empty { margin: 0; padding: 18px 8px; color: #7a8899; text-align: center; font-size: 11px; }
 .d17c-filter-data-popover__footer { display: grid; grid-template-columns: 1fr 1fr; padding: 6px 8px 4px; gap: 6px; border-top: 1px solid #e4e8ed; }
 .d17c-filter-data-popover__footer button { height: 28px; min-height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: #f1f3f4; color: #243247; font-size: 11px; font-weight: 700; }
-.d17c-filter-data-popover__footer button.is-primary { background: var(--d17b-accent, #40de63); color: #fff; }
+.d17c-filter-data-popover__footer button.is-primary { background: #f1f3f4; color: #111827; }
 
 .mak-date-control {
   display: flex;
@@ -666,8 +700,8 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .mak-date-control > button:hover { background: rgba(255, 255, 255, .6); color: #27394f; }
 .mak-date-control > button svg { width: 15px; height: 15px; }
 .mak-date-control.is-iconless > input { padding: 0 10px !important; cursor: pointer; }
-.d17c-filter-date { height: 28px; border-radius: 999px; }
-.d17c-filter-date > input { height: 26px !important; min-height: 26px !important; font-size: 11px !important; }
+.d17c-filter-date { height: 40px; border-radius: 8px; }
+.d17c-filter-date > input { height: 38px !important; min-height: 38px !important; font-size: 13px !important; font-weight: 500 !important; }
 .d17c-filter-date > button { width: 30px; min-width: 30px; }
 
 .mak-date-picker-panel {
@@ -835,7 +869,7 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .mak-column-filter__clear,
 .mak-column-filter__cancel { background: #f1f3f4; color: #243247; }
 .mak-column-filter__clear:disabled { opacity: .4; }
-.mak-column-filter__apply { min-width: 54px; background: var(--d17b-accent, #40de63); color: #fff; }
+.mak-column-filter__apply { min-width: 54px; background: #f1f3f4; color: #111827; }
 .mak-column-filter__apply:disabled { opacity: .45; }
 .mak-column-filter__column-actions { padding: 5px; border-top: 1px solid #edf0f3; }
 .mak-column-filter__column-actions button { display: flex; align-items: center; width: 100%; height: 28px; padding: 0 8px; gap: 7px; border: 0; border-radius: 7px; background: transparent; color: #45566d; font-size: 11px; }
@@ -856,10 +890,10 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 }
 .d17c-table-footer > span { white-space: nowrap; }
 .d17c-table-footer strong { font-weight: 700; }
-.d17c-table-footer__metric { display: none; color: #64748b; }
+.d17c-table-footer__metric { display: inline; color: #4b5563; }
 .d17c-table-footer__pagination { display: flex; align-items: center; justify-content: flex-end; gap: 3px; }
 .d17c-table-footer__pagination [role="combobox"] { width: 68px; height: 28px !important; min-height: 28px !important; border: 0 !important; border-radius: 999px !important; background: #f1f3f4 !important; }
-.d17c-table-footer__pagination button { width: 26px; height: 26px; min-height: 26px; padding: 0; border-radius: 999px; }
+.d17c-table-footer__pagination button { width: 25px; height: 25px; min-height: 25px; padding: 0; border-radius: 50%; }
 
 .d17c-column-dialog {
   --d17b-accent: #40de63;
@@ -914,8 +948,8 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17c-column-dialog__footer { display: flex; align-items: center; justify-content: flex-end; min-height: 42px; padding: 6px 12px; gap: 8px; border-top: 1px solid #e4e8ed; background: #fff; }
 .d17c-column-dialog__footer button { min-width: 72px; height: 28px; min-height: 28px; border: 0; border-radius: 999px !important; box-shadow: none; font-size: 11px !important; font-weight: 700; }
 .d17c-column-dialog__footer button:first-child { background: #f1f3f4; color: #111827; }
-.d17c-column-dialog__footer .d17c-confirm-button { background: var(--d17b-accent) !important; color: #fff !important; }
-.d17c-column-dialog__footer .d17c-confirm-button:hover { background: var(--d17b-accent-hover) !important; }
+.d17c-column-dialog__footer .d17c-confirm-button { background: #f1f3f4 !important; color: #111827 !important; }
+.d17c-column-dialog__footer .d17c-confirm-button:hover { background: #e5e7eb !important; }
 
 .d17b-launch-page { display: flex; flex-direction: column; height: 100%; padding: 0; overflow: hidden; }
 .d17b-launch-page > .mak-mother-page__chrome { flex: 1 1 auto; min-height: 0; gap: 8px !important; padding: 8px 0 10px !important; overflow-x: hidden; overflow-y: auto; scrollbar-gutter: auto; background: var(--d17b-page); }
@@ -931,11 +965,11 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17b-launch-page .emp-content-card [class*="bg-green-50"] { border-color: var(--d17b-border) !important; background: #f7f9fa !important; color: var(--d17b-text) !important; }
 .d17b-launch-page .emp-content-card [class*="text-purple"],
 .d17b-launch-page .emp-content-card [class*="text-blue"],
-.d17b-launch-page .emp-content-card [class*="text-emerald"] { color: #288b44 !important; }
+.d17b-launch-page .emp-content-card [class*="text-emerald"] { color: #111827 !important; }
 .d17b-launch-page .d17b-form-card > div { padding: 8px 10px !important; }
 .d17d-launch-typebar { min-height: 34px; gap: 5px !important; padding-bottom: 5px !important; margin-bottom: 6px !important; }
 .d17d-launch-typebar [role="combobox"] { height: 28px !important; min-height: 28px !important; border-radius: var(--d17b-radius-control) !important; font-size: 11px !important; }
-.d17d-launch-typebar button { min-height: 28px; height: 28px; }
+.d17d-launch-typebar button:not([role="combobox"]) { min-height: 25px; height: 25px; }
 .d17d-launch-typebar .d17d-icon-action { width: 28px !important; min-width: 28px !important; padding: 0 !important; border-radius: 50% !important; }
 .d17d-launch-typebar button svg { width: 14px !important; height: 14px !important; }
 .d17d-launch-typebar > span { min-height: 20px; display: inline-flex; align-items: center; padding-block: 0 !important; }
@@ -964,8 +998,8 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17d-field--animal input,
 .d17d-field--weight input { font-size: 11px !important; }
 .d17d-launch-actions { display: flex; align-items: flex-end; width: 100%; min-width: 0; gap: 4px; }
-.d17d-launch-actions > button { flex: 1 1 0; min-width: 0 !important; height: 28px !important; min-height: 28px !important; }
-.d17d-launch-save { align-self: end; width: 100%; height: 28px !important; min-height: 28px !important; min-width: 0 !important; border-radius: 999px !important; }
+.d17d-launch-actions > button { flex: 0 0 auto; min-width: 0 !important; height: 25px !important; min-height: 25px !important; padding: 0 10px !important; border-radius: 999px !important; font-size: 12px !important; }
+.d17d-launch-save { align-self: end; width: auto; height: 25px !important; min-height: 25px !important; min-width: 0 !important; padding: 0 10px !important; border-radius: 999px !important; }
 .d17d-launch-cancel { border-radius: 999px !important; }
 .d17d-apartation-fields { display: grid !important; grid-template-columns: repeat(9, minmax(0, 1fr)); align-items: end; gap: 6px !important; margin-top: 6px !important; padding-top: 6px !important; }
 .d17d-apartation-fields > * { width: auto !important; min-width: 0; grid-column: auto !important; }
@@ -977,14 +1011,14 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17d-auto-lot-feedback svg { width: 14px !important; height: 14px !important; }
 .d17d-summary-toolbar { flex: 0 0 auto; min-height: 34px; margin: 0 !important; }
 .d17d-summary-switcher { gap: 2px !important; padding: 3px !important; border-color: var(--d17b-border) !important; border-radius: 999px !important; box-shadow: none !important; }
-.d17d-summary-switcher button { min-width: 72px; height: 28px; padding: 0 12px; border: 0; border-radius: 999px !important; font-size: 11px; font-weight: 650; }
+.d17d-summary-switcher button { min-width: 0; height: 25px; padding: 0 10px; border: 0; border-radius: 999px !important; font-size: 12px; font-weight: 650; }
 .d17d-launch-workspace { display: grid !important; grid-template-columns: minmax(0, 3fr) minmax(300px, 1fr); align-items: stretch; min-height: 360px; gap: 6px; }
 .d17d-launch-table-column { display: flex; flex-direction: column; min-width: 0; gap: 0; }
 .d17d-launch-table-card { flex: 1; min-width: 0; overflow: hidden; }
 .d17d-launch-table-card > .d17d-launch-table-body { min-height: 0; padding: 0 !important; }
 .d17d-launch-table-card .emp-header-ctrl { width: 180px !important; height: 28px !important; min-height: 28px !important; padding-left: 28px !important; font-size: 11px !important; }
-.d17d-launch-table-card button { min-height: 28px; height: 28px; }
-.d17b-launch-page .d17d-icon-action { display: inline-grid !important; place-items: center; flex: 0 0 auto; width: 28px !important; min-width: 28px !important; height: 28px !important; min-height: 28px !important; padding: 0 !important; border-radius: 50% !important; }
+.d17d-launch-table-card button { min-height: 25px; height: 25px; }
+.d17b-launch-page .d17d-icon-action { display: inline-grid !important; place-items: center; flex: 0 0 auto; width: 25px !important; min-width: 25px !important; height: 25px !important; min-height: 25px !important; padding: 0 !important; border-radius: 50% !important; }
 .d17b-launch-page .d17d-icon-action svg { width: 14px !important; height: 14px !important; }
 .d17d-launch-table-card .emp-table-shell { width: 100%; max-width: 100%; max-height: 560px !important; overflow: auto !important; scrollbar-gutter: stable; }
 .d17d-launch-table-card .emp-table-pro { width: 100%; min-width: 980px; }
@@ -1049,9 +1083,9 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17b-dialog-content > [class*="DialogHeader"],
 .d17b-dialog-content > div:first-child:has(h2) { flex: 0 0 auto; min-height: 46px; padding: 13px 46px 10px 14px; border-bottom: 1px solid var(--d17b-border); }
 .d17b-dialog-content h2 { color: var(--d17b-text) !important; font-size: 14px !important; font-weight: 700 !important; line-height: 20px !important; }
-.d17b-dialog-content > .d17b-dialog-close { top: 9px !important; right: 9px !important; display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 8px !important; color: var(--d17b-icon); opacity: 1 !important; }
+.d17b-dialog-content > .d17b-dialog-close { top: 9px !important; right: 9px !important; display: inline-flex; align-items: center; justify-content: center; width: 25px; height: 25px; border-radius: 50% !important; color: var(--d17b-icon); opacity: 1 !important; }
 .d17b-dialog-content > .d17b-dialog-close:hover { background: var(--d17b-fill); color: var(--d17b-text); }
-.d17b-dialog-content > .d17b-dialog-close svg { width: 16px; height: 16px; }
+.d17b-dialog-content > .d17b-dialog-close svg { width: 14px; height: 14px; }
 .d17b-dialog-content > div:not(:first-child):not(.d17b-dialog-close) { min-width: 0; }
 .d17b-dialog-content table { font-size: 11px; }
 .d17b-dialog-content table thead { position: sticky; top: 0; z-index: 2; background: #f8fafb; }
@@ -1068,7 +1102,7 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
 .d17d-management-dialog__tabs { flex: 0 0 auto; min-height: 40px; padding: 5px 10px !important; gap: 4px !important; border: 1px solid #e5e9ee !important; border-bottom: 0 !important; border-radius: 12px 12px 0 0; background: #fff; }
 .d17d-management-dialog__tabs button { min-width: 80px; height: 28px; min-height: 28px; padding: 0 11px; border: 0 !important; border-radius: 999px !important; background: #f1f3f4; color: #46566c; box-shadow: none; }
 .d17d-management-dialog__tabs button.bg-primary,
-.d17d-management-dialog__tabs button[data-state="active"] { background: var(--d17b-accent) !important; color: #fff !important; }
+.d17d-management-dialog__tabs button[data-state="active"] { background: var(--d17b-accent) !important; color: #111827 !important; }
 .d17d-management-dialog__body { min-height: 0; padding: 8px 10px; border: 1px solid #e5e9ee; border-top: 1px solid #edf0f3; background: #fff; }
 .d17d-management-dialog__body > [class*="space-y"] { min-height: 100%; }
 .d17d-management-dialog__body [class*="bg-slate-50"],
@@ -1114,10 +1148,7 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
   .d17b-page-actionbar > div:first-child { min-width: 118px; }
   .d17b-page-actionbar h1 { font-size: 13px !important; }
   .d17b-page-actionbar p { display: none; }
-  .d17b-page-actionbar button,
-  .d17b-page-actionbar a > button,
-  .d17b-page-actionbar label button { height: 36px !important; min-height: 36px !important; min-width: 36px; padding: 0 10px !important; }
-  .d17b-actionbar-actions { max-width: 62vw; }
+  .d17b-actionbar-actions { max-width: 100%; flex-wrap: wrap; overflow: visible; }
   .d17c-table-toolbar { min-height: 86px; padding: 4px !important; }
   .d17c-table-toolbar__primary { flex: 0 0 auto; }
   .d17c-table-toolbar__actions { gap: 3px; }
@@ -1171,7 +1202,7 @@ html body .d17b-shell .d17b-page .emp-toolbar-btn-save {
   .d17b-mobile-bottom-nav { position: fixed; inset: auto 0 0 0; z-index: 80; display: grid; grid-template-columns: repeat(3, 1fr); height: 56px; padding: 3px max(6px, env(safe-area-inset-right)) max(3px, env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-left)); border-top: 1px solid var(--d17b-border); background: rgba(255,255,255,.98); box-shadow: 0 -4px 14px rgba(15,23,42,.06); }
   .d17b-mobile-bottom-nav a { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border-radius: 9px; color: var(--d17b-text-2); font-size: 9px; font-weight: 600; }
   .d17b-mobile-bottom-nav a svg { width: 18px; height: 18px; }
-  .d17b-mobile-bottom-nav a.is-active { color: #118b32; background: var(--d17b-accent-soft); }
+  .d17b-mobile-bottom-nav a.is-active { color: #111827; background: var(--d17b-accent-soft); }
   .d17b-mobile-drawer-layer { position: fixed; inset: 0; z-index: 100; display: block; }
   .d17b-mobile-drawer-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: rgba(15,23,42,.42); }
   .d17b-mobile-drawer { position: absolute; inset: 0 auto 0 0; width: min(84vw, 300px); background: #fff; box-shadow: 12px 0 36px rgba(15,23,42,.2); }
@@ -1278,14 +1309,15 @@ html.dark .d17c-column-dialog .d17c-column-row.is-selected { background: rgba(64
 
 html.dark .d17b-filter-backdrop { background: rgba(0, 0, 0, .52); }
 
-/* A barra de tabela usa pílulas/círculos mesmo sob as regras legadas da actionbar. */
-.d17b-shell .d17b-page .d17b-page-actionbar .d17c-round-action,
-.d17b-shell .d17b-page .d17b-page-actionbar .d17c-new-button,
-.d17b-shell .d17b-page .d17b-page-actionbar .d17c-launch-button,
-.d17b-shell .d17b-page .d17b-page-actionbar .d17c-filter-pill,
-.d17b-shell .d17b-page .d17b-page-actionbar .d17c-quick-search > input,
-.d17b-shell .d17b-page .d17c-table-footer__pagination [role="combobox"] {
+/* Só a ação principal da barra fica em pílula. Filtro, pesquisa e ícone não. */
+.d17b-shell .d17b-page .d17b-page-actionbar :is(.d17c-new-button, .d17c-launch-button) {
   border-radius: 999px !important;
+}
+.d17b-shell .d17b-page .d17b-page-actionbar .d17c-round-action {
+  border-radius: 50% !important;
+}
+.d17b-shell .d17b-page .d17c-table-footer__pagination [role="combobox"] {
+  border-radius: 8px !important;
 }
 
 /* Contratos finais da faixa e da tabela — preservados contra os estilos globais do shell. */
@@ -1299,13 +1331,13 @@ html body .mak-column-filter .mak-column-filter__date.is-iconless > input {
 html body .d17b-shell.cadastro-emp-scope .d17b-page .d17b-page-actionbar .mg-filter-pills-rail__toggle,
 html body .d17b-shell.cadastro-emp-scope .d17b-page .d17b-page-actionbar .mg-filter-pills-rail__nav,
 html body .d17b-shell.cadastro-emp-scope .d17b-page .d17b-page-actionbar .mg-filter-pills-rail__config {
-  width: 28px !important;
-  min-width: 28px !important;
-  max-width: 28px !important;
-  height: 28px !important;
-  min-height: 28px !important;
-  max-height: 28px !important;
-  flex: 0 0 28px !important;
+  width: 25px !important;
+  min-width: 25px !important;
+  max-width: 25px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  flex: 0 0 25px !important;
   padding: 0 !important;
   border-radius: 50% !important;
   aspect-ratio: 1 !important;
@@ -1313,12 +1345,13 @@ html body .d17b-shell.cadastro-emp-scope .d17b-page .d17b-page-actionbar .mg-fil
 
 .d17b-shell .d17b-page .d17b-page-actionbar .d17c-launch-button {
   width: auto !important;
-  min-width: 104px !important;
-  height: 28px !important;
-  padding: 0 14px !important;
+  min-width: 0 !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  padding: 0 10px !important;
   border-radius: 999px !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
 }
 
 .mak-table-select-check {
@@ -1351,11 +1384,10 @@ html.dark .mak-table-select-check.is-checked,
 html.dark .mak-table-select-check.is-indeterminate { border-color: #40de63; background: #40de63; }
 
 /* Contrato dimensional do lanÃ§amento: os controles seguem os 28 px do Cadastro de Empresas. */
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page .d17d-launch-typebar :is([role="combobox"], button),
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page .d17d-launch-typebar [role="combobox"],
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page .d17d-launch-fields :is(input, [role="combobox"], .mak-date-control),
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page .d17d-detail-panel :is(input:not([type="checkbox"]), [role="combobox"], .mak-date-control),
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page .d17d-apartation-fields :is(input:not([type="checkbox"]), [role="combobox"], .mak-date-control),
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page .d17d-launch-save {
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page .d17d-apartation-fields :is(input:not([type="checkbox"]), [role="combobox"], .mak-date-control) {
   height: 28px !important;
   min-height: 28px !important;
   max-height: 28px !important;
@@ -1397,15 +1429,18 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page .d17d-apartation-fiel
 }
 
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page .d17d-launch-save {
-  width: 100% !important;
+  width: auto !important;
   min-width: 0 !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
   padding: 0 10px !important;
   border: 0 !important;
   border-radius: 999px !important;
   background: var(--d17b-accent) !important;
-  color: #fff !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
+  color: #111827 !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
   box-shadow: none !important;
 }
 
@@ -1435,7 +1470,7 @@ html body .d17d-management-dialog .d17d-management-dialog__body :is(input:not([t
 html body .d17d-management-dialog .d17d-management-dialog__body .mak-date-control > input { height: 26px !important; min-height: 26px !important; }
 html body .d17d-management-dialog .d17d-management-dialog__body .mak-date-control > button { width: 28px !important; min-width: 28px !important; height: 26px !important; min-height: 26px !important; border-radius: 0 var(--d17b-radius-control, 8px) var(--d17b-radius-control, 8px) 0 !important; }
 html body .d17d-management-dialog .d17d-management-dialog__body button { height: 28px; min-height: 28px; border-radius: 999px !important; font-size: 11px !important; }
-html body .d17d-management-dialog .d17d-management-dialog__body button[class*="bg-emerald"] { border-color: transparent !important; background: var(--d17b-accent) !important; color: #fff !important; }
+html body .d17d-management-dialog .d17d-management-dialog__body button[class*="bg-emerald"] { border-color: transparent !important; background: var(--d17b-accent) !important; color: #111827 !important; }
 .d17d-management-dialog__body :is(.p-4, .p-3) { padding: 8px !important; }
 .d17d-management-dialog__body .mb-4 { margin-bottom: 8px !important; }
 .d17d-management-dialog__body label { font-size: 11px !important; line-height: 14px; }
@@ -1473,7 +1508,7 @@ html.dark body .d17d-management-dialog .d17d-management-dialog__tabs button {
 html.dark body .d17d-management-dialog .d17d-management-dialog__tabs button.bg-primary {
   border-color: transparent !important;
   background: var(--d17b-accent) !important;
-  color: #fff !important;
+  color: #111827 !important;
 }
 
 /* D.17D.2R6 — seleção e ações seguem o comportamento do Cadastro de Empresas. */
@@ -1736,14 +1771,14 @@ html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-sco
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-typebar > span[class*="bg-"] {
   border: 1px solid #30363d;
   background: #1c2128 !important;
-  color: #7ee787 !important;
+  color: #e6edf3 !important;
 }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-typebar > span[class*="text-blue"] { color: #79c0ff !important; }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-typebar > span[class*="text-red"] { color: #ff7b72 !important; }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-summary-switcher .emp-toolbar-btn-save {
   border-color: var(--d17b-accent) !important;
   background: var(--d17b-accent) !important;
-  color: #fff !important;
+  color: #111827 !important;
 }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17b-page-actionbar button:not(.emp-toolbar-btn-save) {
   border-color: #484f58 !important;
@@ -2084,13 +2119,13 @@ html body .d17b-standard-dialog > .d17b-dialog-close {
   right: 10px !important;
   display: inline-grid !important;
   place-items: center;
-  width: 28px !important;
-  min-width: 28px !important;
-  height: 28px !important;
-  min-height: 28px !important;
+  width: 25px !important;
+  min-width: 25px !important;
+  height: 25px !important;
+  min-height: 25px !important;
   padding: 0 !important;
   border: 0 !important;
-  border-radius: 999px !important;
+  border-radius: 50% !important;
   background: #eef1f4 !important;
   color: #5b6f86 !important;
   box-shadow: none !important;
@@ -2327,7 +2362,7 @@ html body .d17d-selected-animal span { color: #66778b; font-size: 9px; }
 html body .d17d-summary-group-row td { background: #fafbfc; }
 html body .d17d-summary-group-row td:first-child { padding-left: 16px !important; }
 html.dark body .d17d-selected-animal { border-color: rgba(50, 211, 108, .3); background: rgba(39, 196, 91, .08); }
-html.dark body .d17d-selected-animal strong { color: #58d985; }
+html.dark body .d17d-selected-animal strong { color: #e6edf3; }
 html.dark body .d17d-selected-animal span { color: #9aa7b6; }
 html.dark body .d17d-summary-group-row td { background: #151a20; }
 html body .d17b-page input:not([type="checkbox"]):not([type="radio"]):focus,
@@ -2496,7 +2531,7 @@ html body .d17b-dialog-content :is(.emp-toolbar-btn-save, .d17b-primary-button, 
 html body [role="dialog"] :is(.emp-toolbar-btn-save, .d17b-primary-button, button.bg-primary, button[class*="bg-emerald"]):hover:not(:disabled) {
   border-color: var(--d17b-accent-hover, #27c45b) !important;
   background: var(--d17b-accent-hover, #27c45b) !important;
-  color: #fff !important;
+  color: #111827 !important;
 }
 
 html body :is(.d17b-dialog-content, .d17b-standard-dialog, [role="dialog"])
@@ -2560,7 +2595,7 @@ html body .cadastro-emp-scope button.emp-toolbar-btn.emp-toolbar-btn-save:hover:
 html body .cadastro-emp-scope button.emp-toolbar-btn.emp-toolbar-btn-new:hover:not(:disabled) {
   border-color: var(--d17b-accent-hover, #36c956) !important;
   background: var(--d17b-accent-hover, #36c956) !important;
-  color: #fff !important;
+  color: #111827 !important;
   box-shadow: none !important;
 }
 
@@ -2792,7 +2827,7 @@ html.dark body .d17d-launch-message--erro { border-color: rgba(248, 81, 73, .25)
 html.dark body .d17d-launch-message--alerta { border-color: rgba(210, 153, 34, .28); background: rgba(210, 153, 34, .08); color: #e3b341; }
 html.dark body .d17d-launch-message__actions button { background: #21262d; }
 html.dark body .d17d-launch-message__actions button:hover { background: #30363d; }
-html.dark body .d17d-weight-gain strong { color: #58d985; }
+html.dark body .d17d-weight-gain strong { color: #e6edf3; }
 
 /* R22 — resumo único do animal: identidade, última pesagem e evolução ficam
    dentro do mesmo painel, sem repetir a mensagem informativa acima. */
@@ -2844,8 +2879,8 @@ html body .d17d-animal-performance__gain {
   background: linear-gradient(90deg, rgba(64, 222, 99, .035), rgba(64, 222, 99, .075));
 }
 html body .d17d-animal-performance__gain .d17d-animal-performance__title,
-html body .d17d-animal-performance__metric { color: var(--d17b-accent-hover, #36c956); font-weight: 750; }
-html body .d17d-animal-performance__metric strong { color: #15913a; font-size: 11px; }
+html body .d17d-animal-performance__metric { color: #111827; font-weight: 750; }
+html body .d17d-animal-performance__metric strong { color: #111827; font-size: 11px; }
 
 html.dark body .d17d-animal-performance {
   border-color: rgba(64, 222, 99, .26);
@@ -2853,11 +2888,11 @@ html.dark body .d17d-animal-performance {
 }
 html.dark body .d17d-animal-performance__group { border-color: rgba(64, 222, 99, .16); color: #9aa7b6; }
 html.dark body .d17d-animal-performance__group strong { color: #e6edf3; }
-html.dark body .d17d-animal-performance__title { border-color: rgba(64, 222, 99, .20); color: #58d985; }
+html.dark body .d17d-animal-performance__title { border-color: rgba(64, 222, 99, .20); color: #e6edf3; }
 html.dark body .d17d-animal-performance__gain { background: rgba(64, 222, 99, .055); }
 html.dark body .d17d-animal-performance__gain .d17d-animal-performance__title,
 html.dark body .d17d-animal-performance__metric,
-html.dark body .d17d-animal-performance__metric strong { color: #58d985; }
+html.dark body .d17d-animal-performance__metric strong { color: #e6edf3; }
 
 @media (max-width: 1280px) {
   html body .d17d-animal-performance { grid-template-columns: minmax(0, 1.35fr) minmax(0, .75fr); }
@@ -3190,51 +3225,103 @@ html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-sco
   color: #fbbf24 !important;
 }
 
-/* R26 — densidade do seletor de animal e legibilidade dos resumos laterais. */
-html body .d17d-animal-choice-dialog :is(h2, [data-dialog-title]) {
-  font-size: 13px !important;
-  line-height: 18px !important;
-}
-
-html body .d17d-animal-choice-dialog :is(p, [data-dialog-description]) {
-  font-size: 11px !important;
-  line-height: 15px !important;
-}
-
-html body .d17d-animal-choice-dialog table :is(th, td),
-html body .d17d-animal-choice-dialog table :is(th, td) :is(span, strong, small) {
-  height: 28px !important;
-  padding-top: 3px !important;
-  padding-bottom: 3px !important;
-  font-size: 11px !important;
-  line-height: 14px !important;
-}
-
-html body .d17d-animal-choice-dialog table th,
-html body .d17d-animal-choice-dialog table th * {
-  text-transform: none !important;
-  letter-spacing: normal !important;
-}
-
-html body .d17d-animal-choice-dialog table :is(th, td) :is(span, strong, small, div) {
+/* Seletor de marca: caixa bem estreita (vence o standard-dialog 720px); Marca+nome destacados. */
+html body .d17b-dialog-content.d17b-standard-dialog.d17d-animal-choice-dialog,
+html body [role="dialog"].d17b-dialog-content.d17d-animal-choice-dialog {
+  width: min(196px, calc(100vw - 32px)) !important;
+  min-width: 0 !important;
+  max-width: 196px !important;
   height: auto !important;
   min-height: 0 !important;
-  padding: 0 !important;
+  max-height: min(80vh, 480px) !important;
+  padding: 12px 10px 10px !important;
+  gap: 8px !important;
 }
-
-html body .d17d-animal-choice-dialog .d17d-rule-summary {
-  gap: 0 !important;
+html body .d17d-animal-choice-dialog :is(h2, [data-dialog-title]) {
+  font-size: 13px !important;
+  line-height: 17px !important;
+  font-weight: 700 !important;
 }
-
-html body .d17d-animal-choice-dialog .d17d-animal-choice-dialog__select {
-  width: auto !important;
-  min-width: 72px !important;
-  height: 26px !important;
-  min-height: 26px !important;
-  padding: 0 10px !important;
-  border-radius: 999px !important;
+html body .d17d-animal-choice-dialog :is(p, [data-dialog-description]) {
+  font-size: 10px !important;
+  line-height: 13px !important;
+}
+html body .d17d-animal-choice-dialog__body {
+  padding-top: 4px !important;
+  padding-bottom: 4px !important;
+}
+html body .d17d-animal-choice-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+html body .d17d-animal-choice-option {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  min-height: 0;
+  height: auto !important;
+  padding: 6px 7px !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: #111827 !important;
+  text-align: left;
+  box-shadow: none !important;
+  cursor: pointer;
+}
+html body .d17d-animal-choice-option:hover,
+html body .d17d-animal-choice-option:focus-visible {
+  border-color: rgba(64, 222, 99, .55) !important;
+  background: #f8fffa !important;
+  outline: none;
+}
+html body .d17d-animal-choice-option__key {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: #f1f3f4;
+  color: #111827;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}
+html body .d17d-animal-choice-option__content {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 1px;
+}
+html body .d17d-animal-choice-option__brand {
+  display: block;
+  overflow: hidden;
+  font-size: 17px !important;
+  line-height: 20px !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+html body .d17d-animal-choice-option__brand-label {
+  color: #6b7280 !important;
+  font-size: 17px !important;
+  font-weight: 500 !important;
+}
+html body .d17d-animal-choice-option__brand strong {
+  color: #111827 !important;
+  font-size: 17px !important;
+  font-weight: 800 !important;
+}
+html body .d17d-animal-choice-option__content > span:last-child {
+  overflow: hidden;
+  color: #9ca3af !important;
   font-size: 11px !important;
-  line-height: 14px !important;
+  font-weight: 500 !important;
+  line-height: 13px !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-summary-panel .d17d-summary-panel__header :is(h2, h3, div) {
@@ -3315,10 +3402,10 @@ html body .d17b-standard-dialog > .d17b-dialog-close {
 html body .d17c-column-dialog .d17c-column-dialog__reset {
   top: 1px !important;
   right: 44px !important;
-  width: 28px !important;
-  min-width: 28px !important;
-  height: 28px !important;
-  min-height: 28px !important;
+  width: 25px !important;
+  min-width: 25px !important;
+  height: 25px !important;
+  min-height: 25px !important;
 }
 
 html body .d17b-standard-dialog :is(
@@ -3328,14 +3415,15 @@ html body .d17b-standard-dialog :is(
 ) button:not([aria-label]) {
   width: auto !important;
   min-width: 78px !important;
-  height: 28px !important;
-  min-height: 28px !important;
-  max-height: 28px !important;
-  padding: 0 12px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  padding: 0 10px !important;
   border-radius: 999px !important;
-  font-size: 11px !important;
-  line-height: 14px !important;
-  font-weight: 700 !important;
+  font-family: "DM Sans", sans-serif;
+  font-size: 12px !important;
+  line-height: 1 !important;
+  font-weight: 600 !important;
 }
 
 @media (max-width: 1100px) {
@@ -3491,18 +3579,18 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
 
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-actions > .d17d-launch-save {
-  border: 1px solid #40de63 !important;
+  border: 1px solid transparent !important;
   border-radius: 999px !important;
-  background: #40de63 !important;
-  color: #fff !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
   box-shadow: none !important;
 }
 
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-actions > .d17d-launch-save:hover:not(:disabled) {
-  border-color: #36c956 !important;
-  background: #36c956 !important;
-  color: #fff !important;
+  border-color: transparent !important;
+  background: #e5e7eb !important;
+  color: #111827 !important;
 }
 
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
@@ -3561,8 +3649,9 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d
   background: #fff !important;
   color: #5b6b80 !important;
 }
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-typebar .d17d-icon-action svg[class*="text-emerald"] {
-  color: #047857 !important;
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-typebar .d17d-icon-action :is(svg, svg[class*="text-"]) {
+  color: #111827 !important;
+  stroke: #111827 !important;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-table-summary .d17d-icon-action:disabled {
   color: #94a3b8 !important;
@@ -3635,7 +3724,7 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td.text-right { text-align: right !important; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td.text-center { text-align: center !important; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td.font-mono { font-family: ui-monospace, Menlo, monospace !important; }
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td.text-emerald-600 { color: #059669 !important; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td.text-emerald-600 { color: #111827 !important; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td.text-red-600 { color: #dc2626 !important; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td .d17d-icon-action {
   width: 24px !important;
@@ -3743,7 +3832,7 @@ html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-sco
 }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro tbody tr:nth-child(even) > td { background: #1c2128; }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td .d17d-icon-action { color: #c3cbd4 !important; }
-html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td.text-emerald-600 { color: #7ee787 !important; }
+html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td.text-emerald-600 { color: #e6edf3 !important; }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-table-card .emp-table-pro td.text-red-600 { color: #ff7b72 !important; }
 
 /* D.17D.2R30 — revisão visual oficial do arquivo
@@ -3812,18 +3901,25 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  min-width: 34px;
+  width: 28px;
+  min-width: 28px;
   height: 26px;
   min-height: 26px;
   padding: 0;
-  gap: 4px;
+  gap: 3px;
   border: 0;
   background: transparent;
-  color: #60758d;
+  color: #111827;
 }
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture:hover { background: rgba(64, 222, 99, .08); color: #177a3e; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture:hover {
+  background: transparent;
+  color: #111827;
+}
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture > span { width: 6px; height: 6px; border-radius: 50%; background: #94a3b8; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-online > span { background: #22c55e; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active > span { background: #22c55e; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-online.is-accent-blue > span,
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active.is-accent-blue > span { background: #3b82f6; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture > svg { width: 14px; height: 14px; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-save {
   display: inline-flex !important;
@@ -3874,17 +3970,60 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d
   flex: 0 0 auto;
   padding: 0 !important;
   border: 0 !important;
-  color: #177a3e !important;
+  color: #111827 !important; /* mesma cor do texto Ganho */
   font-size: 9px !important;
   font-weight: 750 !important;
   letter-spacing: .06em;
   text-transform: uppercase;
 }
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__group > span:not(.d17d-animal-performance__title) { color: #26364b !important; font-size: 11px !important; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__animal .d17d-animal-performance__title {
+  color: #111827 !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__animal {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  gap: 6px !important;
+  overflow: visible !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__pair {
+  display: inline-flex !important;
+  align-items: baseline !important;
+  flex: 0 0 auto !important;
+  gap: 5px !important;
+  min-width: 0 !important;
+  overflow: visible !important;
+  color: inherit !important;
+  font-size: inherit !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__pair .d17d-animal-performance__title {
+  flex: 0 0 auto !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__value {
+  flex: 0 0 auto !important;
+  color: #111827 !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+  font-variant-numeric: tabular-nums;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__sep,
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__rest {
+  flex: 0 1 auto !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+  color: #66778b !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__group > span:not(.d17d-animal-performance__title):not(.d17d-animal-performance__sep):not(.d17d-animal-performance__rest):not(.d17d-animal-performance__pair) { color: #26364b !important; font-size: 11px !important; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__group strong { color: #111827 !important; font-size: 12px !important; font-weight: 800 !important; font-variant-numeric: tabular-nums; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__gain { gap: 10px !important; background: rgba(39, 196, 91, .055) !important; }
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__metric { color: #36c956 !important; font-size: 10px !important; font-weight: 750 !important; }
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__metric strong { color: #15913a !important; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__metric { color: #111827 !important; font-size: 10px !important; font-weight: 750 !important; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__metric strong { color: #111827 !important; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__trend {
   display: flex;
   flex: 1 1 180px;
@@ -3902,7 +4041,7 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__trend svg { flex: 0 0 96px; width: 96px; height: 20px; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__trend polyline { fill: none; stroke: #40de63; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__trend circle { fill: #40de63; }
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__trend strong { color: #15913a; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__trend strong { color: #111827; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__warning {
   display: flex;
   flex: 1 1 250px;
@@ -4041,9 +4180,9 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d
   flex-wrap: wrap;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__group > span { overflow-wrap: anywhere; white-space: normal; }
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__group > .d17d-animal-performance__metric { color: #36c956 !important; font-size: 10px !important; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__group > .d17d-animal-performance__metric { color: #111827 !important; font-size: 10px !important; }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-apartation-fields [role="combobox"] { background: #0d1117 !important; border-color: rgba(64, 222, 99, .35) !important; }
-html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope :is(.d17d-animal-performance__title, .d17d-animal-performance__metric strong) { color: #65de88 !important; }
+html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope :is(.d17d-animal-performance__title, .d17d-animal-performance__metric strong) { color: #e6edf3 !important; }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-animal-performance__warning { color: #f5bf6b; }
 
 @media (max-width: 900px) {
@@ -4119,18 +4258,27 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   min-height: 0 !important;
   padding: 0 !important;
   border: 0 !important;
-  color: #177a3e !important;
+  color: #111827 !important;
   font-size: 9px !important;
   font-weight: 750 !important;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
-  .d17d-animal-performance .d17d-animal-performance__group > span:not(.d17d-animal-performance__title) {
+  .d17d-animal-performance__animal .d17d-animal-performance__title {
+  color: #111827 !important;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+  .d17d-animal-performance .d17d-animal-performance__group > span:not(.d17d-animal-performance__title):not(.d17d-animal-performance__pair) {
   min-width: 0;
   overflow: hidden;
   color: #26364b !important;
   font-size: 11px !important;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+  .d17d-animal-performance .d17d-animal-performance__pair {
+  overflow: visible !important;
+  text-overflow: clip !important;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-animal-performance .d17d-animal-performance__group strong {
@@ -4140,12 +4288,12 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-animal-performance .d17d-animal-performance__metric {
-  color: #36c956 !important;
+  color: #111827 !important;
   font-size: 10px !important;
   font-weight: 750 !important;
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
-  .d17d-animal-performance .d17d-animal-performance__metric strong { color: #15913a !important; }
+  .d17d-animal-performance .d17d-animal-performance__metric strong { color: #111827 !important; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-animal-performance .d17d-animal-performance__trend {
   flex: 1 1 70px !important;
@@ -4156,7 +4304,7 @@ html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-sco
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-animal-performance .d17d-animal-performance__metric,
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
-  .d17d-animal-performance .d17d-animal-performance__metric strong { color: #65de88 !important; }
+  .d17d-animal-performance .d17d-animal-performance__metric strong { color: #e6edf3 !important; }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-animal-performance .d17d-animal-performance__group strong { color: #e6edf3 !important; }
 
@@ -4168,7 +4316,7 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
 }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-animal-performance .d17d-animal-performance__group > .d17d-animal-performance__metric {
-  color: #36c956 !important;
+  color: #111827 !important;
   font-size: 10px !important;
   font-weight: 750 !important;
 }
@@ -4221,15 +4369,15 @@ html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-animal-performance .d17d-animal-performance__group > .d17d-animal-performance__title,
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
-  .d17d-animal-performance .d17d-animal-performance__group > .d17d-animal-performance__metric { color: #65de88 !important; }
+  .d17d-animal-performance .d17d-animal-performance__group > .d17d-animal-performance__metric { color: #e6edf3 !important; }
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-animal-performance .d17d-animal-performance__group > span.d17d-animal-performance__metric:not(.d17d-animal-performance__title) {
-  color: #36c956 !important;
+  color: #111827 !important;
   font-size: 10px !important;
   font-weight: 750 !important;
 }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
-  .d17d-animal-performance .d17d-animal-performance__group > span.d17d-animal-performance__metric:not(.d17d-animal-performance__title) { color: #65de88 !important; }
+  .d17d-animal-performance .d17d-animal-performance__group > span.d17d-animal-performance__metric:not(.d17d-animal-performance__title) { color: #e6edf3 !important; }
 
 /* R32 (fechamento) — vence também os contratos globais e escuros de input. */
 html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
@@ -4421,15 +4569,15 @@ html body .d17b-shell .d17b-list-page--mother .filter-panel__body .mak-date-cont
 }
 html body .d17b-shell .d17b-list-page--mother .filter-panel__body .mak-date-control > input { height: 36px; min-height: 36px; font-size: 13px; }
 html body .d17b-shell .d17b-list-page--mother .filter-panel__body .mak-date-control > button { height: 36px; min-height: 36px; }
-html body .d17b-shell .d17b-list-page--mother .filter-panel__footer .tb-btn { min-width: 78px; height: 28px; border-radius: 999px; }
+html body .d17b-shell .d17b-list-page--mother .filter-panel__footer .tb-btn { min-width: 0; height: 25px; padding: 0 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
 html body .d17b-shell .d17b-list-page--mother .filter-panel__footer .tb-btn-blue {
-  background: var(--d17b-accent, #40de63) !important;
-  border-color: var(--d17b-accent, #40de63) !important;
-  color: #fff !important;
+  background: #f1f3f4 !important;
+  border-color: transparent !important;
+  color: #111827 !important;
 }
 html body .d17b-shell .d17b-list-page--mother .filter-panel__footer .tb-btn-blue:hover:not(:disabled) {
-  background: var(--d17b-accent-hover, #36c956) !important;
-  border-color: var(--d17b-accent-hover, #36c956) !important;
+  background: #e5e7eb !important;
+  border-color: transparent !important;
 }
 
 html.dark body .d17b-shell .d17b-list-page--mother > :is(.mak-mother-page__toolbar, .mak-mother-page__panel-strip),
@@ -4442,14 +4590,14 @@ html.dark body .d17b-shell .d17b-list-page--mother .filter-panel__footer { backg
 /* R34 (continuação) — pesquisa expansível igual ao modelo: a barra usa 28 px e o
    campo dentro da pílula não herda fundo, altura, raio nem anel de foco dos
    inputs globais da página. */
-html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-action-bar { --mg-btn-icon-size: 28px; --mg-btn-height: 28px; }
-html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-desktop-search { width: 28px; height: 28px; }
-html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill { height: 28px !important; min-height: 28px !important; padding: 0 10px !important; border-radius: 999px !important; background: #f1f3f4 !important; border: 1px solid transparent !important; box-shadow: none !important; }
+html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-action-bar { --mg-btn-icon-size: 25px; --mg-btn-height: 25px; --mg-filter-pill-height: 40px; }
+html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-desktop-search { width: 25px; height: 25px; }
+html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill { height: 40px !important; min-height: 40px !important; padding: 0 12px !important; border-radius: 8px !important; background: #f1f3f4 !important; border: 1px solid transparent !important; box-shadow: none !important; }
 html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill:focus-within { border-color: rgba(64, 222, 99, .35) !important; box-shadow: 0 0 0 2px rgba(39, 196, 91, .10) !important; }
 html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill input:not([type="checkbox"]):not([type="radio"]),
 html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill input:not([type="checkbox"]):not([type="radio"]):focus,
-html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill input:not([type="checkbox"]):not([type="radio"]):focus-visible { height: 26px !important; min-height: 0 !important; max-height: 26px !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; outline: 0 !important; font-size: 12px !important; line-height: 26px !important; color: #26364b !important; }
-html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill :is(.mg-search-pill-toggle, .mg-search-pill-clear) { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #5b6b80; box-shadow: none; }
+html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill input:not([type="checkbox"]):not([type="radio"]):focus-visible { height: 28px !important; min-height: 0 !important; max-height: 28px !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: transparent !important; box-shadow: none !important; outline: 0 !important; font-size: 13px !important; line-height: 28px !important; color: #26364b !important; }
+html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill :is(.mg-search-pill-toggle, .mg-search-pill-clear) { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; min-width: 0; min-height: 0; padding: 0; border: 0; border-radius: 999px; background: transparent; color: #111827; box-shadow: none; }
 html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill .mg-search-pill-icon { width: 14px; height: 14px; }
 html body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-desktop-search.is-open .mg-desktop-search__trigger { opacity: 0 !important; pointer-events: none !important; }
 html.dark body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search-pill { background: #21262d !important; }
@@ -4478,51 +4626,224 @@ html.dark body .d17b-shell.cadastro-emp-scope .d17b-list-page--mother .mg-search
   border-bottom-color: #7a5a10;
 }
 
-/* R35 — Paridade das listas-mãe (Relação, cadastros, usuários) com o ModeloBase1;
-   as regras de grade (.emp-table-pro) valem também para a tabela do Lançamento.
-   Valores medidos por getComputedStyle no PROJETOMG-main (Cadastro de Empresas, 1440 px),
-   que vêm de src/styles/mg-prototype.css do projeto base (não portado inteiro). */
+/* R35 — Listas-mãe: mesmo afastamento da visualização de cards
+   (--mg-view-panel-inset: 8px 10px 10px). Barra + tabela formam um cartão
+   branco, afastado das bordas de cima, baixo e laterais; sem vão entre barra e tabela. */
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother {
   gap: 0 !important;
-  padding: 0 !important;
-  background: #f5f6fa !important;
+  padding: var(--mg-view-panel-inset-top, 8px) var(--mg-view-panel-inset-x, 10px) var(--mg-view-panel-inset-bottom, 10px) !important;
+  background: var(--bg-page, #f0f2f5) !important;
+  box-sizing: border-box !important;
 }
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother > .mak-mother-page__toolbar {
   padding: 0 !important;
-  background: #f5f6fa !important;
+  background: transparent !important;
 }
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar {
   gap: 8px !important;
   padding: 4px 12px !important;
   background: #ffffff !important;
+  border: 1px solid #e7eaee !important;
+  border-bottom: 1px solid #e7eaee !important;
+  border-radius: 12px 12px 0 0 !important;
+  box-shadow: none !important;
 }
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother > .mak-mother-page__panel-strip {
   position: relative;
   z-index: 2;
   padding: 0 !important;
-  border-radius: 0 0 16px 16px !important;
+  border-radius: 0 !important;
   background: transparent !important;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.08) !important;
+  box-shadow: none !important;
 }
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-table-panel-strip {
   gap: 8px !important;
   padding: 4px 12px !important;
-  border-radius: 0 0 16px 16px !important;
+  border-radius: 0 !important;
   background: #ffffff !important;
+  border-left: 1px solid #e7eaee !important;
+  border-right: 1px solid #e7eaee !important;
+  border-bottom: 1px solid #e7eaee !important;
 }
+/* Barra colada na tabela; o afastamento das bordas da página vem do padding do .d17b-list-page--mother. */
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother > .d17b-list-body {
   gap: 0 !important;
-  padding: 9px 10px 10px !important;
+  padding: 0 !important;
+  min-height: 0 !important;
 }
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother.d17b-filters-open > .d17b-list-body {
   gap: 10px !important;
+  padding: 0 !important;
 }
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .d17b-table-card,
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-view-panel.emp-table-root {
-  border-radius: 14px !important;
+  border-radius: 0 0 12px 12px !important;
+  border-top: 0 !important;
+  border-left: 1px solid #e7eaee !important;
+  border-right: 1px solid #e7eaee !important;
+  border-bottom: 1px solid #e7eaee !important;
+  overflow: hidden !important;
+  background: #ffffff !important;
 }
-html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled {
+/* Referência Marcas: pílulas cinza #f1f3f4 + glifo/texto #111827;
+   verde (#40de63) só no view-mode ativo. Sem fill verde na ação principal. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled.tb-btn-green,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled.tb-btn-ghost {
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  padding: 0 10px !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
   font-size: 12px !important;
+  font-weight: 600 !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled:disabled,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled:disabled svg {
+  color: #9ca3af !important;
+  stroke: #9ca3af !important;
+  opacity: 1 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled:hover:not(:disabled):not(.tb-btn-danger),
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled.tb-btn-green:hover:not(:disabled) {
+  background: #e5e7eb !important;
+  border-color: transparent !important;
+  color: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled.tb-btn-danger:not(:disabled),
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled.tb-btn-ghost.tb-btn-danger:not(:disabled) {
+  background: #f1f3f4 !important;
+  border-color: transparent !important;
+  color: #dc2626 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled.tb-btn-danger:not(:disabled) svg,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled.tb-btn-ghost.tb-btn-danger:not(:disabled) svg {
+  color: #dc2626 !important;
+  stroke: #dc2626 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .tb-btn-labeled svg {
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-desktop-search__trigger,
+  .mg-table-panel-strip__config-btn,
+  .mg-cards-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn
+) {
+  width: 25px !important;
+  min-width: 25px !important;
+  max-width: 25px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 50% !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-desktop-search__trigger,
+  .mg-table-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn
+) svg {
+  width: 14px !important;
+  height: 14px !important;
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-desktop-search__trigger,
+  .mg-table-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn
+):hover:not(:disabled),
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-speed-dial.is-open .mg-speed-dial__trigger {
+  background: #e5e7eb !important;
+  border-color: transparent !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar__end {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .view-mode-btn {
+  color: #9ca3af !important;
+  background: transparent !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .view-mode-btn svg {
+  color: inherit !important;
+  stroke: currentColor !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .view-mode-btn.active {
+  color: #40de63 !important;
+  background: transparent !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-search-pill {
+  border: 1px solid transparent !important;
+  background: #f1f3f4 !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-search-pill input {
+  color: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-slot.is-visible:has(.tb-btn-labeled) {
+  width: max-content !important;
+  max-width: 220px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-slot.is-visible .tb-btn-labeled {
+  width: auto !important;
+}
+html body .d17b-shell .d17b-list-page--mother .filter-panel__footer .tb-btn {
+  min-width: 0;
+  height: 25px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: #f1f3f4 !important;
+  border-color: transparent !important;
+  color: #111827 !important;
+  font-size: 12px;
+  font-weight: 600;
+}
+@media (max-width: 420px) {
+  html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    row-gap: 8px;
+    height: auto;
+  }
+  html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar__actions,
+  html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar__end {
+    flex: 1 1 100%;
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-start;
+  }
 }
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .d17b-launch-page) .emp-table-pro {
   --emp-table-line: #e7eaee;
@@ -4582,7 +4903,7 @@ html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope 
   border-color: #484f58 !important;
 }
 html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother :is(.mg-filter-pills-rail__toggle, .mg-table-panel-strip__config-btn) {
-  color: #40de63 !important;
+  color: #e6edf3 !important;
 }
 html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-filter-pills-rail__toggle {
   border-color: rgba(64, 222, 99, 0.35) !important;
@@ -4595,8 +4916,9 @@ html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope 
 }
 
 /* R36 — Tela de registro dos cadastros com a tipografia de formulário do
-   ModeloBase1 (medida no PROJETOMG-main): campo 38 px/13 px sobre #f6f8fa e
-   rótulo flutuante de 12 px. O restante do app mantém a escala de 11 px. */
+   ModeloBase1 (medida no PROJETOMG-main): campo 38 px/13 px sobre #f6f8fa.
+   Rótulo vazio 12 px; ao flutuar no topo usa --mg-field-label-size-top (9 px)
+   para não sobrepor o valor (não forçar 12 px no estado preenchido). */
 html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode :is(
   input:not([type="checkbox"]):not([type="radio"]),
   textarea,
@@ -4609,8 +4931,17 @@ html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-r
   background: #f6f8fa !important;
 }
 html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode :is(.fg-label, .cmd-label) {
-  font-size: 12px !important;
   color: #9ca3af !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode .mg-prototype-field:not(.mg-has-value):not(:focus-within) .fg-label,
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode .mg-prototype-composite:not(.mg-has-value) .cmd-label {
+  font-size: 12px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode .mg-has-value :is(.fg-label, .cmd-label),
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode .mg-prototype-form--edit .mg-prototype-field:focus-within .fg-label,
+html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-mode .cmd-select.open .cmd-label {
+  font-size: var(--mg-field-label-size-top, 9px) !important;
+  line-height: 1 !important;
 }
 html body #root .d17b-shell.cadastro-emp-scope .aux-registry-page--record .aux-record-tabs .seg-tab {
   font-size: 13px !important;
@@ -4705,8 +5036,8 @@ html body .d17c-bulk-actions-menu__item em {
   font-weight: 750;
   text-align: center;
 }
-html body .d17c-bulk-actions-menu__item:hover:not([data-disabled]) { background: #effbf3; color: #123d24; }
-html body .d17c-bulk-actions-menu__item:hover:not([data-disabled]) > svg { color: #16a34a; }
+html body .d17c-bulk-actions-menu__item:hover:not([data-disabled]) { background: #effbf3; color: #111827; }
+html body .d17c-bulk-actions-menu__item:hover:not([data-disabled]) > svg { color: #111827; }
 html body .d17c-bulk-actions-menu__item[data-disabled] { opacity: .42; }
 
 html body .d17c-bulk-dialog__body { display: flex; flex-direction: column; gap: 12px; }
@@ -4743,4 +5074,238 @@ html:is(.dark, .tema-escuro, .escuro) body .d17c-bulk-field > label { color: #aa
 @media (max-width: 640px) {
   html body .d17c-bulk-form-grid { grid-template-columns: 1fr; }
   html body .d17c-bulk-field--wide { grid-column: auto; }
+}
+
+/* Modelo da tela: o filtro continua campo (40 px, raio 8).
+   Todo botão tem 25 px: ícone em círculo e nome em pílula. */
+html body #root .d17b-shell.cadastro-emp-scope.mg-empresas-scope.d17b-list-page--mother,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother {
+  --mg-filter-pill-height: 40px;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page .mg-filter-pill__trigger,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page .d17c-filter-pill {
+  height: 40px !important;
+  min-height: 40px !important;
+  border-radius: 8px !important;
+  font-weight: 500 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page .mg-filter-pills-rail--track {
+  height: auto !important;
+  min-height: 40px !important;
+  border-radius: 0 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page :is(
+  .mg-filter-pills-rail__toggle,
+  .mg-filter-pills-rail__nav,
+  .mg-filter-pills-rail__config,
+  .mg-nav-btn
+) {
+  width: 25px !important;
+  min-width: 25px !important;
+  max-width: 25px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page :is(
+  .mg-filter-pills-rail__toggle,
+  .mg-filter-pills-rail__nav,
+  .mg-filter-pills-rail__config,
+  .mg-nav-btn,
+  .tb-btn-icon,
+  .d17d-icon-action,
+  .d17c-round-action
+) svg {
+  width: 14px !important;
+  height: 14px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page .mg-filter-pill__trigger--clear {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  padding: 0 10px !important;
+  border-radius: 999px !important;
+  font-size: 12px !important;
+}
+html body #root .d17b-shell .d17d-animal-choice-dialog .d17d-animal-choice-dialog__select {
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+}
+
+/* ==========================================================================
+   D.17D.2R37 — Cadastros/relações (Tela Mãe): UX polish sem mudar o contrato
+   Marcas (círculos 25px #f1f3f4, tinta #111827, verde só no view ativo).
+   Hit-area ampliada, foco visível, empty states legíveis, press sem jitter.
+   ========================================================================== */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-desktop-search__trigger,
+  .mg-table-panel-strip__config-btn,
+  .mg-cards-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn
+) {
+  position: relative !important;
+  isolation: isolate;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-desktop-search__trigger,
+  .mg-table-panel-strip__config-btn,
+  .mg-cards-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn
+)::after {
+  content: "";
+  position: absolute;
+  inset: -5.5px;
+  border-radius: 50%;
+  z-index: -1;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-desktop-search__trigger,
+  .mg-table-panel-strip__config-btn,
+  .mg-cards-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn,
+  .tb-btn-labeled,
+  .view-mode-btn
+):focus-visible {
+  outline: 2px solid #111827 !important;
+  outline-offset: 2px !important;
+  box-shadow: none !important;
+  z-index: 1;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-table-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn,
+  .tb-btn-labeled
+):active:not(:disabled) {
+  opacity: 0.88;
+  transform: none;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-table-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn
+):disabled {
+  background: #f1f3f4 !important;
+  color: #9ca3af !important;
+  opacity: 1 !important;
+  cursor: not-allowed;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-table-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn
+):disabled svg {
+  color: #9ca3af !important;
+  stroke: #9ca3af !important;
+  opacity: 1 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page) .d17d-empty-row,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .aux-cards-empty {
+  height: auto !important;
+  min-height: 120px !important;
+  padding: 28px 24px !important;
+  color: #4b5563 !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: 1.45 !important;
+  letter-spacing: 0 !important;
+  white-space: normal !important;
+  text-wrap: balance;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .emp-table-pro tbody tr.emp-table-data-row:hover:not(.emp-row-selected) > td.emp-td:not(.aux-check-cell) {
+  background: rgba(64, 222, 99, 0.08) !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .emp-table-pro tbody tr.emp-table-data-row.emp-row-selected > td.emp-td:not(.aux-check-cell) {
+  background: rgba(64, 222, 99, 0.14) !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn {
+  position: relative;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn::after {
+  content: "";
+  position: absolute;
+  inset: -5.5px;
+  border-radius: 50%;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn:focus-visible {
+  outline: 2px solid #111827 !important;
+  outline-offset: 2px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn:hover:not(:disabled) {
+  background: #e5e7eb !important;
+  border-color: transparent !important;
+  color: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn:hover:not(:disabled) svg {
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+@media (prefers-reduced-motion: reduce) {
+  html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+    .tb-btn-icon,
+    .tb-btn-more,
+    .tb-btn-labeled,
+    .view-mode-btn,
+    .mg-speed-dial__trigger
+  ),
+  html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn,
+  html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page .aux-chip {
+    transition: none !important;
+  }
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page) .d17d-empty-row,
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .aux-cards-empty {
+  color: #9da7b3 !important;
+}
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-table-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn
+):focus-visible,
+html:is(.dark, .tema-escuro, .escuro) body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn:focus-visible {
+  outline-color: #e6edf3 !important;
 }

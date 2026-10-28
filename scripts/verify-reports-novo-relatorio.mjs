@@ -353,7 +353,7 @@ await check('tela: seletor com Meus relatórios, diálogo Novo relatório, Salva
   assert.match(dialog, /maxLength=\{REPORT_NAME_MAX\}/, 'nome até 80');
   assert.match(dialog, /reportNameError\(name,/, 'nome conferido como no serviço');
   const screen = read('src/components/reports/MakgestaoScreen.jsx');
-  assert.match(screen, /\{onSaveChanges \? \([\s\S]{0,400}Salvar alterações[\s\S]{0,200}\{canExport \? \([\s\S]{0,80}rpt-mak-print/, '"Salvar alterações" ao lado do Imprimir');
+  assert.match(screen, /\{onSaveChanges \? \([\s\S]{0,500}aria-label=\{savingChanges \? "Salvando" : "Salvar alterações"\}[\s\S]{0,200}\{canExport \? \([\s\S]{0,80}rpt-mak-print/, '"Salvar alterações" (ícone) ao lado do Imprimir');
   for (const text of ['Salvar como…', 'Renomear…', '(empresa)']) assert.ok(screen.includes(text), `tela: ${text}`);
   const view = read('src/components/reports/ReportView.jsx');
   assert.match(view, /title=\{reportTitle\(definition, currentTemplate\)\}/, 'título "Relatório de <nome>"');

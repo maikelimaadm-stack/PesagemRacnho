@@ -13,6 +13,7 @@ import {
   sortApplicationsNewestFirst,
 } from './sanidadeModel.js';
 import '@/styles/sanidade.css';
+import '@/styles/launch-visual.css';
 
 const ni = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 0 });
 
@@ -26,7 +27,8 @@ export default function SanidadeAnimalCard({ applications = [], loading = false,
   return (
     <section className="op-card sanidade-ficha-card" aria-label="Sanidade do animal">
       <header className="op-card__header"><h2>Sanidade</h2><span>{summary}</span></header>
-      {error ? <div className="op-empty">{error}</div> : null}
+      {loading && !error ? <div className="op-empty" role="status">Carregando as aplicações deste animal…</div> : null}
+      {error ? <div className="op-empty" role="alert">{error} Abra a tela Sanidade para conferir, ou volte a esta ficha em instantes.</div> : null}
       {!error && !loading && !rows.length ? <div className="op-empty">Nenhuma aplicação de sanidade registrada para este animal.</div> : null}
       {!error && rows.length ? (
         <div className="op-table-scroll">

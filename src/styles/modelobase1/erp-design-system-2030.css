@@ -124,7 +124,7 @@
   --erp-menu-search-border: var(--border-color);
 
   --erp-radius-control: 8px;
-  --erp-radius-button: 5px;
+  --erp-radius-button: 999px;
   --erp-radius-card: 18px;
   --erp-radius-toolbar-btn: 8px;
   --erp-radius-modal: 18px;
@@ -149,8 +149,8 @@
   --erp-shadow-focus: none;
 
   --erp-control-height: 26px;
-  --erp-toolbar-height: 26px;
-  --erp-toolbar-btn-size: 26px;
+  --erp-toolbar-height: 32px;
+  --erp-toolbar-btn-size: 32px;
   --erp-toggle-width: 36px;
   --erp-toggle-height: 20px;
   --erp-checkbox-size: 14px;
@@ -483,21 +483,28 @@
 }
 
 .cadastro-emp-scope .emp-toolbar .emp-toolbar-btn {
-  height: var(--erp-toolbar-height) !important;
-  min-height: var(--erp-toolbar-height) !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
   font-size: 12px !important;
-  font-weight: 500 !important;
+  font-weight: 600 !important;
 }
 
 .cadastro-emp-scope .emp-toolbar .emp-toolbar-btn:not(.w-auto):not(.emp-toolbar-btn-labeled) {
-  width: var(--erp-toolbar-height) !important;
+  width: 25px !important;
+  min-width: 25px !important;
+  border-radius: 50% !important;
+  padding: 0 !important;
 }
 
 .cadastro-emp-scope .emp-toolbar .emp-toolbar-btn.w-auto,
 .cadastro-emp-scope .emp-toolbar .emp-toolbar-btn.emp-toolbar-btn-labeled {
-  padding-inline: 12px !important;
-  height: var(--erp-toolbar-height) !important;
-  min-height: var(--erp-toolbar-height) !important;
+  width: auto !important;
+  padding-inline: 10px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  border-radius: 999px !important;
 }
 
 .cadastro-emp-scope .emp-toolbar .emp-toolbar-search,
@@ -1539,7 +1546,10 @@
   .emp-th-icon-button,
   .emp-th-menu-button,
   .emp-layout-config-field,
-  .emp-layout-config-field-action
+  .emp-layout-config-field-action,
+  .seg-tab,
+  .view-mode-btn,
+  .op-segmented__item
 ),
 .cadastro-emp-scope :is(
   button,
@@ -1559,7 +1569,10 @@
   .emp-th-icon-button,
   .emp-th-menu-button,
   .emp-layout-config-field,
-  .emp-layout-config-field-action
+  .emp-layout-config-field-action,
+  .seg-tab,
+  .view-mode-btn,
+  .op-segmented__item
 ) {
   border-radius: var(--erp-radius-button) !important;
 }

@@ -35,6 +35,7 @@ import {
 } from '@/modules/sanity/application/sanityService';
 import '@/styles/auxiliary-registries.css';
 import '@/styles/sanidade.css';
+import '@/styles/launch-visual.css';
 
 // Menu OPERAÇÃO › Sanidade (stores próprias da v8: programasSanidade, medicamentos,
 // aplicacoesSanidade — nunca appSettings). Três abas na Tela Mãe do ModeloBase1:

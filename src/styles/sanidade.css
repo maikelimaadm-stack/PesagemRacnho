@@ -24,7 +24,7 @@ html body .d17b-shell .d17b-list-page--mother.sanidade-page > .sanidade-tabs {
   line-height: 1;
   white-space: nowrap;
 }
-.sanidade-status--active { border-color: #6ee7b7; background: #ecfdf5; color: #047857; }
+.sanidade-status--active { border-color: #6ee7b7; background: #ecfdf5; color: #111827; }
 .sanidade-status--inactive { border-color: #e2e8f0; background: #f1f3f4; color: #6b7280; }
 .sanidade-status--cancelled { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
 .sanidade-status--launch { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
@@ -94,16 +94,17 @@ html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidad
   width: auto;
   min-width: 150px;
   max-width: 220px;
-  height: 28px !important;
-  min-height: 28px !important;
-  padding: 0 10px 0 12px;
-  gap: 6px;
+  height: 40px !important;
+  min-height: 40px !important;
+  padding: 0 12px;
   border: 1px solid transparent !important;
-  border-radius: 999px !important;
+  border-radius: 8px !important;
   background: var(--gray-fill, #f1f3f4);
   box-shadow: none;
-  color: var(--text-2, #6b7280) !important;
-  font-size: 11px !important;
+  color: #111827 !important;
+  font-family: "DM Sans", sans-serif;
+  font-size: 13px !important;
+  font-weight: 600 !important;
 }
 html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidade-filter-bar button.sanidade-filter-select.is-active {
   border-color: var(--mg-focus-border, rgba(64, 222, 99, .35)) !important;
@@ -114,14 +115,16 @@ html body #root .d17b-shell.cadastro-emp-scope .d17b-page.sanidade-page .sanidad
 .sanidade-filter-check {
   display: inline-flex;
   align-items: center;
-  height: 28px;
+  height: 32px;
   padding: 0 12px 0 8px;
   gap: 6px;
   border: 1px solid transparent;
   border-radius: 999px;
   background: var(--gray-fill, #f1f3f4);
-  color: var(--text-2, #6b7280);
-  font-size: 11px;
+  color: #111827;
+  font-family: "DM Sans", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
   user-select: none;

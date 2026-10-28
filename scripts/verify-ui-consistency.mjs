@@ -37,7 +37,7 @@ assert(!/needsImmediateAnimalChoice\(pesagens, valor\)/.test(launchPage), 'campo
 assert.match(launchPage, /onBlur=\{\(\) => \{[\s\S]{0,360}if \(numeroAnimal\.trim\(\)\) resolverAnimalDigitado\(numeroAnimal\);[\s\S]{0,40}\}\}/, 'seleção de marca é resolvida ao concluir e sair do campo de identificação');
 assert.match(launchPage, /onKeyDown=\{\(e\) => \{ if \(e\.key === 'Enter'\)[\s\S]{0,180}resolverAnimalDigitado\(numeroAnimal\)/, 'Enter também conclui a identificação e resolve a marca');
 assert.match(launchPage, /ignorarProximoBlurIdentificacaoRef\.current = true[\s\S]{0,180}resolverAnimalDigitado\(numeroAnimal\)/, 'Enter não duplica a notificação ao provocar blur para abrir o pop-up');
-assert.match(visualCss, /D\.17D\.2R20[\s\S]*?background:\s*var\(--d17b-accent-hover[\s\S]*?color:\s*#fff/i, 'hover de botões primários preserva fundo e texto da marca');
+assert.match(visualCss, /D\.17D\.2R20[\s\S]*?background:\s*var\(--d17b-accent-hover[\s\S]*?color:\s*#111827/i, 'hover de botões primários preserva o verde da marca e o texto escuro');
 assert.match(visualCss, /D\.17D\.2R20[\s\S]{0,3200}background:\s*#f1f3f4/i, 'campos de pop-up usam a mesma superfície do lançamento');
 assert.match(tableComponent, /\[&:has\(\.mak-table-select-check\)\]:p-0/, 'células de seleção removem a folga lateral estrutural');
 assert.match(visualCss, /scrollbar-gutter:\s*stable\s*!important/i, 'tabela reserva a barra apenas no lado direito');
@@ -59,7 +59,7 @@ assert.match(launchPage, /d17d-last-launch[\s\S]{0,700}>Desfazer</, 'linha infer
 assert.equal((columnDeclaration.match(/default: true/g) || []).length, 14, 'visualização inicial usa as 14 colunas definidas no HTML oficial');
 assert.match(launchPage, /COLUMN_MODEL_VERSION = 'd17d2r31'/, 'configurações legadas recebem uma única migração para o novo modelo de colunas');
 assert.match(animalDialog, /d17d-animal-choice-dialog__select/, 'seletor de animal usa botão compacto dedicado');
-assert.match(visualCss, /R26[\s\S]*?d17d-animal-choice-dialog__select[\s\S]{0,240}height:\s*26px\s*!important/i, 'botão Selecionar do animal permanece compacto');
+assert.match(visualCss, /R26[\s\S]*?d17d-animal-choice-dialog__select[\s\S]{0,240}height:\s*28px\s*!important/i, 'botão Selecionar do animal acompanha a altura da linha');
 assert.match(visualCss, /R26[\s\S]*?d17d-summary-panel table td[\s\S]{0,360}height:\s*28px\s*!important[\s\S]{0,180}font-size:\s*10px\s*!important/i, 'valores dos resumos usam a escala de 10px do design');
 // R29 — paridade com o design "Lançamento de Pesagens" (Claude Design, 08/09/2026).
 const r29 = visualCss.slice(visualCss.indexOf('D.17D.2R29'));
@@ -85,10 +85,16 @@ assert.match(r29, /d17d-summary-panel__context\s*\{[\s\S]{0,80}text-align:\s*cen
 const relationPage = readFileSync(join(root, 'src/pages/PesagensIndividuais.jsx'), 'utf8');
 assert.match(relationPage, /data-mak-region="toolbar"[\s\S]{0,400}className="mg-action-bar /, 'Relação usa a barra de ações mg-action-bar do modelo');
 assert(!/aria-controls="filter-panel"/.test(relationPage), 'Relação não tem mais o botão do painel lateral de filtros (decisão de 15/09/2026)');
-assert.match(relationPage, /tb-btn tb-btn-labeled tb-btn-green"[^>]*title="Lançar pesagem"/, 'ação principal usa tb-btn-green');
-assert.match(relationPage, /<MgDesktopSearch[\s\S]{0,1400}onApplyAll=/, 'pesquisa expansível com resultados e "Buscar todos"');
+assert.match(relationPage, /tb-btn tb-btn-icon tb-btn-green"[^>]*title="Lançar pesagem"/, 'ação principal usa tb-btn-icon tb-btn-green (círculo cinza na Tela Mãe)');
+assert.match(relationPage, /title="Lançar pesagem"[\s\S]{0,200}<Plus/, 'ação principal tem ícone + como a referência Marcas');
+assert.match(relationPage, /title="Editar"[\s\S]{0,1200}title="Duplicar"[\s\S]{0,1200}title="Excluir"/, 'Editar/Duplicar/Excluir ficam sempre na barra (como a referência Marcas)');
+assert.doesNotMatch(relationPage, /<MgDesktopSearch/, 'Relação não mostra o campo de pesquisa da barra');
+assert.match(relationPage, /<MgViewSeg /, 'Relação expõe o view-seg (Registro/Tabela/Cards) como a referência');
 assert.match(relationPage, /<MgSpeedDialMenu[\s\S]{0,700}Atualizar[\s\S]{0,200}Exportar relatório \(CSV\)[\s\S]{0,200}Exportar para reimportação \(CSV\)[\s\S]{0,300}Importar CSV[\s\S]{0,200}Baixar modelo CSV/, 'Atualizar, exportar (relatório e reimportação), importar e modelo ficam em "Mais opções"');
-assert.match(relationPage, /data-mak-region="panel-strip"[\s\S]{0,200}<MgTablePanelStrip onConfigColumns=/, 'faixa de pílulas com configuração de colunas à direita');
+assert.match(relationPage, /aria-label="Configurar colunas da tabela"[\s\S]{0,700}<MgSpeedDialMenu/, 'Configurar colunas fica ao lado de Mais opções');
+assert.match(visualCss, /Referência Marcas[\s\S]{0,1200}background:\s*#f1f3f4\s*!important/i, 'Tela Mãe trava a ação principal em pílula cinza #f1f3f4 (não fill verde)');
+assert.match(visualCss, /\.mg-action-bar \.view-mode-btn\.active\s*\{[\s\S]{0,120}color:\s*#40de63\s*!important/i, 'view ativo da Tela Mãe usa lima #40de63');
+assert.doesNotMatch(relationPage, /<MakFilterRail|<MakFilterPill|<MgTablePanelStrip/, 'Relação não mostra a faixa de filtros personalizados');
 assert(!/MgFilterPanel/.test(relationPage), 'Relação filtra só pelas pílulas e menus de coluna (painel lateral removido)');
 assert(!/d17b-filter-card/.test(relationPage), 'cartão antigo de filtros foi removido da Relação');
 assert(!/d17c-quick-search/.test(relationPage), 'campo de pesquisa antigo foi removido da Relação');
@@ -99,15 +105,29 @@ assert.match(visualCss, /D\.17D\.2R34[\s\S]{0,600}\.d17b-list-page\.d17b-list-pa
 
 // R34 — os cadastros auxiliares (Parceiros, Mortalidade…) usam a mesma Tela Mãe no modo de listagem.
 const auxiliaryList = readFileSync(join(root, 'src/components/cadastros/CadastroAuxiliarPage.jsx'), 'utf8');
-assert.match(auxiliaryList, /\{!formOpen \? \([\s\S]{0,400}data-mak-region="toolbar"[\s\S]{0,400}className="mg-action-bar /, 'listagem dos cadastros usa a barra de ações mg-action-bar');
-assert.match(auxiliaryList, /tb-btn tb-btn-labeled tb-btn-green aux-new-button/, 'Novo dos cadastros usa tb-btn-green');
-assert.match(auxiliaryList, /<MgDesktopSearch[\s\S]{0,1400}onApplyAll=/, 'cadastros têm pesquisa expansível com resultados');
-assert.match(auxiliaryList, /<MgSpeedDialMenu[\s\S]{0,600}Atualizar[\s\S]{0,200}Configurar colunas[\s\S]{0,200}Mostrar todos os tipos/, 'cadastros concentram Atualizar, colunas e tipos em "Mais opções"');
-assert.match(auxiliaryList, /data-mak-region="panel-strip"[\s\S]{0,200}<MgTablePanelStrip onConfigColumns=[\s\S]{0,1400}\{tableColumns\.map\(\(column\) => \{[\s\S]{0,400}<MakFilterPill/, 'faixa dos cadastros tem uma pílula por coluna visível e configuração de colunas');
-assert(!/MgFilterPanel/.test(auxiliaryList), 'cadastros filtram só pelas pílulas e menus de coluna (painel lateral removido)');
+assert.match(auxiliaryList, /data-mak-region="toolbar"[\s\S]{0,500}className=\{`mg-action-bar /, 'listagem dos cadastros usa a barra de ações mg-action-bar');
+assert.match(auxiliaryList, /d17b-list-page--mother/, 'cadastros mantêm a classe da Tela Mãe também no Registro');
+assert.match(auxiliaryList, /tb-btn tb-btn-icon tb-btn-green aux-new-button/, 'Novo dos cadastros usa tb-btn-icon tb-btn-green (círculo cinza na Tela Mãe)');
+assert.match(auxiliaryList, /aux-new-button[\s\S]{0,220}<Plus/, 'Novo dos cadastros tem ícone + como a referência Marcas');
+assert.match(auxiliaryList, /title="Duplicar"[\s\S]{0,1200}title="Excluir"/, 'cadastros expõem Duplicar/Excluir na barra mãe');
+assert.doesNotMatch(auxiliaryList, /aux-launch-toolbar|d17b-page-actionbar aux-registry-toolbar/, 'Registro não troca a barra mãe por aux-launch-toolbar / ModeloBase1ActionBar');
+assert.doesNotMatch(auxiliaryList, /<MgDesktopSearch/, 'cadastros não mostram o campo de pesquisa da barra');
+assert.match(auxiliaryList, /aria-label="Configurar colunas da tabela"[\s\S]{0,700}<MgSpeedDialMenu/, 'cadastros: Configurar colunas fica ao lado de Mais opções');
+assert.match(auxiliaryList, /<MgSpeedDialMenu[\s\S]{0,600}Atualizar[\s\S]{0,200}Mostrar todos os tipos/, 'cadastros concentram Atualizar e tipos em "Mais opções"');
+assert.doesNotMatch(auxiliaryList, /<MakFilterRail|<MakFilterPill|<MgTablePanelStrip/, 'cadastros não mostram a faixa de filtros personalizados');
+assert(!/MgFilterPanel/.test(auxiliaryList), 'cadastros filtram pelos menus de coluna (painel lateral removido)');
 assert.match(auxiliaryList, /<MakColumnConfigDialog[\s\S]{0,400}onApply=\{applyColumnConfig\}/, 'cadastros permitem configurar colunas como o modelo');
 assert.match(auxiliaryList, /\{tableColumns\.map\(\(column\) => column\.id === '_typeLabel'/, 'tabela dos cadastros respeita ordem e visibilidade configuradas');
-assert(!/d17c-quick-search--actions aux-search/.test(auxiliaryList.split('{!formOpen ? (')[0]), 'campo de pesquisa antigo não fica fora do modo de registro');
+assert(!/d17c-quick-search--actions aux-search/.test(auxiliaryList), 'campo de pesquisa antigo não fica na barra dos cadastros');
+assert.match(auxiliaryList, /const viewMode = formOpen \? 'registro' : listViewMode/, 'Tabela/Cards/Registro compartilham a mesma barra; só o modo do view-seg muda');
+assert.match(auxiliaryList, /mg-action-slot\$\{!formOpen && canWrite \? ' is-visible' : ''\}[\s\S]{0,200}aux-new-button/, 'lista: slot Novo; Registro esconde CRUD');
+assert.match(auxiliaryList, /mg-action-slot\$\{formOpen && canWrite \? ' is-visible' : ''\}[\s\S]{0,400}title="Salvar \(Enter\)"/, 'Registro: slot Salvar no lugar do CRUD');
+assert.match(auxiliaryList, /mg-action-slot\$\{formOpen \? ' is-visible' : ''\}[\s\S]{0,400}aux-cancel-button/, 'Registro: slot Cancelar no lugar do CRUD');
+assert.doesNotMatch(auxiliaryList, /mg-action-slot is-visible[\s\S]{0,80}title="Excluir"[\s\S]{0,400}formOpen \? \([\s\S]{0,200}Salvar/, 'NEGATIVO: não empilhar CRUD+Salvar todos always-visible na mesma linha');
+assert.match(auxiliaryList, /aux-action-bar--form/, 'Novo/Editar: action-bar marca estado de formulário unificado');
+assert.match(auxiliaryList, /aux-context-inline[\s\S]{0,80}data-template-id="context-panel"/, 'Novo/Editar: identidade do registro inline na mesma faixa branca');
+assert.doesNotMatch(auxiliaryList, /aria-label="Navegação entre registros"|aux-context-panel-wrap/, 'Novo/Editar: sem segunda faixa nem pager de registros');
+assert.match(auxiliaryList, /!formOpen \? \([\s\S]{0,120}mg-action-bar__end[\s\S]{0,500}ModeloBase1ViewSeg/, 'lista: view-seg + colunas + mais opções; registro esconde o fim da barra');
 
 for (const file of [
   'src/components/pesagens/PesagensResumoRodape.jsx',
@@ -133,14 +153,14 @@ assert.match(visualCss, /R27[\s\S]*?d17b-standard-dialog table th[\s\S]{0,260}te
 assert.match(visualCss, /d17b-dialog-content\.d17b-standard-dialog--large[\s\S]{0,160}max-width:\s*960px\s*!important/i, 'pop-ups grandes seguem a largura máxima padronizada');
 assert(!/variant="secondary" onClick=\{\(\) => onOpenChange\(false\)\}>Cancelar/.test(columnDialog), 'configuração de colunas usa o X para descartar alterações');
 assert(!/variant="outline" onClick=\{\(\) => onOpenChange\(false\)\}>Cancelar/.test(summaryDialog), 'configuração de resumos usa o X para descartar alterações');
-assert.match(visualCss, /d17c-column-dialog \.d17c-column-dialog__reset\s*\{[\s\S]{0,120}top:\s*1px\s*!important[\s\S]{0,220}height:\s*28px\s*!important/i, 'Restaurar padrões fica alinhado verticalmente ao X');
-assert.match(visualCss, /\.d17b-standard-dialog :is\([\s\S]{0,180}\.d17d-management-form,[\s\S]{0,180}\.d17c-column-dialog__footer[\s\S]{0,80}\) button:not\(\[aria-label\]\)[\s\S]{0,240}min-width:\s*78px\s*!important[\s\S]{0,160}height:\s*28px\s*!important/i, 'Adicionar, Salvar e confirmar usam dimensões padronizadas');
+assert.match(visualCss, /d17c-column-dialog \.d17c-column-dialog__reset\s*\{[\s\S]{0,120}top:\s*1px\s*!important[\s\S]{0,220}height:\s*25px\s*!important/i, 'Restaurar padrões fica alinhado verticalmente ao X');
+assert.match(visualCss, /\.d17b-standard-dialog :is\([\s\S]{0,180}\.d17d-management-form,[\s\S]{0,180}\.d17c-column-dialog__footer[\s\S]{0,80}\) button:not\(\[aria-label\]\)[\s\S]{0,280}min-width:\s*78px\s*!important[\s\S]{0,200}height:\s*25px\s*!important/i, 'Adicionar, Salvar e confirmar usam a altura padrão dos botões');
 assert.match(visualCss, /R23[\s\S]*?\.emp-table-pro[\s\S]*?font-size:\s*11px\s*!important/i, 'cabeçalho e corpo das tabelas seguem a escala tipográfica de 11px');
 assert.match(r30, /\.d17d-animal-performance\s*\{[\s\S]{0,220}display:\s*flex\s*!important[\s\S]{0,220}height:\s*auto\s*!important/i, 'faixa informativa flui sem altura rígida ou conteúdo cortado');
 assert.match(r30, /\.d17d-animal-performance__group strong\s*\{[\s\S]{0,180}font-size:\s*12px\s*!important/i, 'valores do painel informativo têm ênfase tipográfica uniforme');
 const r31 = visualCss.slice(visualCss.indexOf('D.17D.2R31'));
 assert.match(r31, /d17d-field--weight[\s\S]{0,120}d17d-weight-control > input[\s\S]{0,260}color:\s*#f59e0b\s*!important/i, 'peso mantém o amarelo do modelo dentro do controle composto');
-assert.match(r31, /d17d-animal-performance__group > \.d17d-animal-performance__metric[\s\S]{0,120}color:\s*#36c956\s*!important/i, 'métricas de ganho mantêm o verde do HTML oficial');
+assert.match(r31, /d17d-animal-performance__group > \.d17d-animal-performance__metric[\s\S]{0,120}color:\s*#111827\s*!important/i, 'métricas de ganho usam tinta #111827 (sem verde de letra)');
 const r32 = visualCss.slice(visualCss.indexOf('D.17D.2R32'));
 assert.match(r32, /d17d-field--date \.mak-date-control > :is\(input, button\)[\s\S]{0,180}border:\s*0\s*!important[\s\S]{0,160}background:\s*transparent\s*!important/i, 'data e calendário usam uma única superfície sem divisor');
 assert.match(r32, /d17d-field\.d17d-field--date \.mak-date-control > input\[type="text"\][\s\S]{0,240}border-radius:\s*0\s*!important[\s\S]{0,160}box-shadow:\s*none\s*!important/i, 'input da data não pode desenhar contorno arredondado ou sombra dentro do controle');
@@ -155,7 +175,10 @@ assert.match(auxiliaryRegistryCss, /\.aux-record-tabs \.seg-tab-slider[\s\S]{0,2
 assert.match(auxiliaryRegistry, /className="aux-form-toolbar-actions"[\s\S]{0,260}className="aux-form-toolbar-commands"/, 'ações textuais do lançamento auxiliar ficam agrupadas como no action bar oficial');
 assert.match(auxiliaryRegistryCss, /\.aux-record-mode\s*\{\s*--aux-card-gap:\s*12px;\s*\}/i, 'lançamentos auxiliares definem um respiro próprio para os cards');
 assert.match(auxiliaryRegistryCss, /html body \.d17b-shell\.cadastro-emp-scope \.d17b-page \.aux-record-mode \.mg-prototype-cards-layout\s*\{[\s\S]{0,180}gap:\s*var\(--aux-card-gap\)\s*!important/i, 'respiro dos cards prevalece sobre o reset global de três pixels');
-assert.match(auxiliaryRegistryCss, /\.aux-form-toolbar-actions\s*\{\s*gap:\s*6px/i, 'grupos de botões do lançamento auxiliar mantêm separação consistente');
+assert.match(auxiliaryRegistryCss, /\.aux-form-toolbar-actions\s*\{\s*gap:\s*6px/i, 'grupos de botões textuais (Configurações) mantêm gap 6px');
+assert.match(auxiliaryRegistryCss, /\.mak-mother-page__toolbar \.aux-form-toolbar-commands\s*\{\s*gap:\s*0/i, 'Salvar/Descartar do cadastro usam só o gap dos slots');
+assert.match(auxiliaryRegistryCss, /\.aux-model-cmd-select > \.cmd-chevron[\s\S]{0,200}width:\s*12px\s*!important/i, 'chevron dos selects do formulário auxiliar é 12px');
+assert.match(auxiliaryRegistryCss, /aux-action-bar--form[\s\S]{0,200}border-radius:\s*12px\s*!important/i, 'barra única do registro tem cantos fechados');
 assert.match(auxiliaryRegistry, /aux-registry-page--record[\s\S]{0,80}aux-registry-page--table/, 'visualizações de registro e tabela possuem estados estruturais explícitos');
 // Estrutura (não sintaxe): o controle Registro/Tabela/Cards usa o segmento oficial
 // .view-seg com slider e botões acessíveis "Visualizar <modo>" gerados de VIEW_MODES.
@@ -176,14 +199,15 @@ assert.match(auxiliaryRegistryCss, /aux-model-field\[data-width-type="TEXTO_CURT
 assert(!/--mg-row-cols/.test(auxiliaryRegistry), 'formulário auxiliar não força mais colunas iguais por quantidade');
 assert(!/\.aux-tabs\b/.test(auxiliaryRegistryCss), 'abas antigas não podem disputar estilo com as abas oficiais do ModeloBase1');
 assert.match(auxiliaryRegistry, /data-template-id="context-panel"/, 'painel de contexto declara o template oficial');
-assert.match(auxiliaryRegistry, /mg-context-panel__swap-slot--counter/, 'contador do painel de contexto usa o slot de transição oficial');
-assert.match(auxiliaryRegistryCss, /button\.aux-cancel-button\.aux-form-action\.d17c-launch-button\s*\{[\s\S]{0,240}border-radius:\s*999px\s*!important/i, 'botão Cancelar usa a mesma geometria de pílula do Salvar');
+assert.match(auxiliaryRegistry, /aux-context-inline/, 'identidade do registro é inline na barra (sem segundo cartão)');
+assert.doesNotMatch(auxiliaryRegistry, /mg-context-panel__swap-slot--counter|aria-label="Navegação entre registros"/, 'Novo/Editar não mostra contador nem pager de registros');
+assert.match(auxiliaryRegistryCss, /\.mg-action-bar button\.aux-cancel-button\.aux-form-action\.d17c-launch-button\s*\{[\s\S]{0,240}border-radius:\s*50%\s*!important/i, 'Cancelar no Registro usa o mesmo círculo 25px da barra mãe');
 assert.match(auxiliaryRegistryCss, /html:is\(\.dark, \.tema-escuro, \.escuro\)[\s\S]{0,360}\.aux-model-card\s*\{[\s\S]{0,180}background:\s*var\(--mb1-bg-card\)\s*!important/i, 'cards auxiliares obedecem às superfícies oficiais do tema escuro');
 assert.match(auxiliaryRegistryCss, /input\[id\^="aux-"\]:not\(\[type="hidden"\]\)[\s\S]{0,1200}background-color:\s*var\(--mb1-bg-field\)\s*!important/i, 'campos auxiliares permanecem legíveis no tema escuro mesmo sob regras legadas');
 assert.match(auxiliaryRegistryCss, /body #root[\s\S]{0,300}button\.aux-cancel-button[\s\S]{0,120}color:\s*var\(--mb1-text-1\)\s*!important/i, 'Cancelar mantém contraste no tema escuro');
 assert.match(auxiliaryRegistryCss, /\.mg-filter-pill__trigger span\s*\{[\s\S]{0,80}color:\s*currentColor\s*!important/i, 'rótulos dos filtros permanecem legíveis no tema escuro');
 assert.match(auxiliaryRegistryCss, /div\.mg-view-panel\.emp-table-root\.emp-table-shell\.d17c-table-scroll\s*\{[\s\S]{0,160}scrollbar-color:\s*#5c6a7d #232a33\s*!important/i, 'rolagem das tabelas auxiliares segue o tema escuro do ModeloBase1');
-assert.match(auxiliaryRegistry, /const requiredFormFields = formPrimaryFields\.filter[\s\S]{0,220}filledRequiredFields/, 'contador de obrigatórios considera também o tipo do novo cadastro');
+assert.doesNotMatch(auxiliaryRegistry, /filledRequiredFields|aux-required-status/, 'Novo/Editar: barra limpa sem contador de campos obrigatórios');
 assert.match(auxiliaryRegistry, /checked=\{allPageSelected\}[\s\S]{0,300}pageKeys/, 'seleção geral atua somente sobre os registros listados na página atual');
 assert.match(deathCausesPage, /newLabel:\s*'Nova causa de morte'/, 'novo cadastro de causa usa concordância correta no painel de contexto');
 

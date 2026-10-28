@@ -103,10 +103,21 @@ assert.match(component, /REGISTRY_WRITE_PERMISSION = 'registry\.write'/, 'permis
 assert.match(component, /const canWrite = auth \? Boolean\(auth\.can\?\.\(REGISTRY_WRITE_PERMISSION\)\) : true;/, 'ações de escrita dependem de registry.write (sem AuthGate: permitido, o serviço valida)');
 assert.match(component, /if \(!canRead\) return <AccessDenied/, 'sem registry.read a página mostra Acesso não permitido');
 assert.match(component, /const actor = auth\?\.user \?\? null;/, 'ator da sessão vai para o serviço (auditoria)');
-for (const label of ['>Novo<', '{editActionLabel}', '>Inativar<', '>Ativar<', 'Definir padrão', 'Excluir', "label: 'Atualizar'"]) {
-  assert.ok(component.includes(label), `ação na barra: ${label}`);
+for (const label of ['aux-new-button', '{editActionLabel}', "label: 'Inativar'", "label: 'Ativar'", "label: 'Definir como padrão'", 'title="Excluir"', "label: 'Atualizar'", 'title="Duplicar"']) {
+  assert.ok(component.includes(label), `ação na barra/menu: ${label}`);
 }
-assert.match(component, /aria-hidden=\{!canWrite\}>\s*<button[^>]*aux-new-button/, 'Novo oculto sem permissão de escrita');
+assert.match(component, /aria-hidden=\{formOpen \|\| !canWrite\}>\s*<button[^>]*aux-new-button/, 'Novo oculto no Registro ou sem permissão de escrita');
+assert.match(component, /aux-new-button[\s\S]{0,220}<Plus/, 'Novo usa ícone + como a referência Marcas');
+assert.match(component, /mg-action-slot\$\{!formOpen && canWrite \? ' is-visible' : ''\}[\s\S]{0,200}aux-new-button/, 'Novo só visível na lista com escrita');
+assert.match(component, /mg-action-slot\$\{!formOpen \? ' is-visible' : ''\}[\s\S]{0,400}title=\{editActionLabel\}/, 'Editar só visível na lista');
+assert.match(component, /mg-action-slot\$\{!formOpen \? ' is-visible' : ''\}[\s\S]{0,400}title="Duplicar"/, 'Duplicar só visível na lista');
+assert.match(component, /mg-action-slot\$\{!formOpen \? ' is-visible' : ''\}[\s\S]{0,400}title="Excluir"/, 'Excluir só visível na lista');
+assert.match(component, /mg-action-slot\$\{formOpen && canWrite \? ' is-visible' : ''\}[\s\S]{0,400}title="Salvar \(Enter\)"/, 'Salvar só visível no Registro com escrita');
+assert.match(component, /mg-action-slot\$\{formOpen \? ' is-visible' : ''\}[\s\S]{0,400}aux-cancel-button/, 'Cancelar só visível no Registro');
+assert.match(component, /formOpen \? \([\s\S]{0,200}data-template-id="context-panel"/, 'identidade do registro fica no context-panel inline da barra mãe');
+assert.doesNotMatch(component, /aria-label="Navegação entre registros"/, 'Novo/Editar: sem pager first/prev/next/last');
+assert.match(component, /!formOpen \? \([\s\S]{0,120}mg-action-bar__end[\s\S]{0,400}ModeloBase1ViewSeg/, 'view-seg/colunas/mais opções só na lista');
+assert.doesNotMatch(component, /aux-required-status/, 'Novo/Editar: sem "Campos obrigatórios" na barra');
 assert.match(component, /canSetDefault = canWrite && selectedRecords\.length === 1 && selectedTab\.definition\.temPadrao/, 'Definir padrão só com temPadrao e um selecionado');
 assert.match(component, /onSubmit=\{save\}/, 'Enter salva pelo submit do formulário');
 assert.match(component, /event\.key === 'Escape'[\s\S]{0,160}closeForm\(\)/, 'Esc cancela o registro');
@@ -118,11 +129,11 @@ assert.match(component, /referenceOptionsFor\(campo, references\[campo\.referenc
 assert.match(component, /USAGE_COLUMN = \{ id: '_uso', label: 'Em uso'/, 'coluna "Em uso" declarada');
 assert.match(component, /usageInList = tabs\.length === 1 && tab\.usageInList/, 'coluna "Em uso" só quando a contagem é por índice');
 assert.match(component, /Em uso: \{usage\[editingRecord\.id\]\}/, 'registro aberto mostra a contagem de uso sob demanda');
-// Acima do limite: célula "—" com title explicativo, sem pílula de filtro e sem "…" permanente.
+// Acima do limite: célula "—" com title explicativo, sem "…" permanente. Faixa de pílulas removida.
 assert.match(component, /const usageAvailable = usageAvailableFor\(usageInList, \(catalog\[tab\.id\] \|\| \[\]\)\.length\);/, 'disponibilidade da coluna "Em uso" decidida pelo tamanho da lista');
-assert.match(component, /if \(column\.id === '_uso' && !usageAvailable\) return null;/, 'pílula "Em uso" só quando a contagem está disponível');
+assert.doesNotMatch(component, /<MakFilterRail|<MakFilterPill|<MgTablePanelStrip/, 'cadastros não renderizam a faixa de pílulas de filtro');
+assert.match(component, /aria-label="Configurar colunas da tabela"[\s\S]{0,700}<MgSpeedDialMenu/, 'Configurar colunas fica ao lado de Mais opções');
 assert.match(component, /title=\{!usageAvailable \? USAGE_UNAVAILABLE_TITLE : undefined\}>\{!usageAvailable \? USAGE_UNAVAILABLE_TEXT : usage\[record\.id\] == null \? '…' : usage\[record\.id\]\}/, 'célula mostra "—" com title acima do limite; "…" só enquanto conta');
-assert.ok(!/\{usageInList \? \(\s*<MakFilterPill/.test(component), 'NEGATIVO: pílula não depende só de usageInList');
 // Inativar um padrão: o aviso do serviço chega à tela.
 assert.match(component, /const result = await owner\.persistence\.deactivate\(actor, record\.id\);\s*if \(result\?\.aviso\) toast\.warning\(result\.aviso\);/, 'aviso de "deixou de ser padrão" vira notificação');
 assert.match(component, /notifyError\(error, 'Não foi possível salvar o cadastro\.'\)/, 'erro de gravação vai para a notificação com a mensagem do serviço');

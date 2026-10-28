@@ -25,10 +25,12 @@ export default function MgDesktopSearch({
   onApplyAll,
   disabled = false,
   placeholder = "Pesquisar...",
+  /** Referência Marcas: pílula larga sempre visível (não colapsa para o ícone). */
+  alwaysExpanded = false,
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [opened, setOpened] = useState(false);
+  const [expanded, setExpanded] = useState(alwaysExpanded);
+  const [opened, setOpened] = useState(alwaysExpanded);
   const rootRef = useRef(null);
   const inputRef = useRef(null);
   const blurTimeoutRef = useRef(null);
@@ -54,6 +56,10 @@ export default function MgDesktopSearch({
   };
 
   const collapse = () => {
+    if (alwaysExpanded) {
+      setDropdownOpen(false);
+      return;
+    }
     if (animTimeoutRef.current) return;
     if (!expandedRef.current) {
       setDropdownOpen(false);
@@ -138,7 +144,11 @@ export default function MgDesktopSearch({
   };
 
   return (
-    <div className={`mg-desktop-search${expanded ? " is-expanded" : ""}${opened ? " is-open" : ""}`} ref={rootRef}>
+    <div
+      className={`mg-desktop-search${expanded || alwaysExpanded ? " is-expanded" : ""}${opened || alwaysExpanded ? " is-open" : ""}${alwaysExpanded ? " mg-desktop-search--always" : ""}`}
+      ref={rootRef}
+    >
+      {alwaysExpanded ? null : (
       <button
         type="button"
         className={`ios-btn tb-btn tb-btn-ghost tb-btn-icon mg-desktop-search__trigger${hasFilter ? " mg-desktop-search__trigger--active" : ""}`}
@@ -151,7 +161,8 @@ export default function MgDesktopSearch({
       >
         {hasFilter ? <X className="h-3.5 w-3.5" aria-hidden="true" /> : <Search className="h-3.5 w-3.5" aria-hidden="true" />}
       </button>
-      {expanded ? (
+      )}
+      {expanded || alwaysExpanded ? (
         <div className="mg-desktop-search__panel" aria-hidden={!opened}>
           <div className="mg-desktop-search__panel-inner">
             <div className="mg-search-pill-wrap mg-desktop-search__field">
@@ -167,6 +178,8 @@ export default function MgDesktopSearch({
                   >
                     <X className="mg-search-pill-icon h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   </button>
+                ) : alwaysExpanded ? (
+                  <Search className="mg-search-pill-icon h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 ) : (
                   <button
                     type="button"
@@ -198,7 +211,7 @@ export default function MgDesktopSearch({
                   aria-expanded={dropdownOpen}
                   aria-haspopup="listbox"
                   disabled={disabled}
-                  tabIndex={opened ? 0 : -1}
+                  tabIndex={opened || alwaysExpanded ? 0 : -1}
                 />
               </div>
               <MgSearchResultsDropdown

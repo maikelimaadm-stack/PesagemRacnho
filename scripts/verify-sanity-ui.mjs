@@ -174,7 +174,7 @@ function checkPermissionWiring(files) {
   assert.match(page, /canCancel=\{canCancel\}/, 'aba Aplicações recebe canCancel (weighing.edit)');
 
   const catalog = stripComments(files[`${COMPONENT_DIR}/SanidadeCatalogPanel.jsx`]);
-  assert.match(catalog, /mg-action-slot\$\{canWrite \? ' is-visible' : ''\}[\s\S]{0,260}aux-new-button[^>]*disabled=\{!canWrite\}>Novo</, 'Novo só com registry.write');
+  assert.match(catalog, /mg-action-slot\$\{canWrite \? ' is-visible' : ''\}[\s\S]{0,260}aux-new-button[^>]*disabled=\{!canWrite\}[\s\S]{0,200}<Plus/, 'Novo só com registry.write (ícone)');
   assert.match(catalog, /const canInactivate = canWrite && selectedAllActive;/, 'Inativar só com registry.write');
   assert.match(catalog, /const canReactivate = canWrite && selectedAllInactive;/, 'Reativar só com registry.write');
   assert.match(catalog, /const openLabel = canWrite \? 'Editar' : 'Consultar';/, 'sem registry.write o registro abre em Consultar');
@@ -185,11 +185,11 @@ function checkPermissionWiring(files) {
   }
 
   const panel = stripComments(files[`${COMPONENT_DIR}/AplicacoesPanel.jsx`]);
-  assert.match(panel, /mg-action-slot\$\{canApply \? ' is-visible' : ''\}[\s\S]{0,400}disabled=\{!canApply\}>Registrar aplicação</, 'Registrar aplicação só com weighing.write');
+  assert.match(panel, /mg-action-slot\$\{canApply \? ' is-visible' : ''\}[\s\S]{0,400}aria-label="Registrar aplicação avulsa"[\s\S]{0,120}disabled=\{!canApply\}/, 'Registrar aplicação só com weighing.write');
   assert.match(panel, /if \(!canApply \|\| busy\) return;[\s\S]{0,80}registerApplication\(/, 'registro recusado sem weighing.write');
   assert.match(panel, /open=\{registerOpen && canApply\}/, 'diálogo de registro só abre com weighing.write');
   assert.match(panel, /const canCancelSelected = canCancel && Boolean\(selectedApplication\) && !isApplicationCancelled\(selectedApplication\);/, 'Cancelar aplicação só com weighing.edit e aplicação ativa selecionada');
-  assert.match(panel, /mg-action-slot\$\{canCancelSelected \? ' is-visible' : ''\}[\s\S]{0,500}disabled=\{busy \|\| !canCancelSelected\}>Cancelar aplicação</, 'botão Cancelar aplicação condicionado');
+  assert.match(panel, /mg-action-slot\$\{canCancelSelected \? ' is-visible' : ''\}[\s\S]{0,500}aria-label="Cancelar a aplicação selecionada"[\s\S]{0,160}disabled=\{busy \|\| !canCancelSelected\}/, 'botão Cancelar aplicação condicionado');
   assert.match(panel, /if \(!canCancel \|\| !cancelTarget \|\| busy\) return;[\s\S]{0,120}cancelApplication\(cancelTarget\.id, \{ motivo \}\)/, 'cancelamento recusado sem weighing.edit e com motivo');
   assert.match(panel, /application=\{canCancel \? cancelTarget : null\}/, 'diálogo de cancelamento só abre com weighing.edit');
   const cancelDialog = stripComments(files[`${COMPONENT_DIR}/CancelarAplicacaoDialog.jsx`]);
@@ -264,9 +264,10 @@ ok('sem-stores-v5');
   assert.match(tabs, /className="mg-panel-tabs-rail"[\s\S]{0,200}className="seg-control" role="tablist"[\s\S]{0,200}className="seg-tab-slider"/, 'abas na estrutura oficial do ModeloBase1');
   const catalog = sources[`${COMPONENT_DIR}/SanidadeCatalogPanel.jsx`];
   assert.match(catalog, /data-mak-region="toolbar"[\s\S]{0,200}className="mg-action-bar /, 'barra de ações mg-action-bar');
-  assert.match(catalog, /<MgDesktopSearch[\s\S]{0,900}onApplyAll=/, 'pesquisa expansível');
-  assert.match(catalog, /<MgSpeedDialMenu[\s\S]{0,500}Atualizar[\s\S]{0,200}Configurar colunas/, '"Mais opções" com Atualizar e Configurar colunas');
-  assert.match(catalog, /data-mak-region="panel-strip"[\s\S]{0,200}<MgTablePanelStrip[\s\S]{0,600}<MakFilterPill/, 'pílulas por coluna');
+  assert.doesNotMatch(catalog, /<MgDesktopSearch/, 'catálogo de sanidade não mostra o campo de pesquisa da barra');
+  assert.match(catalog, /aria-label="Configurar colunas da tabela"[\s\S]{0,700}<MgSpeedDialMenu/, 'Configurar colunas fica ao lado de Mais opções');
+  assert.match(catalog, /<MgSpeedDialMenu[\s\S]{0,500}Atualizar[\s\S]{0,200}Limpar filtros/, '"Mais opções" com Atualizar e Limpar filtros');
+  assert.doesNotMatch(catalog, /<MakFilterRail|<MakFilterPill|<MgTablePanelStrip/, 'catálogo não mostra a faixa de filtros personalizados');
   const table = sources[`${COMPONENT_DIR}/SanidadeDataTable.jsx`];
   assert.match(table, /className="emp-table-pro d17c-data-table aux-data-table/, 'tabela com as classes da Tela Mãe');
   assert.match(table, /<MakTh[\s\S]{0,900}onFiltrar: /, 'cabeçalhos MakTh com filtro');

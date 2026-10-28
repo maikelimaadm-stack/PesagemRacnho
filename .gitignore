@@ -20,13 +20,13 @@ coverage/
 logs/
 npm-debug.log*
 
-# Temporários
+# Temporários e cache local de desenvolvimento
 tmp/
-.tmp/*
-!.tmp/formulario-escopo/
+.tmp/
 .audit-tmp/
+.userdata-dev/
+.claude/
 *.local
-docs/evidence/**/screenshots/runtime-temp/
 
 # Dados locais de desenvolvimento (legado JSON/SQLite)
 data/*.json

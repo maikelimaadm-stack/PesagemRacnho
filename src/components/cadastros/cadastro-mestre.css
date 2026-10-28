@@ -37,6 +37,10 @@
 .aux-chip:disabled { cursor: not-allowed; opacity: .6; }
 .aux-chip svg { width: 12px; height: 12px; }
 .aux-chip:focus-visible { outline: 2px solid var(--d17b-accent, #40de63); outline-offset: 1px; }
+.aux-chip:active:not(:disabled) { opacity: 0.9; }
+@media (prefers-reduced-motion: reduce) {
+  .aux-chip { transition: none; }
+}
 
 /* Distintivos do painel de contexto: padrão, inativo e contagem de uso. */
 .aux-context-badges { display: inline-flex; align-items: center; gap: 6px; margin-left: 8px; }

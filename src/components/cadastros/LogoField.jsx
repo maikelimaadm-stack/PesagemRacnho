@@ -3,6 +3,7 @@
 // ajustado no navegador (logoImage.js) e o formulário recebe o data URL. "Remover"
 // limpa. O id do input NÃO usa o prefixo `aux-` (não herda o estilo de campo de texto).
 import { useEffect, useRef, useState } from 'react';
+import { ImagePlus, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { isAcceptedLogo } from '@/modules/catalog/domain/propertyHeader';
 import { prepareLogoFromFile } from './logoImage.js';
@@ -74,12 +75,12 @@ export default function LogoField({ campo, value, onChange, disabled }) {
             disabled={disabled || busy}
             onChange={handleFile}
           />
-          <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost aux-logo-field__button" onClick={choose} disabled={disabled || busy} aria-controls={inputId}>
-            {busy ? 'Ajustando…' : hasImage ? 'Trocar' : 'Escolher logo'}
+          <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost aux-logo-field__button" onClick={choose} disabled={disabled || busy} aria-controls={inputId} title={busy ? 'Ajustando…' : hasImage ? 'Trocar logo' : 'Escolher logo'} aria-label={busy ? 'Ajustando…' : hasImage ? 'Trocar logo' : 'Escolher logo'}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" /> : hasImage ? <RefreshCw className="h-3.5 w-3.5 shrink-0" aria-hidden="true" /> : <ImagePlus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
           </button>
           {hasImage ? (
-            <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost tb-btn-danger aux-logo-field__button" onClick={remove} disabled={disabled || busy}>
-              Remover
+            <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost tb-btn-danger aux-logo-field__button" onClick={remove} disabled={disabled || busy} title="Remover logo" aria-label="Remover logo">
+              <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             </button>
           ) : null}
           <span className={`aux-logo-field__help${erro ? ' is-error' : ''}`} role={erro ? 'alert' : undefined}>

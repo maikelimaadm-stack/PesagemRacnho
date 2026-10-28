@@ -31,7 +31,7 @@
   font-weight: 700;
 }
 .importacao-steps__tab.active .importacao-steps__badge { background: var(--mb1-green); color: #0f2f18; }
-.importacao-steps__tab[data-concluida="true"] .importacao-steps__badge { background: var(--mb1-green-soft); color: #118b32; }
+.importacao-steps__tab[data-concluida="true"] .importacao-steps__badge { background: var(--mb1-green-soft); color: #111827; }
 
 /* Conteúdo de uma etapa */
 .importacao-step { display: flex; flex-direction: column; gap: 10px; }
@@ -54,7 +54,7 @@
 .importacao-link-button {
   border: 0;
   background: none;
-  color: #118b32;
+  color: #111827;
   font-size: 11px;
   font-weight: 600;
   text-decoration: underline;
@@ -76,7 +76,7 @@
   font-size: 12px;
   line-height: 17px;
 }
-.importacao-alert--ok { border-color: #6ee7b7; background: #ecfdf5; color: #047857; }
+.importacao-alert--ok { border-color: #6ee7b7; background: #ecfdf5; color: #111827; }
 .importacao-alert--aviso { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
 .importacao-alert--erro { border-color: #fca5a5; background: #fef2f2; color: #b91c1c; }
 .importacao-alert--info { border-color: #93c5fd; background: #eff6ff; color: #1d4ed8; }
@@ -86,7 +86,7 @@
 .importacao-file-box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .importacao-facts { display: flex; flex-wrap: wrap; margin: 0; gap: 8px 18px; }
 .importacao-facts div { display: flex; flex-direction: column; }
-.importacao-facts dt { color: var(--mb1-text-3); font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+.importacao-facts dt { color: var(--mb1-text-2); font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; }
 .importacao-facts dd { margin: 0; color: var(--mb1-text-1); font-size: 12px; font-weight: 600; }
 
 /* Campos */
@@ -97,7 +97,8 @@
 .importacao-select,
 .importacao-input {
   min-width: 170px;
-  height: var(--mb1-button-height);
+  height: 40px;
+  min-height: 40px;
   padding: 0 8px;
   border: 1px solid var(--mb1-border);
   border-radius: var(--mb1-radius-control);
@@ -216,7 +217,7 @@
   line-height: 1;
   white-space: nowrap;
 }
-.importacao-status--novo { border-color: #6ee7b7; background: #ecfdf5; color: #047857; }
+.importacao-status--novo { border-color: #6ee7b7; background: #ecfdf5; color: #111827; }
 .importacao-status--existe { border-color: #cbd5e1; background: #f1f5f9; color: #475569; }
 .importacao-status--duplicidade { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
 .importacao-status--conflito { border-color: #fdba74; background: #fff7ed; color: #c2410c; }

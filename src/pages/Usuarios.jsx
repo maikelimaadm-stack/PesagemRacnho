@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ClipboardCopy, RefreshCw } from 'lucide-react';
+import { ClipboardCopy, KeyRound, Pencil, Plus, Power, RefreshCw, ShieldAlert } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -189,29 +189,38 @@ function UsuariosContent() {
       <div className="mak-mother-page__toolbar mg-subtoolbar-stack" data-mak-region="toolbar">
         <div data-template-id="action-bar" className="mg-action-bar canva-section flex w-full shrink-0 items-center" style={{ background: 'var(--bg-card)' }}>
           <div className="mg-action-bar__actions flex min-w-0 items-center">
-            <div className="mg-action-slot is-visible" style={{ '--slot-width': '112px' }}>
-              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green" onClick={openNew} title="Novo usuário">Novo usuário</button>
+            <div className="mg-action-slot is-visible" style={{ '--slot-width': '25px' }}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-green" onClick={openNew} title="Novo usuário" aria-label="Novo usuário">
+                <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" strokeWidth={2.5} />
+              </button>
             </div>
-            <div className={`mg-action-slot${selected ? ' is-visible' : ''}`} style={{ '--slot-width': '66px' }} aria-hidden={!selected}>
-              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => openEdit(selected)} title="Editar" tabIndex={selected ? 0 : -1}>Editar</button>
+            <div className={`mg-action-slot${selected ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!selected}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" onClick={() => openEdit(selected)} title="Editar" aria-label="Editar" tabIndex={selected ? 0 : -1}>
+                <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              </button>
             </div>
-            <div className={`mg-action-slot${selected ? ' is-visible' : ''}`} style={{ '--slot-width': '84px' }} aria-hidden={!selected}>
+            <div className={`mg-action-slot${selected ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!selected}>
               <button
                 type="button"
-                className={`ios-btn tb-btn tb-btn-labeled tb-btn-ghost${selected?.ativo ? ' tb-btn-danger' : ''}`}
+                className={`ios-btn tb-btn tb-btn-icon tb-btn-ghost${selected?.ativo ? ' tb-btn-danger' : ''}`}
                 onClick={askToggleActive}
                 title={selected?.ativo ? 'Inativar usuário' : 'Ativar usuário'}
+                aria-label={selected?.ativo ? 'Inativar usuário' : 'Ativar usuário'}
                 tabIndex={selected ? 0 : -1}
                 disabled={isSelf}
               >
-                {selected?.ativo ? 'Inativar' : 'Ativar'}
+                <Power className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               </button>
             </div>
-            <div className={`mg-action-slot${selected ? ' is-visible' : ''}`} style={{ '--slot-width': '124px' }} aria-hidden={!selected}>
-              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => { setResetForm(EMPTY_RESET); setResetDialog(selected); }} title="Redefinir senha" tabIndex={selected ? 0 : -1}>Redefinir senha</button>
+            <div className={`mg-action-slot${selected ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!selected}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" onClick={() => { setResetForm(EMPTY_RESET); setResetDialog(selected); }} title="Redefinir senha" aria-label="Redefinir senha" tabIndex={selected ? 0 : -1}>
+                <KeyRound className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              </button>
             </div>
-            <div className={`mg-action-slot${selected && !selected.must_change_password ? ' is-visible' : ''}`} style={{ '--slot-width': '104px' }} aria-hidden={!selected || selected.must_change_password}>
-              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={askForceChange} title="Forçar troca de senha no próximo acesso" tabIndex={selected ? 0 : -1}>Forçar troca</button>
+            <div className={`mg-action-slot${selected && !selected.must_change_password ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!selected || selected.must_change_password}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" onClick={askForceChange} title="Forçar troca de senha no próximo acesso" aria-label="Forçar troca de senha no próximo acesso" tabIndex={selected ? 0 : -1}>
+                <ShieldAlert className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              </button>
             </div>
           </div>
           <div className="mg-action-bar__end">
@@ -273,8 +282,8 @@ function UsuariosContent() {
                     <TableCell>{fmtDateTimeBR(row.last_login_at, 'Nunca')}</TableCell>
                   </TableRow>
                 ))}
-                {!loading && !rows.length ? <TableRow><TableCell colSpan={6} className="d17d-empty-row">Nenhum usuário cadastrado.</TableCell></TableRow> : null}
-                {loading ? <TableRow><TableCell colSpan={6} className="d17d-empty-row">Carregando usuários...</TableCell></TableRow> : null}
+                {!loading && !rows.length ? <TableRow><TableCell colSpan={6} className="d17d-empty-row" role="status">Nenhum usuário cadastrado. Inclua um usuário para liberar o acesso.</TableCell></TableRow> : null}
+                {loading ? <TableRow><TableCell colSpan={6} className="d17d-empty-row" role="status">Carregando usuários...</TableCell></TableRow> : null}
               </TableBody>
             </Table>
           </div>

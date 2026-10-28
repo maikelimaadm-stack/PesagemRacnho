@@ -23,4 +23,33 @@ contextBridge.exposeInMainWorld('pesagemApp', {
     selectImportJson: () => ipcRenderer.invoke('dialog:select-import-json'),
     selectExportDirectory: () => ipcRenderer.invoke('dialog:select-export-directory'),
   },
+  // Balança: o app lista e conecta (Bluetooth ou COM) — sem emparelhar no Windows.
+  equipment: {
+    onDeviceList: (handler) => {
+      const listener = (_event, payload) => handler(payload);
+      ipcRenderer.on('equipment:device-list', listener);
+      return () => ipcRenderer.removeListener('equipment:device-list', listener);
+    },
+    // Só portas COM reais — não reaproveitar lista Bluetooth (quebrava o clique no S3).
+    onSerialPortList: (handler) => {
+      const listener = (_event, payload) => {
+        if (payload?.source !== 'serial') return;
+        handler({
+          ports: (payload?.devices || []).map((d) => ({
+            portId: d.portId || d.id,
+            displayName: d.label,
+            portName: d.portName || '',
+            bluetoothLikely: d.bluetoothLikely,
+          })),
+          empty: payload?.empty,
+        });
+      };
+      ipcRenderer.on('equipment:device-list', listener);
+      return () => ipcRenderer.removeListener('equipment:device-list', listener);
+    },
+    chooseSerialPort: (portId) => ipcRenderer.invoke('equipment:choose-serial-port', portId),
+    cancelSerialPort: () => ipcRenderer.invoke('equipment:cancel-serial-port'),
+    chooseBluetoothDevice: (deviceId) => ipcRenderer.invoke('equipment:choose-bluetooth-device', deviceId),
+    cancelBluetoothDevice: () => ipcRenderer.invoke('equipment:cancel-bluetooth-device'),
+  },
 });

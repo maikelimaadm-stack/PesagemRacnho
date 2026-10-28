@@ -1,16 +1,27 @@
-/* Lançamento — fonte de Nº Identificação e Peso em 18 px (pedido 17/09/2026).
-   Só a fonte muda: altura e largura dos campos continuam as do modelo (R29–R31).
-   Carregado depois de d17b-modelobase1.css, com os mesmos seletores. */
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+/* Lançamento — Nº Identificação e Peso: mesma tipografia (âmbar, negrito, 18px).
+   Carregado depois de d17b-modelobase1.css; launch-visual reforça o Salvar. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
   .d17d-launch-fields .d17d-field.d17d-field--animal > input:not([type="checkbox"]):not([type="radio"]),
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
-  .d17d-launch-fields .d17d-field.d17d-field--weight .d17d-weight-control > input {
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+  .d17d-launch-fields .d17d-field.d17d-field--animal > input:not([type="checkbox"]):not([type="radio"])::placeholder,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+  .d17d-launch-fields .d17d-field.d17d-field--weight .d17d-weight-control > input,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+  .d17d-launch-fields .d17d-field.d17d-field--weight .d17d-weight-control > input::placeholder {
+  color: #f59e0b !important;
   font-size: 18px !important;
+  font-weight: 700 !important;
   line-height: 22px !important;
 }
 
-/* Identificação em negrito. */
-html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
-  .d17d-launch-fields .d17d-field.d17d-field--animal > input:not([type="checkbox"]):not([type="radio"]) {
-  font-weight: 700 !important;
+/* Captura automática: calibrando = preto; estabilizado = âmbar da Identificação. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+  .d17d-launch-fields .d17d-field.d17d-field--weight .d17d-weight-control.is-auto > input,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+  .d17d-launch-fields .d17d-field.d17d-field--weight .d17d-weight-control.is-auto.is-settling > input {
+  color: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope
+  .d17d-launch-fields .d17d-field.d17d-field--weight .d17d-weight-control.is-auto.is-stable > input {
+  color: #f59e0b !important; /* mesma cor da Identificação */
 }

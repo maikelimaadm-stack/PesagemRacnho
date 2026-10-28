@@ -22,7 +22,7 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Eye, EyeOff } from "lucide-react";
-import { Scale, Save, RefreshCw, Settings, Plus, ChevronLeft, ChevronRight, MoreVertical, X, ArrowUpDown, ArrowUp, ArrowDown, Truck, FolderOpen, Tag, AlertTriangle, Syringe } from "lucide-react";
+import { Scale, Save, RefreshCw, Settings, Plus, ChevronLeft, ChevronRight, MoreVertical, X, ArrowUpDown, ArrowUp, ArrowDown, Truck, FolderOpen, Tag, AlertTriangle, Syringe, ListOrdered } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
@@ -69,6 +69,9 @@ import SanidadeLancamentoPanel from "../components/pesagens/SanidadeLancamentoPa
 import { listApplications, listMedicamentos, listProgramas } from "@/modules/sanity/application/sanityService";
 import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
 import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
+import { formatWeightForField } from "@/modules/equipment/domain/scaleContract";
+import { getEquipmentConfig } from "@/modules/equipment/application/equipmentConfigService";
+import { ensureScaleReady, getLastStableReading, getStatus as getScaleStatus, onScaleReading, onScaleStatus } from "@/modules/equipment/application/scaleService";
 // Contexto fixo por sequência: o que fica e o que sai entre um animal e o próximo
 // é decidido pelo módulo puro launchContext (matriz STICKY_FIELDS/ANIMAL_FIELDS por modo).
 import {
@@ -96,6 +99,9 @@ const m = fmtCurrency;
 // Padrões da empresa (marca/raça/apartação/rendimento) vêm da configuração e dos
 // cadastros mestres; nunca de valores fixos no código (ADR-025, S-01.5).
 const PADROES_VAZIOS = Object.freeze({ marca: "", marcaId: "", raca: "", racaId: "", apartacaoSelecionada: "", rendimento: "" });
+const ATALHO_LOTE_SETTING_KEY = 'lancamento:atalho-lote';
+/** Atalhos de lote quando a faixa coincidir (F11 = 1º, F12 = 2º, …). */
+const ATALHO_LOTE_TECLAS = Object.freeze(['F11', 'F12', 'F10', 'F9', 'F8', 'F7', 'F6', 'F5', 'F4']);
 const CATALOGOS_VAZIOS = Object.freeze({ marcas: [], racas: [], categorias: [] });
 const CATALOGO_SANIDADE_VAZIO = Object.freeze({ programas: [], medicamentos: [], carregado: false, erro: false });
 // sessionStorage pode faltar (ou lançar) fora do Electron/navegador: o contexto só não persiste.
@@ -153,6 +159,8 @@ export default function LancamentoPesagensIndividuais() {
   // Refs para navegação rápida
   const numeroInputRef = useRef(null);
   const pesoInputRef = useRef(null);
+  const observacaoInputRef = useRef(null);
+  const salvarButtonRef = useRef(null);
   const ignorarProximoBlurIdentificacaoRef = useRef(false);
 
   // Dados em cache (offline-first)
@@ -172,6 +180,97 @@ export default function LancamentoPesagensIndividuais() {
   const [snDialogInitialValue, setSnDialogInitialValue] = useState(null);
   const [snDialogInherited, setSnDialogInherited] = useState(false);
   const [peso, setPeso] = useState("");
+  const [balancaOnline, setBalancaOnline] = useState(() => Boolean(getScaleStatus().connected));
+  const [pesagemAuto, setPesagemAuto] = useState(false);
+  /** idle | settling | stable — acompanha estabilização do monitor no campo Peso. */
+  const [pesoEstagioBalanca, setPesoEstagioBalanca] = useState('idle');
+  /** Destaque visual do botão Salvar quando o Enter leva o foco até ele. */
+  const [salvarSelecionado, setSalvarSelecionado] = useState(false);
+  /** Atalho opcional F11/F12/… quando vários lotes caem na mesma faixa de peso. */
+  const [atalhoLoteAtivo, setAtalhoLoteAtivo] = useState(false);
+  /** Cor do indicador da balança (dot + ícone): green | blue. */
+  const [statusAccentBalanca, setStatusAccentBalanca] = useState('green');
+  const pesagemAutoRef = useRef(false);
+  const handleSalvarRef = useRef(null);
+  const pesoUiRafRef = useRef(0);
+  const pesoUiPendenteRef = useRef(null);
+  const pesoUiAplicadoRef = useRef({ text: '', stage: 'idle' });
+
+  const estagioPesoDoMonitor = (weightKg, stable) => {
+    if (stable && Number(weightKg) > 0) return 'stable';
+    if (Number(weightKg) > 0) return 'settling';
+    return 'idle';
+  };
+
+  const aplicarPesoDoMonitorNaUi = (weightKg, stage, { force = false } = {}) => {
+    if (weightKg == null || !Number.isFinite(Number(weightKg))) return;
+    const text = formatWeightForField(weightKg);
+    const nextStage = stage || estagioPesoDoMonitor(weightKg, false);
+    pesoUiPendenteRef.current = { text, stage: nextStage };
+    if (pesoUiRafRef.current) {
+      if (force) {
+        cancelAnimationFrame(pesoUiRafRef.current);
+        pesoUiRafRef.current = 0;
+      } else {
+        return;
+      }
+    }
+    const flush = () => {
+      pesoUiRafRef.current = 0;
+      const pending = pesoUiPendenteRef.current;
+      if (!pending) return;
+      const last = pesoUiAplicadoRef.current;
+      if (!force && last.text === pending.text && last.stage === pending.stage) return;
+      pesoUiAplicadoRef.current = pending;
+      setPeso(pending.text);
+      setPesoEstagioBalanca(pending.stage);
+    };
+    if (force) {
+      flush();
+      return;
+    }
+    pesoUiRafRef.current = requestAnimationFrame(flush);
+  };
+
+  const sincronizarPesoDoMonitor = ({ force = false } = {}) => {
+    if (!pesagemAutoRef.current) return;
+    const status = getScaleStatus();
+    const kg = status.lastWeightKg ?? getLastStableReading()?.weightKg ?? null;
+    if (kg == null || !Number.isFinite(Number(kg))) return;
+    aplicarPesoDoMonitorNaUi(kg, estagioPesoDoMonitor(kg, status.stable), { force });
+  };
+
+  const focarBotaoSalvar = () => {
+    // Marca visual na hora. O foco no botão espera o keyup do Enter —
+    // senão o próprio Enter “clica” o Salvar e some a seleção (Tab funcionava, Enter não).
+    setSalvarSelecionado(true);
+    const aplicarFoco = () => {
+      const btn = salvarButtonRef.current;
+      if (!btn) return;
+      btn.focus({ preventScroll: true });
+      setSalvarSelecionado(true);
+    };
+    const onKeyUp = (ev) => {
+      if (ev.key !== 'Enter' && ev.key !== ' ') return;
+      window.removeEventListener('keyup', onKeyUp);
+      clearTimeout(fallbackId);
+      aplicarFoco();
+    };
+    window.addEventListener('keyup', onKeyUp);
+    const fallbackId = setTimeout(() => {
+      window.removeEventListener('keyup', onKeyUp);
+      aplicarFoco();
+    }, 80);
+  };
+
+  /** Com pesagem automática: próximo passo é o Salvar (peso vem do monitor). Sem automática: vai ao Peso. */
+  const focarAposIdentificacao = () => {
+    if (pesagemAutoRef.current) {
+      focarBotaoSalvar();
+      return;
+    }
+    pesoInputRef.current?.focus();
+  };
   const [sexo, setSexo] = useState("M");
   // Marca/raça: nome (snapshot) + id do cadastro mestre selecionado.
   const [raca, setRaca] = useState("");
@@ -297,6 +396,98 @@ export default function LancamentoPesagensIndividuais() {
     writeStoredLaunchState(armazenamentoSessao(), chaveContextoSessao, JSON.parse(contextoSerializado));
   }, [contextoSessaoAplicado, chaveContextoSessao, contextoSerializado]);
 
+  useEffect(() => {
+    pesagemAutoRef.current = pesagemAuto;
+  }, [pesagemAuto]);
+
+  // Balança: status + preenche Peso só com pesagem automática ligada (sem roubar o foco).
+  useEffect(() => {
+    let cancelled = false;
+    let offReading = () => {};
+    const offStatus = onScaleStatus((status) => {
+      setBalancaOnline(Boolean(status?.connected));
+    });
+    const applyWeightQuiet = (reading) => {
+      if (!pesagemAutoRef.current) return;
+      if (reading?.weightKg == null || !Number.isFinite(Number(reading.weightKg))) return;
+      // Espelha o monitor (0 = idle; oscilando = settling; estável = stable).
+      aplicarPesoDoMonitorNaUi(
+        reading.weightKg,
+        estagioPesoDoMonitor(reading.weightKg, reading.stable),
+      );
+    };
+    (async () => {
+      try {
+        const config = await getEquipmentConfig();
+        if (cancelled || config.adapter === 'none') return;
+        await ensureScaleReady();
+        if (cancelled) return;
+        setBalancaOnline(Boolean(getScaleStatus().connected));
+        offReading = onScaleReading((reading) => {
+          if (config.autoFillOnStable === false) return;
+          applyWeightQuiet(reading);
+        });
+      } catch {
+        /* balança opcional — digitação manual continua */
+      }
+    })();
+    return () => {
+      cancelled = true;
+      offReading();
+      offStatus();
+      if (pesoUiRafRef.current) {
+        cancelAnimationFrame(pesoUiRafRef.current);
+        pesoUiRafRef.current = 0;
+      }
+    };
+  }, []);
+
+  const alternarPesagemAuto = () => {
+    if (!balancaOnline) {
+      toast.info('Conecte a balança em Configurações › Equipamentos para usar a pesagem automática.');
+      return;
+    }
+    setPesagemAuto((ligado) => {
+      const next = !ligado;
+      pesagemAutoRef.current = next;
+      if (next) {
+        ensureScaleReady().catch(() => {});
+        const status = getScaleStatus();
+        const current = getLastStableReading()
+          || (status.lastWeightKg != null ? { weightKg: status.lastWeightKg } : null);
+        if (current?.weightKg != null) setPeso(formatWeightForField(current.weightKg));
+        setPesoEstagioBalanca(status.stable || getLastStableReading() ? 'stable' : 'settling');
+        toast.success('Pesagem automática ligada — campo Peso bloqueado.');
+      } else {
+        setPesoEstagioBalanca('idle');
+        toast.info('Pesagem automática desligada — digite o peso manualmente.');
+      }
+      return next;
+    });
+  };
+
+  // Sem balança online, desliga a pesagem automática.
+  useEffect(() => {
+    if (balancaOnline || !pesagemAuto) return;
+    pesagemAutoRef.current = false;
+    setPesagemAuto(false);
+    setPesoEstagioBalanca('idle');
+  }, [balancaOnline, pesagemAuto]);
+
+  useEffect(() => {
+    getSetting(ATALHO_LOTE_SETTING_KEY, false).then((v) => setAtalhoLoteAtivo(Boolean(v))).catch(() => {});
+    const applyAccent = (cfg) => setStatusAccentBalanca(cfg?.statusAccent || 'green');
+    getEquipmentConfig().then(applyAccent).catch(() => {});
+    const onConfig = (event) => applyAccent(event?.detail);
+    window.addEventListener('pesagens:equipment-config', onConfig);
+    return () => window.removeEventListener('pesagens:equipment-config', onConfig);
+  }, []);
+
+  const alternarAtalhoLote = async (ligado) => {
+    setAtalhoLoteAtivo(ligado);
+    try { await setSetting(ATALHO_LOTE_SETTING_KEY, ligado); } catch { /* ignore */ }
+  };
+
   const animaisCadastrados = useMemo(() => getRegisteredAnimals(pesagens), [pesagens]);
   const animalLookupIndex = useMemo(() => buildAnimalLookupIndex(animaisCadastrados), [animaisCadastrados]);
   const animalSelecionado = useMemo(
@@ -359,12 +550,23 @@ export default function LancamentoPesagensIndividuais() {
     setRacaId(registro?.id || '');
     setRaca(registro?.nome || '');
   };
-  // Descrição do cadastro do animal na faixa (Manejo/Saída): categoria e era do registro v7.
+  // Nome da marca na faixa (cadastro selecionado, registro v7 ou catálogo por id).
+  const marcaCadastroAnimal = useMemo(() => {
+    if (!animalSelecionado) return '';
+    if (animalSelecionado.marca) return String(animalSelecionado.marca);
+    if (animalRegistro?.marca) return String(animalRegistro.marca);
+    const porId = animalRegistro?.marca_id
+      ? catalogos.marcas.find((item) => item.id === animalRegistro.marca_id)
+      : null;
+    return porId?.nome || '';
+  }, [animalSelecionado, animalRegistro, catalogos.marcas]);
+
+  // Faixa do animal (Manejo/Saída): resto após Animal/Marca (raça, categoria, era, sexo).
   const descricaoCadastroAnimal = useMemo(() => {
     if (!animalSelecionado) return '';
     const categoria = animalRegistro?.categoria_id ? nomeCategoria(animalRegistro.categoria_id) : '';
     const eraAtual = animalRegistro?.era || animalSelecionado.era;
-    return [animalSelecionado.marca || 'Sem marca', animalSelecionado.raca || '-', categoria || '-', eraAtual ? `era ${eraAtual}` : '', animalSelecionado.sexo || '-'].filter(Boolean).join(' · ');
+    return [animalSelecionado.raca || '-', categoria || '-', eraAtual ? `era ${eraAtual}` : '', animalSelecionado.sexo || '-'].filter(Boolean).join(' · ');
   }, [animalSelecionado, animalRegistro, catalogos.categorias]);
 
   // Perfil do animal selecionado (Manejo/Saída) fica em animalSelecionado/animalRegistro:
@@ -375,7 +577,9 @@ export default function LancamentoPesagensIndividuais() {
     setAnimalIdSelecionado(animal.animal_id || animal.id);
     setNumeroAnimal(normalizeAnimalIdentifier(animal.numero_animal));
     setAvisoTela(criarMensagemAnimal({ numero: animal.numero_animal, dadosCadastro: animal, ultimo: animal, tipoManejo, editingId, formatarData }));
-    setTimeout(() => pesoInputRef.current?.focus(), 0);
+    // Após o diálogo de marcas, o Radix tenta devolver o foco ao Nº — usamos um tick
+    // e onCloseAutoFocus(preventDefault) no dialog para ir a Peso/Salvar.
+    setTimeout(() => focarAposIdentificacao(), 30);
     return true;
   };
 
@@ -472,13 +676,26 @@ export default function LancamentoPesagensIndividuais() {
 
   const resolverAnimalDigitado = (value = numeroAnimal) => {
     if (tipoManejo === 'Cadastro' || isSnIdentifier(value)) return true;
-    const matches = animalLookupIndex.byNumber.get(normalizeAnimalText(value)) || [];
+    const numeroNorm = normalizeAnimalText(value);
+    if (!numeroNorm) {
+      setAnimalIdSelecionado('');
+      setAvisoTela(null);
+      return false;
+    }
+    const matches = animalLookupIndex.byNumber.get(numeroNorm) || [];
+    // Já escolheu a marca para este número: Tab/blur não pergunta de novo.
+    // Só volta a perguntar se apagar/trocar a identificação (onChange limpa o id).
+    if (animalIdSelecionado) {
+      const jaEscolhido = matches.find((item) => String(item.animal_id || item.id) === String(animalIdSelecionado));
+      if (jaEscolhido && normalizeAnimalText(jaEscolhido.numero_animal) === numeroNorm) {
+        return true;
+      }
+    }
     if (matches.length === 1) return aplicarAnimalSelecionado(matches[0]);
     if (matches.length > 1) {
       setOpcoesAnimal(matches);
       setSeletorAnimalOpen(true);
       setAvisoTela(null);
-      toast.warning(`O número ${String(value).trim()} existe em mais de uma marca. Escolha o animal correto.`);
       return false;
     }
     setAnimalIdSelecionado('');
@@ -550,7 +767,10 @@ export default function LancamentoPesagensIndividuais() {
     const { form, contexts } = switchMode(formRef.current, novoTipo, contextosPorModoRef.current, { defaults: padroesEmpresaRef.current, proximoNumero });
     contextosPorModoRef.current = contexts;
     aplicarForm(form);
-    setTimeout(() => (proximoNumero ? pesoInputRef : numeroInputRef).current?.focus(), 0);
+    setTimeout(() => {
+      if (proximoNumero && !pesagemAutoRef.current) pesoInputRef.current?.focus();
+      else numeroInputRef.current?.focus();
+    }, 0);
   };
 
   // Configuração de colunas
@@ -916,19 +1136,62 @@ export default function LancamentoPesagensIndividuais() {
   };
 
   // ========== DETERMINAR LOTE AUTOMATICAMENTE ==========
-  const getLoteAutomatico = (pesoNum) => {
-    if (!apartacaoSelecionada || !pesoNum) return null;
-    // Não sugerir lotes fechados ou cheios
-    const lote = lotesApartacaoAtual.find((l) =>
-    pesoNum >= l.peso_minimo && pesoNum <= l.peso_maximo && !l.fechado && !isLoteCheio(l)
+  const getLotesCandidatos = (pesoNum) => {
+    if (!apartacaoSelecionada || !Number.isFinite(pesoNum)) return [];
+    return lotesApartacaoAtual.filter((l) =>
+      pesoNum >= l.peso_minimo && pesoNum <= l.peso_maximo && !l.fechado && !isLoteCheio(l)
     );
-    return lote;
   };
+
+  const getLoteAutomatico = (pesoNum) => {
+    const candidatos = getLotesCandidatos(pesoNum);
+    if (!candidatos.length) return null;
+    // Com atalho ligado e empate de faixa: não escolhe sozinho — usuário usa F11/F12/…
+    if (atalhoLoteAtivo && candidatos.length > 1) return null;
+    return candidatos[0];
+  };
+
+  const pesoNumAtual = useMemo(() => {
+    const n = parseBrazilianNumber(peso);
+    return Number.isFinite(n) ? Math.floor(n) : null;
+  }, [peso]);
+
+  const lotesCandidatosAtalho = useMemo(() => {
+    if (!atalhoLoteAtivo || !apartacaoSelecionada || loteTransferencia || pesoNumAtual == null) return [];
+    const candidatos = getLotesCandidatos(pesoNumAtual);
+    return candidatos.length > 1 ? candidatos.slice(0, ATALHO_LOTE_TECLAS.length) : [];
+  }, [atalhoLoteAtivo, apartacaoSelecionada, loteTransferencia, pesoNumAtual, lotesApartacaoAtual]);
+
+  /** Atalho de lote: escolhe o lote e salva na hora (não vai para o botão Salvar). */
+  const escolherLotePorAtalho = (lote) => {
+    if (!lote || isSaving) return;
+    setLoteTransferencia(lote.id);
+    setSalvarSelecionado(false);
+    void handleSalvarRef.current?.({ loteId: lote.id });
+  };
+
+  // F11/F12/… escolhem o lote e salvam quando o atalho está ativo e há empate de faixa.
+  useEffect(() => {
+    if (!lotesCandidatosAtalho.length) return undefined;
+    const onKeyDown = (event) => {
+      if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+      const index = ATALHO_LOTE_TECLAS.indexOf(event.key);
+      if (index < 0) return;
+      const lote = lotesCandidatosAtalho[index];
+      if (!lote) return;
+      event.preventDefault();
+      event.stopPropagation();
+      escolherLotePorAtalho(lote);
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [lotesCandidatosAtalho, isSaving]);
 
   // ========== SALVAR PESAGEM ==========
   const handleSalvar = async (options = {}) => {
     const skipSnConfirmation = options?.skipSnConfirmation === true;
     const snProfile = options?.snProfile || null;
+    const loteIdOverride = options?.loteId;
     // Evitar cliques duplos
     if (isSaving) return;
 
@@ -946,11 +1209,13 @@ export default function LancamentoPesagensIndividuais() {
       numeroInputRef.current?.focus();
       return;
     }
-    const pesoInformado = parseBrazilianNumber(peso);
+    const pesoInformadoRaw = parseBrazilianNumber(peso);
+    // Peso no sistema é inteiro (monitor 58,5 → 58).
+    const pesoInformado = Number.isFinite(pesoInformadoRaw) ? Math.floor(pesoInformadoRaw) : pesoInformadoRaw;
     const permiteMovimentoSemPeso = tipoManejo === 'Saída' && ['Morte', 'Doação', 'Transferência'].includes(motivoSaida);
     if (!permiteMovimentoSemPeso && (!Number.isFinite(pesoInformado) || pesoInformado <= 0)) {
       toast.error("⚠️ Campo obrigatório: Peso (deve ser maior que zero)");
-      pesoInputRef.current?.focus();
+      if (!pesagemAutoRef.current) pesoInputRef.current?.focus();
       return;
     }
     if (tipoManejo === 'Saída' && !motivoSaida) {
@@ -986,7 +1251,11 @@ export default function LancamentoPesagensIndividuais() {
     }
 
     // Snapshot submetido: o contexto seguinte nasce dele, nunca de um fechamento antigo (V-01).
-    const formularioSubmetido = formRef.current;
+    // Atalho F11/F12 pode passar loteId antes do setState pintar.
+    const formularioSubmetido = loteIdOverride != null
+      ? { ...formRef.current, loteTransferencia: loteIdOverride }
+      : formRef.current;
+    const loteTransferenciaEfetivo = loteIdOverride != null ? loteIdOverride : loteTransferencia;
     const isSN = isSnIdentifier(numeroAnimal);
     const numeroDigitado = normalizeAnimalIdentifier(numeroAnimal).trim();
     const numeroNorm = normalizeAnimalText(numeroDigitado);
@@ -1106,14 +1375,14 @@ export default function LancamentoPesagensIndividuais() {
     // Determinar lote
     let loteId = null,nomeLote = null,apartacaoId = null,nomeApartacao = null;
 
-    if (loteTransferencia === "NENHUM") {
+    if (loteTransferenciaEfetivo === "NENHUM") {
       // Usuário optou por não vincular a nenhum lote
       loteId = null;
       nomeLote = null;
       apartacaoId = apartacaoSelecionada || null;
       nomeApartacao = apartacaoSelecionada ? apartacoes.find((a) => a.id === apartacaoSelecionada)?.nome_apartacao || "" : null;
-    } else if (loteTransferencia) {
-      const lote = lotesApartacaoAtual.find((l) => l.id === loteTransferencia);
+    } else if (loteTransferenciaEfetivo) {
+      const lote = lotesApartacaoAtual.find((l) => l.id === loteTransferenciaEfetivo);
       if (lote) {
         loteId = lote.id;
         nomeLote = lote.nome_lote;
@@ -1296,14 +1565,37 @@ export default function LancamentoPesagensIndividuais() {
         });
       const foco = focusAfterSave(proximoFormulario.tipoManejo, opcoesSequencia);
       contextoAntesEdicaoRef.current = null;
+      // Pesagem automática: não zera o Peso — mantém o valor atual do monitor no próximo animal.
+      if (pesagemAutoRef.current) {
+        const status = getScaleStatus();
+        const kg = status.lastWeightKg ?? getLastStableReading()?.weightKg ?? null;
+        if (kg != null && Number.isFinite(Number(kg))) {
+          proximoFormulario.peso = formatWeightForField(kg);
+          const stage = estagioPesoDoMonitor(kg, status.stable);
+          pesoUiAplicadoRef.current = { text: proximoFormulario.peso, stage };
+          setPesoEstagioBalanca(stage);
+        }
+      }
       aplicarForm(proximoFormulario);
-      if (foco === 'peso') setTimeout(() => pesoInputRef.current?.focus(), 100); else setTimeout(() => numeroInputRef.current?.focus(), 0);
+      setSalvarSelecionado(false);
+      if (pesagemAutoRef.current) {
+        sincronizarPesoDoMonitor({ force: true });
+        requestAnimationFrame(() => sincronizarPesoDoMonitor({ force: true }));
+      }
+      if (pesagemAutoRef.current) {
+        setTimeout(() => numeroInputRef.current?.focus(), 0);
+      } else if (foco === 'peso') {
+        setTimeout(() => pesoInputRef.current?.focus(), 100);
+      } else {
+        setTimeout(() => numeroInputRef.current?.focus(), 0);
+      }
     } catch (error) {
       toast.error('Erro: ' + error.message);
     } finally {
       setIsSaving(false);
     }
   };
+  handleSalvarRef.current = handleSalvar;
 
   // ========== EXCLUIR PESAGEM ==========
   const handleExcluir = async (pesagem) => {
@@ -1471,7 +1763,7 @@ export default function LancamentoPesagensIndividuais() {
               className="d17d-icon-action h-8 w-8"
               title="Gerenciar Apartações">
 
-              <Scale className="w-8 h-8 text-emerald-700" />
+              <Scale aria-hidden="true" />
             </Button>
             {/* Motivo da Saída (rente ao Tipo) */}
             {tipoManejo === 'Saída' &&
@@ -1678,33 +1970,82 @@ export default function LancamentoPesagensIndividuais() {
                   }
                   if (numeroAnimal.trim()) resolverAnimalDigitado(numeroAnimal);
                 }}
-                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); ignorarProximoBlurIdentificacaoRef.current = true; if (resolverAnimalDigitado(numeroAnimal)) pesoInputRef.current?.focus(); } }} className="h-7 text-xs text-amber-500 font-semibold" autoFocus placeholder="Ex: 1234" />
+                onKeyDown={(e) => {
+                  // Com balança automática: Tab → Observação; Enter → botão Salvar (Enter de novo salva).
+                  if (pesagemAuto && e.key === 'Tab' && !e.shiftKey) {
+                    e.preventDefault();
+                    ignorarProximoBlurIdentificacaoRef.current = true;
+                    if (numeroAnimal.trim()) resolverAnimalDigitado(numeroAnimal);
+                    observacaoInputRef.current?.focus();
+                    return;
+                  }
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  ignorarProximoBlurIdentificacaoRef.current = true;
+                  if (!resolverAnimalDigitado(numeroAnimal)) return;
+                  // Com automática o aplicarAnimalSelecionado já manda ao Salvar;
+                  // reforça aqui para o caso Cadastro (sem animal resolvido).
+                  focarAposIdentificacao();
+                }} className="font-bold text-amber-500" autoFocus placeholder="Ex: 1234" />
 
             </div>
 
-            {/* Peso */}
+            {/* Peso — ícone liga/desliga pesagem automática (sem roubar foco) */}
             <div className="space-y-1 d17d-field d17d-field--weight">
               <Label className="text-xs font-medium">Peso (kg) <span className="text-red-500">*</span></Label>
-              <div className="d17d-weight-control">
+              <div
+                className={[
+                  'd17d-weight-control',
+                  pesagemAuto ? 'is-auto' : '',
+                  pesoEstagioBalanca === 'settling' ? 'is-settling' : '',
+                  pesoEstagioBalanca === 'stable' ? 'is-stable' : '',
+                  statusAccentBalanca === 'blue' ? 'is-accent-blue' : '',
+                ].filter(Boolean).join(' ')}
+              >
                 <Input
                   ref={pesoInputRef}
-                  type="text" inputMode="decimal"
+                  type="text" inputMode="numeric"
                   value={peso}
-                  onChange={(e) => setPeso(e.target.value)}
-                  onKeyDown={(e) => handleKeyDown(e, 'salvar')}
-                  className="font-bold text-amber-500"
+                  readOnly={pesagemAuto}
+                  tabIndex={pesagemAuto ? -1 : undefined}
+                  onChange={(e) => {
+                    if (pesagemAuto) return;
+                    // Só dígitos — peso do sistema sem vírgula/decimal.
+                    setPeso(String(e.target.value || '').replace(/\D/g, ''));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    // Enter no Peso → destaca Salvar (não salva ainda); Enter de novo no Salvar grava.
+                    focarBotaoSalvar();
+                  }}
+                  className={[
+                    'font-bold',
+                    (pesagemAuto || pesoEstagioBalanca === 'settling' || pesoEstagioBalanca === 'stable')
+                      ? ''
+                      : 'text-amber-500',
+                  ].filter(Boolean).join(' ')}
                   placeholder="Ex: 320"
+                  title={pesagemAuto ? 'Pesagem automática ligada — peso vem do monitor' : 'Digite o peso ou ligue a captura automática'}
                 />
-                <button
-                  type="button"
-                  className="d17d-weight-capture"
-                  onClick={() => toast.info('Integração com balança ainda não configurada.')}
-                  title="Configurar balança para capturar o peso automaticamente"
-                  aria-label="Capturar peso da balança"
-                >
-                  <span aria-hidden="true" />
-                  <Scale aria-hidden="true" />
-                </button>
+                {balancaOnline ? (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    className={[
+                      'd17d-weight-capture',
+                      pesagemAuto ? 'is-active' : '',
+                      'is-online',
+                      statusAccentBalanca === 'blue' ? 'is-accent-blue' : '',
+                    ].filter(Boolean).join(' ')}
+                    onClick={alternarPesagemAuto}
+                    aria-pressed={pesagemAuto}
+                    title={pesagemAuto ? 'Desligar pesagem automática' : 'Ligar pesagem automática'}
+                    aria-label={pesagemAuto ? 'Desligar pesagem automática' : 'Ligar pesagem automática'}
+                  >
+                    <Scale aria-hidden="true" />
+                  </button>
+                ) : null}
               </div>
             </div>
             
@@ -1712,8 +2053,14 @@ export default function LancamentoPesagensIndividuais() {
             <div className="space-y-1 d17d-field d17d-field--observation">
               <Label className="text-xs font-medium">Observação</Label>
               <Input
+                ref={observacaoInputRef}
                 value={observacao}
                 onChange={(e) => setObservacao(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter') return;
+                  e.preventDefault();
+                  focarBotaoSalvar();
+                }}
                 className="h-9 text-sm"
                 placeholder="Obs..." />
 
@@ -1721,7 +2068,29 @@ export default function LancamentoPesagensIndividuais() {
 
             {/* Botões Salvar e Cancelar */}
             <div className="d17d-launch-actions">
-              <Button onClick={handleSalvar} disabled={isSaving} size="sm" className="emp-toolbar-btn emp-toolbar-btn-save d17d-launch-save text-xs px-4">
+              <Button
+                ref={salvarButtonRef}
+                onClick={handleSalvar}
+                onFocus={() => setSalvarSelecionado(true)}
+                onBlur={(e) => {
+                  // Só tira a seleção se o foco saiu de verdade do botão.
+                  if (e.currentTarget.contains(e.relatedTarget)) return;
+                  setSalvarSelecionado(false);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key !== 'Enter' && e.key !== ' ') return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setSalvarSelecionado(false);
+                  handleSalvar();
+                }}
+                disabled={isSaving}
+                size="sm"
+                className={[
+                  'emp-toolbar-btn emp-toolbar-btn-save d17d-launch-save text-xs px-4',
+                  salvarSelecionado ? 'is-selected' : '',
+                ].filter(Boolean).join(' ')}
+              >
                 <span>{isSaving ? 'Salvando...' : editingId ? 'Atualizar' : 'Salvar'}</span>
                 {!isSaving && <span className="d17d-launch-save__shortcut">Enter</span>}
               </Button>
@@ -1756,8 +2125,18 @@ export default function LancamentoPesagensIndividuais() {
             {tipoManejo !== 'Cadastro' && animalSelecionado && ganhoVisual && (
               <div className="d17d-animal-performance" aria-label="Informações do animal e ganho de peso">
                 <section className="d17d-animal-performance__group d17d-animal-performance__animal">
-                  <span className="d17d-animal-performance__title">Animal</span>
-                  <span><strong>{animalSelecionado.numero_animal || '-'}</strong> · {descricaoCadastroAnimal}</span>
+                  <span className="d17d-animal-performance__pair">
+                    <span className="d17d-animal-performance__title">Animal</span>
+                    <strong className="d17d-animal-performance__value">{animalSelecionado.numero_animal || '-'}</strong>
+                  </span>
+                  <span className="d17d-animal-performance__sep" aria-hidden="true">·</span>
+                  <span className="d17d-animal-performance__pair">
+                    <span className="d17d-animal-performance__title">Marca</span>
+                    <strong className="d17d-animal-performance__value">{marcaCadastroAnimal || 'Sem marca'}</strong>
+                  </span>
+                  {descricaoCadastroAnimal ? (
+                    <span className="d17d-animal-performance__rest">· {descricaoCadastroAnimal}</span>
+                  ) : null}
                 </section>
                 <section className="d17d-animal-performance__group d17d-animal-performance__previous">
                   <span className="d17d-animal-performance__title">Última</span>
@@ -1789,7 +2168,7 @@ export default function LancamentoPesagensIndividuais() {
             )}
           </div>
 
-          <SequenciaBrincos visivel={tipoManejo === 'Cadastro' && mostrarSequenciaBrinco} brincoAtual={numeroAnimal} onSetNumeroAnimal={setNumeroAnimal} numerosUsados={numerosUsados} onFocusPeso={() => setTimeout(() => pesoInputRef.current?.focus(), 100)} controllerRef={sequenciaBrincosRef} />
+          <SequenciaBrincos visivel={tipoManejo === 'Cadastro' && mostrarSequenciaBrinco} brincoAtual={numeroAnimal} onSetNumeroAnimal={setNumeroAnimal} numerosUsados={numerosUsados} onFocusPeso={() => setTimeout(() => focarAposIdentificacao(), 100)} controllerRef={sequenciaBrincosRef} />
           {tipoManejo === 'Cadastro' && mostrarDadosCompra &&
           <div className="d17d-detail-panel mt-3 p-3 border-t bg-slate-50 rounded">
               <h3 className="text-xs font-semibold text-slate-700 mb-3 flex items-center gap-2">
@@ -2157,37 +2536,75 @@ export default function LancamentoPesagensIndividuais() {
               </Select>
             </div>
             <div className="space-y-1 d17d-transfer-field">
-                              <Label className="text-xs font-medium">Transferência de Lote</Label>
-                              <Select value={loteTransferencia || '__auto__'} onValueChange={(value) => setLoteTransferencia(value === '__auto__' ? '' : value)} disabled={!apartacaoSelecionada}>
-                                <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Automático" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__auto__">Automático</SelectItem>
-                  <SelectItem value="NENHUM" className="text-slate-500 font-medium">-- Sem Lote --</SelectItem>
-                  {lotesApartacaoAtual.map((l) => {
-                    const cheio = isLoteCheio(l);
-                    return (
-                      <SelectItem key={l.id} value={l.id} className={cheio ? "text-red-600" : ""}>
-                        {l.nome_lote} (Peso: {fmtNum(l.peso_minimo)} a {fmtNum(l.peso_maximo)}) {cheio ? "[FECHADO]" : ""}
-                      </SelectItem>);
-
-                  })}
-                </SelectContent>
-              </Select>
+              <Label className="text-xs font-medium">Transferência de Lote</Label>
+              <div className={`d17d-transfer-control${atalhoLoteAtivo ? ' is-atalho' : ''}`}>
+                <Select value={loteTransferencia || '__auto__'} onValueChange={(value) => setLoteTransferencia(value === '__auto__' ? '' : value)} disabled={!apartacaoSelecionada}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Automático" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__auto__">Automático</SelectItem>
+                    <SelectItem value="NENHUM" className="text-slate-500 font-medium">-- Sem Lote --</SelectItem>
+                    {lotesApartacaoAtual.map((l) => {
+                      const cheio = isLoteCheio(l);
+                      return (
+                        <SelectItem key={l.id} value={l.id} className={cheio ? "text-red-600" : ""}>
+                          {l.nome_lote} (Peso: {fmtNum(l.peso_minimo)} a {fmtNum(l.peso_maximo)}) {cheio ? "[FECHADO]" : ""}
+                        </SelectItem>);
+                    })}
+                  </SelectContent>
+                </Select>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className={`d17d-lot-atalho-toggle${atalhoLoteAtivo ? ' is-active' : ''}`}
+                  onClick={() => alternarAtalhoLote(!atalhoLoteAtivo)}
+                  aria-pressed={atalhoLoteAtivo}
+                  title={atalhoLoteAtivo ? 'Desligar atalho de lote (F11/F12/…)' : 'Ligar atalho de lote (F11/F12/…) quando a faixa coincidir — salva na hora'}
+                  aria-label={atalhoLoteAtivo ? 'Desligar atalho de lote' : 'Ligar atalho de lote'}
+                >
+                  <ListOrdered aria-hidden="true" />
+                </button>
+              </div>
             </div>
-            {peso && apartacaoSelecionada && !loteTransferencia &&
-            (() => {
-              const loteAuto = getLoteAutomatico(parseBrazilianNumber(peso));
-              return (
-                <div className="d17d-auto-lot-field space-y-1">
-                  <Label className="text-xs font-medium">Lote destino</Label>
-                  <div className={`d17d-auto-lot-feedback ${loteAuto ? 'text-orange-700 bg-orange-100 border-orange-300' : 'text-red-700 bg-red-100 border-red-300'}`} title={loteAuto?.nome_lote || 'Não encontrado (todos cheios ou fora da faixa)'}>
-                    <ChevronRight className="w-5 h-5 inline" />
-                    <span>{loteAuto?.nome_lote || 'Não encontrado (todos cheios ou fora da faixa)'}</span>
+            {peso && apartacaoSelecionada && !loteTransferencia && (() => {
+              if (lotesCandidatosAtalho.length > 1) {
+                return (
+                  <div className="d17d-auto-lot-field d17d-auto-lot-field--shortcuts">
+                    <div
+                      className="d17d-lot-shortcut-list"
+                      role="listbox"
+                      aria-label={`Lotes na mesma faixa — ${lotesCandidatosAtalho.map((_, i) => ATALHO_LOTE_TECLAS[i]).join(', ')} salva na hora`}
+                    >
+                      {lotesCandidatosAtalho.map((lote, index) => (
+                        <button
+                          key={lote.id}
+                          type="button"
+                          role="option"
+                          className="d17d-lot-shortcut-option"
+                          onClick={() => escolherLotePorAtalho(lote)}
+                          title={`${ATALHO_LOTE_TECLAS[index]} — ${lote.nome_lote}`}
+                        >
+                          <span className="d17d-lot-shortcut-option__key" aria-hidden="true">{ATALHO_LOTE_TECLAS[index]}</span>
+                          <span>{lote.nome_lote}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>);
-
-            })()
-            }
+                );
+              }
+              const loteAuto = getLoteAutomatico(pesoNumAtual);
+              return (
+                <div className="space-y-1 d17d-auto-lot-field">
+                  <Label className="text-xs font-medium">Lote destino</Label>
+                  <div
+                    className={`d17d-auto-lot-feedback ${loteAuto ? 'is-found' : 'is-missing'}`}
+                    title={loteAuto?.nome_lote || 'Não encontrado (todos cheios ou fora da faixa)'}
+                  >
+                    <ChevronRight aria-hidden="true" />
+                    <span>{loteAuto?.nome_lote || 'Não encontrado'}</span>
+                  </div>
+                </div>
+              );
+            })()}
             {tipoManejo === 'Saída' && (motivoSaida === 'Venda' || motivoSaida === 'Abate') && (
               <div className="space-y-1 d17d-embarque-field">
                 <Label className="text-xs font-medium">Embarque</Label>
@@ -2221,13 +2638,6 @@ export default function LancamentoPesagensIndividuais() {
                   <button type="button" onClick={() => handleExcluir(ultimoLancamentoDia)}>Desfazer</button>
                 </div>
               )}
-              <span className={`d17d-launch-status d17d-launch-status--${tipoManejo === 'Cadastro' ? 'success' : tipoManejo === 'Manejo' ? 'info' : 'danger'}`}>
-                {tipoManejo === 'Cadastro'
-                  ? 'Cadastro de novos animais (Ativo)'
-                  : tipoManejo === 'Manejo'
-                    ? 'Apenas animais já cadastrados (Ativo)'
-                    : 'Animal será marcado como INATIVO'}
-              </span>
             </div>
           </div>
         </CardContent>
@@ -2275,7 +2685,7 @@ export default function LancamentoPesagensIndividuais() {
                     {isLoading ?
                     <TableRow><TableCell colSpan={20} className="text-center py-4 text-xs">Carregando...</TableCell></TableRow> :
                     pesagensDia.length === 0 ?
-                    <TableRow><TableCell colSpan={20} className="text-center py-4 text-xs text-slate-400">Nenhuma pesagem</TableCell></TableRow> :
+                    <TableRow><TableCell colSpan={20} className="d17d-empty-row">Nenhuma pesagem neste dia. Informe o brinco e o peso para lançar.</TableCell></TableRow> :
 
                     pesagensDiaPaginadas.map((p, idx) =>
                     <TableRow key={p.id} className={`${makRowClass(((launchPageSafe - 1) * launchItemsPerPage) + idx)} emp-table-data-row`}>
@@ -2288,11 +2698,11 @@ export default function LancamentoPesagensIndividuais() {
                                       <Button
                                         variant="ghost"
                                         size="icon"
-                                        className="h-6 w-6"
+                                        className="h-8 w-8"
                                         aria-label={`Ações da pesagem ${p.numero_animal || p._numero_registro}`}
                                         title={`Ações da pesagem ${p.numero_animal || p._numero_registro}`}
                                       >
-                                        <MoreVertical className="w-3.5 h-3.5 text-slate-600" />
+                                        <MoreVertical className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
                                       </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="start">

@@ -4,24 +4,21 @@
 // o serviço do cadastro (list/get/create/update/deactivate/activate/remove/
 // setDefault?/countUsage?). A página não conhece stores nem chaves de configuração.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Check, ChevronDown, ChevronFirst, ChevronLast, ChevronLeft, ChevronRight, Columns3, FileText, LayoutDashboard, ListFilter, RefreshCw, Star, TableProperties, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileText, LayoutDashboard, ListFilter, Pencil, Plus, RefreshCw, Save, Star, TableProperties, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ensureEmpresaId } from '@/api/db';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import MakFilterPill from '@/components/mak/MakFilterPill';
-import MakFilterRail from '@/components/mak/MakFilterRail';
 import MakTableSelectCheck from '@/components/mak/MakTableSelectCheck';
 import MakTh from '@/components/mak/MakTh';
 import MakColumnConfigDialog from '@/components/mak/MakColumnConfigDialog';
-import MgDesktopSearch from '@/components/mak/MgDesktopSearch';
 import MgSpeedDialMenu from '@/components/mak/MgSpeedDialMenu';
-import MgTablePanelStrip from '@/components/mak/MgTablePanelStrip';
+import { Columns3Cog } from '@/components/mak/mgIcons';
 import { normalizeSearchQuery } from '@/components/mak/mgSearchHighlight';
 import { isMakColumnFilterActive, matchesMakColumnFilter } from '@/components/mak/MakColumnMenu';
-import { ModeloBase1ActionBar, ModeloBase1PageContainer, ModeloBase1PageHeader } from '@/components/modelobase1';
+import { ModeloBase1PageContainer, ModeloBase1PageHeader } from '@/components/modelobase1';
 import { AccessDenied } from '@/components/auth/RequirePermission';
 import { useAuth } from '@/components/auth/useAuth';
 import { getRegistryService } from '@/modules/catalog/application/index';
@@ -53,6 +50,7 @@ import DocumentInput from './DocumentInput.jsx';
 import LogoField from './LogoField.jsx';
 import PropertyHeaderPreview from './PropertyHeaderPreview.jsx';
 import '@/styles/auxiliary-registries.css';
+import '@/styles/launch-visual.css';
 import './cadastro-mestre.css';
 
 export const REGISTRY_READ_PERMISSION = 'registry.read';
@@ -576,19 +574,12 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
   };
   const formPrimaryFields = !editingId && tabs.length > 1 ? [typeField, ...primaryFields] : primaryFields;
   const formValues = { ...form, __type: activeTabId };
-  const requiredFormFields = formPrimaryFields.filter((campo) => campo.obrigatorio);
-  const filledRequiredFields = requiredFormFields.filter((campo) => hasFieldValue(formValues[campo.id])).length;
   const updateFormField = (id, value) => id === '__type' ? changeNewRecordType(value) : setField(id, value);
   // Opções dos campos com referência (ativos + o valor já gravado, mesmo inativo).
   const referenceOptions = useMemo(() => Object.fromEntries(definition.campos
     .filter((campo) => campo.referencia)
     .map((campo) => [campo.id, referenceOptionsFor(campo, references[campo.referencia.store], form[campo.id])])), [definition, references, form]);
   const editingRecord = editingId ? tabRecords.find((record) => record.id === editingId) : null;
-  const editingIndex = editingId ? tabRecords.findIndex((record) => record.id === editingId) : -1;
-  const openRelativeRecord = (index) => {
-    const record = tabRecords[index];
-    if (record) openEdit({ ...record, _tabId: tab.id });
-  };
   const recordCode = recordCodeOf(definition, editingRecord);
   const formatCell = (column, record) => cellText(column, record) || '—';
   const readOnly = !canWrite;
@@ -596,163 +587,116 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
 
   if (!canRead) return <AccessDenied profile={auth?.user?.perfil} permission={REGISTRY_READ_PERMISSION} />;
 
+  const viewMode = formOpen ? 'registro' : listViewMode;
+  const openRecordView = () => {
+    if (formOpen) return;
+    const record = selected.length === 1 ? selectedRecords[0] : (paginated[0] || filtered[0]);
+    if (record) openEdit(record);
+    else if (canWrite) openNew();
+  };
+  const switchToListView = (mode) => {
+    if (formOpen) closeForm();
+    setListViewMode(mode);
+  };
+
   return (
-    <ModeloBase1PageContainer variant="table" className={`d17b-page d17b-list-page cadastro-emp-scope mg-empresas-scope aux-registry-page${formOpen ? '' : ' d17b-list-page--mother'} ${formOpen ? 'aux-registry-page--record' : 'aux-registry-page--table'}`}>
+    <ModeloBase1PageContainer variant="table" className={`d17b-page d17b-list-page d17b-list-page--mother cadastro-emp-scope mg-empresas-scope aux-registry-page ${formOpen ? 'aux-registry-page--record' : 'aux-registry-page--table'}`}>
       <ModeloBase1PageHeader title={title} description={description} visuallyHidden />
-      {!formOpen ? (
-        <>
-          {/* Barra de ações da Tela Mãe (ModeloBase1): Filtrar, Novo, seleção; pesquisa, modos e "Mais opções". */}
-          <div className="mak-mother-page__toolbar mg-subtoolbar-stack" data-mak-region="toolbar">
-            <div data-template-id="action-bar" className="mg-action-bar canva-section flex w-full shrink-0 items-center" style={{ background: 'var(--bg-card)' }}>
-              <div className="mg-action-bar__actions flex min-w-0 items-center">
-                <div className={`mg-action-slot${canWrite ? ' is-visible' : ''}`} style={{ '--slot-width': '64px' }} aria-hidden={!canWrite}>
-                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green aux-new-button" onClick={() => openNew()} title="Novo" tabIndex={canWrite ? 0 : -1}>Novo</button>
-                </div>
-                <div className={`mg-action-slot${selected.length === 1 ? ' is-visible' : ''}`} style={{ '--slot-width': canWrite ? '66px' : '90px' }} aria-hidden={selected.length !== 1}>
-                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => openEdit(selectedRecords[0])} title={editActionLabel} tabIndex={selected.length === 1 ? 0 : -1}>{editActionLabel}</button>
-                </div>
-                <div className={`mg-action-slot${canWrite && selectedAllActive ? ' is-visible' : ''}`} style={{ '--slot-width': '78px' }} aria-hidden={!(canWrite && selectedAllActive)}>
-                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => toggleActive(selectedRecords, false)} title="Inativar" disabled={busy} tabIndex={canWrite && selectedAllActive ? 0 : -1}>Inativar</button>
-                </div>
-                <div className={`mg-action-slot${canWrite && selectedAllInactive ? ' is-visible' : ''}`} style={{ '--slot-width': '68px' }} aria-hidden={!(canWrite && selectedAllInactive)}>
-                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => toggleActive(selectedRecords, true)} title="Ativar" disabled={busy} tabIndex={canWrite && selectedAllInactive ? 0 : -1}>Ativar</button>
-                </div>
-                <div className={`mg-action-slot${canSetDefault ? ' is-visible' : ''}`} style={{ '--slot-width': '118px' }} aria-hidden={!canSetDefault}>
-                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={() => setDefault(selectedRecords[0])} title="Definir como padrão" disabled={busy} tabIndex={canSetDefault ? 0 : -1}>
-                    <Star className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    Definir padrão
-                  </button>
-                </div>
-                <div className={`mg-action-slot${canWrite && selected.length ? ' is-visible' : ''}`} style={{ '--slot-width': '84px' }} aria-hidden={!(canWrite && selected.length)}>
-                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost tb-btn-danger" onClick={() => setDeleteRequest(selectedRecords)} title="Excluir" disabled={busy} tabIndex={canWrite && selected.length ? 0 : -1}>
-                    <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    Excluir
-                  </button>
-                </div>
-              </div>
-              <div className="mg-action-bar__end">
-                <div className="mg-action-bar__tools mg-action-bar__tools--visible">
-                  <MgDesktopSearch
-                    value={searchInput}
-                    onValueChange={setSearchInput}
-                    hasFilter={Boolean(search)}
-                    onClear={() => { setSearchInput(''); setSearch(''); setCurrentPage(1); }}
-                    results={searchResults.items}
-                    resultsTotal={searchResults.total}
-                    titleField="titulo"
-                    codeField="codigo"
-                    detailFields={listColumns.filter((column) => column.id !== 'nome').slice(0, 4).map((column) => ({ key: column.id, label: column.label }))}
-                    getFieldValue={(record, key) => record?.[key]}
-                    onSelectResult={(item) => { setSearchInput(''); setSearch(''); openEdit(item._record); }}
-                    onApplyAll={() => { setSearch(searchInput.trim()); setCurrentPage(1); }}
-                  />
-                </div>
-                <ModeloBase1ViewSeg
-                  mode={listViewMode}
-                  canOpenRecord={filtered.length > 0 || canWrite}
-                  onTable={() => setListViewMode('tabela')}
-                  onRecord={() => {
-                    const record = selected.length === 1 ? selectedRecords[0] : (paginated[0] || filtered[0]);
-                    if (record) openEdit(record);
-                    else if (canWrite) openNew();
-                  }}
-                  onCards={() => setListViewMode('cards')}
-                />
-                <div className="relative">
-                  <MgSpeedDialMenu
-                    open={moreOpen}
-                    onOpenChange={setMoreOpen}
-                    items={[
-                      { id: 'atualizar', label: 'Atualizar', icon: RefreshCw, onClick: refresh },
-                      { id: 'colunas', label: 'Configurar colunas', icon: Columns3, onClick: () => setShowColumnConfig(true) },
-                      { id: 'tipos', label: 'Mostrar todos os tipos', icon: ListFilter, onClick: clearFilters },
-                    ]}
-                  />
-                </div>
-              </div>
+      {/* Barra mãe única: lista = CRUD + view-seg/colunas/mais; registro = Salvar/Cancelar + identidade na mesma faixa branca. */}
+      <div className={`mak-mother-page__toolbar mg-subtoolbar-stack${formOpen ? ' aux-toolbar--form' : ''}`} data-mak-region="toolbar">
+        <div data-template-id="action-bar" className={`mg-action-bar canva-section flex w-full shrink-0 items-center${formOpen ? ' aux-action-bar--form' : ''}`} style={{ background: 'var(--bg-card)' }} aria-label={`Ações de ${title}`}>
+          <div className="mg-action-bar__actions flex min-w-0 items-center">
+            <div className={`mg-action-slot${!formOpen && canWrite ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={formOpen || !canWrite}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-green aux-new-button" onClick={() => openNew()} title="Novo" aria-label="Novo" tabIndex={!formOpen && canWrite ? 0 : -1} disabled={!canWrite}>
+                <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" strokeWidth={2.5} />
+              </button>
             </div>
-          </div>
-          <div className="mak-mother-page__panel-strip" data-mak-region="panel-strip">
-            <MgTablePanelStrip onConfigColumns={() => setShowColumnConfig(true)}>
-              <MakFilterRail
-                hasActiveFilters={isMakColumnFilterActive(typeFilter) || Object.values(columnFilters).some(isMakColumnFilterActive)}
-                onClear={clearFilters}
-              >
-                {/* Uma pílula por coluna visível da tabela, na mesma ordem (ModeloBase1). */}
-                {tableColumns.map((column) => {
-                  // Acima do limite a contagem não é calculada: sem pílula de "Em uso".
-                  if (column.id === '_uso' && !usageAvailable) return null;
-                  if (column.id === '_typeLabel') {
-                    return (
-                      <MakFilterPill
-                        key="_typeLabel"
-                        label={column.label}
-                        value={typeFilter}
-                        filterType="text"
-                        listOptions={tabs.map((item) => item.label)}
-                        onChange={(value) => { setTypeFilter(value); setCurrentPage(1); }}
-                      />
-                    );
-                  }
-                  return (
-                    <MakFilterPill
-                      key={column.id}
-                      label={column.label}
-                      value={columnFilters[column.id] || null}
-                      filterType={column.id === '_uso' ? 'number' : 'text'}
-                      listOptions={column.id === '_uso' ? [] : columnListOptions(column)}
-                      onChange={(value) => { setColumnFilters((current) => ({ ...current, [column.id]: value })); setCurrentPage(1); }}
-                    />
-                  );
-                })}
-              </MakFilterRail>
-            </MgTablePanelStrip>
-          </div>
-        </>
-      ) : null}
-      {formOpen ? <div className="aux-toolbar-stack is-form-open">
-      <ModeloBase1ActionBar className="d17b-page-actionbar d17c-table-toolbar aux-registry-toolbar aux-launch-toolbar" aria-label={`Ações de ${title}`}>
-        <div className="d17c-table-toolbar__primary">
-          <div className="d17c-table-toolbar__left">
+            <div className={`mg-action-slot${!formOpen ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={formOpen}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" onClick={() => selected.length === 1 && openEdit(selectedRecords[0])} title={editActionLabel} aria-label={editActionLabel} tabIndex={!formOpen && selected.length === 1 ? 0 : -1} disabled={selected.length !== 1}>
+                <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              </button>
+            </div>
+            <div className={`mg-action-slot${!formOpen ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={formOpen}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" title="Duplicar" aria-label="Duplicar" tabIndex={-1} disabled>
+                <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              </button>
+            </div>
+            <div className={`mg-action-slot${!formOpen ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={formOpen}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost tb-btn-danger" onClick={() => setDeleteRequest(selectedRecords)} title="Excluir" aria-label="Excluir" tabIndex={!formOpen && canWrite && selected.length ? 0 : -1} disabled={busy || !(canWrite && selected.length)}>
+                <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              </button>
+            </div>
             <div className="aux-form-toolbar-actions">
               <div className="aux-form-toolbar-commands">
-                {canWrite ? <Button size="sm" className="emp-toolbar-btn emp-toolbar-btn-save d17c-launch-button aux-form-action" onClick={save} disabled={saving} title="Salvar (Enter)">{saving ? 'Salvando...' : 'Salvar'}</Button> : null}
-                <Button size="sm" variant="outline" className="emp-toolbar-btn d17c-launch-button aux-cancel-button aux-form-action" onClick={closeForm} title={canWrite ? 'Cancelar (Esc)' : 'Voltar (Esc)'}>{canWrite ? 'Cancelar' : 'Voltar'}</Button>
+                <div className={`mg-action-slot${formOpen && canWrite ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!formOpen || !canWrite}>
+                  <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost aux-form-action" onClick={save} disabled={!formOpen || saving || !canWrite} title="Salvar (Enter)" aria-label={saving ? 'Salvando' : 'Salvar'} tabIndex={formOpen && canWrite ? 0 : -1}>
+                    <Save className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  </button>
+                </div>
+                <div className={`mg-action-slot${formOpen ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!formOpen}>
+                  <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost d17c-launch-button aux-cancel-button aux-form-action" onClick={closeForm} title={canWrite ? 'Cancelar (Esc)' : 'Voltar (Esc)'} aria-label={canWrite ? 'Cancelar' : 'Voltar'} tabIndex={formOpen ? 0 : -1}>
+                    <X className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  </button>
+                </div>
               </div>
             </div>
+            {formOpen ? (
+              <div className="mg-context-panel aux-context-panel aux-context-inline" data-template-id="context-panel">
+                <div className="mg-context-panel__meta">
+                  <div className="mg-context-panel__meta-row">
+                    <div className="mg-context-panel__swap-slot min-w-0 flex-1">
+                      <span key={`${activeTabId}:${editingId || 'novo'}`} className="mg-context-panel__meta-text mg-motion-swap mg-motion-swap--text aux-record-identity">
+                        {editingId ? <><span className="mg-context-panel__code">{recordCode}</span><span className="mg-context-panel__sep"> • </span></> : null}
+                        <span className="mg-context-panel__title">{editingId ? (form.nome || tab.editLabel) : tab.newLabel}</span>
+                        {editingRecord ? (
+                          <span className="aux-context-badges">
+                            {editingRecord.padrao ? <span className="aux-context-badge aux-context-badge--default" title="Pré-selecionado no cadastro rápido"><Star aria-hidden="true" />Padrão</span> : null}
+                            {editingRecord.ativo === false ? <span className="aux-context-badge aux-context-badge--inactive">Inativo</span> : null}
+                            {usage[editingRecord.id] != null ? <span className="aux-context-badge" title="Registros que usam este cadastro">Em uso: {usage[editingRecord.id]}</span> : null}
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
           </div>
-          <div className="d17c-table-toolbar__actions aux-form-toolbar-end"><div className="aux-required-status">Campos obrigatórios <strong>{filledRequiredFields}/{requiredFormFields.length}</strong></div><ModeloBase1ViewSeg mode="registro" canOpenRecord onTable={() => { closeForm(); setListViewMode('tabela'); }} onRecord={() => {}} onCards={() => { closeForm(); setListViewMode('cards'); }} /></div>
-        </div>
-      </ModeloBase1ActionBar>
-      <div className="mg-context-panel-wrap is-visible aux-context-panel-wrap">
-        <div className="mg-context-panel aux-context-panel" data-template-id="context-panel">
-          <div className="mg-context-panel__meta">
-            <div className="mg-context-panel__meta-row">
-              <div className="mg-context-panel__swap-slot min-w-0 flex-1">
-                <span key={`${activeTabId}:${editingId || 'novo'}`} className="mg-context-panel__meta-text mg-motion-swap mg-motion-swap--text aux-record-identity">
-                  {editingId ? <><span className="mg-context-panel__code">{recordCode}</span><span className="mg-context-panel__sep"> • </span></> : null}
-                  <span className="mg-context-panel__title">{editingId ? (form.nome || tab.editLabel) : tab.newLabel}</span>
-                  {editingRecord ? (
-                    <span className="aux-context-badges">
-                      {editingRecord.padrao ? <span className="aux-context-badge aux-context-badge--default" title="Pré-selecionado no cadastro rápido"><Star aria-hidden="true" />Padrão</span> : null}
-                      {editingRecord.ativo === false ? <span className="aux-context-badge aux-context-badge--inactive">Inativo</span> : null}
-                      {usage[editingRecord.id] != null ? <span className="aux-context-badge" title="Registros que usam este cadastro">Em uso: {usage[editingRecord.id]}</span> : null}
-                    </span>
-                  ) : null}
-                </span>
+          {!formOpen ? (
+            <div className="mg-action-bar__end">
+              <ModeloBase1ViewSeg
+                mode={viewMode}
+                canOpenRecord={filtered.length > 0 || canWrite}
+                onTable={() => switchToListView('tabela')}
+                onRecord={openRecordView}
+                onCards={() => switchToListView('cards')}
+              />
+              <button
+                type="button"
+                className="mg-nav-btn ios-btn tb-btn tb-btn-icon mg-table-panel-strip__config-btn"
+                onClick={() => setShowColumnConfig(true)}
+                title="Configurar colunas da tabela"
+                aria-label="Configurar colunas da tabela"
+              >
+                <Columns3Cog className="mg-table-panel-strip__config-icon" strokeWidth={2.1} aria-hidden="true" />
+              </button>
+              <div className="relative">
+                <MgSpeedDialMenu
+                  open={moreOpen}
+                  onOpenChange={setMoreOpen}
+                  items={[
+                    { id: 'atualizar', label: 'Atualizar', icon: RefreshCw, onClick: refresh },
+                    { id: 'tipos', label: 'Mostrar todos os tipos', icon: ListFilter, onClick: clearFilters },
+                    ...(canWrite && selectedAllActive ? [{ id: 'inativar', label: 'Inativar', icon: ListFilter, onClick: () => toggleActive(selectedRecords, false) }] : []),
+                    ...(canWrite && selectedAllInactive ? [{ id: 'ativar', label: 'Ativar', icon: ListFilter, onClick: () => toggleActive(selectedRecords, true) }] : []),
+                    ...(canSetDefault ? [{ id: 'padrao', label: 'Definir como padrão', icon: Star, onClick: () => setDefault(selectedRecords[0]) }] : []),
+                  ]}
+                />
               </div>
             </div>
-          </div>
-          <div className={`mg-context-panel__nav is-visible${editingId ? '' : ' aux-context-panel__nav--new'}`} aria-label="Navegação entre registros">
-            <button type="button" className="mg-nav-btn ios-btn" onClick={() => openRelativeRecord(0)} disabled={editingIndex <= 0} title="Primeiro"><ChevronFirst aria-hidden="true" /></button>
-            <button type="button" className="mg-nav-btn ios-btn" onClick={() => openRelativeRecord(editingIndex - 1)} disabled={editingIndex <= 0} title="Anterior"><ChevronLeft aria-hidden="true" /></button>
-            <span className="mg-context-panel__swap-slot mg-context-panel__swap-slot--counter"><span key={`${activeTabId}:${editingIndex}`} className="mg-context-panel__counter mg-motion-swap mg-motion-swap--text">{editingIndex >= 0 ? `${editingIndex + 1} de ${tabRecords.length}` : 'Novo registro'}</span></span>
-            <button type="button" className="mg-nav-btn ios-btn" onClick={() => openRelativeRecord(editingIndex + 1)} disabled={editingIndex < 0 || editingIndex >= tabRecords.length - 1} title="Próximo"><ChevronRight aria-hidden="true" /></button>
-            <button type="button" className="mg-nav-btn ios-btn" onClick={() => openRelativeRecord(tabRecords.length - 1)} disabled={editingIndex < 0 || editingIndex >= tabRecords.length - 1} title="Último"><ChevronLast aria-hidden="true" /></button>
-          </div>
+          ) : null}
         </div>
       </div>
-      </div> : null}
 
       {formOpen ? (
         <section className="mg-view-panel emp-form-panel aux-launch-panel" aria-label={editingId ? tab.editLabel : tab.newLabel}>
@@ -846,7 +790,7 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
                   );
                 })}
               </div>
-            ) : <div className="d17d-empty-row aux-cards-empty">{loading ? 'Carregando cadastros...' : 'Nenhum cadastro encontrado.'}</div>}
+            ) : <div className="d17d-empty-row aux-cards-empty" role="status">{loading ? 'Carregando cadastros...' : 'Nenhum cadastro encontrado. Inclua o primeiro registro.'}</div>}
           </div>
         ) : <div className="mg-view-panel emp-table-root emp-table-shell emp-table-body-scroll d17c-table-scroll aux-table-scroll">
           <Table className="emp-table-pro d17c-data-table aux-data-table">
@@ -891,8 +835,8 @@ export default function CadastroAuxiliarPage({ title, description, tabs: rawTabs
                     ? <TableCell key="_uso" className={`aux-usage-cell${usage[record.id] == null ? ' is-pending' : ''}`} title={!usageAvailable ? USAGE_UNAVAILABLE_TITLE : undefined}>{!usageAvailable ? USAGE_UNAVAILABLE_TEXT : usage[record.id] == null ? '…' : usage[record.id]}</TableCell>
                     : <TableCell key={column.id} className={column.id === 'nome' ? 'font-semibold' : ''}>{formatCell(column, record)}</TableCell>)}
               </TableRow>)}
-              {!loading && !filtered.length ? <TableRow><TableCell colSpan={tableColumns.length + 1} className="d17d-empty-row">Nenhum cadastro encontrado.</TableCell></TableRow> : null}
-              {loading ? <TableRow><TableCell colSpan={tableColumns.length + 1} className="d17d-empty-row">Carregando cadastros...</TableCell></TableRow> : null}
+              {!loading && !filtered.length ? <TableRow><TableCell colSpan={tableColumns.length + 1} className="d17d-empty-row" role="status">Nenhum cadastro encontrado. Inclua o primeiro registro.</TableCell></TableRow> : null}
+              {loading ? <TableRow><TableCell colSpan={tableColumns.length + 1} className="d17d-empty-row" role="status">Carregando cadastros...</TableCell></TableRow> : null}
             </TableBody>
           </Table>
         </div>}

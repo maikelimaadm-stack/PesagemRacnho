@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowLeft, ChartColumnBig, ChevronLeft, FileJson, FileSpreadsheet, FileText, FolderOpen, ListFilter, MoreHorizontal, PencilLine, Printer, RefreshCw, Save, ScrollText, Settings, Trash2, Users } from "lucide-react";
+import { ArrowLeft, ChartColumnBig, ChevronLeft, Eraser, FileJson, FileSpreadsheet, FileText, FolderOpen, ListFilter, MoreHorizontal, PencilLine, Printer, RefreshCw, Save, ScrollText, Settings, Trash2, Users } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -130,7 +130,7 @@ export function MakgestaoFilterList({ label, value, filterType = "text", listOpt
           <span className="cursor-pointer text-sm">{option.label}</span>
         </label>
       ))}
-      {!all.length ? <p className="text-xs text-slate-500">Nenhum valor no período.</p> : null}
+      {!all.length ? <p className="text-xs text-slate-500">Nenhum valor neste período. Amplie as datas ou troque o filtro.</p> : null}
     </div>
   );
 }
@@ -177,8 +177,8 @@ export function MakgestaoMoreFilters({ columns, onChange }) {
   return (
     <Popover open={open} onOpenChange={(next) => { setOpen(next); if (!next) { setSelected(null); setTerm(""); } }}>
       <PopoverTrigger asChild>
-        <button type="button" className="rpt-mak-btn rpt-mak-btn--icon" aria-label={active ? `Mais filtros (${active} ligados)` : "Mais filtros"} title="Filtrar por outras colunas do relatório">
-          <ListFilter aria-hidden="true" />Mais filtros…{active ? ` (${active})` : ""}
+        <button type="button" className={`rpt-mak-btn rpt-mak-btn--icon${active ? " is-on" : ""}`} aria-label={active ? `Mais filtros (${active} ligados)` : "Mais filtros"} title="Filtrar por outras colunas do relatório">
+          <ListFilter aria-hidden="true" />
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" className="rpt-mak-pop rpt-mak-more w-72 max-h-96 overflow-auto border-[#e5e5e5] text-[#0a0a0a]" aria-label="Mais filtros">
@@ -204,7 +204,7 @@ export function MakgestaoMoreFilters({ columns, onChange }) {
                 );
               })}
             </ul>
-            {!shown.length ? <p className="text-xs text-slate-500">Nenhuma coluna com esse nome.</p> : null}
+            {!shown.length ? <p className="text-xs text-slate-500">Nenhuma coluna com esse nome. Tente outro trecho.</p> : null}
           </div>
         )}
       </PopoverContent>
@@ -213,8 +213,8 @@ export function MakgestaoMoreFilters({ columns, onChange }) {
 }
 
 /**
- * Topo do antigo (L509–518): título grande + "Análise e impressão" à esquerda; à direita o Imprimir verde.
- * Discretos ao lado dele: Excel, PDF e o menu "⋯" (CSV, JSON, Salvar como meu relatório, Atualizar, colunas vazias).
+ * Topo: título + "Análise e impressão" à esquerda; à direita a toolbar — Excel/PDF (secundários),
+ * Imprimir (primário), utilitários ⋯ no fim (CSV, JSON, modelo, atualizar, colunas vazias).
  * Os relatórios salvos abrem pelo campo "Relatório" ("Meus relatórios"). onDeleteTemplate: só com o relatório
  * salvo aberto e permissão.
  * E1F (relatório do usuário aberto — "Meus relatórios"): baseNote = "base · quem vê" no subtítulo;
@@ -224,7 +224,7 @@ export function MakgestaoMoreFilters({ columns, onChange }) {
  *   onPrintCharts/onPdfCharts = "Imprimir só os gráficos" / "PDF só dos gráficos" no ⋯ (null fora da vista).
  */
 export function MakgestaoTopBar({
-  title, templateName = null, loading = false, backLabel = "Relatórios", onBack = null,
+  title, templateName = null, loading = false, updatedLabel = null, backLabel = "Relatórios", onBack = null,
   canExport, disabled, onPrint, onExcel, onPdf, onCsv, onJson, menuLabel,
   onSaveTemplate = null, onDeleteTemplate = null,
   baseNote = null, onSaveChanges = null, savingChanges = false, onSaveAs = null, onRename = null, deleteLabel = null,
@@ -238,62 +238,66 @@ export function MakgestaoTopBar({
         <p className="rpt-mak__subtitle">
           Análise e impressão
           {baseNote ? <em> · {baseNote}</em> : templateName ? <em> · modelo “{templateName}”</em> : null}
-          {loading ? <span className="rpt-mak__busy" aria-live="polite"> · Calculando…</span> : null}
+          {loading ? <span className="rpt-mak__busy" aria-live="polite"> · Calculando…</span> : updatedLabel ? <span className="rpt-mak__stamp"> · {updatedLabel}</span> : null}
         </p>
       </div>
       <div className="rpt-mak__actions" role="group" aria-label="Imprimir e exportar">
         {onBack ? (
-          <button type="button" className="rpt-mak-link" onClick={onBack} title={`Voltar para ${backLabel}`}>
-            <ArrowLeft aria-hidden="true" />{backLabel}
+          <button type="button" className="rpt-mak-ghost rpt-mak-ghost--icon" onClick={onBack} title={`Voltar para ${backLabel}`} aria-label={`Voltar para ${backLabel}`}>
+            <ArrowLeft aria-hidden="true" />
           </button>
         ) : null}
         {canExport ? (
-          <>
-            <button type="button" className="rpt-mak-ghost" disabled={disabled} onClick={onExcel} title={chartsView ? "Planilha Excel (XLSX) com a folha e a aba Gráficos" : "Planilha Excel (XLSX) com a mesma tabela da folha"}>
-              <FileSpreadsheet aria-hidden="true" />Excel
+          <div className="rpt-mak__exports" role="group" aria-label="Exportar">
+            <button type="button" className="rpt-mak-ghost rpt-mak-ghost--icon" disabled={disabled} onClick={onExcel} title={chartsView ? "Planilha Excel (XLSX) com a folha e a aba Gráficos" : "Planilha Excel (XLSX) com a mesma tabela da folha"} aria-label="Excel">
+              <FileSpreadsheet aria-hidden="true" />
             </button>
-            <button type="button" className="rpt-mak-ghost" disabled={disabled} onClick={onPdf} title={chartsView ? "PDF A4 com os gráficos e a folha" : "PDF A4 da folha"}>
-              <FileText aria-hidden="true" />PDF
+            <button type="button" className="rpt-mak-ghost rpt-mak-ghost--icon" disabled={disabled} onClick={onPdf} title={chartsView ? "PDF A4 com os gráficos e a folha" : "PDF A4 da folha"} aria-label="PDF">
+              <FileText aria-hidden="true" />
             </button>
-          </>
+          </div>
         ) : null}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="rpt-mak-ghost rpt-mak-ghost--icon" aria-label="Mais opções" title="Mais opções (CSV, JSON, modelo, atualizar)">
-              <MoreHorizontal aria-hidden="true" />
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="rpt-mak-menu">
-            {canExport ? (
-              <>
-                <DropdownMenuLabel className="text-xs">{menuLabel}</DropdownMenuLabel>
-                <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onCsv}><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />CSV (Excel pt-BR)</DropdownMenuItem>
-                <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onJson}><FileJson className="h-3.5 w-3.5" aria-hidden="true" />JSON com manifesto</DropdownMenuItem>
-                {/* E1G: na vista Gráficos, imprimir/PDF só dos gráficos (sem a folha). */}
-                {onPrintCharts ? <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onPrintCharts}><Printer className="h-3.5 w-3.5" aria-hidden="true" />Imprimir só os gráficos</DropdownMenuItem> : null}
-                {onPdfCharts ? <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onPdfCharts}><FileText className="h-3.5 w-3.5" aria-hidden="true" />PDF só dos gráficos</DropdownMenuItem> : null}
-                <DropdownMenuSeparator />
-              </>
-            ) : null}
-            {/* E1F: os relatórios salvos abrem pelo campo "Relatório" (grupo "Meus relatórios") — sem "Abrir modelo" repetido aqui. */}
-            {onSaveAs ? <DropdownMenuItem className="text-xs" onClick={onSaveAs}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar como…</DropdownMenuItem>
-              : onSaveTemplate ? <DropdownMenuItem className="text-xs" onClick={onSaveTemplate}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar como meu relatório…</DropdownMenuItem> : null}
-            {onRename ? <DropdownMenuItem className="text-xs" onClick={onRename}><PencilLine className="h-3.5 w-3.5" aria-hidden="true" />Renomear…</DropdownMenuItem> : null}
-            {onDeleteTemplate ? <DropdownMenuItem className="text-xs" onClick={onDeleteTemplate}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />{deleteLabel ?? <>Excluir modelo “{templateName}”…</>}</DropdownMenuItem> : null}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-xs" onClick={onRefresh}><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Atualizar (reler os dados)</DropdownMenuItem>
-            <DropdownMenuCheckboxItem className="text-xs" checked={showEmptyColumns} onCheckedChange={onToggleEmptyColumns}>Mostrar colunas vazias</DropdownMenuCheckboxItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
         {/* E1F: alteração não salva no relatório do usuário — só grava com este botão (o último estado não mexe nele). */}
         {onSaveChanges ? (
-          <button type="button" className="rpt-mak-btn rpt-mak-btn--icon rpt-mak-save" disabled={savingChanges} onClick={onSaveChanges} title="Gravar o relatório como está na tela">
-            <Save aria-hidden="true" />{savingChanges ? "Salvando…" : "Salvar alterações"}
+          <button type="button" className="rpt-mak-btn rpt-mak-btn--icon rpt-mak-save" disabled={savingChanges} onClick={onSaveChanges} title={savingChanges ? "Salvando…" : "Gravar o relatório como está na tela"} aria-label={savingChanges ? "Salvando" : "Salvar alterações"}>
+            <Save aria-hidden="true" />
           </button>
         ) : null}
         {canExport ? (
-          <button type="button" className="rpt-mak-print text-white" disabled={disabled} onClick={onPrint} title={chartsView ? "Imprimir os gráficos e a folha (A4)" : "Imprimir a folha (A4)"}>Imprimir</button>
+          <button type="button" className="rpt-mak-print rpt-mak-ghost--icon" disabled={disabled} onClick={onPrint} title={chartsView ? "Imprimir os gráficos e a folha (A4)" : "Imprimir a folha (A4)"} aria-label="Imprimir">
+            <Printer aria-hidden="true" />
+          </button>
         ) : null}
+        <div className="rpt-mak__utils" role="group" aria-label="Mais opções">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className="rpt-mak-ghost rpt-mak-ghost--icon" aria-label="Mais opções" title="Mais opções (CSV, JSON, modelo, atualizar)">
+                <MoreHorizontal aria-hidden="true" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="rpt-mak-menu">
+              {canExport ? (
+                <>
+                  <DropdownMenuLabel className="text-xs">{menuLabel}</DropdownMenuLabel>
+                  <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onCsv}><FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />CSV (Excel pt-BR)</DropdownMenuItem>
+                  <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onJson}><FileJson className="h-3.5 w-3.5" aria-hidden="true" />JSON com manifesto</DropdownMenuItem>
+                  {/* E1G: na vista Gráficos, imprimir/PDF só dos gráficos (sem a folha). */}
+                  {onPrintCharts ? <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onPrintCharts}><Printer className="h-3.5 w-3.5" aria-hidden="true" />Imprimir só os gráficos</DropdownMenuItem> : null}
+                  {onPdfCharts ? <DropdownMenuItem className="text-xs" disabled={disabled} onClick={onPdfCharts}><FileText className="h-3.5 w-3.5" aria-hidden="true" />PDF só dos gráficos</DropdownMenuItem> : null}
+                  <DropdownMenuSeparator />
+                </>
+              ) : null}
+              {/* E1F: os relatórios salvos abrem pelo campo "Relatório" (grupo "Meus relatórios") — sem "Abrir modelo" repetido aqui. */}
+              {onSaveAs ? <DropdownMenuItem className="text-xs" onClick={onSaveAs}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar como…</DropdownMenuItem>
+                : onSaveTemplate ? <DropdownMenuItem className="text-xs" onClick={onSaveTemplate}><Save className="h-3.5 w-3.5" aria-hidden="true" />Salvar como meu relatório…</DropdownMenuItem> : null}
+              {onRename ? <DropdownMenuItem className="text-xs" onClick={onRename}><PencilLine className="h-3.5 w-3.5" aria-hidden="true" />Renomear…</DropdownMenuItem> : null}
+              {onDeleteTemplate ? <DropdownMenuItem className="text-xs" onClick={onDeleteTemplate}><Trash2 className="h-3.5 w-3.5" aria-hidden="true" />{deleteLabel ?? <>Excluir modelo “{templateName}”…</>}</DropdownMenuItem> : null}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="text-xs" onClick={onRefresh}><RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />Atualizar (reler os dados)</DropdownMenuItem>
+              <DropdownMenuCheckboxItem className="text-xs" checked={showEmptyColumns} onCheckedChange={onToggleEmptyColumns}>Mostrar colunas vazias</DropdownMenuCheckboxItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
       </div>
     </header>
   );
@@ -308,8 +312,8 @@ export function MakgestaoDisplaySwitch({ value, onChange }) {
   return (
     <div className="rpt-mak-switch" role="group" aria-label="Ver como">
       {options.map(([id, label, Icon, title]) => (
-        <button key={id} type="button" className={`rpt-mak-btn rpt-mak-btn--icon rpt-mak-switch__btn${value === id ? " is-on" : ""}`} aria-pressed={value === id} title={title} onClick={() => value !== id && onChange(id)}>
-          <Icon aria-hidden="true" />{label}
+        <button key={id} type="button" className={`rpt-mak-btn rpt-mak-btn--icon rpt-mak-switch__btn${value === id ? " is-on" : ""}`} aria-pressed={value === id} title={title} aria-label={label} onClick={() => value !== id && onChange(id)}>
+          <Icon aria-hidden="true" />
         </button>
       ))}
     </div>
@@ -319,8 +323,8 @@ export function MakgestaoDisplaySwitch({ value, onChange }) {
 /** Botão "Colunas…" do antigo (outline h-8 text-xs gap-1 com a engrenagem w-3.5). */
 export function MakgestaoColumnsButton({ label, title, onClick }) {
   return (
-    <button type="button" className="rpt-mak-btn rpt-mak-btn--icon" onClick={onClick} title={title ?? label}>
-      <Settings aria-hidden="true" />{label}
+    <button type="button" className="rpt-mak-btn rpt-mak-btn--icon" onClick={onClick} title={title ?? label} aria-label={label}>
+      <Settings aria-hidden="true" />
     </button>
   );
 }
@@ -422,7 +426,7 @@ export function MakgestaoFilterCard({
       <div className="rpt-mak__buttons" role="group" aria-label="Filtros">
         {filterButtons}
         {columnsButton ? <MakgestaoColumnsButton {...columnsButton} /> : null}
-        <button type="button" className="rpt-mak-btn" onClick={onClear}>Limpar Filtros</button>
+        <button type="button" className="rpt-mak-btn rpt-mak-btn--icon" onClick={onClear} title="Limpar filtros" aria-label="Limpar filtros"><Eraser aria-hidden="true" /></button>
         {extras}
       </div>
     </section>

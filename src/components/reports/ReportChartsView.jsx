@@ -98,7 +98,7 @@ function ChartCard({ viewModel, chart, config, index, onOption, onToggleSeries, 
       {data.notas?.length ? <ul className="rc-notes">{data.notas.map((nota) => <li key={nota}>{nota}</li>)}</ul> : null}
       {data.tabela?.linhas?.length ? (
         <div className="rpt-chart__foot">
-          <button type="button" className="rpt-mak-btn rpt-mak-btn--sm rpt-mak-btn--icon rpt-chart__table-btn" aria-expanded={table} onClick={() => setTable((open) => !open)}>
+          <button type="button" className="rpt-mak-btn rpt-mak-btn--sm rpt-chart__table-btn" aria-expanded={table} onClick={() => setTable((open) => !open)}>
             <Table2 aria-hidden="true" />{table ? "Esconder tabela" : "Ver tabela"}
           </button>
         </div>

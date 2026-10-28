@@ -1,11 +1,11 @@
-# Instalação no Windows
+﻿# Instalação no Windows
 
-Versão deste guia: **1.5.0**. O instalador chama-se
-**Pesagens Individuais Setup 1.5.0.exe**.
+Versão deste guia: **1.5.4**. O instalador chama-se
+**Pesagens Individuais Setup 1.5.4.exe**.
 
 ## Como instalar
 
-1. Execute o arquivo **Pesagens Individuais Setup 1.5.0.exe**.
+1. Execute o arquivo **Pesagens Individuais Setup 1.5.4.exe**.
 2. Siga as telas do instalador.
 3. Você pode escolher a pasta de instalação.
 4. Ao terminar, o atalho é criado.
@@ -34,15 +34,15 @@ Um build sem assinatura pode ser gerado em `release-unsigned/` apenas para
 diagnóstico local (`signed: false` no manifesto); ele não é instalador oficial
 e pode ser corretamente bloqueado por uma política corporativa do Windows.
 
-## Como atualizar da 1.3.x ou da 1.4.x para a 1.5.0
+## Como atualizar da 1.3.x, 1.4.x, 1.5.0 ou 1.5.2 para a 1.5.4
 
 1. Abra a versão atual e crie um **backup completo** em **Backup e Manutenção**. Guarde o arquivo
    fora do computador (pen drive ou outra pasta).
 2. Feche **todas** as janelas do programa.
-3. Execute o **Setup 1.5.0** por cima da instalação atual.
-4. Abra o programa e faça o login. A barra superior mostra **v1.5.0**.
+3. Execute o **Setup 1.5.4** por cima da instalação atual.
+4. Abra o programa e faça o login. A barra superior mostra **v1.5.4**.
 
-A 1.5.0 (como a 1.4.x) **não muda o banco** (continua na versão 8): não há migração automática nem backup
+A 1.5.4 (como a 1.5.1, 1.5.0 e a 1.4.x) **não muda o banco** (continua na versão 8): não há migração automática nem backup
 pré-migração. Só os favoritos, recentes e modelos de relatório são convertidos para os relatórios
 novos, na primeira vez que cada pessoa abre **Relatórios** (sem apagar nada; fica na auditoria).
 Detalhes e como voltar para a 1.3.2 em `docs/release/1.4.0/MIGRATION-1.3.0-TO-1.4.0.md`.
@@ -51,7 +51,7 @@ Na primeira abertura da 1.4.2 ou mais nova (vindo da 1.4.0/1.4.1), o programa re
 (só os campos calculados: data e peso anterior, dias, ganho e GMD). Nenhuma pesagem é apagada ou mudada
 de peso; fica registrado no log.
 
-O pacote de teste da 1.5.0 não é assinado: o Defender/SmartScreen pode avisar ou retirar o arquivo
+O pacote de teste da 1.5.4 não é assinado: o Defender/SmartScreen pode avisar ou retirar o arquivo
 da pasta. Não desative a proteção; veja **Segurança do instalador** acima.
 
 ## Como atualizar sem perder dados (1.1.x → 1.2.0)

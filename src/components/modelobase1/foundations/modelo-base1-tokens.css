@@ -23,8 +23,9 @@
   --mb1-radius-card: 12px;
   --mb1-radius-pill: 999px;
   --mb1-field-height: 38px;
-  --mb1-button-height: 28px;
-  --mb1-icon-button-size: 28px;
+  --mb1-button-height: 25px;
+  --mb1-button-height-default: 25px;
+  --mb1-icon-button-size: 25px;
   --mb1-toolbar-height: 36px;
   --mb1-row-height: 26px;
   --mb1-table-header-height: 30px;
@@ -61,8 +62,9 @@ html.escuro .mb1-scope {
 
 @media (max-width: 767px) {
   .mb1-scope {
-    --mb1-button-height: 36px;
-    --mb1-icon-button-size: 36px;
-    --mb1-toolbar-height: 44px;
+    --mb1-button-height: 25px;
+    --mb1-button-height-default: 25px;
+    --mb1-icon-button-size: 25px;
+    --mb1-toolbar-height: 48px;
   }
 }

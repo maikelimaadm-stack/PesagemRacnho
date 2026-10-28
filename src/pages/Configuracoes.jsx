@@ -14,7 +14,9 @@ import { DEFAULT_EMPRESA_ID, getAppConfig, updateAppConfig } from '@/modules/set
 import { parseBrazilianNumber } from '@/modules/weighing/domain/brazilianValues';
 import { GMD_DIAS_MINIMOS_OPCOES, GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinimos } from '@/modules/weighing/domain/gmdQuality';
 import { describeVersions } from '@/versioning/versionInfo';
+import ScaleEquipmentCard from '@/components/equipment/ScaleEquipmentCard';
 import '@/styles/auxiliary-registries.css';
+import '@/styles/launch-visual.css';
 
 // Sentinela do select para "nenhum padrão" (o Radix Select não aceita valor vazio).
 const NONE = '__nenhuma__';
@@ -451,15 +453,20 @@ function ConfiguracoesContent() {
                               {renderSection('relatorios')}
                             </div>
                           ) : null}
+                          {auth?.can?.('settings.manage') ? (
+                            <div className="emp-form-cards-row">
+                              <ScaleEquipmentCard />
+                            </div>
+                          ) : null}
                           {canSeeData ? (
                             <div className="emp-form-cards-row">
                               <FormCard title="Dados" description="Backup, restauração, importação, migração e verificação de integridade ficam em Backup e Manutenção." full>
                                 <div className="app-config__actions flex flex-wrap items-center gap-2" data-width-type="CAMPO_PRINCIPAL" style={{ flex: '1 1 100%' }}>
-                                  <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" onClick={goToMaintenance} title="Abrir Backup e Manutenção">
-                                    <HardDriveDownload className="h-3.5 w-3.5" aria-hidden="true" />Abrir Backup e Manutenção
+                                  <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" onClick={goToMaintenance} title="Abrir Backup e Manutenção" aria-label="Abrir Backup e Manutenção">
+                                    <HardDriveDownload className="h-3.5 w-3.5" aria-hidden="true" />
                                   </button>
                                   <span className="app-config__meta ml-auto text-[10px]" style={{ color: 'var(--mb1-text-3)' }}>
-                                    Aplicativo {versions.app} · Banco v{versions.dbSchema} · Backup formato {versions.backupFormat}
+                                    Aplicativo {versions.app}. Banco v{versions.dbSchema}. Backup formato {versions.backupFormat}.
                                   </span>
                                 </div>
                               </FormCard>

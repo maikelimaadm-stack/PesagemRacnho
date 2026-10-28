@@ -193,9 +193,9 @@ export default function GerenciarApartacoesDialog({ open, onOpenChange, empresaI
                         <TableCell className="text-xs text-center">{qtdPesagens > 0 ? <Badge variant="outline" className="text-[10px]">{fmtInt(qtdPesagens)}</Badge> : '-'}</TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {onUseApartacao && <Button size="sm" className="h-7 text-xs" onClick={() => { onUseApartacao(a); onOpenChange(false); }}>Usar</Button>}
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setNomeApartacao(a.nome_apartacao); setEditingApartacaoId(a.id); }}><Edit2 className="w-3 h-3" /></Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => excluirApartacao(a.id)}><Trash2 className="w-3 h-3" /></Button>
+                            {onUseApartacao && <Button size="sm" onClick={() => { onUseApartacao(a); onOpenChange(false); }}>Usar</Button>}
+                            <Button variant="ghost" size="icon" aria-label={`Editar ${a.nome_apartacao || "apartação"}`} onClick={() => { setNomeApartacao(a.nome_apartacao); setEditingApartacaoId(a.id); }}><Edit2 className="w-3.5 h-3.5" aria-hidden="true" /></Button>
+                            <Button variant="ghost" size="icon" className="text-red-500" aria-label={`Excluir ${a.nome_apartacao || "apartação"}`} onClick={() => excluirApartacao(a.id)}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></Button>
                           </div>
                         </TableCell>
                       </TableRow>
@@ -233,9 +233,9 @@ export default function GerenciarApartacoesDialog({ open, onOpenChange, empresaI
                         <TableCell className="text-xs text-center">{qtdPesagens > 0 ? <Badge variant="outline" className="text-[10px]">{fmtInt(qtdPesagens)}</Badge> : '-'}</TableCell>
                         <TableCell>
                           <div className="flex gap-1">
-                            {onUseLote && <Button size="sm" className="h-7 text-xs" onClick={() => { onUseLote(l); onOpenChange(false); }}>Usar</Button>}
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setApartacaoIdLote(l.apartacao_id); setNomeLote(l.nome_lote); setQtdMaxima(String(l.quantidade_maxima)); setPesoMinimo(String(l.peso_minimo)); setPesoMaximo(String(l.peso_maximo)); setEditingLoteId(l.id); }}><Edit2 className="w-3 h-3" /></Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500" onClick={() => excluirLote(l.id)}><Trash2 className="w-3 h-3" /></Button>
+                            {onUseLote && <Button size="sm" onClick={() => { onUseLote(l); onOpenChange(false); }}>Usar</Button>}
+                            <Button variant="ghost" size="icon" aria-label={`Editar ${l.nome_lote || "lote"}`} onClick={() => { setApartacaoIdLote(l.apartacao_id); setNomeLote(l.nome_lote); setQtdMaxima(String(l.quantidade_maxima)); setPesoMinimo(String(l.peso_minimo)); setPesoMaximo(String(l.peso_maximo)); setEditingLoteId(l.id); }}><Edit2 className="w-3.5 h-3.5" aria-hidden="true" /></Button>
+                            <Button variant="ghost" size="icon" className="text-red-500" aria-label={`Excluir ${l.nome_lote || "lote"}`} onClick={() => excluirLote(l.id)}><Trash2 className="w-3.5 h-3.5" aria-hidden="true" /></Button>
                           </div>
                         </TableCell>
                       </TableRow>

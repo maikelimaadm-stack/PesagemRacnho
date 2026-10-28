@@ -4,12 +4,11 @@
 // sanityService.listApplications; pesquisa e pílulas refinam só o que já foi carregado.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Columns3, FileSpreadsheet, ListFilter, RefreshCw, Upload } from 'lucide-react';
+import { Ban, FileSpreadsheet, ListFilter, Plus, RefreshCw, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { createPageUrl } from '@/utils';
 import MakDateControl from '@/components/mak/MakDateControl';
 import MakTableSelectCheck from '@/components/mak/MakTableSelectCheck';
-import MgDesktopSearch from '@/components/mak/MgDesktopSearch';
 import MgSpeedDialMenu from '@/components/mak/MgSpeedDialMenu';
 import { Columns3Cog } from '@/components/mak/mgIcons';
 import { cancelApplication, listApplications, registerApplication } from '@/modules/sanity/application/sanityService';
@@ -143,35 +142,32 @@ export default function AplicacoesPanel({
       <div className="mak-mother-page__toolbar mg-subtoolbar-stack" data-mak-region="toolbar">
         <div data-template-id="action-bar" className="mg-action-bar canva-section flex w-full shrink-0 items-center" style={{ background: 'var(--bg-card)' }}>
           <div className="mg-action-bar__actions flex min-w-0 items-center">
-            <div className={`mg-action-slot${canApply ? ' is-visible' : ''}`} style={{ '--slot-width': '142px' }} aria-hidden={!canApply}>
-              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green" onClick={() => setRegisterOpen(true)} title="Registrar aplicação avulsa" tabIndex={canApply ? 0 : -1} disabled={!canApply}>Registrar aplicação</button>
-            </div>
-            <div className={`mg-action-slot${canApply ? ' is-visible' : ''}`} style={{ '--slot-width': '150px' }} aria-hidden={!canApply}>
-              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" data-testid="sanidade-importar-aplicacoes" onClick={abrirImportacao} title="Importar aplicações de uma planilha" tabIndex={canApply ? 0 : -1} disabled={!canApply}>
-                <Upload className="w-4 h-4 mr-1" aria-hidden="true" />
-                Importar aplicações
+            <div className={`mg-action-slot${canApply ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!canApply}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-green" onClick={() => setRegisterOpen(true)} title="Registrar aplicação avulsa" aria-label="Registrar aplicação avulsa" tabIndex={canApply ? 0 : -1} disabled={!canApply}>
+                <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" strokeWidth={2.5} />
               </button>
             </div>
-            <div className={`mg-action-slot${canCancelSelected ? ' is-visible' : ''}`} style={{ '--slot-width': '136px' }} aria-hidden={!canCancelSelected}>
-              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost tb-btn-danger" onClick={() => setCancelTarget(selectedApplication)} title="Cancelar a aplicação selecionada" tabIndex={canCancelSelected ? 0 : -1} disabled={busy || !canCancelSelected}>Cancelar aplicação</button>
+            <div className={`mg-action-slot${canApply ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!canApply}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" data-testid="sanidade-importar-aplicacoes" onClick={abrirImportacao} title="Importar aplicações de uma planilha" aria-label="Importar aplicações de uma planilha" tabIndex={canApply ? 0 : -1} disabled={!canApply}>
+                <Upload className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              </button>
+            </div>
+            <div className={`mg-action-slot${canCancelSelected ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!canCancelSelected}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost tb-btn-danger" onClick={() => setCancelTarget(selectedApplication)} title="Cancelar a aplicação selecionada" aria-label="Cancelar a aplicação selecionada" tabIndex={canCancelSelected ? 0 : -1} disabled={busy || !canCancelSelected}>
+                <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              </button>
             </div>
           </div>
           <div className="mg-action-bar__end">
-            <div className="mg-action-bar__tools mg-action-bar__tools--visible">
-              <MgDesktopSearch
-                value={table.searchInput}
-                onValueChange={table.setSearchInput}
-                hasFilter={Boolean(table.search)}
-                onClear={table.clearSearch}
-                results={table.searchResults.items}
-                resultsTotal={table.searchResults.total}
-                titleField="titulo"
-                detailFields={[{ key: 'animal', label: 'Animal' }, { key: 'programa', label: 'Programa' }, { key: 'medicamento', label: 'Medicamento' }, { key: 'situacao', label: 'Situação' }]}
-                getFieldValue={(item, key) => item?.[key]}
-                onSelectResult={(item) => { table.clearSearch(); table.setSelected([table.getKey(item._row)]); }}
-                onApplyAll={table.applySearch}
-              />
-            </div>
+            <button
+              type="button"
+              className="mg-nav-btn ios-btn tb-btn tb-btn-icon mg-table-panel-strip__config-btn"
+              onClick={() => table.setShowColumnConfig(true)}
+              title="Configurar colunas da tabela"
+              aria-label="Configurar colunas da tabela"
+            >
+              <Columns3Cog className="mg-table-panel-strip__config-icon" strokeWidth={2.1} aria-hidden="true" />
+            </button>
             <div className="relative">
               <MgSpeedDialMenu
                 open={moreOpen}
@@ -180,7 +176,6 @@ export default function AplicacoesPanel({
                 menuId="sanidade-aplicacoes-more-menu"
                 items={[
                   { id: 'atualizar', label: 'Atualizar', icon: RefreshCw, onClick: load },
-                  { id: 'colunas', label: 'Configurar colunas', icon: Columns3, onClick: () => table.setShowColumnConfig(true) },
                   { id: 'limpar', label: 'Limpar filtros', icon: ListFilter, onClick: clearAll },
                   { id: 'modelo-importacao', label: 'Baixar modelo de importação', icon: FileSpreadsheet, onClick: baixarModeloImportacao },
                 ]}
@@ -210,9 +205,6 @@ export default function AplicacoesPanel({
               <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost mg-filter-pill__trigger mg-filter-pill__trigger--clear" onClick={clearAll}>Limpar filtros</button>
             ) : null}
           </div>
-          <button type="button" className="mg-nav-btn ios-btn mg-table-panel-strip__config-btn sanidade-filter-strip__config" onClick={() => table.setShowColumnConfig(true)} title="Configurar colunas da tabela" aria-label="Configurar colunas da tabela">
-            <Columns3Cog className="mg-table-panel-strip__config-icon" strokeWidth={2.1} />
-          </button>
         </div>
       </div>
       <div className="d17b-list-body" id="sanidade-panel-aplicacoes" role="tabpanel" aria-labelledby="sanidade-tab-aplicacoes">

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Archive, Check, FileSpreadsheet, Lock, Printer, Unlock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import MakDateControl from '@/components/mak/MakDateControl';
@@ -14,6 +14,7 @@ import { exportWeighingCsv } from '@/modules/weighing/export/weighingExportServi
 import { downloadCsvFile } from '@/modules/weighing/export/csvDownload';
 import { useAuth } from '@/components/auth/useAuth';
 import '@/styles/operational-insights.css';
+import '@/styles/launch-visual.css';
 
 const nf = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const n3 = new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
@@ -46,6 +47,7 @@ export default function FechamentoDia() {
   const [date, setDate] = useState(today);
   const [apartacaoId, setApartacaoId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [justified, setJustified] = useState(() => new Set());
   // Política comercial da empresa (documento na venda, rendimento padrão): lida
   // uma vez; sem configuração vale o padrão (venda sem exigência, rendimento nulo).
@@ -60,6 +62,8 @@ export default function FechamentoDia() {
   }, []);
 
   const refresh = async ({ chooseLatest = false } = {}) => {
+    setLoading(true);
+    setLoadError('');
     try {
       const data = await loadOperationalCatalog();
       setCatalog(data);
@@ -68,7 +72,9 @@ export default function FechamentoDia() {
         if (latest) setDate(latest);
       }
     } catch (error) {
-      toast.error(error.message || 'Não foi possível carregar o fechamento.');
+      const message = error.message || 'Não foi possível carregar o fechamento.';
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -194,28 +200,31 @@ export default function FechamentoDia() {
             </SelectContent>
           </Select>
         </div>
-        <span className={`op-pill ${pending.length ? 'op-pill--warn' : 'op-pill--active'}`}><AlertTriangle size={14} />{pending.length ? `${ni.format(pending.length)} pendências` : 'Conferido'}</span>
+        <span className={`op-pill ${!loading && !loadError && pending.length ? 'op-pill--warn' : !loading && !loadError ? 'op-pill--active' : ''}`}><AlertTriangle size={14} />{loading ? 'Carregando…' : loadError ? 'Não carregou' : pending.length ? `${ni.format(pending.length)} pendências` : 'Conferido'}</span>
         <div className="op-toolbar-actions">
-          {podeExportar ? <button className="op-button" type="button" onClick={exportCsv} disabled={!rows.length}>Exportar CSV</button> : null}
-          <button className="op-button" type="button" onClick={() => navigate(`/Relatorios?r=controle.fechamento-dia&d=${date}`)} disabled={!rows.length} title="Relatório imprimível com as mesmas regras de pendência">Imprimir fechamento</button>
-          <button className="op-button" type="button" onClick={backupDay} disabled={!rows.length}>Backup do dia</button>
-          <button className="op-button op-button--primary" type="button" onClick={toggleClosed} disabled={loading || !rows.length}>{isClosed ? 'Reabrir o dia' : 'Fechar o dia'}</button>
+          {podeExportar ? <button className="op-button op-button--icon" type="button" onClick={exportCsv} disabled={!rows.length} title="Exportar CSV" aria-label="Exportar CSV"><FileSpreadsheet size={14} aria-hidden="true" /></button> : null}
+          <button className="op-button op-button--icon" type="button" onClick={() => navigate(`/Relatorios?r=controle.fechamento-dia&d=${date}`)} disabled={!rows.length} title="Relatório imprimível com as mesmas regras de pendência" aria-label="Imprimir fechamento"><Printer size={14} aria-hidden="true" /></button>
+          <button className="op-button op-button--icon" type="button" onClick={backupDay} disabled={!rows.length} title="Backup do dia" aria-label="Backup do dia"><Archive size={14} aria-hidden="true" /></button>
+          <button className="op-button op-button--icon op-button--primary" type="button" onClick={toggleClosed} disabled={loading || !rows.length} title={isClosed ? 'Reabrir o dia' : 'Fechar o dia'} aria-label={isClosed ? 'Reabrir o dia' : 'Fechar o dia'}>{isClosed ? <Unlock size={14} aria-hidden="true" /> : <Lock size={14} aria-hidden="true" />}</button>
         </div>
       </div>
 
+      {loading ? <div className="op-empty" role="status">Carregando os lançamentos deste dia…</div> : loadError ? <section className="op-card" role="alert"><div className="op-empty"><p>{loadError} Use Tentar de novo.</p><button className="op-button" type="button" onClick={() => refresh()}>Tentar de novo</button></div></section> : <>
       <div className="op-kpis">{kpis.map(([label, value, hint, accent]) => <div key={label} className={`op-kpi ${accent ? `op-kpi--${accent}` : ''}`}><span className="op-kpi__label">{label}</span><strong className="op-kpi__value">{value}</strong><span className="op-kpi__hint">{hint}</span></div>)}</div>
 
       <section className="op-card op-card--warning">
         <header className="op-card__header"><h2>Pendências antes de fechar</h2><span>Resolva cada item para concluir</span></header>
-        {pending.length ? pending.map((item) => <div className="op-pending-row" key={item.key}><span className={`op-pending-tag ${item.danger ? 'op-pending-tag--danger' : ''}`}>{item.type}</span><div className="op-pending-copy"><strong>{item.title}</strong><span>{item.detail}</span></div><div className="op-toolbar-actions"><button className="op-button" type="button" onClick={() => setJustified((current) => new Set([...current, item.key]))}>Justificar</button><button className="op-button" type="button" onClick={() => { location.hash = '#/PesagensIndividuais'; }}>{item.action}</button></div></div>) : <div className="op-empty">Nenhuma pendência encontrada para esta data.</div>}
+        {pending.length ? pending.map((item) => <div className="op-pending-row" key={item.key}><span className={`op-pending-tag ${item.danger ? 'op-pending-tag--danger' : ''}`}>{item.type}</span><div className="op-pending-copy"><strong>{item.title}</strong><span>{item.detail}</span></div><div className="op-toolbar-actions"><button className="op-button" type="button" onClick={() => setJustified((current) => new Set([...current, item.key]))}>Justificar</button><button className="op-button" type="button" onClick={() => { location.hash = '#/PesagensIndividuais'; }}>{item.action}</button></div></div>) : <div className="op-empty">Nenhuma pendência nesta data. Escolha outro dia ou confira a relação de pesagens.</div>}
       </section>
 
       <div className="op-grid-two">
-        <section className="op-card"><header className="op-card__header"><h2>Conferência por lote</h2><span>Contado × capacidade</span></header><div className="op-table-scroll"><table className="op-table"><thead><tr><th>Lote</th><th className="is-number">Lançado</th><th className="is-number">Capacidade</th><th className="is-number">Peso médio</th><th>Ocupação</th></tr></thead><tbody>{lots.map((lot) => <tr key={lot.id} className={lot.pct >= 100 ? 'is-danger' : ''}><td><strong>{lot.nome_lote}</strong></td><td className="is-number">{ni.format(lot.linked)}</td><td className="is-number">{lot.capacity ? ni.format(lot.capacity) : '—'}</td><td className="is-number">{lot.average !== null ? nf.format(lot.average) : '—'}</td><td><div className="op-progress-cell"><span className={`op-progress ${lot.pct >= 100 ? 'is-full' : ''}`}><span style={{ width: `${lot.pct}%` }} /></span><small>{ni.format(lot.pct)}%</small></div></td></tr>)}</tbody></table>{!lots.length && <div className="op-empty">Nenhum lote configurado para a seleção.</div>}</div></section>
-        <section className="op-card"><header className="op-card__header"><h2>Conferência por marca</h2><span>{ni.format(rows.length)} lançamentos</span></header><div className="op-brand-list">{brands.map((brand) => <div className="op-brand-row" key={brand.name}><span className="op-pill">{brand.name}</span><span className="op-brand-row__bar"><span style={{ width: `${brand.pct}%` }} /></span><strong>{ni.format(brand.count)}</strong><small>{brand.average === null ? '—' : nf.format(brand.average)} kg</small></div>)}{!brands.length && <div className="op-empty">Sem lançamentos nesta data.</div>}<div className="op-totals"><span>Peso total do dia</span><strong>{totalWeight === null ? '—' : `${nf.format(totalWeight)} kg`}</strong></div><div className="op-totals"><span>@ carcaça estimada{salesPolicy.rendimento_padrao ? ` (${nf.format(salesPolicy.rendimento_padrao)}% padrão da empresa)` : ''}</span><strong>{carcassOfDay.arrobas !== null ? `${nf.format(carcassOfDay.arrobas)} @` : 'sem rendimento padrão'}</strong></div></div></section>
+        <section className="op-card"><header className="op-card__header"><h2>Conferência por lote</h2><span>Contado × capacidade</span></header><div className="op-table-scroll"><table className="op-table"><thead><tr><th>Lote</th><th className="is-number">Lançado</th><th className="is-number">Capacidade</th><th className="is-number">Peso médio</th><th>Ocupação</th></tr></thead><tbody>{lots.map((lot) => <tr key={lot.id} className={lot.pct >= 100 ? 'is-danger' : ''}><td><strong>{lot.nome_lote}</strong></td><td className="is-number">{ni.format(lot.linked)}</td><td className="is-number">{lot.capacity ? ni.format(lot.capacity) : '—'}</td><td className="is-number">{lot.average !== null ? nf.format(lot.average) : '—'}</td><td><div className="op-progress-cell"><span className={`op-progress ${lot.pct >= 100 ? 'is-full' : ''}`}><span style={{ width: `${lot.pct}%` }} /></span><small>{ni.format(lot.pct)}%</small></div></td></tr>)}</tbody></table>{!lots.length && <div className="op-empty">Nenhum lote nesta apartação. Cadastre um lote ou escolha outra apartação.</div>}</div></section>
+        <section className="op-card"><header className="op-card__header"><h2>Conferência por marca</h2><span>{ni.format(rows.length)} lançamentos</span></header><div className="op-brand-list">{brands.map((brand) => <div className="op-brand-row" key={brand.name}><span className="op-pill">{brand.name}</span><span className="op-brand-row__bar"><span style={{ width: `${brand.pct}%` }} /></span><strong>{ni.format(brand.count)}</strong><small>{brand.average === null ? '—' : nf.format(brand.average)} kg</small></div>)}{!brands.length && <div className="op-empty">Nenhum lançamento nesta data. Escolha outro dia ou lance as pesagens.</div>}<div className="op-totals"><span>Peso total do dia</span><strong>{totalWeight === null ? '—' : `${nf.format(totalWeight)} kg`}</strong></div><div className="op-totals"><span>@ carcaça estimada{salesPolicy.rendimento_padrao ? ` (${nf.format(salesPolicy.rendimento_padrao)}% padrão da empresa)` : ''}</span><strong>{carcassOfDay.arrobas !== null ? `${nf.format(carcassOfDay.arrobas)} @` : 'sem rendimento padrão'}</strong></div></div></section>
       </div>
 
       <section className="op-card"><header className="op-card__header"><h2>O que será gravado no fechamento</h2><span>{isClosed ? `Fechado em ${dateBr(date)}` : 'Sessão aberta'}</span></header><div className="op-steps">{[['Backup operacional disponível', 'Os registros do dia podem ser exportados em JSON antes da conclusão.'], ['Série de desempenho calculada', 'Dias, ganho e GMD utilizam os valores persistidos de cada animal.'], ['Ocupação de lotes conferida', 'Contagem, capacidade e status são apresentados por lote.'], ['Sessão diária persistida', 'O estado aberto ou fechado é gravado no IndexedDB.']].map(([title, detail]) => <div className="op-step" key={title}><Check /><div><strong>{title}</strong><span>{detail}</span></div></div>)}</div></section>
+      </>}
+      <p className="op-report-foot">Dia {dateBr(date)} · horário deste computador · origem: lançamentos gravados neste aparelho. Peso ausente não entra na média. GMD médio = soma do ganho ÷ soma dos dias. 1 @ = 15 kg de carcaça, só com o rendimento padrão da empresa.</p>
     </main>
   );
 }

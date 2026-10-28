@@ -1,0 +1,902 @@
+/* Linguagem visual da linha de lançamento, medida na tela:
+   campos 28px, raio 8px, borda rgba(64, 222, 99, .42), fundo #fff;
+   botões nomeados: pílula 25px fundo #f1f3f4, letra #111827 (padrão Marcas);
+   ícones: círculo 25px, fundo transparente, glifo #111827;
+   peso âmbar. Sem fill verde em botão. */
+
+html body #root .d17b-shell :is(.d17b-page, .d17b-dialog-content, .d17b-launch-page) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+  textarea,
+  [role="combobox"],
+  .mak-date-control,
+  .d17d-weight-control
+),
+html body #root .op-screen :is([role="combobox"], .mak-date-control),
+html body #root .rpt-mak :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+  textarea,
+  [role="combobox"]
+) {
+  border: 1px solid rgba(64, 222, 99, .42) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  color: #111827 !important;
+  box-shadow: inset 0 0 0 1px rgba(64, 222, 99, .12) !important;
+}
+
+html body #root .d17b-shell :is(.d17b-page, .d17b-dialog-content, .d17b-launch-page) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]):not(textarea),
+  [role="combobox"],
+  .mak-date-control,
+  .d17d-weight-control
+),
+html body #root .op-screen :is([role="combobox"], .mak-date-control),
+html body #root .rpt-mak :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+  [role="combobox"]
+) {
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+}
+
+html body #root .d17b-shell :is(.d17b-page, .d17b-dialog-content, .d17b-launch-page) textarea,
+html body #root .rpt-mak textarea {
+  height: auto !important;
+  min-height: 28px !important;
+  max-height: none !important;
+}
+
+html body #root .d17b-shell :is(.d17b-page, .d17b-dialog-content, .d17b-launch-page) :is(
+  input,
+  textarea,
+  [role="combobox"]
+)::placeholder,
+html body #root .op-screen :is([role="combobox"])::placeholder,
+html body #root .rpt-mak :is(input, textarea)::placeholder {
+  color: rgba(17, 24, 39, .45) !important;
+}
+
+/* Texto do combobox e chevron/SVG = tinta #111827. */
+html body #root .d17b-shell :is(.d17b-page, .d17b-dialog-content, .d17b-launch-page) [role="combobox"] span,
+html body #root .op-screen [role="combobox"] span,
+html body #root .rpt-mak [role="combobox"] span {
+  color: #111827 !important;
+}
+html body #root .d17b-shell :is(.d17b-page, .d17b-dialog-content, .d17b-launch-page) [role="combobox"] svg,
+html body #root .op-screen [role="combobox"] svg,
+html body #root .rpt-mak [role="combobox"] svg {
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+
+/* Rótulos: tinta #111827 em lançamento, cadastros, relatórios e op. */
+html body #root .d17b-shell .d17b-launch-page label,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-fields .d17d-field > label,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-typebar > label {
+  color: #111827 !important;
+}
+html body #root .op-screen :is(.op-card__header h2, .op-kpi__label) {
+  color: #111827 !important;
+}
+
+html body #root .d17b-shell .mak-date-control > input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+html body #root .d17b-shell .d17d-weight-control > input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+html body #root .d17b-shell .mak-date-control > button,
+html body #root .d17b-shell .d17d-weight-capture {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  max-height: 26px !important;
+}
+
+/* Ícone do calendário / captura: glifo preto (borda do campo continua verde). */
+html body #root .d17b-shell .mak-date-control > button,
+html body #root .d17b-shell .mak-date-control > button svg,
+html body #root .d17b-shell .d17d-weight-capture,
+html body #root .d17b-shell .d17d-weight-capture svg {
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+
+html body #root .d17b-shell .mg-search-pill {
+  border: 1px solid rgba(64, 222, 99, .42) !important;
+  background: #fff !important;
+  box-shadow: none !important;
+}
+
+html body #root .d17b-shell .mg-search-pill input {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #111827 !important;
+}
+
+/* Identificação e Peso: mesma cor, tamanho e peso (igual ao exemplo do Peso). */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-fields .d17d-field.d17d-field--weight .d17d-weight-control > input,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-fields .d17d-field.d17d-field--weight .d17d-weight-control > input::placeholder,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-fields .d17d-field.d17d-field--animal > input,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-fields .d17d-field.d17d-field--animal > input::placeholder {
+  color: #f59e0b !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 22px !important;
+}
+
+/* Ações: mesmo espaçamento dos campos de lançamento (4px via padding do flex). */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions {
+  flex: 0 0 auto !important;
+  margin-left: 0 !important;
+}
+
+/* Lote destino: mesma coluna rótulo + controle dos outros campos da apartação. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-apartation-fields > .d17d-auto-lot-field {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: stretch !important;
+  justify-content: flex-end !important;
+  flex: 0 0 164px !important;
+  width: 164px !important;
+  min-width: 0 !important;
+  max-width: 220px !important;
+  padding-right: 4px !important;
+  gap: 4px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-apartation-fields > .d17d-auto-lot-field > label {
+  min-height: 16px !important;
+  line-height: 16px !important;
+  margin: 0 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-apartation-fields > .d17d-auto-lot-field > .d17d-auto-lot-feedback {
+  display: inline-flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  margin: 0 !important;
+  padding: 0 10px !important;
+  gap: 6px !important;
+  border-radius: 8px !important;
+  border-width: 1px !important;
+  border-style: solid !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  grid-column: auto !important;
+  align-self: stretch !important;
+  position: static !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-auto-lot-feedback.is-found {
+  border-color: rgba(245, 158, 11, .45) !important;
+  background: #fff7ed !important;
+  color: #c2410c !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-auto-lot-feedback.is-missing {
+  border-color: rgba(220, 38, 38, .28) !important;
+  background: #fef2f2 !important;
+  color: #b91c1c !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-auto-lot-feedback > svg {
+  flex: 0 0 14px !important;
+  width: 14px !important;
+  height: 14px !important;
+  margin: 0 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-auto-lot-feedback > span {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+/* Salvar: verde da linha do painel (#40de63), pílula como os outros botões. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > .d17d-launch-save,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > button.d17d-launch-save {
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  padding: 0 16px !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  background: #40de63 !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > .d17d-launch-save:hover:not(:disabled),
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > button.d17d-launch-save:hover:not(:disabled) {
+  background: #36c956 !important;
+  color: #fff !important;
+}
+/* Enter → Salvar selecionado: só troca a cor (cinza), sem anéis extras. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > .d17d-launch-save.is-selected,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > .d17d-launch-save:focus,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > .d17d-launch-save:focus-visible,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > button.d17d-launch-save.is-selected,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > button.d17d-launch-save:focus,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > button.d17d-launch-save:focus-visible {
+  outline: none !important;
+  background: #6b7280 !important;
+  color: #fff !important;
+  border: 1px solid #4b5563 !important;
+  box-shadow: none !important;
+  transform: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > .d17d-launch-save.is-selected .d17d-launch-save__shortcut,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > .d17d-launch-save:focus .d17d-launch-save__shortcut,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > .d17d-launch-save:focus-visible .d17d-launch-save__shortcut,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > button.d17d-launch-save.is-selected .d17d-launch-save__shortcut,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > button.d17d-launch-save:focus .d17d-launch-save__shortcut,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > button.d17d-launch-save:focus-visible .d17d-launch-save__shortcut {
+  background: rgba(255, 255, 255, .22) !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-actions > .d17d-launch-save .d17d-launch-save__shortcut {
+  background: rgba(255, 255, 255, .28) !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+}
+
+/* Ativação da pesagem: só o ícone; ativo = âmbar da Identificação. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active.is-accent-blue {
+  color: #f59e0b !important;
+  background: transparent !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active :is(svg, svg.lucide),
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active.is-accent-blue :is(svg, svg.lucide) {
+  color: #f59e0b !important;
+  stroke: #f59e0b !important;
+}
+
+/* Campo Peso com automática: fundo cinza claro de bloqueio + borda sempre presente. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto {
+  position: relative !important;
+  overflow: visible !important;
+  isolation: isolate !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 8px !important;
+  background: #f9fafb !important; /* cinza bem claro — só indica bloqueio */
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, .12) !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto > input {
+  cursor: default !important;
+  background: transparent !important;
+  color: #111827 !important; /* calibrando / aguardando = preto */
+}
+
+/* Estabilização: anel girando só enquanto oscila; estável = número verde, sem anel extra. */
+@property --d17d-weight-spin {
+  syntax: '<angle>';
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes d17d-weight-border-spin {
+  to { --d17d-weight-spin: 360deg; }
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto.is-settling::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: -2px !important;
+  border-radius: 10px !important;
+  pointer-events: none !important;
+  z-index: 3 !important;
+  background: conic-gradient(
+    from var(--d17d-weight-spin),
+    #40de63 0deg,
+    #40de63 55deg,
+    rgba(64, 222, 99, .12) 95deg,
+    transparent 130deg,
+    transparent 250deg,
+    rgba(64, 222, 99, .2) 300deg,
+    #40de63 360deg
+  ) !important;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0) !important;
+  -webkit-mask-composite: xor !important;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0) !important;
+  mask-composite: exclude !important;
+  padding: 2.5px !important;
+  animation: d17d-weight-border-spin 0.85s linear infinite !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto.is-settling.is-accent-blue::before {
+  background: conic-gradient(
+    from var(--d17d-weight-spin),
+    #3b82f6 0deg,
+    #3b82f6 55deg,
+    rgba(59, 130, 246, .12) 95deg,
+    transparent 130deg,
+    transparent 250deg,
+    rgba(59, 130, 246, .2) 300deg,
+    #3b82f6 360deg
+  ) !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto.is-settling > :is(input, button) {
+  position: relative !important;
+  z-index: 4 !important;
+  color: #111827 !important; /* calibrando = preto */
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto.is-stable::before {
+  content: none !important;
+  display: none !important;
+}
+/* Cinza / cores de estabilização só com captura automática ligada. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto.is-stable {
+  background: #f9fafb !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto.is-stable > input {
+  color: #f59e0b !important; /* estável = mesma cor da Identificação */
+  font-weight: 700 !important;
+}
+/* Transferência de lote: toggle de atalho no campo (como ícone da balança no Peso). */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-transfer-control {
+  display: flex !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  border: 1px solid rgba(64, 222, 99, .42) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  box-shadow: inset 0 0 0 1px rgba(64, 222, 99, .12) !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-transfer-control > button[role="combobox"],
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-transfer-control > [role="combobox"] {
+  flex: 1 1 auto !important;
+  width: 1px !important;
+  min-width: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+/* Atalho de lote: só o ícone no campo; ativo = âmbar da Identificação. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-lot-atalho-toggle {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 28px !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  align-self: center !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  max-height: 26px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #111827 !important;
+  cursor: pointer !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-lot-atalho-toggle > svg {
+  width: 14px !important;
+  height: 14px !important;
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-lot-atalho-toggle.is-active,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-lot-atalho-toggle.is-active > svg {
+  color: #f59e0b !important;
+  stroke: #f59e0b !important;
+  background: transparent !important;
+}
+/* Atalhos de lote (F11/F12/…) — mesmo tamanho/borda dos campos de lançamento. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-apartation-fields > .d17d-auto-lot-field.d17d-auto-lot-field--shortcuts {
+  flex: 0 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex-direction: row !important;
+  align-items: flex-end !important;
+  gap: 0 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-lot-shortcut-list {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  gap: 6px !important;
+  margin: 0 !important;
+  height: 28px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-lot-shortcut-option {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  padding: 0 10px !important;
+  border: 1px solid rgba(64, 222, 99, .42) !important;
+  border-radius: 8px !important;
+  background: #fff !important;
+  box-shadow: inset 0 0 0 1px rgba(64, 222, 99, .12) !important;
+  color: #111827 !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  cursor: pointer !important;
+  white-space: nowrap !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-lot-shortcut-option__key {
+  display: inline-grid !important;
+  place-items: center !important;
+  min-width: 28px !important;
+  height: 16px !important;
+  padding: 0 4px !important;
+  border-radius: 4px !important;
+  background: #f1f3f4 !important;
+  font-size: 9px !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.02em !important;
+}
+/* Ícones só — padrão da Relação de Pesagens: círculo 25px, fundo #f1f3f4. */
+html body #root .d17b-shell :is(
+  .d17d-icon-action,
+  .tb-btn-icon,
+  .tb-btn-more,
+  .mg-nav-btn,
+  .d17c-round-action,
+  .d17b-dialog-close
+),
+html body #root .mb1-app-shell :is(.mb1-shell-icon-button, .mb1-shell-topbar-button:not(.mb1-user-menu__trigger)),
+html body #root .rpt-mak :is(.rpt-mak-ghost--icon, .rpt-mak-btn--icon):not(#rpt-none) {
+  width: 25px !important;
+  min-width: 25px !important;
+  max-width: 25px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 50% !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+
+html body #root .d17b-shell :is(.d17d-icon-action, .tb-btn-icon, .tb-btn-more, .mg-nav-btn, .d17c-round-action, .d17b-dialog-close) svg,
+html body #root .mb1-app-shell :is(.mb1-shell-icon-button, .mb1-shell-topbar-button:not(.mb1-user-menu__trigger)) svg,
+html body #root .rpt-mak :is(.rpt-mak-ghost--icon, .rpt-mak-btn--icon):not(#rpt-none) svg {
+  width: 14px !important;
+  height: 14px !important;
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+
+html body #root .d17b-shell :is(.d17d-icon-action, .tb-btn-icon, .tb-btn-more, .mg-nav-btn, .d17c-round-action):hover:not(:disabled),
+html body #root .mb1-app-shell :is(.mb1-shell-icon-button, .mb1-shell-topbar-button:not(.mb1-user-menu__trigger)):hover:not(:disabled) {
+  background: #e5e7eb !important;
+  border-color: transparent !important;
+  color: #111827 !important;
+}
+
+/* Lançamento: reforça o mesmo padrão cinza em todos os botões só-ícone. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope :is(
+  .d17d-icon-action,
+  button.d17d-icon-action,
+  .d17d-launch-typebar .d17d-icon-action,
+  .d17d-launch-typebar__actions .d17d-icon-action,
+  .d17d-table-summary .d17d-icon-action,
+  .d17d-launch-table-card .d17d-icon-action
+) {
+  display: inline-grid !important;
+  place-items: center !important;
+  flex: 0 0 25px !important;
+  width: 25px !important;
+  min-width: 25px !important;
+  max-width: 25px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 50% !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope :is(
+  .d17d-icon-action,
+  .d17d-launch-typebar .d17d-icon-action,
+  .d17d-launch-typebar__actions .d17d-icon-action,
+  .d17d-table-summary .d17d-icon-action,
+  .d17d-launch-table-card .d17d-icon-action
+):hover:not(:disabled) {
+  background: #e5e7eb !important;
+  border-color: transparent !important;
+  color: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope :is(
+  .d17d-icon-action,
+  .d17d-launch-typebar .d17d-icon-action,
+  .d17d-launch-typebar__actions .d17d-icon-action,
+  .d17d-table-summary .d17d-icon-action,
+  .d17d-launch-table-card .d17d-icon-action
+) :is(svg, svg.lucide, svg[class*="text-"], svg[class*="w-"], svg[class*="h-"]) {
+  width: 14px !important;
+  height: 14px !important;
+  color: #111827 !important;
+  stroke: #111827 !important;
+  fill: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-icon-action:hover:not(:disabled) :is(svg, svg.lucide, svg[class*="text-"]) {
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+
+/* Popup escolha de marca: bem estreito; Marca+nome bem maiores que o restante. */
+html body #root .d17b-dialog-content.d17b-standard-dialog.d17d-animal-choice-dialog {
+  width: min(196px, calc(100vw - 32px)) !important;
+  min-width: 0 !important;
+  max-width: 196px !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 12px 10px 10px !important;
+}
+html body #root .d17d-animal-choice-option__brand,
+html body #root .d17d-animal-choice-option__brand-label,
+html body #root .d17d-animal-choice-option__brand strong {
+  font-size: 17px !important;
+  line-height: 20px !important;
+}
+html body #root .d17d-animal-choice-option__brand strong {
+  font-weight: 800 !important;
+  color: #111827 !important;
+}
+html body #root .d17d-animal-choice-option__content > span:last-child {
+  font-size: 11px !important;
+  color: #9ca3af !important;
+}
+
+/* Captura automática: só o ícone no campo; ativo = âmbar da Identificação. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture:hover:not(:disabled) {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 28px !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  align-self: center !important;
+  height: 26px !important;
+  min-height: 26px !important;
+  max-height: 26px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  gap: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture :is(svg, svg.lucide) {
+  width: 14px !important;
+  height: 14px !important;
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active.is-accent-blue,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active :is(svg, svg.lucide),
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-weight-capture.is-active.is-accent-blue :is(svg, svg.lucide) {
+  color: #f59e0b !important;
+  stroke: #f59e0b !important;
+  background: transparent !important;
+}
+
+/* Vence mg-layout (--accent / --mg-icon-color verdes ou cinza) na barra da Tela Mãe. */
+html body #root .d17b-shell.cadastro-emp-scope.mg-empresas-scope .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  #more-btn,
+  .mg-speed-dial__trigger,
+  .mg-table-panel-strip__config-btn
+),
+html body #root .d17b-shell.cadastro-emp-scope .mg-context-panel .mg-nav-btn:not(:disabled) {
+  color: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope.mg-empresas-scope .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  #more-btn,
+  .mg-speed-dial__trigger,
+  .mg-table-panel-strip__config-btn
+) svg,
+html body #root .d17b-shell.cadastro-emp-scope .mg-context-panel .mg-nav-btn:not(:disabled) svg,
+html body #root .d17b-shell.cadastro-emp-scope.mg-empresas-scope .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-accent-icon-btn,
+  #more-btn
+):hover:not(:disabled) svg {
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope.mg-empresas-scope .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-accent-icon-btn,
+  #more-btn
+):hover:not(:disabled) {
+  color: #111827 !important;
+}
+
+/* Botões nomeados — um fundo só (#f1f3f4), em todo o sistema (referência Marcas). */
+html body #root .d17b-shell :is(
+  .tb-btn-labeled,
+  .tb-btn-labeled.tb-btn-green,
+  .tb-btn-labeled.tb-btn-ghost,
+  .tb-btn-green,
+  .tb-btn-blue,
+  .tb-btn-gray,
+  .d17d-launch-save,
+  .emp-toolbar-btn-save,
+  .d17c-new-button,
+  .d17c-launch-button
+),
+html body #root .op-screen .op-button,
+html body #root .op-screen .op-button--primary,
+html body #root .rpt-mak :is(.rpt-mak-btn, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-print):not(.rpt-mak-btn--icon):not(.rpt-mak-ghost--icon):not(#rpt-none),
+html body #root .mb1-app-shell .mb1-user-menu__trigger,
+html body #root .rpt-empty__retry {
+  box-sizing: border-box !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  padding: 0 10px !important;
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+}
+
+html body #root .d17b-shell :is(
+  .tb-btn-labeled,
+  .tb-btn-green,
+  .tb-btn-blue,
+  .d17d-launch-save,
+  .emp-toolbar-btn-save
+):hover:not(:disabled),
+html body #root .op-screen .op-button:hover:not(:disabled),
+html body #root .rpt-mak :is(.rpt-mak-btn, .rpt-mak-ghost, .rpt-mak-link, .rpt-mak-print):not(.rpt-mak-btn--icon):not(.rpt-mak-ghost--icon):not(#rpt-none):hover:not(:disabled),
+html body #root .rpt-empty__retry:hover:not(:disabled) {
+  background: #e5e7eb !important;
+  border-color: transparent !important;
+  color: #111827 !important;
+}
+
+html body #root .rpt-mak .rpt-mak-btn.is-on:not(#rpt-none) {
+  border-color: transparent !important;
+  background: #e5e7eb !important;
+  color: #111827 !important;
+}
+
+/* Perigo nomeado: mesmo fundo cinza, letra/ícone vermelhos. */
+html body #root .d17b-shell :is(
+  .tb-btn-labeled.tb-btn-danger,
+  .tb-btn-labeled.tb-btn-ghost.tb-btn-danger,
+  .tb-btn-danger
+):not(:disabled) {
+  background: #f1f3f4 !important;
+  border-color: transparent !important;
+  color: #dc2626 !important;
+}
+html body #root .d17b-shell :is(
+  .tb-btn-labeled.tb-btn-danger,
+  .tb-btn-labeled.tb-btn-ghost.tb-btn-danger,
+  .tb-btn-danger
+):not(:disabled) svg {
+  color: #dc2626 !important;
+  stroke: #dc2626 !important;
+}
+
+/* Tela Mãe + Registro: pílulas/círculos cinza + tinta preta; verde só no view ativo.
+   Registro mantém d17b-list-page--mother e a mesma mg-action-bar da listagem. */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar :is(
+  .tb-btn-labeled,
+  .tb-btn-labeled.tb-btn-green,
+  .tb-btn-labeled.tb-btn-ghost
+) {
+  border: 1px solid transparent !important;
+  border-radius: 999px !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .tb-btn-labeled svg {
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .tb-btn-labeled:disabled,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .tb-btn-labeled:disabled svg {
+  color: #9ca3af !important;
+  stroke: #9ca3af !important;
+  opacity: 1 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .tb-btn-labeled.tb-btn-danger:not(:disabled),
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .tb-btn-labeled.tb-btn-ghost.tb-btn-danger:not(:disabled) {
+  background: #f1f3f4 !important;
+  border-color: transparent !important;
+  color: #dc2626 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .tb-btn-labeled.tb-btn-danger:not(:disabled) svg,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .tb-btn-labeled.tb-btn-ghost.tb-btn-danger:not(:disabled) svg {
+  color: #dc2626 !important;
+  stroke: #dc2626 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-desktop-search__trigger,
+  .mg-table-panel-strip__config-btn,
+  .mg-cards-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn
+),
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn {
+  width: 25px !important;
+  min-width: 25px !important;
+  max-width: 25px !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  padding: 0 !important;
+  border: 1px solid transparent !important;
+  border-radius: 50% !important;
+  background: #f1f3f4 !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar :is(
+  .tb-btn-icon,
+  .tb-btn-more,
+  .tb-btn-filter,
+  .mg-nav-btn,
+  .mg-accent-icon-btn,
+  .mg-table-panel-strip__config-btn,
+  .mg-speed-dial__trigger,
+  #more-btn
+):hover:not(:disabled),
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .mg-speed-dial.is-open .mg-speed-dial__trigger,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn:hover:not(:disabled) {
+  background: #e5e7eb !important;
+  border-color: transparent !important;
+  color: #111827 !important;
+  box-shadow: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn:hover:not(:disabled) svg,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .aux-context-panel .mg-nav-btn:not(:disabled) svg,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.aux-registry-page--record .mg-action-bar .tb-btn-icon:not(:disabled) svg {
+  color: #111827 !important;
+  stroke: #111827 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .view-mode-btn {
+  color: #111827 !important;
+  background: transparent !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .view-mode-btn.active {
+  color: #40de63 !important;
+  background: transparent !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page:is(.d17b-list-page--mother, .aux-registry-page--record) .mg-action-bar .view-mode-btn.active svg {
+  color: #40de63 !important;
+  stroke: #40de63 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-desktop-search--always {
+  width: min(280px, 36vw) !important;
+  min-width: 180px !important;
+  height: auto !important;
+  flex: 1 1 180px !important;
+  max-width: 320px !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-desktop-search--always .mg-desktop-search__panel,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-desktop-search--always .mg-desktop-search__panel-inner,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-desktop-search--always .mg-search-pill-wrap,
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-desktop-search--always .mg-search-pill {
+  width: 100% !important;
+  max-width: none !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-page.d17b-list-page--mother .mg-action-bar .mg-search-pill {
+  border: 1px solid transparent !important;
+  background: #f1f3f4 !important;
+  box-shadow: none !important;
+  border-radius: 999px !important;
+}
+
+/* Exclusão em diálogo/lançamento: mesmo fundo cinza padrão, letra vermelha. */
+html body #root .d17b-shell .d17b-launch-page .tb-btn-danger,
+html body #root .d17b-shell .d17b-dialog-content .tb-btn-danger,
+html body #root .d17b-shell .emp-toolbar-btn-delete {
+  border-color: transparent !important;
+  background: #f1f3f4 !important;
+  color: #dc2626 !important;
+}
+
+html.dark body #root .d17b-shell :is(.d17b-page, .d17b-dialog-content, .d17b-launch-page) :is(
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="hidden"]),
+  textarea,
+  [role="combobox"],
+  .mak-date-control,
+  .d17d-weight-control
+),
+html.dark body #root .op-screen :is([role="combobox"], .mak-date-control),
+html.dark body #root .rpt-mak :is(input:not([type="checkbox"]):not([type="radio"]), textarea, [role="combobox"]) {
+  background: #21262d !important;
+  color: #e6edf3 !important;
+  border-color: rgba(126, 231, 135, .55) !important;
+}
+
+html.dark body #root .d17b-shell :is(.d17d-icon-action, .tb-btn-icon, .tb-btn-more, .mg-nav-btn, .d17c-round-action, .d17b-dialog-close),
+html.dark body #root .mb1-app-shell :is(.mb1-shell-icon-button, .mb1-shell-topbar-button:not(.mb1-user-menu__trigger)),
+html.dark body #root .rpt-mak :is(.rpt-mak-ghost--icon, .rpt-mak-btn--icon):not(#rpt-none) {
+  background: #21262d !important;
+  color: #e6edf3 !important;
+  border-color: rgba(126, 231, 135, .55) !important;
+}
+html.dark body #root .d17b-shell .tb-btn-labeled:not(.tb-btn-green):not(.tb-btn-danger),
+html.dark body #root .op-screen .op-button:not(.op-button--primary),
+html.dark body #root .rpt-mak :is(.rpt-mak-btn, .rpt-mak-ghost, .rpt-mak-link):not(.rpt-mak-btn--icon):not(.rpt-mak-ghost--icon):not(#rpt-none) {
+  background: #21262d !important;
+  color: #e6edf3 !important;
+  border-color: rgba(126, 231, 135, .55) !important;
+}
+
+html.dark body #root .d17b-shell .d17b-launch-page label,
+html.dark body #root .d17b-shell .d17b-launch-page [role="combobox"] span,
+html.dark body #root .d17b-shell :is(.d17b-page, .d17b-dialog-content) [role="combobox"] span,
+html.dark body #root .op-screen [role="combobox"] span,
+html.dark body #root .rpt-mak [role="combobox"] span {
+  color: #e6edf3 !important;
+}
+html.dark body #root .d17b-shell [role="combobox"] svg,
+html.dark body #root .d17b-shell :is(.d17d-icon-action, .tb-btn-icon, .mg-nav-btn) svg,
+html.dark body #root .mb1-app-shell :is(.mb1-shell-icon-button, .mb1-shell-topbar-button:not(.mb1-user-menu__trigger)) svg,
+html.dark body #root .rpt-mak :is(.rpt-mak-ghost--icon, .rpt-mak-btn--icon):not(#rpt-none) svg,
+html.dark body #root .d17b-shell .mak-date-control > button,
+html.dark body #root .d17b-shell .mak-date-control > button svg,
+html.dark body #root .d17b-shell .d17d-weight-capture,
+html.dark body #root .d17b-shell .d17d-weight-capture svg {
+  color: #e6edf3 !important;
+  stroke: #e6edf3 !important;
+}
+
+html.dark body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-fields .d17d-field.d17d-field--weight .d17d-weight-control > input,
+html.dark body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-launch-fields .d17d-field.d17d-field--animal > input {
+  color: #f59e0b !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+}

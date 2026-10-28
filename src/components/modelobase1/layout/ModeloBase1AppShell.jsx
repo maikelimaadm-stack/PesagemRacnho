@@ -13,6 +13,8 @@ import {
 import { createPageUrl } from "@/utils";
 import UserMenu from "@/components/auth/UserMenu";
 import { APP_VERSION } from "@/versioning/versionInfo";
+import { ensureScaleReady, onScaleStatus } from "@/modules/equipment/application/scaleService";
+import { getEquipmentConfig } from "@/modules/equipment/application/equipmentConfigService";
 import ModeloBase1Tokens from "../foundations/ModeloBase1Tokens";
 import "./modelo-base1-shell.css";
 
@@ -68,6 +70,51 @@ function ShellIdentity({ compact = false }) {
         <strong>Pesagens Individuais</strong>
         <span>Operação local</span>
       </div>
+    </div>
+  );
+}
+
+function ScaleDeviceStatuses() {
+  const [scale, setScale] = useState(() => ({ connected: false, label: 'Balança', detail: 'Não configurada' }));
+  const [statusAccent, setStatusAccent] = useState('green');
+  useEffect(() => {
+    ensureScaleReady().catch(() => {});
+    const refreshAccent = (cfg) => {
+      if (cfg?.statusAccent) {
+        setStatusAccent(cfg.statusAccent);
+        return;
+      }
+      getEquipmentConfig()
+        .then((next) => setStatusAccent(next.statusAccent || 'green'))
+        .catch(() => {});
+    };
+    refreshAccent();
+    const onConfig = (event) => refreshAccent(event?.detail);
+    window.addEventListener('pesagens:equipment-config', onConfig);
+    const offStatus = onScaleStatus(setScale);
+    return () => {
+      window.removeEventListener('pesagens:equipment-config', onConfig);
+      offStatus();
+    };
+  }, []);
+  const scaleTitle = scale.connected
+    ? `${scale.label}${scale.detail ? ` · ${scale.detail}` : ''}`
+    : (scale.detail || 'Configure a ponte Bluetooth em Configurações › Equipamentos');
+  const scaleText = scale.connected
+    ? 'Balança online'
+    : (scale.adapterId && scale.adapterId !== 'none' ? 'Balança offline' : 'Balança não configurada');
+  return (
+    <div className="mb1-shell-device-statuses" aria-label="Estado dos equipamentos">
+      <span
+        className={`mb1-shell-device-status${scale.connected ? ' is-online' : ''}${statusAccent === 'blue' ? ' is-accent-blue' : ''}`}
+        title={scaleTitle}
+      >
+        <span aria-hidden="true" />
+        {scaleText}
+      </span>
+      <span className="mb1-shell-device-status" title="Integração com leitor RFID ainda não configurada">
+        <span aria-hidden="true" />RFID não configurado
+      </span>
     </div>
   );
 }
@@ -158,14 +205,7 @@ export default function ModeloBase1AppShell({ children, navItems, navGroups = DE
           </div>
 
           {isWeighingLaunch ? (
-            <div className="mb1-shell-device-statuses" aria-label="Estado dos equipamentos">
-              <span className="mb1-shell-device-status" title="Integração com balança ainda não configurada">
-                <span aria-hidden="true" />Balança não configurada
-              </span>
-              <span className="mb1-shell-device-status" title="Integração com leitor RFID ainda não configurada">
-                <span aria-hidden="true" />RFID não configurado
-              </span>
-            </div>
+            <ScaleDeviceStatuses />
           ) : null}
 
           {desktopMenuOpen ? (

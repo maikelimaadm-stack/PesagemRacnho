@@ -3,12 +3,10 @@ import MakTh, { makRowClass } from "@/components/mak/MakTh";
 import { isMakColumnFilterActive } from "@/components/mak/MakColumnMenu";
 import MakColumnConfigDialog from "@/components/mak/MakColumnConfigDialog";
 import MakDateControl from "@/components/mak/MakDateControl";
-import MakFilterRail from "@/components/mak/MakFilterRail";
-import MakFilterPill from "@/components/mak/MakFilterPill";
 import MakTableSelectCheck from "@/components/mak/MakTableSelectCheck";
-import MgDesktopSearch from "@/components/mak/MgDesktopSearch";
 import MgSpeedDialMenu from "@/components/mak/MgSpeedDialMenu";
-import MgTablePanelStrip from "@/components/mak/MgTablePanelStrip";
+import MgViewSeg from "@/components/mak/MgViewSeg";
+import { Columns3Cog } from "@/components/mak/mgIcons";
 import {
   ModeloBase1ActionBar,
   ModeloBase1PageContainer,
@@ -32,7 +30,8 @@ import {
   Upload, Search, Trash2, FileSpreadsheet, Download, FileDown,
   ArrowUpDown, ArrowUp, ArrowDown, RefreshCw, X, Scale,
   Settings, MoreVertical, Layers, ListFilter, ChevronLeft, ChevronRight,
-  Tags, MapPinned, ShoppingCart, Store, Factory, BadgeDollarSign
+  Tags, MapPinned, ShoppingCart, Store, Factory, BadgeDollarSign,
+  Plus, Pencil, Copy
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -309,7 +308,7 @@ export default function PesagensIndividuais() {
   const tableMinWidth = colunasOrdenadas.reduce((total, coluna) => total + getColumnWidth(coluna.id), 0);
 
   // Fetch pesagens
-  const { data: pesagens = [], isLoading, refetch } = useQuery({
+  const { data: pesagens = [], isPending, isError, error: relationError, refetch } = useQuery({
     queryKey: ['pesagens-individuais', empresaSelecionadaId],
     queryFn: async () => {
       // Mesma transformação dos relatórios (deduplicação, nomes de cadastro, doc_qtd).
@@ -319,6 +318,8 @@ export default function PesagensIndividuais() {
     },
     enabled: !!empresaSelecionadaId,
   });
+  const relationBlocked = !empresaSelecionadaId;
+  const relationLoading = Boolean(empresaSelecionadaId) && isPending && !isError;
 
 
 
@@ -626,13 +627,6 @@ export default function PesagensIndividuais() {
     setDeleteRequest({ open: true, ids: [...selectedItems] });
   };
 
-  const limparFiltros = () => {
-    setSearchTerm("");
-    setSearchInput("");
-    setFiltrosColuna({});
-    setCurrentPage(1);
-  };
-
   const hasActiveFilters = Boolean(searchTerm || Object.values(filtrosColuna).some(isMakColumnFilterActive));
 
   // Resultados da pesquisa expansível (ModeloBase1): um item por animal.
@@ -733,31 +727,6 @@ export default function PesagensIndividuais() {
     return uniqueOptionsCache.get(columnId);
   };
 
-  // Uma pílula por coluna visível da tabela, na mesma ordem (ModeloBase1).
-  // Valores únicos: calculados sob demanda (ao abrir) e guardados até a lista de pesagens mudar.
-  const renderQuickFilter = (coluna) => {
-    const filterId = coluna.id;
-    const listOptions = () => uniqueOptionsOf(filterId);
-    return (
-      <MakFilterPill
-        key={filterId}
-        label={coluna.label}
-        value={filtrosColuna[filterId] || null}
-        filterType={getColumnFilterType(filterId)}
-        listOptions={listOptions}
-        onChange={(value) => {
-          setFiltrosColuna((current) => {
-            const next = { ...current };
-            if (value && isMakColumnFilterActive(value)) next[filterId] = value;
-            else delete next[filterId];
-            return next;
-          });
-          setCurrentPage(1);
-        }}
-      />
-    );
-  };
-
   return (
     <ModeloBase1PageContainer
       variant="table"
@@ -769,54 +738,63 @@ export default function PesagensIndividuais() {
         description="Consulta, filtros e gestão dos registros de pesagem."
       />
 
-      {/* Barra de ações do ModeloBase1 (Cadastro de Empresas): filtrar, ação principal,
-          ações da seleção; à direita, pesquisa expansível e "Mais opções". */}
+      {/* Barra mãe = referência Marcas: pílulas cinza (+ ação / Editar / Duplicar / Excluir),
+          busca larga sempre aberta, view-seg com ativo lima, gap 0 até a tabela. */}
       <div className="mak-mother-page__toolbar mg-subtoolbar-stack" data-mak-region="toolbar">
         <div data-template-id="action-bar" className="mg-action-bar canva-section flex w-full shrink-0 items-center" style={{ background: "var(--bg-card)" }}>
           <div className="mg-action-bar__actions flex min-w-0 items-center">
-            {podeLancar && (
-            <div className="mg-action-slot is-visible" style={{ "--slot-width": "122px" }}>
-              <Link to={createPageUrl("LancamentoPesagensIndividuais")} className="mg-action-slot__link">
-                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-green" title="Lançar pesagem">
-                  Lançar pesagem
-                </button>
-              </Link>
+            <div className={`mg-action-slot${podeLancar ? " is-visible" : ""}`} style={{ "--slot-width": "25px" }} aria-hidden={!podeLancar}>
+              {podeLancar ? (
+                <Link to={createPageUrl("LancamentoPesagensIndividuais")} className="mg-action-slot__link">
+                  <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" title="Lançar pesagem" aria-label="Lançar pesagem">
+                    <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" strokeWidth={2.5} />
+                  </button>
+                </Link>
+              ) : null}
             </div>
-            )}
-            {podeEditar && (<>
-            <div className={`mg-action-slot${selectedItems.length === 1 ? " is-visible" : ""}`} style={{ "--slot-width": "66px" }} aria-hidden={selectedItems.length !== 1}>
-              <Link to={createPageUrl(`LancamentoPesagensIndividuais?editar=${selectedItems[0] || ""}`)} className="mg-action-slot__link" tabIndex={selectedItems.length === 1 ? 0 : -1}>
-                <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost" title="Editar" tabIndex={-1}>
-                  Editar
+            <div className="mg-action-slot is-visible" style={{ "--slot-width": "25px" }}>
+              {podeEditar && selectedItems.length === 1 ? (
+                <Link to={createPageUrl(`LancamentoPesagensIndividuais?editar=${selectedItems[0] || ""}`)} className="mg-action-slot__link">
+                  <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" title="Editar" aria-label="Editar">
+                    <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  </button>
+                </Link>
+              ) : (
+                <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" title="Editar" aria-label="Editar" disabled>
+                  <Pencil className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                 </button>
-              </Link>
+              )}
             </div>
-            <div className={`mg-action-slot${selectedItems.length > 0 ? " is-visible" : ""}`} style={{ "--slot-width": "84px" }} aria-hidden={selectedItems.length === 0}>
-              <button type="button" className="ios-btn tb-btn tb-btn-labeled tb-btn-ghost tb-btn-danger" onClick={handleDeleteSelected} title="Excluir" tabIndex={selectedItems.length > 0 ? 0 : -1}>
-                <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                Excluir
+            <div className="mg-action-slot is-visible" style={{ "--slot-width": "25px" }}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" title="Duplicar" aria-label="Duplicar" disabled>
+                <Copy className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               </button>
             </div>
-            </>)}
+            <div className="mg-action-slot is-visible" style={{ "--slot-width": "25px" }}>
+              <button
+                type="button"
+                className="ios-btn tb-btn tb-btn-icon tb-btn-ghost tb-btn-danger"
+                onClick={handleDeleteSelected}
+                title="Excluir"
+                aria-label="Excluir"
+                disabled={!podeEditar || selectedItems.length === 0}
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              </button>
+            </div>
           </div>
 
           <div className="mg-action-bar__end">
-            <div className="mg-action-bar__tools mg-action-bar__tools--visible">
-              <MgDesktopSearch
-                value={searchInput}
-                onValueChange={setSearchInput}
-                hasFilter={Boolean(searchTerm)}
-                onClear={() => { setSearchInput(""); setSearchTerm(""); setCurrentPage(1); }}
-                results={resultadosPesquisa.items}
-                resultsTotal={resultadosPesquisa.total}
-                titleField="titulo"
-                codeField="codigo"
-                detailFields={CAMPOS_RESULTADO_PESQUISA}
-                getFieldValue={(record, key) => record?.[key]}
-                onSelectResult={(record) => { setSearchInput(record.numero_animal); setSearchTerm(record.numero_animal); setCurrentPage(1); }}
-                onApplyAll={() => { setSearchTerm(searchInput.trim()); setCurrentPage(1); }}
-              />
-            </div>
+            <MgViewSeg value="tabela" canOpenRecord={false} onChange={() => {}} />
+            <button
+              type="button"
+              className="mg-nav-btn ios-btn tb-btn tb-btn-icon mg-table-panel-strip__config-btn"
+              onClick={() => setShowConfigColunas(true)}
+              title="Configurar colunas da tabela"
+              aria-label="Configurar colunas da tabela"
+            >
+              <Columns3Cog className="mg-table-panel-strip__config-icon" strokeWidth={2.1} aria-hidden="true" />
+            </button>
             <div className="relative">
               <MgSpeedDialMenu
                 open={moreOpen}
@@ -836,15 +814,6 @@ export default function PesagensIndividuais() {
             </div>
           </div>
         </div>
-      </div>
-
-      {/* Faixa de pílulas de filtro + configuração de colunas (ModeloBase1). */}
-      <div className="mak-mother-page__panel-strip" data-mak-region="panel-strip">
-        <MgTablePanelStrip onConfigColumns={() => setShowConfigColunas(true)}>
-          <MakFilterRail hasActiveFilters={hasActiveFilters} onClear={limparFiltros}>
-            {colunasOrdenadas.filter((coluna) => !coluna.fixo).map(renderQuickFilter)}
-          </MakFilterRail>
-        </MgTablePanelStrip>
       </div>
 
       <div className="d17b-list-body">
@@ -882,7 +851,7 @@ export default function PesagensIndividuais() {
                                   type="button"
                                   variant="ghost"
                                   size="icon"
-                                  className="h-6 w-6"
+                                  className="h-8 w-8"
                                   aria-label={`Ações para ${fmtInt(selectedItems.length)} registros selecionados`}
                                   title={`Ações em lote · ${fmtInt(selectedItems.length)} selecionado(s)`}
                                 >
@@ -972,15 +941,22 @@ export default function PesagensIndividuais() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {isLoading ? (
+                {relationBlocked ? (
                   <TableRow>
-                    <TableCell colSpan={20} className="text-center py-8 text-xs text-slate-400">Carregando...</TableCell>
+                    <TableCell colSpan={colunasOrdenadas.length || 1} className="d17d-empty-row" role="status">Selecione a empresa para ver a relação de pesagens.</TableCell>
+                  </TableRow>
+                ) : isError ? (
+                  <TableRow>
+                    <TableCell colSpan={colunasOrdenadas.length || 1} className="d17d-empty-row" role="alert">Não foi possível carregar a relação.{relationError?.message ? ` ${relationError.message}` : ''} Use Atualizar para tentar de novo.</TableCell>
+                  </TableRow>
+                ) : relationLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={colunasOrdenadas.length || 1} className="d17d-empty-row" role="status">Carregando a relação de pesagens…</TableCell>
                   </TableRow>
                 ) : pesagensPaginadas.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={20} className="text-center py-8 text-xs text-slate-400">
-                      <FileSpreadsheet className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                      Nenhuma pesagem encontrada
+                    <TableCell colSpan={colunasOrdenadas.length || 1} className="d17d-empty-row" role="status">
+                      {pesagens.length && hasActiveFilters ? 'Nenhuma pesagem com esses filtros. Ajuste a busca, limpe um filtro ou lance uma pesagem.' : 'Nenhuma pesagem lançada. Use Lançar pesagem para registrar a primeira.'}
                     </TableCell>
                   </TableRow>
                 ) : (
@@ -1019,8 +995,8 @@ export default function PesagensIndividuais() {
                             <TableCell key="acoes" className="text-xs !p-0 text-center">
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-6 w-6">
-                                    <MoreVertical className="w-3.5 h-3.5 text-slate-600" />
+                                  <Button variant="ghost" size="icon" className="h-8 w-8" aria-label={`Ações da pesagem ${p.numero_animal || p.id}`}>
+                                    <MoreVertical className="w-3.5 h-3.5 text-slate-600" aria-hidden="true" />
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="start">
@@ -1089,14 +1065,17 @@ export default function PesagensIndividuais() {
           </div>
 
           <div className="d17c-table-footer">
+            {relationBlocked || isError || relationLoading ? (
+              <span role={isError ? 'alert' : 'status'}>{relationBlocked ? 'Totais indisponíveis até haver uma empresa selecionada.' : isError ? 'Totais indisponíveis até a relação carregar. Use Atualizar.' : 'Calculando os totais da relação…'}</span>
+            ) : (<>
             <span><strong>Selecionados:</strong> {fmtInt(selectedItems.length)}</span>
             <span><strong>Listados:</strong> {fmtInt(pesagensPaginadas.length)}</span>
             <span><strong>Filtrados:</strong> {fmtInt(pesagensFiltradas.length)}</span>
             <span><strong>Totais:</strong> {fmtInt(pesagens.length)}</span>
             <span className="d17c-table-footer__metric"><strong>Animais únicos:</strong> {fmtInt(stats.animaisUnicos)}</span>
             <span className="d17c-table-footer__metric"><strong>Animais ativos:</strong> {fmtInt(stats.animaisAtivos)}</span>
-            <span className="d17c-table-footer__metric"><strong>Peso atual estimado:</strong> {fmtNum(stats.pesoAtual)}</span>
-            <span className="d17c-table-footer__metric"><strong>Média da última pesagem:</strong> {fmtNum(stats.pesoMedioAtual)}</span>
+            <span className="d17c-table-footer__metric"><strong>Peso atual estimado:</strong> {stats.pesoAtual == null ? '—' : `${fmtNum(stats.pesoAtual)} kg`}</span>
+            <span className="d17c-table-footer__metric"><strong>Média da última pesagem:</strong> {stats.pesoMedioAtual == null ? '—' : `${fmtNum(stats.pesoMedioAtual)} kg`}</span>
             <div className="d17c-table-footer__pagination">
               <Select value={String(itemsPerPage)} onValueChange={(value) => { setItemsPerPage(Number(value)); setCurrentPage(1); }}>
                 <SelectTrigger aria-label="Itens por página"><SelectValue /></SelectTrigger>
@@ -1108,6 +1087,7 @@ export default function PesagensIndividuais() {
               <span>{fmtInt(Math.min(currentPage, Math.max(totalPages, 1)))}/{fmtInt(Math.max(totalPages, 1))}</span>
               <Button type="button" variant="ghost" size="icon" disabled={currentPage >= totalPages} onClick={() => setCurrentPage((page) => page + 1)} aria-label="Próxima página"><ChevronRight aria-hidden="true" /></Button>
             </div>
+            </>)}
           </div>
         </CardContent>
       </Card>

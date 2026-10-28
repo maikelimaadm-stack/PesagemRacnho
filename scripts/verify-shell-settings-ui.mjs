@@ -84,7 +84,7 @@ function checkAuthScreens(s) {
   assert.match(s.authShell, /className="auth-banner auth-banner--info" role="status"/, 'informação (bloqueio temporário) em faixa com role=status');
   assert.match(s.authShell, /ModeloBase1Tokens enterpriseScope=\{false\} className="auth-root"/, 'telas de acesso usam os tokens do ModeloBase1');
   assert.match(s.authCss, /\.auth-field input \{[\s\S]{0,400}height: var\(--mb1-field-height\)/, 'campos das telas de acesso têm a altura padrão do modelo');
-  assert.match(s.authCss, /\.auth-button \{[\s\S]{0,400}border-radius: var\(--mb1-radius-pill\)[\s\S]{0,200}background: var\(--mb1-green\); color: #fff/, 'botão primário em pílula verde com texto branco (tb-btn-green)');
+  assert.match(s.authCss, /\.auth-button \{[\s\S]{0,500}border-radius: var\(--mb1-radius-pill\)[\s\S]{0,240}background: var\(--mb1-green\); color: #111827/, 'botão primário em pílula verde com texto escuro');
   assert.match(s.authCss, /\.auth-banner--error \{/, 'faixa de erro estilizada');
   assert.match(s.authCss, /html\.dark \.auth-banner--error/, 'faixa de erro com contraste no tema escuro');
   for (const [key, firstField] of [['login', 'login-usuario'], ['lock', 'lock-senha'], ['setup', 'setup-nome'], ['recover', 'recuperar-login'], ['change', 'troca-atual']]) {
