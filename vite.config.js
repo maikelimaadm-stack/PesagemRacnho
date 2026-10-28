@@ -32,6 +32,7 @@ export default defineConfig({
   base: './',
   define: {
     __APP_VERSION__: JSON.stringify(packageJson.version),
+    __RELEASE_FEED_URL__: JSON.stringify(String(process.env.RELEASE_FEED_URL || '').trim()),
     __BUILD_INFO__: JSON.stringify({
       gitCommit: resolveGitCommit(),
       buildTimestamp: new Date().toISOString(),

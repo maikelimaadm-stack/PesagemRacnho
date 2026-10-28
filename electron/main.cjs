@@ -8,6 +8,7 @@ const { registerEquipmentSessionHandlers, registerEquipmentIpc, attachBluetoothH
 const appLogger = require('./logging/appLogger.cjs');
 const appRuntime = require('./appRuntime.cjs');
 const { buildDiagnosticInfo } = require('./diagnostics.cjs');
+const { isTrustedExternalUrl } = require('./trustedExternalUrl.cjs');
 
 const isDev = process.env.ELECTRON_DEV === '1';
 
@@ -129,6 +130,14 @@ app.whenReady().then(() => {
   ipcMain.handle('app:getDiagnosticInfo', () => diagnosticInfo());
   ipcMain.handle('app:getDataDir', () => dataDir);
   ipcMain.handle('app:openDataFolder', () => shell.openPath(dataDir));
+  ipcMain.handle('app:openExternalUrl', async (_event, rawUrl) => {
+    const url = String(rawUrl || '').trim();
+    if (!isTrustedExternalUrl(url)) {
+      throw Object.assign(new Error('Link de download não permitido'), { code: 'URL_001' });
+    }
+    await shell.openExternal(url);
+    return { ok: true };
+  });
 
   // Persistência de arquivos gerados no renderer (backup/export Dexie).
   // Salva sob userData/data/<subdir> — usuário NÃO escolhe pasta.

@@ -1,0 +1,78 @@
+name: Release Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      signed:
+        description: 'Build assinado (npm run dist). Requer WIN_CSC_* nos segredos.'
+        required: false
+        default: false
+        type: boolean
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    env:
+      RELEASE_FEED_URL: ${{ secrets.RELEASE_FEED_URL }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_RELEASE_BUCKET: ${{ secrets.SUPABASE_RELEASE_BUCKET }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Build unsigned installer
+        if: ${{ !inputs.signed }}
+        run: npm run dist:unsigned
+
+      - name: Build signed installer
+        if: ${{ inputs.signed }}
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+        run: npm run dist
+
+      - name: Publish to Supabase
+        if: ${{ env.SUPABASE_URL != '' && env.SUPABASE_SERVICE_ROLE_KEY != '' }}
+        shell: bash
+        run: |
+          if [ "${{ inputs.signed }}" = "true" ]; then
+            export RELEASE_DIR=release
+          else
+            export RELEASE_DIR=release-unsigned
+          fi
+          node scripts/publish-release-supabase.mjs
+
+      - name: Upload GitHub artifact (unsigned)
+        if: ${{ !inputs.signed }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pesagens-setup-unsigned
+          path: |
+            release-unsigned/*.exe
+            release-unsigned/release-manifest.json
+            release-unsigned/SHA256SUMS.txt
+
+      - name: Upload GitHub artifact (signed)
+        if: ${{ inputs.signed }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pesagens-setup-signed
+          path: |
+            release/*.exe
+            release/release-manifest.json
+            release/SHA256SUMS.txt

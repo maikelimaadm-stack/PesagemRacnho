@@ -16,6 +16,7 @@ import { APP_VERSION } from "@/versioning/versionInfo";
 import { ensureScaleReady, onScaleStatus } from "@/modules/equipment/application/scaleService";
 import { getEquipmentConfig } from "@/modules/equipment/application/equipmentConfigService";
 import ModeloBase1Tokens from "../foundations/ModeloBase1Tokens";
+import ReleaseUpdateNotice from "@/components/updates/ReleaseUpdateNotice.jsx";
 import "./modelo-base1-shell.css";
 
 // Grupos padrão do menu (docs 10 §3). O Layout pode passar  com a ordem
@@ -224,6 +225,7 @@ export default function ModeloBase1AppShell({ children, navItems, navGroups = DE
           <UserMenu />
           {!isOperationalInsight ? themeToggle : null}
           <span className="mb1-shell-offline"><CloudOff aria-hidden="true" /> Offline</span>
+          <ReleaseUpdateNotice compact />
           <span className="mb1-shell-product-mark" aria-label={`Pesagens Individuais ${APP_VERSION}`} title={`Pesagens Individuais · versão ${APP_VERSION}`}>PI</span>
           <span className="mb1-shell-version-badge" aria-label={`Versão instalada ${APP_VERSION}`}>v{APP_VERSION}</span>
         </div>

@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('pesagemApp', {
   getDiagnosticInfo: () => ipcRenderer.invoke('app:getDiagnosticInfo'),
   getDataDir: () => ipcRenderer.invoke('app:getDataDir'),
   openDataFolder: () => ipcRenderer.invoke('app:openDataFolder'),
+  openExternalUrl: (url) => ipcRenderer.invoke('app:openExternalUrl', url),
   files: {
     writeUserFile: (args) => ipcRenderer.invoke('app:writeUserFile', args),
     listUserFiles: (args) => ipcRenderer.invoke('app:listUserFiles', args),
