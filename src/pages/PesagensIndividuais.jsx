@@ -317,6 +317,10 @@ export default function PesagensIndividuais() {
       return (await loadEventRows({ empresaId: empresaSelecionadaId, gmdDiasMinimos })).rows;
     },
     enabled: !!empresaSelecionadaId,
+    // O cache global é staleTime: Infinity e quem grava pesagens (Lançamento, Importação,
+    // restauração de backup) não invalida esta chave: sem isto, voltar à Relação mostrava
+    // a lista de antes do lançamento. Relê ao abrir; enquanto isso a lista em cache aparece.
+    refetchOnMount: 'always',
   });
   const relationBlocked = !empresaSelecionadaId;
   const relationLoading = Boolean(empresaSelecionadaId) && isPending && !isError;
