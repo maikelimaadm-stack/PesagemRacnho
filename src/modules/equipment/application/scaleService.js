@@ -1,6 +1,7 @@
 // Adaptador configurado + estabilidade → Lançamento.
 // Não derruba a conexão Bluetooth a cada ensureScaleReady (era a causa da queda em segundos).
 import { assertAdapterShape, createReading } from '../domain/scaleContract.js';
+import { createStabilityTracker } from '../domain/stabilityTracker.js';
 import { createSimulatorAdapter } from '../adapters/simulatorAdapter.js';
 import { createS3SerialAdapter } from '../adapters/s3SerialAdapter.js';
 import { createS3BluetoothAdapter } from '../adapters/s3BluetoothAdapter.js';
@@ -12,8 +13,7 @@ let unsubscribeAdapter = null;
 let unsubscribeAdapterStatus = null;
 let lastReading = null;
 let lastStable = null;
-let stabilityCandidate = null;
-let stabilitySince = 0;
+let stabilityTracker = null;
 let statusListeners = new Set();
 let readingListeners = new Set();
 let bootPromise = null;
@@ -45,42 +45,11 @@ function notifyReading(reading) {
   // Não notifica status a cada tick de peso — evita re-render do shell e travamento na captura.
 }
 
-function applyStability(reading, config) {
-  if (!reading || reading.weightKg == null || !Number.isFinite(reading.weightKg)) {
-    stabilityCandidate = null;
-    stabilitySince = 0;
-    return reading;
-  }
-  // Adaptador já marcou estável (ASCII ST / simulador) — confia no monitor.
-  if (reading.stable) {
-    stabilityCandidate = reading.weightKg;
-    stabilitySince = Date.now();
-    return reading;
-  }
-  // BLE S3 não manda bit de “hold”: espelha o monitor pelo kg inteiro da tela.
-  // Enquanto o número do monitor não muda, após stabilityMs → estável.
-  const shown = Math.floor(Number(reading.weightKg));
-  const prevShown = stabilityCandidate == null ? null : Math.floor(Number(stabilityCandidate));
-  const windowMs = config.stabilityMs ?? 500;
-  if (prevShown == null || shown !== prevShown) {
-    stabilityCandidate = reading.weightKg;
-    stabilitySince = Date.now();
-    return createReading({ ...reading, stable: false });
-  }
-  // Monitor em 0 = livre (não “estável com animal”).
-  if (shown <= 0) {
-    return createReading({ ...reading, stable: false });
-  }
-  if (Date.now() - stabilitySince >= windowMs) {
-    return createReading({ ...reading, stable: true });
-  }
-  return createReading({ ...reading, stable: false });
-}
-
 function buildAdapter(config) {
   switch (config.adapter) {
     case 'simulator':
-      return assertAdapterShape(createSimulatorAdapter());
+      // Modo 's3': o simulador do app se comporta como o S3 real (só envia quando muda).
+      return assertAdapterShape(createSimulatorAdapter({ mode: 's3' }));
     case 's3-usb':
       return assertAdapterShape(createS3SerialAdapter({ baudRate: config.baudRate }));
     case 's3-bluetooth':
@@ -106,15 +75,22 @@ async function tearDown() {
     activeAdapter = null;
   }
   activeAdapterKey = null;
-  stabilityCandidate = null;
-  stabilitySince = 0;
+  stabilityTracker?.reset();
+  stabilityTracker = null;
 }
 
 function wireAdapter(adapter, config) {
   activeAdapter = adapter;
   activeAdapterKey = adapterKeyOf(config);
+  // Estabilidade (stabilityTracker): o S3 só manda o peso quando muda, então o
+  // número parado também vira "estável" pelo timer, sem esperar nova leitura.
+  stabilityTracker = createStabilityTracker({
+    windowMs: config.stabilityMs,
+    toleranceKg: config.stabilityKg,
+    onSettled: (reading) => notifyReading(reading),
+  });
   unsubscribeAdapter = activeAdapter.onReading((raw) => {
-    notifyReading(applyStability(raw, config));
+    notifyReading(stabilityTracker.track(raw));
   });
   if (typeof activeAdapter.onStatus === 'function') {
     unsubscribeAdapterStatus = activeAdapter.onStatus(() => notifyStatus());

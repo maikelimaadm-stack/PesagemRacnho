@@ -2,7 +2,7 @@
 // curral pela interface, como o usuário faria. Diferente dos gates que leem o
 // fonte, este prova comportamento: primeiro acesso → marca → Cadastro → Manejo →
 // repesagem → peso fora da faixa (justificativa) → desfazer → Relação → fechar e
-// reabrir com os dados no lugar.
+// reabrir com os dados no lugar → balança chegando a estável → Relatórios.
 //
 // Linux sem tela: xvfb-run -a npm run e2e:electron:verify
 // Pede o build da interface (npm run build) antes: o main carrega dist/.
@@ -186,7 +186,19 @@ try {
   assert.ok(novaVisivel, 'marca criada depois de abrir a Relação aparece na edição em lote');
   await win.keyboard.press('Escape');
 
-  // 7. Relatórios abre sem erro.
+  // 7. Balança (simulador no modo do S3 real: só envia o peso quando muda e nunca
+  // marca estável). Com a pesagem automática, o campo Peso tem de chegar a estável
+  // quando o número para — era o defeito: o monitor estabilizava e o app não.
+  await irPara(win, 'Configuracoes');
+  await win.getByRole('combobox', { name: 'Balança ativa' }).click();
+  await win.getByRole('option', { name: /Simulador/ }).click();
+  await irPara(win, 'LancamentoPesagensIndividuais');
+  await win.getByRole('button', { name: 'Ligar pesagem automática' }).click();
+  await win.locator('.d17d-weight-control.is-auto.is-stable').waitFor({ timeout: 15000 });
+  assert.equal(await win.getByPlaceholder('Ex: 320').inputValue(), '328', 'peso estável do monitor no campo');
+  await win.getByRole('button', { name: 'Desligar pesagem automática' }).click();
+
+  // 8. Relatórios abre sem erro.
   await irPara(win, 'Relatorios');
   await win.getByText('Relatório de Pesagens Individuais').first().waitFor();
 

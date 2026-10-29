@@ -9,6 +9,11 @@ Electron 44, zero vulnerabilidades no `npm audit` e listas atualizadas entre tel
 backup **formato 3**, sem mudança. Notas em `docs/release/1.5.6/RELEASE-NOTES.md`.
 
 ### Fixed
+- Balança S3: o monitor estabilizava e o Lançamento não mostrava estável. Desde o firmware 1.2.6 o S3 só envia
+  o peso pelo Bluetooth quando muda (e o Weight Measurement 0x2A9D não tem bit de estável); a regra antiga
+  esperava outra leitura igual que nunca chegava. `stabilityTracker` conta o silêncio: peso parado (dentro de
+  `stabilityKg`, 0,5 kg) por `stabilityMs` (500 ms) vira estável sem nova leitura. O simulador do app passa a
+  imitar o S3 real (só envia quando muda) e o E2E confere o campo Peso chegando a estável.
 - Relação de Pesagens mostrava a lista de antes depois de lançar, importar ou restaurar (cache do react-query
   `staleTime: Infinity` sem invalidação); o mesmo nas listas das edições em lote (marcas, categorias,
   apartações, lotes, embarques). `refetchOnMount: 'always'` vira o padrão do QueryClient.

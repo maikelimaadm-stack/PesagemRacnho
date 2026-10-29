@@ -1,16 +1,25 @@
 // Simulador: oscila e estabiliza um peso — permite ver o campo Peso preenchido sem hardware.
+// modo 's3': imita o Bluetooth do S3 real (firmware ≥ 1.2.6): só envia quando o número
+// muda e nunca marca estável — quem decide a estabilidade é o stabilityTracker.
 import { createReading } from '../domain/scaleContract.js';
 
 const DEFAULT_TARGET = 328.4;
 
-export function createSimulatorAdapter({ targetKg = DEFAULT_TARGET, tickMs = 200 } = {}) {
+export function createSimulatorAdapter({ targetKg = DEFAULT_TARGET, tickMs = 200, mode = 'stable-flag' } = {}) {
   let timer = null;
   let listeners = new Set();
   let connected = false;
   let step = 0;
   let current = targetKg - 4;
+  let lastSent = null;
+  const s3Like = mode === 's3';
 
   const emit = (reading) => {
+    if (s3Like) {
+      if (reading.weightKg === lastSent) return;
+      lastSent = reading.weightKg;
+      reading = createReading({ weightKg: reading.weightKg, stable: false, source: reading.source });
+    }
     for (const cb of listeners) {
       try { cb(reading); } catch { /* listener isolado */ }
     }
@@ -20,7 +29,7 @@ export function createSimulatorAdapter({ targetKg = DEFAULT_TARGET, tickMs = 200
     step += 1;
     // ~2 s de oscilação, depois estabiliza no alvo.
     if (step < 10) {
-      current = targetKg + (Math.sin(step / 2) * 2.2) + ((Math.random() - 0.5) * 0.6);
+      current = targetKg + (Math.sin(step / 2) * 2.2) + (s3Like ? 0 : ((Math.random() - 0.5) * 0.6));
       emit(createReading({ weightKg: current, stable: false, source: 'SIMULADOR' }));
       return;
     }
@@ -36,6 +45,7 @@ export function createSimulatorAdapter({ targetKg = DEFAULT_TARGET, tickMs = 200
       connected = true;
       step = 0;
       current = targetKg - 4;
+      lastSent = null;
       timer = setInterval(tick, tickMs);
       tick();
     },
