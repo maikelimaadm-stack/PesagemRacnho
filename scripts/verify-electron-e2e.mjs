@@ -1,7 +1,8 @@
 // E2E real do app desktop: abre o Electron com Playwright e percorre o fluxo do
 // curral pela interface, como o usuário faria. Diferente dos gates que leem o
 // fonte, este prova comportamento: primeiro acesso → marca → Cadastro → Manejo →
-// repesagem → Relação → fechar e reabrir com os dados no lugar.
+// repesagem → peso fora da faixa (justificativa) → desfazer → Relação → fechar e
+// reabrir com os dados no lugar.
 //
 // Linux sem tela: xvfb-run -a npm run e2e:electron:verify
 // Pede o build da interface (npm run build) antes: o main carrega dist/.
@@ -132,6 +133,27 @@ try {
   await repesar.getByRole('button', { name: 'Repesar (substitui)' }).click();
   await linhasDoNumero(win, '7001').filter({ hasText: '360' }).first().waitFor();
   assert.equal(await contarLinhas(win, '7001', 1), 1, 'repesagem substitui a pesagem do dia (uma linha, 360 kg)');
+
+  // Peso fora da faixa (> 1500 kg): pede justificativa antes de gravar.
+  await escolherTipo(win, 'Cadastro (Novo Animal)');
+  await escolherData(win, 'hoje');
+  await win.getByRole('combobox', { name: 'Marca do animal' }).click();
+  await win.getByRole('option', { name: /E2E/ }).first().click();
+  await lancar(win, '7002', '1600');
+  const conferir = win.getByRole('dialog').filter({ hasText: 'Conferir peso informado' });
+  await conferir.waitFor();
+  const confirmarPeso = conferir.getByRole('button', { name: 'Confirmar e salvar' });
+  assert.equal(await confirmarPeso.isDisabled(), true, 'peso fora da faixa só segue com justificativa');
+  await conferir.getByLabel('Justificativa para continuar').fill('conferido na balança');
+  await confirmarPeso.click();
+  await linhasDoNumero(win, '7002').first().waitFor();
+
+  // Desfazer o último lançamento: confirma e exclui só ele.
+  await win.getByRole('button', { name: 'Desfazer' }).click();
+  const excluir = win.getByRole('dialog').filter({ hasText: 'Confirmar exclusão' });
+  await excluir.getByText('Somente este lançamento de 7002').waitFor();
+  await excluir.getByRole('button', { name: 'Excluir' }).click();
+  assert.equal(await contarLinhas(win, '7002', 0), 0, 'Desfazer exclui o lançamento do 7002');
 
   // 4. Relação de Pesagens lista as duas pesagens.
   await irPara(win, 'PesagensIndividuais');
