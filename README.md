@@ -43,3 +43,21 @@ npm run test:full
 
 O build de distribuição oficial exige credenciais válidas de assinatura de
 código. O build sem assinatura existe apenas para diagnóstico local.
+
+## Instalador pelo GitHub (sem precisar de máquina local)
+
+O workflow **Gerar instalador** (`.github/workflows/instalador.yml`) monta o
+instalador do Windows numa máquina Windows do GitHub:
+
+- **Manual:** aba *Actions* → *Gerar instalador* → *Run workflow*. O `.exe`
+  fica em *Artifacts*, no fim da página da execução (guardado por 30 dias).
+- **Versão publicada:** atualize a versão no `package.json`, faça o merge na
+  `main` e crie a tag igual à versão (ex.: `v1.5.5`). O `.exe` também vai para a
+  página *Releases*.
+
+Por enquanto o instalador sai **sem assinatura de código** (`dist:unsigned`):
+o Windows mostra "Editor desconhecido" ao instalar ("Mais informações" →
+"Executar assim mesmo").
+
+O workflow **Testes** (`.github/workflows/testes.yml`) roda lint, build e
+`test:quick` em todo PR e em todo push na `main`.

@@ -1,0 +1,77 @@
+name: Gerar instalador
+
+# Gera o instalador do Windows (.exe) numa máquina Windows do GitHub.
+#
+# - Manual: aba Actions → "Gerar instalador" → Run workflow. O .exe fica em
+#   "Artifacts", no fim da página da execução.
+# - Por tag: ao criar a tag vX.Y.Z (igual à versão do package.json), além do
+#   artifact, publica o .exe na página Releases do repositório.
+#
+# Enquanto não há certificado de assinatura, usa o build sem assinatura
+# (dist:unsigned): o Windows mostra "Editor desconhecido" ao instalar.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths: ['.github/workflows/instalador.yml']
+
+concurrency:
+  group: instalador-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  instalador:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Conferir tag com a versão do package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          versao="v$(node -p "require('./package.json').version")"
+          if [ "$versao" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::A tag $GITHUB_REF_NAME não bate com a versão do package.json ($versao)."
+            exit 1
+          fi
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar instalador (sem assinatura)
+        run: npm run dist:unsigned
+
+      - name: Guardar instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: instalador-windows
+          path: |
+            release-unsigned/*.exe
+            release-unsigned/*.sha256
+            release-unsigned/*.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publicar em Releases
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-unsigned/*.exe
+            release-unsigned/*.sha256
+            release-unsigned/*.json
+          body: |
+            Instalador sem assinatura de código: o Windows mostra "Editor desconhecido"
+            ao instalar. Clique em "Mais informações" → "Executar assim mesmo".
