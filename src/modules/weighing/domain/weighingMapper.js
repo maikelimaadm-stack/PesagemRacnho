@@ -19,6 +19,9 @@ export const LEGACY_PAYLOAD_ALLOWLIST = Object.freeze([
   // Rastro da importação conciliada (src/modules/import): job de origem e fingerprint canônico
   // do evento (empresa | animal | data | tipo | peso [| id_externo]). `id_externo` já consta acima.
   'importacao_id', 'import_fingerprint',
+  // Missão pesagens-integrada (P01/P15): de onde veio o peso (BALANCA | MANUAL) e a leitura bruta da
+  // balança usada { kg_bruto, seq, epoch, fonte, lida_em } — o peso gravado continua inteiro.
+  'peso_origem', 'balanca_leitura',
 ]);
 
 // Proibidas em gravação nova: redundantes com colunas/timestamps do registro

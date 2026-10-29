@@ -166,7 +166,7 @@ assert.equal((page.match(/<SanidadeLancamentoPanel/g) || []).length, 1, 'um úni
 assert.match(page, /listProgramas\(\{ empresaId: empresaSelecionadaId \}\)/, 'programas ativos');
 assert.match(page, /listMedicamentos\(\{ empresaId: empresaSelecionadaId \}\)/, 'medicamentos ativos');
 assert.match(page, /if \(!podeRegistrarSanidade\) return undefined;/, 'sem weighing.write nem carrega os cadastros');
-assert.match(page, /weighingService\.createEntry\(\{ \.\.\.data, aplicacoes_sanidade: sanidadeValidada\.payload \}\)/, 'createEntry recebe aplicacoes_sanidade');
+assert.match(page, /weighingService\.createEntry\(\{ \.\.\.data, (?:id: cicloLancamentoRef\.current, )?aplicacoes_sanidade: sanidadeValidada\.payload \}\)/, 'createEntry recebe aplicacoes_sanidade');
 assert.match(page, /const sanidadeNoLancamento = !editingId && podeRegistrarSanidade && modeSupportsSanity\(tipoManejo\);/, 'edição e Saída não enviam aplicações');
 assert.match(page, /buildSanityPayload\(sanidadeAplicacoes,/, 'payload montado pelo módulo puro');
 const dataBlock = between(page, 'const data = {', '\n    };');
