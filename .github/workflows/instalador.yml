@@ -26,13 +26,14 @@ permissions:
   contents: read
 
 jobs:
+  # Build sem permissão de escrita: roda código do PR (npm ci, scripts de build).
   instalador:
     runs-on: windows-latest
     timeout-minutes: 45
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v4
         with:
@@ -66,8 +67,20 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  # Só a tag publica em Releases; este job não roda código do repositório.
+  publicar:
+    needs: instalador
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: instalador-windows
+          path: release-unsigned
+
       - name: Publicar em Releases
-        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
