@@ -70,6 +70,8 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
   const [restoreFileName, setRestoreFileName] = useState("");
   const [diag, setDiag] = useState(null);
   const [backups, setBackups] = useState([]);
+  // P21: situação da proteção (último backup VERIFICADO × arquivos encontrados).
+  const [backupStatus, setBackupStatus] = useState(null);
   const [confirmation, setConfirmation] = useState(null);
   const [versions, setVersions] = useState(null);
   const [migration, setMigration] = useState(null);
@@ -89,11 +91,12 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
       const [s, integrity, backupList, migrationStatus] = await Promise.all([
         maintenanceService.getDatabaseStats(),
         maintenanceService.runIntegrityCheck().catch((err) => ({ ok: false, error: err.message })),
-        maintenanceService.listBackups().catch(() => ({ full: [] })),
+        maintenanceService.getBackupStatus().catch(() => maintenanceService.listBackups().then((r) => ({ files: r?.full || [], protecao: null })).catch(() => ({ files: [], protecao: null }))),
         maintenanceService.getMigrationStatus().catch(() => null),
       ]);
       setStats(s);
-      setBackups(backupList?.full || []);
+      setBackups(backupList?.files || []);
+      setBackupStatus(backupList || null);
       setMigration(migrationStatus);
       const ok = integrity?.ok !== false && integrity?.result === "ok";
       setStatusLabel(ok ? "OK" : "Erro");
@@ -149,20 +152,25 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
     }
   };
 
-  const onBackupDatabase = () =>
+  // P19: um comando só — cria o backup completo e o verifica lendo de volta do disco.
+  const onBackupNow = () =>
     run(
-      "bak-db",
-      () => maintenanceService.createDatabaseBackup({ reason: "manual-ui" }),
-      "Backup criado com sucesso.",
+      "bak-now",
+      () => maintenanceService.createBackupNow({ reason: "manual-ui" }),
+      "Backup criado e verificado.",
       "Não foi possível criar o backup."
     );
 
-  const onBackupFull = () =>
+  const onVerifyBackup = (file) =>
     run(
-      "bak-full",
-      () => maintenanceService.createFullDataBackup({ reason: "manual-ui" }),
-      "Backup completo criado com sucesso.",
-      "Não foi possível criar o backup completo."
+      `verify-${file.name}`,
+      async () => {
+        const r = await maintenanceService.verifyBackupFile({ name: file.name });
+        if (!r.ok) throw new Error(r.error);
+        return r;
+      },
+      "Backup verificado: arquivo íntegro e restaurável.",
+      "A verificação falhou."
     );
 
   const onExportCsv = () =>
@@ -191,6 +199,19 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
       },
       "Verificação de integridade concluída.",
       "Foi encontrado um problema. Faça backup e envie o relatório técnico."
+    );
+
+  const onReconcile = () =>
+    run(
+      "reconcile",
+      async () => {
+        const r = await maintenanceService.reconcileDerivations();
+        const integ = await maintenanceService.runIntegrityCheck();
+        setDiagText(integ?.ok ? `Derivados reconciliados (${fmtInt(r.animais)} animais). Banco íntegro.` : `Derivados reconciliados; restam ${fmtInt(integ?.issues?.length || 0)} problema(s).`);
+        return r;
+      },
+      "Lotes, movimentos e GMD reconciliados (backup criado antes).",
+      "Não foi possível reconciliar."
     );
 
   const onQuick = () =>
@@ -560,23 +581,40 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
           <CardTitle className="text-xs font-semibold uppercase tracking-wide">Backup</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
-          <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={onBackupDatabase} disabled={!!busy}>
-            {busy === "bak-db" ? "Criando…" : "Criar backup do banco"}
-          </Button>
-          <Button type="button" className="emp-toolbar-btn px-4" onClick={onBackupFull} disabled={!!busy}>
-            {busy === "bak-full" ? "Criando…" : "Criar backup completo"}
+          <div className="w-full text-xs" data-backup-protecao={backupStatus?.protecao || "desconhecida"}>
+            {backupStatus?.lastVerified ? (
+              <p className="text-emerald-700">
+                <strong>Último backup verificado:</strong> {fmtDateTimeBR(backupStatus.lastVerified.verifiedAt)} · {fmtInt(backupStatus.lastVerified.size)} bytes · {backupStatus.lastVerified.name}
+              </p>
+            ) : (
+              <p className="text-amber-700">
+                <strong>Nenhum backup verificado ainda.</strong> {backups.length ? "Há arquivos na pasta, mas nenhum foi conferido: use Verificar." : "Crie o primeiro backup."}
+              </p>
+            )}
+          </div>
+          <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={onBackupNow} disabled={!!busy}>
+            {busy === "bak-now" ? "Criando e verificando…" : "Criar backup agora"}
           </Button>
           <p className="w-full text-xs text-slate-500">
-            Inclui todos os stores, manifesto, versão, contagens e SHA-256. A gravação usa arquivo temporário e valida o conteúdo antes de concluir.
+            Backup completo: todos os dados, cadastros, usuários e configurações, com manifesto e SHA-256. Depois de gravar, o arquivo é lido de volta e conferido; só então conta como verificado.
+          </p>
+          <p className="w-full text-xs text-amber-800" role="note">
+            O arquivo de backup contém todos os dados, inclusive valores comerciais e os usuários do sistema (credenciais guardadas só de forma cifrada). Guarde a cópia em local protegido (pendrive ou disco seu) e não envie por e-mail ou mensagem sem proteção.
           </p>
           <div className="w-full border border-slate-200 rounded-md overflow-hidden">
-            <div className="px-3 py-2 text-xs font-semibold bg-slate-50">Backups físicos encontrados</div>
+            <div className="px-3 py-2 text-xs font-semibold bg-slate-50">Arquivos de backup neste computador</div>
             {backups.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-slate-500">Nenhum backup neste computador. Use Criar backup do banco para guardar uma cópia.</p>
+              <p className="px-3 py-2 text-xs text-slate-500">Nenhum backup neste computador. Use Criar backup agora para guardar uma cópia.</p>
             ) : backups.slice(0, 10).map((backup) => (
-              <div key={backup.path} className="px-3 py-2 border-t border-slate-100 text-xs flex flex-wrap justify-between gap-2">
+              <div key={backup.path} className="px-3 py-2 border-t border-slate-100 text-xs flex flex-wrap items-center justify-between gap-2" data-backup-estado={backup.estado || "NAO_VERIFICADO"}>
                 <span className="font-medium break-all">{backup.name}</span>
                 <span>{fmtInt(backup.size)} bytes · {fmtDateTimeBR(backup.modifiedAt)}</span>
+                <span className={backup.estado === "VERIFICADO" ? "text-emerald-700" : backup.estado === "FALHOU" ? "text-red-700" : "text-slate-500"}>
+                  {backup.estado === "VERIFICADO" ? `Verificado em ${fmtDateTimeBR(backup.verifiedAt)}` : backup.estado === "FALHOU" ? `Falhou: ${backup.erro}` : "Não verificado"}
+                </span>
+                <Button type="button" variant="outline" className="h-6 px-2 text-xs" onClick={() => onVerifyBackup(backup)} disabled={!!busy}>
+                  {busy === `verify-${backup.name}` ? "Verificando…" : "Verificar"}
+                </Button>
               </div>
             ))}
           </div>
@@ -585,9 +623,12 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
 
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Exportação</CardTitle>
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Exportação de pesagens (não é backup)</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-2">
+          <p className="w-full text-xs text-slate-500">
+            Arquivo só com as pesagens, para planilha ou outro sistema. Não traz animais, cadastros, usuários nem configurações e não serve para restaurar.
+          </p>
           <Button type="button" className="emp-toolbar-btn px-4" onClick={onExportCsv} disabled={!!busy}>
             Exportar pesagens em CSV
           </Button>
@@ -737,6 +778,11 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
             <Button type="button" className="emp-toolbar-btn px-3" onClick={onIntegrity} disabled={!!busy}>
               Verificar integridade
             </Button>
+            {allowed("maintenance.migrate") && (
+              <Button type="button" className="emp-toolbar-btn px-3" onClick={onReconcile} disabled={!!busy} title="Recompõe lotes, movimentos e GMD a partir das pesagens (cria backup antes)">
+                {busy === "reconcile" ? "Reconciliando…" : "Reconciliar derivados"}
+              </Button>
+            )}
             <Button type="button" className="emp-toolbar-btn px-3" onClick={onQuick} disabled={!!busy}>
               Verificação rápida
             </Button>

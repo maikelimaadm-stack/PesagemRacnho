@@ -43,6 +43,36 @@ export async function createFullDataBackup(options) {
   return adapter.createFullDataBackup(options);
 }
 
+/** Comando único (P19): cria e verifica o backup completo. */
+export async function createBackupNow(options) {
+  requireMaintenanceAction('Backup', 'maintenance.backup');
+  return adapter.createBackupNow(options);
+}
+
+/** Lê o arquivo de volta e valida (P21). */
+export async function verifyBackupFile(options) {
+  requireMaintenanceAction('Verificar backup', 'maintenance.backup');
+  return adapter.verifyBackupFile(options);
+}
+
+/**
+ * Reparo geral (P04/P08/P13): reconcilia lotes, movimentos derivados e GMD de todos os animais.
+ * ADMIN (maintenance.migrate). Cria e verifica um backup ANTES; sem backup verificado, não roda.
+ */
+export async function reconcileDerivations({ onProgress } = {}) {
+  requireMaintenanceAction('Reconciliar derivados', 'maintenance.migrate');
+  const safety = await adapter.createBackupNow({ reason: 'pre-reconcile', automatic: true });
+  const { reconcileAllAnimalDerivations } = await import('../../weighing/infrastructure/weighingDataAdapter.js');
+  const result = await reconcileAllAnimalDerivations({ onProgress });
+  return { ...result, safetyBackup: { path: safety.backupPath, size: safety.size, sha256: safety.sha256 } };
+}
+
+/** Situação da proteção: último verificado × arquivos encontrados (P21). */
+export async function getBackupStatus() {
+  requireMaintenanceAction('Situação do backup', 'maintenance.backup');
+  return adapter.getBackupStatus();
+}
+
 export async function exportWeighingJson(filters) {
   requireMaintenanceAction('Exportação JSON', 'maintenance.backup');
   return adapter.exportWeighingJson(filters);

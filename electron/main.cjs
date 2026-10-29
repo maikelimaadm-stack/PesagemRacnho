@@ -194,6 +194,21 @@ app.whenReady().then(() => {
     return { ok: true, files: result };
   });
 
+  // Leitura de volta de um arquivo do app (verificação de backup — P21): mesma contenção da gravação
+  // (só dentro da pasta de dados do usuário, sem caminho vindo do renderer). Devolve conteúdo + SHA-256.
+  const MAX_READ_BYTES = 1024 * 1024 * 1024;
+  ipcMain.handle('app:readUserFile', (_e, { subdir, filename } = {}) => {
+    const { full } = containedUserFile(subdir, filename);
+    if (!fs.existsSync(full) || !fs.statSync(full).isFile()) {
+      throw Object.assign(new Error('Arquivo não encontrado'), { code: 'PATH_001' });
+    }
+    const size = fs.statSync(full).size;
+    if (size > MAX_READ_BYTES) throw Object.assign(new Error('Arquivo grande demais para verificar'), { code: 'PATH_002' });
+    const bytes = fs.readFileSync(full);
+    const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+    return { ok: true, path: full, size: bytes.length, sha256, content: bytes.toString('utf8') };
+  });
+
   registerDialogIpc(ipcMain, () => dataDir);
   // Emissão de relatórios (PDF, impressão, salvar arquivo) — destino sempre escolhido no diálogo nativo.
   registerReportIpc(ipcMain);

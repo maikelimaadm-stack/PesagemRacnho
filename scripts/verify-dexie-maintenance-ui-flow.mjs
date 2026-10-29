@@ -13,7 +13,7 @@ const read = (rel) => readFileSync(join(root, rel), 'utf8');
 const ui = read('src/pages/ManutencaoSistema.jsx');
 assert(/from ["']@\/modules\/maintenance\/application\/maintenanceService["']/.test(ui),
   'ManutencaoSistema importa maintenanceService');
-assert(/maintenanceService\.createDatabaseBackup/.test(ui) && /maintenanceService\.getDatabaseStats/.test(ui),
+assert(/maintenanceService\.(createBackupNow|createDatabaseBackup)/.test(ui) && /maintenanceService\.getDatabaseStats/.test(ui),
   'UI chama maintenanceService (backup/stats)');
 assert(!/maintenance:backup:sqlite/.test(ui) && !/window\.pesagemApp\?\.maintenance/.test(ui),
   'UI NÃO chama IPC de manutenção SQLite diretamente');

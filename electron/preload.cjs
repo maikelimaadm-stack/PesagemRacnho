@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('pesagemApp', {
   files: {
     writeUserFile: (args) => ipcRenderer.invoke('app:writeUserFile', args),
     listUserFiles: (args) => ipcRenderer.invoke('app:listUserFiles', args),
+    readUserFile: (args) => ipcRenderer.invoke('app:readUserFile', args),
   },
   // Relatórios: o renderer envia o documento/conteúdo e um nome sugerido; o destino é escolhido
   // no diálogo nativo do processo principal (nenhum caminho vem do renderer).

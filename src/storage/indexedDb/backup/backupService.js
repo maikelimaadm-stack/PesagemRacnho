@@ -125,6 +125,12 @@ export async function exportPesagensJson() {
 
 async function readBackup(payload, { allowLegacy = true } = {}) {
   const b = typeof payload === 'string' ? JSON.parse(payload) : payload;
+  // P24: exportação de pesagens não é backup — dizer isso em vez de "formato não reconhecido".
+  if (b && b.type === 'weighing-entries-export') {
+    const err = new Error('Este arquivo é uma EXPORTAÇÃO DE PESAGENS, não um backup completo: ele não traz animais, cadastros, usuários nem configurações. Para restaurar, escolha um arquivo backup-completo-….json.');
+    err.code = 'DEXIE_BACKUP_007';
+    throw err;
+  }
   if (!b || b.format !== BACKUP_FORMAT || !b.stores) {
     const err = new Error('Backup inválido (formato não reconhecido)');
     err.code = 'DEXIE_BACKUP_001';

@@ -62,15 +62,108 @@ export async function isMaintenanceAvailable() {
   try { await storage.ensureReady(); return true; } catch { return false; }
 }
 
-// Backup completo do banco (todos os stores Dexie) → JSON em disco.
-export async function createDatabaseBackup() {
-  const saved = await persistFullBackup({ reason: 'manual-ui' });
-  return { ok: true, backupPath: saved.path, counts: saved.counts, size: saved.size, sha256: saved.sha256 };
+// --- Verificação de backup (P21): ler de volta, conferir SHA do arquivo e validar o conteúdo ---
+
+async function readUserFile(subdir, filename) {
+  if (!files()?.readUserFile) throw new Error('Leitura de arquivo indisponível (abra pelo aplicativo desktop).');
+  return unwrapDialog(await files().readUserFile({ subdir, filename }));
 }
-// No modelo Dexie, "backup completo" = mesmo backup de todos os stores.
-export async function createFullDataBackup() {
-  const saved = await persistFullBackup({ reason: 'manual-ui' });
-  return { ok: true, backupPath: saved.path, backupDir: saved.path, files: Object.keys(saved.counts), counts: saved.counts, size: saved.size, sha256: saved.sha256 };
+
+const baseName = (fullPath) => String(fullPath || '').split(/[\\/]/).pop();
+
+/**
+ * Lê o backup de volta do disco e valida: SHA-256 do arquivo (contra o gravado, quando conhecido),
+ * JSON, formato, SHA-256 do conteúdo, contagens e esquema (dryRunRestore). Registra o resultado no
+ * histórico ('verify'): "verificado" só existe com essa leitura de volta — arquivo encontrado não basta.
+ */
+export async function verifyBackupFile({ name, expectedFileSha256 = null } = {}) {
+  const startedAt = new Date().toISOString();
+  let read = null;
+  try {
+    read = await readUserFile('backups', name);
+    if (expectedFileSha256 && read.sha256 !== expectedFileSha256) {
+      throw Object.assign(new Error('O arquivo no disco não é o mesmo que foi gravado (SHA-256 diferente).'), { code: 'BACKUP_VERIFY_SHA' });
+    }
+    let payload;
+    try { payload = JSON.parse(read.content); } catch {
+      throw Object.assign(new Error('Arquivo truncado ou corrompido: não é um JSON válido.'), { code: 'BACKUP_VERIFY_JSON' });
+    }
+    const dry = await storage.dryRunRestore(payload);
+    const result = {
+      ok: true, path: read.path, name: baseName(read.path), size: read.size, fileSha256: read.sha256,
+      payloadSha256: payload?.integrity?.sha256 || null, backupId: payload?.manifest?.backupId || null,
+      createdAt: payload?.manifest?.createdAt || payload?.createdAt || null, reason: payload?.manifest?.reason || null,
+      automatic: Boolean(payload?.manifest?.automatic), dbVersion: dry.sourceDbVersion, counts: dry.counts, verifiedAt: startedAt,
+    };
+    await storage.recordBackupHistory('verify', result);
+    return result;
+  } catch (err) {
+    const failure = { ok: false, path: read?.path || null, name: name || null, size: read?.size ?? null, fileSha256: read?.sha256 || null, error: err.message, code: err.code || null, verifiedAt: startedAt };
+    await storage.recordBackupHistory('verify', failure);
+    return failure;
+  }
+}
+
+/**
+ * Comando ÚNICO de backup (P19): cria o backup completo e o verifica lendo de volta do disco.
+ * Só devolve ok com a verificação aprovada; se a verificação falhar, o erro diz por quê.
+ */
+export async function createBackupNow({ reason = 'manual-ui', automatic = false } = {}) {
+  const saved = await persistFullBackup({ reason, automatic });
+  const verification = await verifyBackupFile({ name: baseName(saved.path), expectedFileSha256: saved.sha256 });
+  if (!verification.ok) {
+    throw Object.assign(new Error(`O backup foi gravado, mas a verificação falhou: ${verification.error}`), { code: 'BACKUP_VERIFY_FAILED', backupPath: saved.path });
+  }
+  return { ok: true, backupPath: saved.path, counts: saved.counts, size: saved.size, sha256: saved.sha256, verified: true, verifiedAt: verification.verifiedAt };
+}
+
+// Compatibilidade: os dois nomes antigos são o MESMO backup completo (antes dois botões sugeriam
+// formatos diferentes — P19). Ambos passam pelo comando único, com verificação.
+export async function createDatabaseBackup(options = {}) {
+  return createBackupNow({ reason: options.reason || 'manual-ui' });
+}
+export async function createFullDataBackup(options = {}) {
+  const r = await createBackupNow({ reason: options.reason || 'manual-ui' });
+  return { ...r, backupDir: r.backupPath, files: Object.keys(r.counts || {}) };
+}
+
+function parseHistory(row) {
+  let detalhes = {};
+  try { detalhes = JSON.parse(row.detalhes || '{}'); } catch { detalhes = {}; }
+  return { tipo: row.tipo, created_at: row.created_at, ...detalhes };
+}
+
+/**
+ * Situação da proteção (P21): último backup criado, último VERIFICADO (leitura de volta ok) e os
+ * arquivos da pasta com o estado de cada um — verificado, falhou na verificação ou não verificado.
+ */
+export async function getBackupStatus() {
+  const db = await storage.ensureReady();
+  const history = (await db.table('backupHistory').toArray()).map(parseHistory)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const created = history.filter((h) => h.tipo === 'full-durable');
+  const verifies = history.filter((h) => h.tipo === 'verify');
+  const lastVerified = verifies.find((h) => h.ok) || null;
+  let filesList = [];
+  let unavailable = false;
+  try {
+    filesList = (await listBackups()).full || [];
+    unavailable = !files()?.listUserFiles;
+  } catch { unavailable = true; }
+  const catalog = filesList.map((file) => {
+    const verify = verifies.find((h) => h.path === file.path && h.size === file.size);
+    const origin = created.find((h) => h.path === file.path);
+    return {
+      ...file,
+      reason: origin?.reason || verify?.reason || null,
+      automatic: origin?.automatic ?? verify?.automatic ?? null,
+      estado: verify ? (verify.ok ? 'VERIFICADO' : 'FALHOU') : 'NAO_VERIFICADO',
+      verifiedAt: verify?.verifiedAt || null,
+      erro: verify && !verify.ok ? verify.error : null,
+    };
+  });
+  const protecao = lastVerified ? 'VERIFICADO' : (catalog.length ? 'NAO_VERIFICADO' : 'SEM_BACKUP');
+  return { protecao, lastCreated: created[0] || null, lastVerified, files: catalog, unavailable };
 }
 
 export async function exportWeighingCsv() {
