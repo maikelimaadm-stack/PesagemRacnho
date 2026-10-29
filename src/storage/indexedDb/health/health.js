@@ -63,7 +63,8 @@ export async function logicalIntegrity({ enforceV7 = null } = {}) {
     const row = payload(raw);
     if (!parseCivilDate(row.data_pesagem)) issues.push(`pesagens ${row.id}: data_pesagem inválida`);
     const weight = Number(row.peso_kg ?? row.peso);
-    const weightOptional = row.tipo_manejo === 'Saída' && ['Morte', 'Doação', 'Transferência'].includes(row.motivo_saida);
+    const weightOptional = row.tipo_manejo === 'Saída'
+      && (['Morte', 'Doação', 'Transferência'].includes(row.motivo_saida) || (row.motivo_saida === 'Outros' && Boolean(row.operacao_id)));
     if (!weightOptional && (!Number.isFinite(weight) || weight <= 0)) issues.push(`pesagens ${row.id}: peso inválido`);
     if (row.animal_id && animalIds.size && !animalIds.has(row.animal_id)) issues.push(`pesagens ${row.id}: animal_id órfão ${row.animal_id}`);
     if (row.lote_id && !lotIds.has(row.lote_id)) issues.push(`pesagens ${row.id}: lote_id órfão ${row.lote_id}`);

@@ -85,7 +85,7 @@ ok('P09 edição de lote reconcilia movimentos e permanências');
 // ---------------------------------------------------------------------------
 // P13 — reconstrução de lotes idempotente (sem soft-delete + insert a cada chamada).
 const totalLotes = await db.table('animalLotes').count();
-for (let i = 0; i < 5; i += 1) await db.transaction('rw', db.table('pesagens'), db.table('animalLotes'), () => adapter.rebuildAnimalLotProjection(db, 'C'));
+for (let i = 0; i < 5; i += 1) await db.transaction('rw', db.table('pesagens'), db.table('animalLotes'), db.table('movimentosAnimais'), () => adapter.rebuildAnimalLotProjection(db, 'C'));
 assert.equal(await db.table('animalLotes').count(), totalLotes, 'P13: reaplicar não cria nem apaga linhas');
 const totalMov = await db.table('movimentosAnimais').count();
 for (let i = 0; i < 3; i += 1) await db.transaction('rw', db.table('pesagens'), db.table('movimentosAnimais'), db.table('auditoria'), () => adapter.reconcileWeighingMovements(db, 'C'));

@@ -251,6 +251,10 @@ export async function rebuildAnimalStateProjection(db, animalId, timestamp = new
       if (era) categoryChanges.era = era;
     }
   }
+  // v9: a primeira pesagem com peso tira o animal de PENDENTE_PESAGEM (identificação pendente continua).
+  if (animal.situacao_cadastro === 'PENDENTE_PESAGEM' && latestWeighed) {
+    categoryChanges.situacao_cadastro = animal.identificacao_normalizada ? 'OK' : 'PENDENTE_IDENTIFICACAO';
+  }
   const changes = {
     ...categoryChanges,
     // Enum v7 (ADR-028): derivado do motivo da saída definitiva; sem motivo mapeável → INATIVO.
@@ -309,10 +313,24 @@ export async function removeOrphanAnimal(db, animalId, timestamp = new Date().to
  * gravado e escreve só a diferença — reaplicar ao mesmo estado não gera soft-delete nem inserção.
  * Mantém a linha existente (e a origem dela) quando lote e início batem; ajusta fim/apartação.
  */
+/**
+ * Eventos de lote vindos de OPERAÇÕES (v9: Movimentação e Entrada com lote de destino), sem pesagem: entram
+ * na linha do tempo das permanências e dos movimentos derivados para que a projeção não desfaça a
+ * movimentação nem gere uma segunda "Mudança de lote" quando o animal for pesado no lote novo.
+ */
+const lotEventsFrom = (movements) => movements
+  .filter((row) => !row.deleted_at && row.origem === 'operacao' && row.lote_destino_id && (row.natureza || naturezaDoTipo(row.tipo)) !== 'SAIDA')
+  .map((row) => ({ id: row.id, data: row.data_evento, lote_id: row.lote_destino_id, created_at: row.created_at }));
+
+export async function operationLotEvents(db, animalId) {
+  if (!animalId) return [];
+  return lotEventsFrom(await db.table('movimentosAnimais').where('animal_id').equals(animalId).toArray());
+}
+
 export async function rebuildAnimalLotProjection(db, animalId, timestamp = new Date().toISOString()) {
   if (!animalId) return 0;
   const animalLotTable = db.table('animalLotes');
-  const expected = deriveLotStays(await activeEventsOf(db, animalId));
+  const expected = deriveLotStays(await activeEventsOf(db, animalId), { lotEvents: await operationLotEvents(db, animalId) });
   const previous = (await animalLotTable.where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at);
   const byKey = new Map();
   const extras = [];
@@ -348,11 +366,19 @@ export async function rebuildAnimalLotProjection(db, animalId, timestamp = new D
 export async function reconcileWeighingMovements(db, animalId, timestamp = new Date().toISOString(), { origem = 'lancamento' } = {}) {
   if (!animalId) return { criados: 0, cancelados: 0 };
   const table = db.table('movimentosAnimais');
-  const expected = deriveWeighingMovements(await activeEventsOf(db, animalId));
-  const existing = (await table.where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at && row.pesagem_id);
+  const allMovements = await table.where('animal_id').equals(animalId).toArray();
+  const expected = deriveWeighingMovements(await activeEventsOf(db, animalId), { lotEvents: lotEventsFrom(allMovements) });
+  const existing = allMovements.filter((row) => !row.deleted_at && row.pesagem_id);
   const byKey = new Map();
   const duplicates = [];
+  // Movimento de ENTRADA da operação já adotado por um Cadastro: casa pela pesagem (o tipo é o da operação —
+  // Compra, Nascimento… — e não "Entrada"); sem isso a reconciliação seguinte criaria uma segunda entrada.
+  const adoptedByPesagem = new Map();
   for (const row of existing) {
+    if (row.origem === 'operacao' && (row.natureza || naturezaDoTipo(row.tipo)) === 'ENTRADA' && !adoptedByPesagem.has(row.pesagem_id)) {
+      adoptedByPesagem.set(row.pesagem_id, row);
+      continue;
+    }
     const key = movementKey(row);
     if (byKey.has(key)) duplicates.push(row); else byKey.set(key, row);
   }
@@ -360,12 +386,14 @@ export async function reconcileWeighingMovements(db, animalId, timestamp = new D
   const adds = [];
   // v9: entrada sem peso registrada por OPERAÇÃO (movimento sem pesagem_id, origem 'operacao'): o primeiro
   // Cadastro do animal ADOTA esse movimento em vez de criar uma segunda entrada (saldo +1, não +2).
-  const operacaoSemPesagem = (await table.where('animal_id').equals(animalId).toArray())
+  const operacaoSemPesagem = allMovements
     .filter((row) => !row.deleted_at && !row.pesagem_id && row.origem === 'operacao' && (row.natureza || naturezaDoTipo(row.tipo)) === 'ENTRADA');
   for (const movement of expected) {
+    const natureza = naturezaDoTipo(movement.tipo);
+    const adopted = natureza === 'ENTRADA' ? adoptedByPesagem.get(movement.pesagem_id) : null;
+    if (adopted) { matched.add(adopted.localId); continue; }
     const row = byKey.get(movementKey(movement));
     if (row) { matched.add(row.localId); continue; }
-    const natureza = naturezaDoTipo(movement.tipo);
     if (natureza === 'ENTRADA' && operacaoSemPesagem.length) {
       const adotado = operacaoSemPesagem.shift();
       await table.update(adotado.localId, { pesagem_id: movement.pesagem_id, data_evento: adotado.data_evento || movement.data_evento, lote_destino_id: adotado.lote_destino_id || movement.lote_destino_id, updated_at: timestamp });
@@ -430,6 +458,22 @@ export async function reconcileAnimalAfterChange(db, animalId, timestamp = new D
   await rebuildAnimalStateProjection(db, animalId, timestamp);
 }
 
+async function findPendingAnimal(db, ui) {
+  const numero = normalized(ui.numero_animal);
+  if (!numero) return null;
+  const candidatos = (await db.table('animais').where('identificacao_normalizada').equals(numero).toArray())
+    .filter((row) => !row.deleted_at && row.situacao_cadastro === 'PENDENTE_PESAGEM' && row.situacao === 'ATIVO');
+  if (!candidatos.length) return null;
+  // Mesma resolução de marca do Cadastro (id escolhido; senão o texto; senão a marca padrão).
+  const marcaId = await existingRegistryId(db, 'marcas', ui.marca_id) ?? await resolveRegistryId(db, 'marcas', ui.marca, new Date().toISOString(), { fallbackToDefault: true });
+  const mesmos = candidatos.filter((row) => (row.marca_id || null) === (marcaId || null));
+  for (const animal of mesmos) {
+    const pesagens = (await db.table('pesagens').where('animal_id').equals(animal.id).toArray()).filter((row) => !row.deleted_at);
+    if (!pesagens.length) return animal;
+  }
+  return null;
+}
+
 export async function isStorageAvailable() {
   try {
     await storage.ensureReady();
@@ -449,7 +493,8 @@ export async function createEntry(payload, { aplicacoesSanidade = [] } = {}) {
   const ui = typeof payload.legacy_payload === 'object' ? payload.legacy_payload : {};
   const ts = new Date().toISOString();
   const entryId = payload.id || crypto.randomUUID();
-  const animalId = payload.animal_id || ui.animal_id || (ui.tipo_manejo === 'Cadastro' ? crypto.randomUUID() : null);
+  const animalInformado = payload.animal_id || ui.animal_id || null;
+  let animalId = animalInformado || (ui.tipo_manejo === 'Cadastro' ? crypto.randomUUID() : null);
   let sessionId = ui.sessao_id || null;
   const entry = { ...payload, id: entryId, animal_id: animalId, sessao_id: sessionId, created_by_user_id: actorUserId(), updated_by_user_id: actorUserId(), created_at: payload.created_at || ts, updated_at: ts, deleted_at: null };
   const isRegistration = ui.tipo_manejo === 'Cadastro';
@@ -476,6 +521,15 @@ export async function createEntry(payload, { aplicacoesSanidade = [] } = {}) {
       entry.sessao_id = sessionId;
     }
     if (await db.table('pesagens').where('id').equals(entryId).first()) throw new Error(`Pesagem duplicada (${entryId})`);
+    // v9: Cadastro de um animal que entrou por operação SEM peso (PENDENTE_PESAGEM, mesmo número e marca, sem
+    // pesagens) é a primeira pesagem DELE — não um segundo animal. O movimento de entrada é adotado depois.
+    if (isRegistration && !animalInformado) {
+      const pendente = await findPendingAnimal(db, ui);
+      if (pendente) {
+        animalId = pendente.id;
+        entry.animal_id = animalId;
+      }
+    }
     // Linha do tempo (P05/P07) dentro da transação: série inteira, sem duplicar Manejo no dia.
     await assertAnimalTimeline(db, animalId, { upsert: [entry] });
     // Referências das aplicações resolvidas antes de gravar a pesagem: erro aborta tudo.

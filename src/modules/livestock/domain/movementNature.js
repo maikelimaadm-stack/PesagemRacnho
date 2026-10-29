@@ -5,7 +5,7 @@
 export const NATUREZAS = Object.freeze({ ENTRADA: 'ENTRADA', SAIDA: 'SAIDA', INTERNA: 'INTERNA' });
 
 const ENTRADAS = new Set(['entrada', 'compra', 'nascimento', 'transferência recebida', 'transferencia recebida', 'ajuste de entrada']);
-const SAIDAS = new Set(['venda', 'abate', 'morte', 'doação', 'doacao', 'transferência', 'transferencia', 'transferência enviada', 'transferencia enviada', 'saída', 'saida', 'ajuste de saída', 'ajuste de saida']);
+const SAIDAS = new Set(['venda', 'abate', 'morte', 'doação', 'doacao', 'transferência', 'transferencia', 'transferência enviada', 'transferencia enviada', 'saída', 'saida', 'ajuste de saída', 'ajuste de saida', 'outros']);
 const INTERNAS = new Set(['mudança de lote', 'mudanca de lote', 'transferência interna', 'transferencia interna', 'mudança de pasto', 'mudanca de pasto', 'mudança de propriedade', 'mudanca de propriedade']);
 
 /** Natureza a partir do tipo do movimento; null quando o tipo não é reconhecido. */
