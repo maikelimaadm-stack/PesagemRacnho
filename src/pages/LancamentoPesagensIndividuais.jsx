@@ -11,7 +11,6 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import MakTh, { makRowClass } from "@/components/mak/MakTh";
-import { matchesMakColumnFilter, isMakColumnFilterActive } from "@/components/mak/MakColumnMenu";
 import MakColumnConfigDialog from "@/components/mak/MakColumnConfigDialog";
 import MakDateControl from "@/components/mak/MakDateControl";
 import {
@@ -46,6 +45,9 @@ import PesagensResumoRodape from "../components/pesagens/PesagensResumoRodape";
 import ConfirmarAnimalSnDialog from "../components/pesagens/ConfirmarAnimalSnDialog";
 import { criarMensagemAnimal } from "../components/pesagens/animalLookup";
 import SelecionarAnimalDialog from "../components/pesagens/SelecionarAnimalDialog";
+import ConferirPesoDialog from "../components/pesagens/ConferirPesoDialog";
+import ConfirmarExclusaoLancamentoDialog from "../components/pesagens/ConfirmarExclusaoLancamentoDialog";
+import { automaticLot, buildDayEntries, countByShipmentDocument, getColumnFilterType, isLotFull, latestEntryOfDay, lotCandidates, summarizeEntries, summarizeShipmentDocuments } from "../components/pesagens/lancamentoDia";
 import { buildAnimalLookupIndex, buildDeletionPlan, createAnimalId, getAnimalHistory, getRegisteredAnimals, legacyAnimalKey, normalizeAnimalText } from "@/modules/animals/domain/animalHistory";
 import { findLatestSnProfile, isSnIdentifier, normalizeAnimalIdentifier } from "@/modules/animals/domain/snAnimal";
 import { calculateWeightGain } from "@/modules/weighing/domain/weighingCalculations";
@@ -121,9 +123,6 @@ const POLITICAS_INICIAIS = Object.freeze({
 const SEM_SELECAO = '__none__';
 // Categoria do Cadastro (CATEGORIA_AUTOMATICA, de launchContext): "Automático" escolhe pelo sexo e pela faixa de peso da categoria.
 const COMMERCIAL_VALUE_FIELDS = new Set(["valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "valor_arroba_abate", "valor_total_abate", "peso_carcaca_estimado", "rendimento_carcaca"]);
-const NUMBER_COLUMN_IDS = new Set(["numero_registro", "peso", "peso_anterior", "valor_pago_cabeca", "valor_venda_total", "valor_arroba", "quantidade_arrobas", "doc_qtd", "dias", "ganho", "gmd"]);
-const DATE_COLUMN_IDS = new Set(["data_pesagem", "data_anterior"]);
-const getColumnFilterType = (id) => DATE_COLUMN_IDS.has(id) ? "date" : NUMBER_COLUMN_IDS.has(id) ? "number" : "text";
 // M1: GMD de intervalo curto (NAO_CONFIAVEL) aparece apagado, como os itens desabilitados do ModeloBase1
 // (.is-disabled = opacidade .45). A faixa do animal fixa a cor do número com !important; a cor própria é da
 // trilha visual.
@@ -357,7 +356,6 @@ export default function LancamentoPesagensIndividuais() {
   const [resumoPersonalizado, setResumoPersonalizado] = useState([]);
   const [deleteLaunchRequest, setDeleteLaunchRequest] = useState(null);
   const [outlierDialog, setOutlierDialog] = useState({ open: false, warnings: [], options: null });
-  const [outlierJustification, setOutlierJustification] = useState("");
   // M1 — Repesagem no mesmo dia: { anterioresIds, resumo, avisoSanidade, options } enquanto o diálogo está aberto.
   const [repesagemDialog, setRepesagemDialog] = useState(null);
   // M1 — Intervalo mínimo do GMD confiável (Configurações › Relatórios, gmd_dias_minimos; padrão 21).
@@ -934,73 +932,10 @@ export default function LancamentoPesagensIndividuais() {
   };
 
   // ========== PESAGENS DO DIA + FILTRO + ORDENAÇÃO ==========
-  const pesagensDia = useMemo(() => {
-    let resultado = pesagens
-      .filter((p) => p.data_pesagem === dataPesagem)
-      .sort((a, b) => new Date(a.created_date || 0) - new Date(b.created_date || 0))
-      .map((p, idx) => ({ ...p, _numero_registro: idx + 1 }));
-
-    resultado.sort((a, b) => {
-      let valA, valB;
-      switch (sortColumn) {
-        case 'numero_animal':
-          valA = a.numero_animal || '';
-          valB = b.numero_animal || '';
-          break;
-        case 'peso':
-          valA = a.peso || 0;
-          valB = b.peso || 0;
-          break;
-        case 'sexo':
-          valA = a.sexo || '';
-          valB = b.sexo || '';
-          break;
-        case 'raca':
-          valA = a.raca || '';
-          valB = b.raca || '';
-          break;
-        case 'marca':
-          valA = a.marca || '';
-          valB = b.marca || '';
-          break;
-        case 'nome_apartacao':
-          valA = a.nome_apartacao || '';
-          valB = b.nome_apartacao || '';
-          break;
-        case 'nome_lote':
-          valA = a.nome_lote || '';
-          valB = b.nome_lote || '';
-          break;
-        case 'numero_registro': {
-          valA = a._numero_registro;
-          valB = b._numero_registro;
-          break;
-        }
-        case 'created_date':
-        default:
-          valA = new Date(a.created_date || 0);
-          valB = new Date(b.created_date || 0);
-          break;
-      }
-
-      if (typeof valA === 'string') {
-        return sortDirection === 'asc' ? valA.localeCompare(valB) : valB.localeCompare(valA);
-      }
-      return sortDirection === 'asc' ? valA - valB : valB - valA;
-    });
-
-    const ativos = Object.entries(filtrosColuna).filter(([, value]) => isMakColumnFilterActive(value));
-    if (ativos.length) {
-      resultado = resultado.filter((linha) =>
-        ativos.every(([campo, valor]) => {
-          const alvo = campo === "numero_registro" ? linha._numero_registro : linha[campo];
-          return matchesMakColumnFilter(alvo, valor, getColumnFilterType(campo));
-        })
-      );
-    }
-
-    return resultado;
-  }, [pesagens, dataPesagem, empresaSelecionadaId, sortColumn, sortDirection, filtrosColuna]);
+  const pesagensDia = useMemo(
+    () => buildDayEntries(pesagens, { date: dataPesagem, sortColumn, sortDirection, columnFilters: filtrosColuna }),
+    [pesagens, dataPesagem, sortColumn, sortDirection, filtrosColuna],
+  );
 
   const launchTotalPages = Math.max(1, Math.ceil(pesagensDia.length / launchItemsPerPage));
   const launchPageSafe = Math.min(launchPage, launchTotalPages);
@@ -1010,14 +945,7 @@ export default function LancamentoPesagensIndividuais() {
   );
   useEffect(() => { setLaunchPage(1); }, [dataPesagem, filtrosColuna, sortColumn, sortDirection]);
 
-  const docCountsDia = useMemo(() => {
-    const map = {};
-    pesagensDia.forEach((p) => {
-      const id = p.documento_embarque_id;
-      if (id) map[id] = (map[id] || 0) + 1;
-    });
-    return map;
-  }, [pesagensDia]);
+  const docCountsDia = useMemo(() => countByShipmentDocument(pesagensDia), [pesagensDia]);
 
   // Função para alternar ordenação
   const handleSort = (column) => {
@@ -1043,18 +971,8 @@ export default function LancamentoPesagensIndividuais() {
   const lotesApartacaoAtual = useMemo(() => { if (!apartacaoSelecionada) return []; return lotesApartacao.filter((l) => l.apartacao_id === apartacaoSelecionada); }, [apartacaoSelecionada, lotesApartacao]);
 
   // ========== ESTATÍSTICAS DO DIA ==========
-  const estatisticas = useMemo(() => {
-    const total = pesagensDia.length;
-    const machos = pesagensDia.filter((p) => p.sexo === 'M').length;
-    const femeas = pesagensDia.filter((p) => p.sexo === 'F').length;
-    const pesoMedio = total > 0 ? pesagensDia.reduce((s, p) => s + (p.peso || 0), 0) / total : 0;
-    return { total, machos, femeas, pesoMedio };
-  }, [pesagensDia]);
-  const ultimoLancamentoDia = useMemo(
-    () => pesagens.filter((entry) => entry.data_pesagem === dataPesagem)
-      .sort((a, b) => new Date(b.created_date || 0) - new Date(a.created_date || 0))[0] || null,
-    [pesagens, dataPesagem],
-  );
+  const estatisticas = useMemo(() => summarizeEntries(pesagensDia), [pesagensDia]);
+  const ultimoLancamentoDia = useMemo(() => latestEntryOfDay(pesagens, dataPesagem), [pesagens, dataPesagem]);
 
   // Estatísticas do documento/embarque selecionados (Abate)
   const pesagensDocSelecionado = useMemo(() => {
@@ -1062,28 +980,14 @@ export default function LancamentoPesagensIndividuais() {
     return pesagens.filter((p) => p.documento_embarque_id === documentoSelecionado);
   }, [documentoSelecionado, pesagens]);
 
-  const resumoDoc = useMemo(() => {
-    const total = pesagensDocSelecionado.length;
-    const machos = pesagensDocSelecionado.filter((p) => p.sexo === 'M').length;
-    const femeas = pesagensDocSelecionado.filter((p) => p.sexo === 'F').length;
-    const pesoTotal = pesagensDocSelecionado.reduce((s, p) => s + (p.peso || 0), 0);
-    const pesoMedio = total > 0 ? pesoTotal / total : 0;
-    return { total, machos, femeas, pesoTotal, pesoMedio };
-  }, [pesagensDocSelecionado]);
+  const resumoDoc = useMemo(() => summarizeEntries(pesagensDocSelecionado), [pesagensDocSelecionado]);
 
   const pesagensEmbarqueSelecionado = useMemo(() => {
     if (!embarqueSelecionadoDoc) return [];
     return pesagens.filter((p) => p.embarque_id === embarqueSelecionadoDoc);
   }, [embarqueSelecionadoDoc, pesagens]);
 
-  const resumoEmbarque = useMemo(() => {
-    const total = pesagensEmbarqueSelecionado.length;
-    const machos = pesagensEmbarqueSelecionado.filter((p) => p.sexo === 'M').length;
-    const femeas = pesagensEmbarqueSelecionado.filter((p) => p.sexo === 'F').length;
-    const pesoTotal = pesagensEmbarqueSelecionado.reduce((s, p) => s + (p.peso || 0), 0);
-    const pesoMedio = total > 0 ? pesoTotal / total : 0;
-    return { total, machos, femeas, pesoTotal, pesoMedio };
-  }, [pesagensEmbarqueSelecionado]);
+  const resumoEmbarque = useMemo(() => summarizeEntries(pesagensEmbarqueSelecionado), [pesagensEmbarqueSelecionado]);
 
   // Resumo por Documento do Embarque selecionado (para tabela Doc/Nº/Prev/Emb/Faltam)
   const documentosDoEmbarqueSel = useMemo(() => {
@@ -1091,65 +995,18 @@ export default function LancamentoPesagensIndividuais() {
     return documentosEmbarque.filter((d) => d.embarque_id === embarqueSelecionadoDoc);
   }, [documentosEmbarque, embarqueSelecionadoDoc]);
 
-  const todasPesagensAbate = useMemo(() => {
-    return pesagens;
-  }, [pesagens]);
-
-  const resumoDocsAbate = useMemo(() => {
-    return documentosDoEmbarqueSel.map((d) => {
-      const pesDoc = todasPesagensAbate.filter((p) => p.documento_embarque_id === d.id);
-      const pesoTotal = pesDoc.reduce((s, p) => s + (p.peso || 0), 0);
-      const pesoMedio = pesDoc.length ? pesoTotal / pesDoc.length : 0;
-      return {
-        id: d.id,
-        gta: d.numero_gta || '-',
-        nfe: d.numero_nfe || '-',
-        prevM: d.qtd_prev_machos || 0,
-        prevF: d.qtd_prev_femeas || 0,
-        pesoTotal,
-        pesoMedio,
-      };
-    });
-  }, [documentosDoEmbarqueSel, todasPesagensAbate]);
-
-  const totaisDocsAbate = useMemo(() => {
-    return resumoDocsAbate.reduce((acc, r) => ({
-      prevM: acc.prevM + r.prevM,
-      prevF: acc.prevF + r.prevF,
-      embM: acc.embM + r.embM,
-      embF: acc.embF + r.embF,
-      faltamM: acc.faltamM + r.faltamM,
-      faltamF: acc.faltamF + r.faltamF,
-    }), { prevM: 0, prevF: 0, embM: 0, embF: 0, faltamM: 0, faltamF: 0 });
-  }, [resumoDocsAbate]);
+  const resumoDocsAbate = useMemo(
+    () => summarizeShipmentDocuments(documentosDoEmbarqueSel, pesagens),
+    [documentosDoEmbarqueSel, pesagens],
+  );
 
 
-  // ========== VERIFICAR SE LOTE ESTÁ CHEIO ==========
-  const isLoteCheio = (lote) => {
-    if (!lote) return false;
-    if (lote.fechado) return true;
-
-    // Contar animais no lote
-    const animaisNoLote = pesagens.filter((p) => p.lote_id === lote.id).length;
-
-    return animaisNoLote >= (lote.quantidade_maxima || 999999);
-  };
-
-  // ========== DETERMINAR LOTE AUTOMATICAMENTE ==========
-  const getLotesCandidatos = (pesoNum) => {
-    if (!apartacaoSelecionada || !Number.isFinite(pesoNum)) return [];
-    return lotesApartacaoAtual.filter((l) =>
-      pesoNum >= l.peso_minimo && pesoNum <= l.peso_maximo && !l.fechado && !isLoteCheio(l)
-    );
-  };
-
-  const getLoteAutomatico = (pesoNum) => {
-    const candidatos = getLotesCandidatos(pesoNum);
-    if (!candidatos.length) return null;
-    // Com atalho ligado e empate de faixa: não escolhe sozinho — usuário usa F11/F12/…
-    if (atalhoLoteAtivo && candidatos.length > 1) return null;
-    return candidatos[0];
-  };
+  // Lote cheio / candidatos / automático: regras em lancamentoDia (contam as pesagens já lançadas).
+  const isLoteCheio = (lote) => isLotFull(lote, pesagens);
+  const getLotesCandidatos = (pesoNum) => (apartacaoSelecionada ? lotCandidates(lotesApartacaoAtual, pesagens, pesoNum) : []);
+  const getLoteAutomatico = (pesoNum) => (
+    apartacaoSelecionada ? automaticLot(lotesApartacaoAtual, pesagens, pesoNum, { shortcutEnabled: atalhoLoteAtivo }) : null
+  );
 
   const pesoNumAtual = useMemo(() => {
     const n = parseBrazilianNumber(peso);
@@ -1344,7 +1201,6 @@ export default function LancamentoPesagensIndividuais() {
     }
     const outlierWarnings = evaluateWeighingWarnings({ weight: pesoInformado, date: dataPesagem, history: registrosMesmaIdentidade, policy: weightWarningPolicy });
     if (outlierWarnings.length > 0 && options?.skipOutlierConfirmation !== true) {
-      setOutlierJustification("");
       setOutlierDialog({ open: true, warnings: outlierWarnings, options: { ...options, skipOutlierConfirmation: true } });
       return;
     }
@@ -2901,34 +2757,23 @@ export default function LancamentoPesagensIndividuais() {
         )}
       </div>
 
-      <Dialog open={Boolean(deleteLaunchRequest)} onOpenChange={(open) => { if (!open) setDeleteLaunchRequest(null); }}>
-        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact d17e-confirm-dialog">
-          <DialogHeader>
-            <DialogTitle>Confirmar exclusão</DialogTitle>
-            <DialogDescription>{deleteLaunchPlan.cascades.some((cascade) => cascade.blocked)
-              ? `O cadastro original de ${deleteLaunchRequest?.numero_animal} / Marca ${deleteLaunchRequest?.marca || '-'} possui histórico e não pode ser excluído. Inative o animal ou cancele somente um evento.`
-              : `Somente este lançamento de ${deleteLaunchRequest?.numero_animal} / Marca ${deleteLaunchRequest?.marca || '-'} será excluído. O cadastro e os demais registros serão preservados.`}</DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="d17b-standard-dialog__footer"><Button variant="outline" onClick={() => setDeleteLaunchRequest(null)}>Cancelar</Button><Button className="emp-toolbar-btn-delete" disabled={deleteLaunchPlan.cascades.some((cascade) => cascade.blocked)} onClick={confirmarExclusaoLancamento}>Excluir</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConfirmarExclusaoLancamentoDialog
+        pesagem={deleteLaunchRequest}
+        bloqueado={deleteLaunchPlan.cascades.some((cascade) => cascade.blocked)}
+        onCancel={() => setDeleteLaunchRequest(null)}
+        onConfirm={confirmarExclusaoLancamento}
+      />
 
-      <Dialog open={outlierDialog.open} onOpenChange={(open) => { if (!open) setOutlierDialog({ open: false, warnings: [], options: null }); }}>
-        <DialogContent className="d17b-standard-dialog d17b-standard-dialog--compact">
-          <DialogHeader>
-            <DialogTitle>Conferir peso informado</DialogTitle>
-            <DialogDescription>O lançamento pode ser válido, mas está fora das faixas operacionais de conferência.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <ul className="list-disc pl-5 text-xs text-slate-700 space-y-1">{outlierDialog.warnings.map((warning) => <li key={warning.code}>{warning.message}</li>)}</ul>
-            <div className="space-y-1"><Label className="text-xs">Justificativa para continuar</Label><Input value={outlierJustification} onChange={(event) => setOutlierJustification(event.target.value)} placeholder="Ex.: peso conferido na balança" /></div>
-          </div>
-          <DialogFooter className="d17b-standard-dialog__footer">
-            <Button variant="outline" onClick={() => setOutlierDialog({ open: false, warnings: [], options: null })}>Cancelar</Button>
-            <Button disabled={!outlierJustification.trim()} onClick={() => { const pending = outlierDialog.options || {}; setOutlierDialog({ open: false, warnings: [], options: null }); void handleSalvar({ ...pending, outlierJustification: outlierJustification.trim() }); }}>Confirmar e salvar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ConferirPesoDialog
+        open={outlierDialog.open}
+        warnings={outlierDialog.warnings}
+        onCancel={() => setOutlierDialog({ open: false, warnings: [], options: null })}
+        onConfirm={(justificativa) => {
+          const pending = outlierDialog.options || {};
+          setOutlierDialog({ open: false, warnings: [], options: null });
+          void handleSalvar({ ...pending, outlierJustification: justificativa });
+        }}
+      />
 
       {/* M1 — Repesagem no mesmo dia (M1-FUNDACAO-NUMERO.md §4). "Repesar (substitui)" segue o salvamento com a
           confirmação (cancela a pesagem de hoje com o motivo "repesagem" e grava a nova); "Cancelar" não grava nada. */}
