@@ -49,6 +49,15 @@ const electronStub = {
     static getFocusedWindow() { return windows[0] || null; }
   },
   ipcMain: { handle: (channel, fn) => { handlers[channel] = fn; } },
+  // equipmentIpc (1.5.4) registra as permissões de serial/Bluetooth na sessão padrão.
+  session: {
+    defaultSession: {
+      setPermissionCheckHandler: () => {},
+      setDevicePermissionHandler: () => {},
+      setBluetoothPairingHandler: () => {},
+      on: () => {},
+    },
+  },
   shell: { openPath: () => Promise.resolve('') },
   dialog: { showOpenDialog: async () => ({ canceled: true }) },
 };

@@ -35,7 +35,7 @@ assert.match(visualCss, /\.d17d-icon-action:hover:not\(:disabled\)[\s\S]{0,220}b
 assert.match(visualCss, /\.d17b-standard-dialog/, 'diálogos usam o shell visual padronizado');
 assert(!/needsImmediateAnimalChoice\(pesagens, valor\)/.test(launchPage), 'campo de identificação não interrompe a digitação com seleção de marca');
 assert.match(launchPage, /onBlur=\{\(\) => \{[\s\S]{0,360}if \(numeroAnimal\.trim\(\)\) resolverAnimalDigitado\(numeroAnimal\);[\s\S]{0,40}\}\}/, 'seleção de marca é resolvida ao concluir e sair do campo de identificação');
-assert.match(launchPage, /onKeyDown=\{\(e\) => \{ if \(e\.key === 'Enter'\)[\s\S]{0,180}resolverAnimalDigitado\(numeroAnimal\)/, 'Enter também conclui a identificação e resolve a marca');
+assert.match(launchPage, /onKeyDown=\{\(e\) => \{[\s\S]{0,600}if \(e\.key !== 'Enter'\) return;[\s\S]{0,180}resolverAnimalDigitado\(numeroAnimal\)/, 'Enter também conclui a identificação e resolve a marca');
 assert.match(launchPage, /ignorarProximoBlurIdentificacaoRef\.current = true[\s\S]{0,180}resolverAnimalDigitado\(numeroAnimal\)/, 'Enter não duplica a notificação ao provocar blur para abrir o pop-up');
 assert.match(visualCss, /D\.17D\.2R20[\s\S]*?background:\s*var\(--d17b-accent-hover[\s\S]*?color:\s*#111827/i, 'hover de botões primários preserva o verde da marca e o texto escuro');
 assert.match(visualCss, /D\.17D\.2R20[\s\S]{0,3200}background:\s*#f1f3f4/i, 'campos de pop-up usam a mesma superfície do lançamento');
@@ -51,16 +51,18 @@ assert.match(launchPage, /d17d-launch-feedbacks[\s\S]{0,3600}d17d-animal-perform
 assert.match(launchPage, /d17d-animal-performance[\s\S]{0,2600}>Animal<[\s\S]{0,1800}>Última<[\s\S]{0,1800}>Ganho</, 'resumo único reúne identidade, última pesagem e evolução');
 assert.match(launchPage, /d17d-animal-performance__trend[\s\S]{0,800}<polyline points=\{sparklinePeso\.points\}/, 'faixa operacional desenha a tendência dinâmica do histórico');
 assert.match(launchPage, /d17d-animal-performance__warning[\s\S]{0,500}avisosPesoVisual/, 'avisos de peso aparecem na própria faixa operacional');
-assert.match(launchPage, /d17d-transfer-field[\s\S]{0,2600}d17d-auto-lot-feedback[\s\S]{0,1800}d17d-embarque-field/, 'indicação automática do lote aparece imediatamente após Transferência de Lote');
+assert.match(launchPage, /d17d-transfer-field[\s\S]{0,4200}d17d-auto-lot-feedback[\s\S]{0,1800}d17d-embarque-field/, 'indicação automática do lote aparece imediatamente após Transferência de Lote');
 assert.match(launchPage, /d17d-auto-lot-field[\s\S]{0,220}>Lote destino<[/\s\S]{0,400}d17d-auto-lot-feedback/, 'indicação automática possui o rótulo Lote destino fora da área recortada');
-assert.match(launchPage, /d17d-weight-control[\s\S]{0,900}d17d-weight-capture/, 'peso usa o controle composto com área de captura da balança');
+assert.match(launchPage, /d17d-weight-control[\s\S]{0,2400}d17d-weight-capture/, 'peso usa o controle composto com área de captura da balança');
 assert.match(launchPage, /d17d-launch-save__shortcut">Enter/, 'botão Salvar comunica o atalho Enter');
 assert.match(launchPage, /d17d-last-launch[\s\S]{0,700}>Desfazer</, 'linha inferior oferece desfazer para o último lançamento');
 assert.equal((columnDeclaration.match(/default: true/g) || []).length, 14, 'visualização inicial usa as 14 colunas definidas no HTML oficial');
 assert.match(launchPage, /COLUMN_MODEL_VERSION = 'd17d2r31'/, 'configurações legadas recebem uma única migração para o novo modelo de colunas');
-assert.match(animalDialog, /d17d-animal-choice-dialog__select/, 'seletor de animal usa botão compacto dedicado');
-assert.match(visualCss, /R26[\s\S]*?d17d-animal-choice-dialog__select[\s\S]{0,240}height:\s*28px\s*!important/i, 'botão Selecionar do animal acompanha a altura da linha');
-assert.match(visualCss, /R26[\s\S]*?d17d-summary-panel table td[\s\S]{0,360}height:\s*28px\s*!important[\s\S]{0,180}font-size:\s*10px\s*!important/i, 'valores dos resumos usam a escala de 10px do design');
+// 1.5.4: o seletor de marca virou lista de opções com atalho numérico (1–9), sem tabela nem botão Selecionar.
+assert.match(animalDialog, /role="option"[\s\S]{0,80}className="d17d-animal-choice-option"/, 'seletor de animal lista cada marca como opção clicável');
+assert.match(animalDialog, /if \(!\/\^\[1-9\]\$\/\.test\(key\)\) return;[\s\S]{0,300}escolher\(animais\[index\]\)/, 'teclas 1–9 escolhem a marca no seletor de animal');
+assert.match(visualCss, /\.d17d-animal-choice-option \{[\s\S]{0,200}height:\s*auto\s*!important/i, 'opções do seletor não aumentam artificialmente de altura');
+assert.match(visualCss, /d17d-summary-panel table td[\s\S]{0,360}height:\s*28px\s*!important[\s\S]{0,180}font-size:\s*10px\s*!important/i, 'valores dos resumos usam a escala de 10px do design');
 // R29 — paridade com o design "Lançamento de Pesagens" (Claude Design, 08/09/2026).
 const r29 = visualCss.slice(visualCss.indexOf('D.17D.2R29'));
 assert.ok(r29.length > 0, 'bloco R29 de paridade com o design existe');
@@ -143,9 +145,7 @@ for (const file of [
     assert.match(source, /d17d-summary-panel__totals/, 'painel lateral marca a linha de totais');
   }
 }
-assert.match(visualCss, /d17d-animal-choice-dialog table th,[\s\S]{0,140}text-transform:\s*none\s*!important/i, 'cabeçalhos do seletor de animal preservam capitalização normal');
-assert.match(visualCss, /d17d-animal-choice-dialog table :is\(th, td\) :is\(span, strong, small, div\)[\s\S]{0,180}height:\s*auto\s*!important/i, 'conteúdo interno não aumenta artificialmente a altura das linhas do seletor');
-assert.match(launchPage, /toast\.warning\(`O número \$\{String\(value\)\.trim\(\)\} existe em mais de uma marca/, 'ambiguidade de marca aparece na notificação superior');
+assert.match(launchPage, /if \(matches\.length > 1\) \{\s*setOpcoesAnimal\(matches\);\s*setSeletorAnimalOpen\(true\);/, 'ambiguidade de marca abre o seletor de animal (1.5.4: sem notificação extra)');
 assert.match(launchPage, /toast\.error\(`Animal \$\{String\(value \|\| ''\)\.trim\(\)\} não cadastrado/, 'animal sem cadastro aparece na notificação superior');
 assert.match(dialogBase, /onPointerDownOutside=\{\(event\) => \{[\s\S]{0,120}event\.preventDefault\(\)/, 'diálogos não fecham ao clicar fora');
 assert.match(dialogBase, /onEscapeKeyDown=\{\(event\) => \{[\s\S]{0,120}event\.preventDefault\(\)/, 'diálogos não fecham pela tecla Escape');

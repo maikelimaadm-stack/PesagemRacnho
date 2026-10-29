@@ -471,7 +471,7 @@ assert.match(page, /definition\.campos\.filter\(\(campo\) => campo\.tipo === 'te
 assert.match(logoField, /type="file"[\s\S]{0,120}accept="image\/png,image\/jpeg"[\s\S]{0,60}className="sr-only"/, 'input de arquivo escondido, só PNG/JPG');
 assert.match(logoField, /const inputId = `arquivo-\$\{campo\.id\}`/, 'id do input sem o prefixo aux- (não herda o estilo de campo de texto)');
 assert.ok(!/id=\{`aux-/.test(logoField), 'NEGATIVO: nenhum id aux- no campo de arquivo');
-for (const texto of ["'Escolher logo'", "'Trocar'", 'Remover', 'prepareLogoFromFile(file)', 'isAcceptedLogo(current)']) assert.ok(logoField.includes(texto), `LogoField: ${texto}`);
+for (const texto of ["'Escolher logo'", "'Trocar logo'", 'Remover logo', 'prepareLogoFromFile(file)', 'isAcceptedLogo(current)']) assert.ok(logoField.includes(texto), `LogoField: ${texto}`);
 assert.match(preview, /import \{ renderSheetHeaderHtml \} from '@\/modules\/reporting\/infrastructure\/exporters\/sheetHtml'/, 'pré-visualização usa o renderizador da folha');
 assert.match(preview, /import \{ SHEET_CSS \} from '@\/modules\/reporting\/infrastructure\/exporters\/sheetStyles'/, 'pré-visualização usa o CSS da folha');
 assert.match(preview, /<style>\{SHEET_CSS\}<\/style>\s*<div className="rpt-sheet rpt-sheet--preview" dangerouslySetInnerHTML=\{\{ __html: html \}\}/, 'folha dentro de .rpt-sheet--preview');

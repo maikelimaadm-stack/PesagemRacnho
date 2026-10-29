@@ -81,7 +81,8 @@ assert.match(relacao, /\.map\(id => colunasPermitidas\.find\(c => c\.id === id\)
 assert.match(relacao, /columns=\{colunasPermitidas\}/, 'configurador de colunas não oferece valores sem permissão');
 assert.doesNotMatch(relacao, /\.map\(id => COLUNAS_DISPONIVEIS\.find/, 'NEGATIVO: a tabela não lê a lista completa');
 assert.match(relacao, /const podeEditar = pode\('weighing\.edit'\)/);
-assert.match(relacao, /\{podeEditar && \(<>/, 'Editar/Excluir da barra só com weighing.edit');
+assert.match(relacao, /\{podeEditar && selectedItems\.length === 1 \? \(/, 'Editar da barra só com weighing.edit');
+assert.match(relacao, /onClick=\{handleDeleteSelected\}[\s\S]{0,120}disabled=\{!podeEditar \|\| selectedItems\.length === 0\}/, 'Excluir da barra só com weighing.edit');
 assert.match(relacao, /if \(!podeEditar\) return <TableCell key="acoes"/, 'menu da linha só com weighing.edit');
 assert.match(relacao, /\.\.\.\(podeImportar \? \[/, 'Importar só com weighing.write');
 assert.match(relacao, /\.\.\.\(podeExportar \? \[/, 'Exportar só com reports.export');

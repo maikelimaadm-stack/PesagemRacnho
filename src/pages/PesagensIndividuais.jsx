@@ -746,7 +746,7 @@ export default function PesagensIndividuais() {
             <div className={`mg-action-slot${podeLancar ? " is-visible" : ""}`} style={{ "--slot-width": "25px" }} aria-hidden={!podeLancar}>
               {podeLancar ? (
                 <Link to={createPageUrl("LancamentoPesagensIndividuais")} className="mg-action-slot__link">
-                  <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" title="Lançar pesagem" aria-label="Lançar pesagem">
+                  <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-green" title="Lançar pesagem" aria-label="Lançar pesagem">
                     <Plus className="h-3.5 w-3.5 shrink-0" aria-hidden="true" strokeWidth={2.5} />
                   </button>
                 </Link>
@@ -1074,8 +1074,8 @@ export default function PesagensIndividuais() {
             <span><strong>Totais:</strong> {fmtInt(pesagens.length)}</span>
             <span className="d17c-table-footer__metric"><strong>Animais únicos:</strong> {fmtInt(stats.animaisUnicos)}</span>
             <span className="d17c-table-footer__metric"><strong>Animais ativos:</strong> {fmtInt(stats.animaisAtivos)}</span>
-            <span className="d17c-table-footer__metric"><strong>Peso atual estimado:</strong> {stats.pesoAtual == null ? '—' : `${fmtNum(stats.pesoAtual)} kg`}</span>
-            <span className="d17c-table-footer__metric"><strong>Média da última pesagem:</strong> {stats.pesoMedioAtual == null ? '—' : `${fmtNum(stats.pesoMedioAtual)} kg`}</span>
+            <span className="d17c-table-footer__metric"><strong>Peso atual estimado (kg):</strong> {fmtNum(stats.pesoAtual)}</span>
+            <span className="d17c-table-footer__metric"><strong>Média da última pesagem (kg):</strong> {fmtNum(stats.pesoMedioAtual)}</span>
             <div className="d17c-table-footer__pagination">
               <Select value={String(itemsPerPage)} onValueChange={(value) => { setItemsPerPage(Number(value)); setCurrentPage(1); }}>
                 <SelectTrigger aria-label="Itens por página"><SelectValue /></SelectTrigger>
