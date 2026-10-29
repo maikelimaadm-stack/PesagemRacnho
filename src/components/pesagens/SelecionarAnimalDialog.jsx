@@ -27,7 +27,7 @@ export default function SelecionarAnimalDialog({ open, onOpenChange, numero, ani
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="d17b-standard-dialog d17d-animal-choice-dialog overflow-hidden flex flex-col"
+        className="d17b-standard-dialog d17b-standard-dialog--compact d17d-animal-choice-dialog overflow-hidden flex flex-col"
         // Evita o Radix devolver o foco ao Nº Ident. — o Lançamento foca Peso/Salvar.
         onCloseAutoFocus={(event) => event.preventDefault()}
       >

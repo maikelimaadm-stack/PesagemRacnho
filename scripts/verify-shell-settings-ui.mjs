@@ -177,7 +177,7 @@ function checkSettings(s) {
   assert.match(page, /mg-prototype-cards-layout/, 'cards no layout de cartões do modelo');
   assert.match(page, /cmd-select aux-model-cmd-select/, 'selects na estrutura cmd-select do modelo');
   assert.match(page, /createPageUrl\('ManutencaoSistema'\)/, 'Dados navega para Backup e Manutenção (deep link ?secao é da tela de manutenção)');
-  assert.match(page, /onClick=\{goToMaintenance\}[^>]*>\s*<HardDriveDownload[^>]*\/>Abrir Backup e Manutenção/, 'botão "Abrir Backup e Manutenção"');
+  assert.match(page, /onClick=\{goToMaintenance\} title="Abrir Backup e Manutenção" aria-label="Abrir Backup e Manutenção">\s*<HardDriveDownload[^>]*\/>/, 'botão de ícone "Abrir Backup e Manutenção" (título e rótulo acessível)');
   assert.match(page, /err\?\.code === 'CONFIG_INVALID' && err\.field/, 'erro de validação do serviço aponta o campo');
   assert.match(page, /focusField\(err\.field\)/, 'campo inválido recebe o foco');
   assert.ok(!/console\.(log|info|debug)/.test(page), 'página sem console.log');

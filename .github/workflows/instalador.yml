@@ -1,0 +1,92 @@
+name: Gerar instalador
+
+# Gera o instalador do Windows (.exe) numa máquina Windows do GitHub.
+#
+# - Manual: aba Actions → "Gerar instalador" → Run workflow. O .exe fica em
+#   "Artifacts", no fim da página da execução.
+# - Por tag: ao criar a tag vX.Y.Z (igual à versão do package.json), além do
+#   artifact, publica o .exe na página Releases do repositório.
+#
+# Enquanto não há certificado de assinatura, usa o build sem assinatura
+# (dist:unsigned): o Windows mostra "Editor desconhecido" ao instalar.
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+  # Em PR, só quando muda a versão/dependências (package.json) ou o próprio workflow:
+  # o .exe de teste fica nos Artifacts da execução.
+  pull_request:
+    paths: ['package.json', '.github/workflows/instalador.yml']
+
+concurrency:
+  group: instalador-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Build sem permissão de escrita: roda código do PR (npm ci, scripts de build).
+  instalador:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Conferir tag com a versão do package.json
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          versao="v$(node -p "require('./package.json').version")"
+          if [ "$versao" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::A tag $GITHUB_REF_NAME não bate com a versão do package.json ($versao)."
+            exit 1
+          fi
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar instalador (sem assinatura)
+        run: npm run dist:unsigned
+
+      - name: Guardar instalador
+        uses: actions/upload-artifact@v4
+        with:
+          name: instalador-windows
+          path: |
+            release-unsigned/*.exe
+            release-unsigned/*.sha256
+            release-unsigned/*.json
+          if-no-files-found: error
+          retention-days: 30
+
+  # Só a tag publica em Releases; este job não roda código do repositório.
+  publicar:
+    needs: instalador
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: instalador-windows
+          path: release-unsigned
+
+      - name: Publicar em Releases
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release-unsigned/*.exe
+            release-unsigned/*.sha256
+            release-unsigned/*.json
+          body: |
+            Instalador sem assinatura de código: o Windows mostra "Editor desconhecido"
+            ao instalar. Clique em "Mais informações" → "Executar assim mesmo".
