@@ -1,6 +1,6 @@
 name: Testes
 
-# Roda lint, build e a bateria rápida de verificações (test:quick) em todo PR
+# Roda lint, build, a bateria rápida de verificações (test:quick) e o E2E do app em todo PR
 # e em todo push na main, para nenhuma versão sair com verificação quebrada.
 on:
   pull_request:
@@ -19,11 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -36,3 +36,8 @@ jobs:
 
       - name: Verificações (test:quick)
         run: xvfb-run -a npm run test:quick
+
+      # App desktop de verdade (Electron + Playwright): primeiro acesso, cadastro,
+      # lançamento, repesagem, Relação e reabertura com os dados.
+      - name: E2E do app (Electron)
+        run: xvfb-run -a npm run e2e:electron:verify

@@ -54,6 +54,8 @@ const dialogFiles = [
   'src/components/pesagens/GerenciarSaidasDialog.jsx',
   'src/components/pesagens/ConfigurarResumosDialog.jsx',
   'src/components/pesagens/SelecionarAnimalDialog.jsx',
+  'src/components/pesagens/ConferirPesoDialog.jsx',
+  'src/components/pesagens/ConfirmarExclusaoLancamentoDialog.jsx',
 ];
 
 let dialogCount = 0;

@@ -66,7 +66,8 @@ const REGRAS_INICIAIS = Object.freeze({
 
 const CATALOGOS_VAZIOS = Object.freeze({ marcas: [], racas: [], categorias: [], apartacoes: [], lotes: [] });
 
-const carimbo = () => new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+// \D em vez de colchetes com hífen, dois-pontos e T: o Tailwind lia aquele trecho como classe e gerava CSS inválido.
+const carimbo = () => new Date().toISOString().slice(0, 19).replace(/\D/g, '');
 
 // Tipo pré-escolhido pela tela que abriu o assistente (hoje: Sanidade › Aplicações →
 // #/Importacao?tipo=SANIDADE). Valor desconhecido é ignorado: o assistente abre normal.
