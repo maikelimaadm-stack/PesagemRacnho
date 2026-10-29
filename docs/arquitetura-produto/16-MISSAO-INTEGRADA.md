@@ -134,3 +134,25 @@ essa identificação pertence a **um** animal.
   do fechamento abria outra sessão, que ficava aberta.
 - **Reabrir:** reabre a sessão mais recente.
 - **Preservado:** lançar num dia fechado continua permitido, como antes. Mudar isso é decisão de produto.
+
+## ADR-057 — Backup: comando único verificado por leitura de volta (P19, P21, P24, P26)
+
+**Decisão.**
+- **Comando único.** `createBackupNow` grava o backup completo e o lê de volta pelo IPC `app:readUserFile`.
+  Esse canal tem a mesma contenção da gravação: só a pasta de dados do usuário, sem caminho vindo do renderer.
+  Na leitura de volta são conferidos:
+  - o SHA-256 do arquivo contra o gravado;
+  - o JSON;
+  - o formato, o SHA-256 do conteúdo e as contagens;
+  - o esquema (`dryRunRestore`).
+
+  Só então o backup conta como **verificado**, e o resultado vai para `backupHistory` (`verify`).
+- **Compatibilidade.** `createDatabaseBackup` e `createFullDataBackup` passam a delegar ao comando único.
+- **Situação da proteção.** `getBackupStatus` informa a proteção (`VERIFICADO`, `NAO_VERIFICADO` ou
+  `SEM_BACKUP`), o último backup verificado e o estado de cada arquivo da pasta (verificado, falhou ou não
+  verificado).
+- **Exportação não é backup.** A exportação de pesagens (`type: weighing-entries-export`) é recusada na
+  restauração com mensagem própria (`DEXIE_BACKUP_007`).
+- **Dado sensível.** O aviso aparece na tela e no guia. A criptografia opcional fica para F22.
+- **Reparo geral.** `reconcileDerivations` (ADMIN, `maintenance.migrate`) cria um backup verificado antes de
+  rodar `reconcileAllAnimalDerivations`.

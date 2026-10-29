@@ -22,19 +22,19 @@ Base: `origin/main` 9392274 (app 1.5.6, Dexie v8). Atualizado a cada checkpoint.
 | P11 | **risco reproduzido** em teste de domínio (número reaproveitado na marca) → corrigido: sem ligação por coincidência quando ambíguo; lista de exceções na integridade | `ambiguousLegacyKeys`/`getAnimalHistory` (domain/animalHistory), `logicalIntegrity().warnings`, ADR-056 | `animalHistory.test.js` | — | PASS |
 | P12 | **confirmado** → corrigido: data anterior validada com `parseCivilDate`; timeline recusa data impossível | `weighingCalculations.js`, `animalTimeline` | `weighingCalculations.test.js` (30/02, negativos e zero), `scripts/verify-weighing-integrity.mjs` (`npm run weighing:integrity:verify`) | — | PASS |
 | P13 | **confirmado** (main: 3 → 8 linhas em 5 reconstruções) → corrigido: só grava a diferença | `rebuildAnimalLotProjection` + `deriveLotStays`, ADR-054 | `scripts/verify-weighing-integrity.mjs` (`npm run weighing:integrity:verify`) (5 reconstruções sem mudança; movimentos idem; reparo geral idempotente) | reprodução na main registrada | PASS |
-| P14 | confirmado: só há backups pré-operação; não há agenda periódica nem cópia externa | — | — | — | PENDENTE |
+| P14 | **confirmado**: só backups pré-operação; periódico + cópia externa entram em F20/F21 (fase B, como pede o prompt A3) | serviço base pronto (`createBackupNow` verificado) | — | — | PENDENTE (→ F20/F21) |
 | P15 | **decisão preservada**: peso inteiro (`Math.floor`) mantido; leitura bruta guardada em `balanca_leitura.kg_bruto` | ADR-052 (`docs/arquitetura-produto/16-MISSAO-INTEGRADA.md`), allowlist `peso_origem`/`balanca_leitura` | `equipment:contract:verify` (formatWeightForField), E2E (bruto 328,4 → gravado 328) | — | PASS |
 | P16 | homologação física da S3 — sem balança no ambiente da missão | roteiro `VALIDACAO-MANUAL-WINDOWS-S3.md` (12 cenários) | simulador modo S3 + E2E + testes de unidade/serviço | não executado com equipamento real | BLOQUEADO (pendente de homologação física) |
 | P17 | sem defeito relatado; auditoria achou fechamento do dia que deixava sessão aberta → corrigido; refresh pós-lançamento/importação coberto por `refetchOnMount` (1.5.6) e E2E | `closeWeighingDay`/`reopenWeighingDay`, ADR-056 | `scripts/verify-weighing-integrity.mjs` (`npm run weighing:integrity:verify`) (fechar, lançar, fechar), E2E Relação | — | PASS |
-| P18 | configuração administrativa do GitHub (proteção da `main`) — fora do alcance; registrar recomendação | — | — | — | PENDENTE |
-| P19 | confirmado: `createDatabaseBackup` e `createFullDataBackup` chamam `persistFullBackup` igual; dois botões | — | — | — | PENDENTE |
-| P20 | confirmado: Manutenção mistura backup, migração, export/import, limpeza, diagnóstico e relatórios | — | — | — | PENDENTE |
-| P21 | confirmado: `listBackups` lista nome/tamanho/data dos 10 primeiros, sem "último verificado" | — | — | — | PENDENTE |
-| P22 | confirmado: backup só na pasta local do app; nenhuma cópia em destino independente | — | — | — | PENDENTE |
-| P23 | confirmado: Configurações num formulário misto (geral, curral, comercial, segurança, relatórios, balança, dados) | — | — | — | PENDENTE |
-| P24 | confirmado: JSON de backup, export de pesagens e import JSON na mesma tela | — | — | — | PENDENTE |
-| P25 | confirmado: docs de backup citam 1.2.0/banco v7; detalhes técnicos na área comum | — | — | — | PENDENTE |
-| P26 | confirmado: backup completo é JSON em texto puro com dados comerciais e hash/salt de senha | — | — | — | PENDENTE |
+| P18 | configuração administrativa do GitHub — não alterada (sem permissão; proibido pelo prompt) | recomendação exata em `RECOMENDACAO-P18.md` (checks `testes`/`instalador`, PR obrigatório, sem force-push); publicação só por tag (job `publicar` separado) | — | — | BLOQUEADO (ação do proprietário) |
+| P19 | **confirmado** → corrigido: um comando `createBackupNow` (grava + verifica); nomes antigos delegam a ele; tela com um botão só | `maintenanceDataAdapter.createBackupNow`, `maintenanceService`, `ManutencaoSistema` | `scripts/verify-backup-recovery.mjs` (`npm run backup:recovery:verify`), E2E (botão único + verificado) | — | PASS |
+| P20 | **confirmado**: tela mistura rotinas; separação estrutural é F19/F24 (fase B). A3: botão único, exportação rotulada, reparo só ADMIN | `ManutencaoSistema` (rótulos) | — | — | PENDENTE (→ F19/F24) |
+| P21 | **confirmado** → corrigido: "verificado" só com leitura de volta (IPC `app:readUserFile` contido); status separa último verificado × não verificado × falhou; botão Verificar por arquivo | `electron/main.cjs` (`app:readUserFile`), `verifyBackupFile`, `getBackupStatus`, tela | `scripts/verify-backup-recovery.mjs` (`npm run backup:recovery:verify`) (truncado, adulterado, trocado), E2E | — | PASS |
+| P22 | **confirmado**: backup só na pasta local; cópia em destino independente é F21 (fase B) | — | — | — | PENDENTE (→ F21) |
+| P23 | **confirmado**: Configurações num formulário misto; separação é F25/F26 (fase B) | — | — | — | PENDENTE (→ F25/F26) |
+| P24 | **confirmado** → corrigido: exportação rotulada "(não é backup)"; restauração recusa exportação de pesagens com mensagem clara (`DEXIE_BACKUP_007`) | `backupService.readBackup`, tela | `scripts/verify-backup-recovery.mjs` (`npm run backup:recovery:verify`) | — | PASS |
+| P25 | **confirmado** → corrigido: `docs/user/BACKUP-E-RESTAURACAO.md` reescrito para a versão vigente (banco 8, formato 3, botão único, verificação, reconciliar, exportação ≠ backup) | doc de usuário | `npm run docs:user:verify` | — | PASS (detalhes técnicos sob Avançado: ver F24) |
+| P26 | **confirmado** (risco, sem vazamento) → mitigado: aviso de dado sensível na tela e no guia; diagnóstico sem hash/salt (provado); permissões mantidas. Criptografia opcional do arquivo: F22 | tela, guia, `getDiagnosticSnapshot` | `scripts/verify-backup-recovery.mjs` (`npm run backup:recovery:verify`) | — | PASS parcial (criptografia em F22) |
 
 ## Fase B — novas capacidades (F01–F26)
 

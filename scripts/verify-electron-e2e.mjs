@@ -224,7 +224,16 @@ try {
   assert.deepEqual(origem, { origem: 'BALANCA', bruto: 328.4 }, 'pesagem pela balança grava a origem e o peso bruto');
   await win.getByRole('button', { name: 'Desligar pesagem automática' }).click();
 
-  // 8. Relatórios abre sem erro.
+  // 8. Backup (P19/P21): um botão só, que grava e lê de volta pela ponte do Electron; o quadro mostra
+  // o último backup VERIFICADO e o arquivo aparece como verificado no catálogo.
+  await irPara(win, 'ManutencaoSistema');
+  await win.getByRole('button', { name: 'Criar backup agora' }).click();
+  await win.getByText('Backup criado e verificado.').first().waitFor({ timeout: 30000 });
+  await win.getByText('Último backup verificado:').first().waitFor();
+  assert.ok(await win.locator('[data-backup-estado="VERIFICADO"]').count() >= 1, 'catálogo mostra o arquivo verificado');
+  assert.equal(await win.getByRole('button', { name: /Criar backup completo|Criar backup do banco/ }).count(), 0, 'P19: sem os dois botões antigos');
+
+  // 9. Relatórios abre sem erro.
   await irPara(win, 'Relatorios');
   await win.getByText('Relatório de Pesagens Individuais').first().waitFor();
 
