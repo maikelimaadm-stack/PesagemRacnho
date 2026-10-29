@@ -167,7 +167,26 @@ try {
   await win.getByText(RELACAO).waitFor();
   assert.equal(await contarLinhas(win, '7001', 2), 2, 'pesagens continuam após reabrir o app');
 
-  // 6. Relatórios abre sem erro.
+  // 6. Cadastro feito depois de abrir a Relação aparece na edição em lote dela
+  // (a Relação já tinha carregado as marcas antes; não pode ficar com a lista velha).
+  await irPara(win, 'Marcas');
+  await win.locator('.aux-new-button').first().click();
+  await win.getByLabel('Marca', { exact: true }).fill('NOVA');
+  await win.getByLabel('Abreviação').fill('NOV');
+  await win.getByTitle('Salvar (Enter)').click();
+  await win.locator('table tbody tr').filter({ hasText: 'NOVA' }).first().waitFor();
+  await irPara(win, 'PesagensIndividuais');
+  await win.getByText(RELACAO).waitFor();
+  await win.getByLabel('Selecionar pesagem 7001').first().click();
+  await win.getByRole('button', { name: /Ações para 1 registros selecionados/ }).click();
+  await win.getByRole('menuitem', { name: /Identificação e classificação/ }).click();
+  const perfil = win.getByRole('dialog').filter({ hasText: 'Identificação e classificação' });
+  await perfil.getByText('Marca', { exact: true }).locator('..').getByRole('combobox').click();
+  const novaVisivel = await win.getByRole('option', { name: 'NOVA' }).waitFor({ timeout: 5000 }).then(() => true, () => false);
+  assert.ok(novaVisivel, 'marca criada depois de abrir a Relação aparece na edição em lote');
+  await win.keyboard.press('Escape');
+
+  // 7. Relatórios abre sem erro.
   await irPara(win, 'Relatorios');
   await win.getByText('Relatório de Pesagens Individuais').first().waitFor();
 
