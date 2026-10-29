@@ -3,6 +3,21 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.5.5] — 2026-10-29
+
+Primeira versão com instalador gerado no GitHub Actions. Esquema Dexie **8** e backup **formato 3**, sem mudança.
+Notas em `docs/release/1.5.5/RELEASE-NOTES.md`.
+
+### Added
+- Workflow **Testes** (lint, build e `test:quick` em todo PR) e **Gerar instalador** (Windows, `dist:unsigned`;
+  artifact e, por tag `vX.Y.Z`, página Releases).
+
+### Fixed
+- `test:quick` verde de novo: docs de arquitetura restaurados, stub de `session` no boot do main e gates de UI
+  alinhados ao desenho da 1.5.4.
+- Relação: unidade "kg" no rótulo do rodapé; "Lançar pesagem" com o botão padrão da Tela Mãe.
+- Seletor de marca declara a dimensão padrão de diálogo (`--compact`).
+
 ## [1.5.4] — 2026-10-28
 
 Pesagem automática acompanha o monitor da balança (peso e estabilização) sem zerar ao salvar.

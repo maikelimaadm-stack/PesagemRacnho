@@ -13,8 +13,10 @@ on:
   workflow_dispatch:
   push:
     tags: ['v*']
+  # Em PR, só quando muda a versão/dependências (package.json) ou o próprio workflow:
+  # o .exe de teste fica nos Artifacts da execução.
   pull_request:
-    paths: ['.github/workflows/instalador.yml']
+    paths: ['package.json', '.github/workflows/instalador.yml']
 
 concurrency:
   group: instalador-${{ github.ref }}
