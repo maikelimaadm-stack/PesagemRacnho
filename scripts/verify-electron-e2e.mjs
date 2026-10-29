@@ -233,7 +233,30 @@ try {
   assert.ok(await win.locator('[data-backup-estado="VERIFICADO"]').count() >= 1, 'catálogo mostra o arquivo verificado');
   assert.equal(await win.getByRole('button', { name: /Criar backup completo|Criar backup do banco/ }).count(), 0, 'P19: sem os dois botões antigos');
 
-  // 9. Relatórios abre sem erro.
+  // 9. Entradas (F01) e Inventário (F17): compra de 2 animais (um sem peso) pela tela, conferência com aviso,
+  // confirmação; o inventário do dia conta as 2 compras.
+  await irPara(win, 'Entradas');
+  await win.getByRole('button', { name: /Nova entrada/ }).click();
+  await win.getByLabel('Número do animal 1').fill('8001');
+  await win.getByLabel('Marca do animal 1').selectOption({ label: 'E2E' });
+  await win.getByLabel('Sexo do animal 1').selectOption('M');
+  await win.getByLabel('Peso do animal 1').fill('250');
+  await win.getByRole('button', { name: 'Animal', exact: true }).click();
+  await win.getByLabel('Número do animal 2').fill('8002');
+  await win.getByLabel('Marca do animal 2').selectOption({ label: 'E2E' });
+  await win.getByLabel('Sexo do animal 2').selectOption('F');
+  await win.getByRole('button', { name: /Conferir e confirmar/ }).click();
+  await win.getByText(/sem peso: ficam pendentes de pesagem/).first().waitFor();
+  await win.getByLabel('Conferi os avisos acima').check();
+  await win.getByRole('button', { name: /Conferir e confirmar/ }).click();
+  await win.getByText('Compra confirmada: 2 animal(is).').first().waitFor({ timeout: 15000 });
+  await win.locator('.rb-row').filter({ hasText: 'Compra' }).first().waitFor();
+  await irPara(win, 'Inventario');
+  const compras = win.locator('.rb-table--balance tr').filter({ hasText: '+ Compras' });
+  await compras.first().waitFor({ timeout: 15000 });
+  assert.equal((await compras.first().locator('td').innerText()).trim(), '2', 'inventário conta as 2 compras');
+
+  // 10. Relatórios abre sem erro.
   await irPara(win, 'Relatorios');
   await win.getByText('Relatório de Pesagens Individuais').first().waitFor();
 

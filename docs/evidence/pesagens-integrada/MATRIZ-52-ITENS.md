@@ -48,9 +48,9 @@ restaurável no app v9. Gate: `npm run migration:v9:verify` (no `test:quick`/`te
 
 | ID | Capacidade | Código | Teste automatizado | Evidência | Status |
 |---|---|---|---|---|---|
-| F01 | Entradas (Compra, Transferência recebida, Nascimento, Ajuste) | — | — | — | PENDENTE |
-| F02 | Saídas (Venda, Abate, Transferência enviada, Morte, Doação, Ajuste) | — | — | — | PENDENTE |
-| F03 | Movimentações / livro de movimentos | — | — | — | PENDENTE |
+| F01 | Entradas (Compra, Transferência recebida, Nascimento, Ajuste) | `modules/livestock` (operationRules, operationsDataAdapter, operationsService), tela Rebanho › Entradas | `scripts/verify-livestock-operations.mjs` (`npm run livestock:operations:verify`), `operationRules.test.js`, E2E passo 9 | entrada sem peso = PENDENTE_PESAGEM (sem 0 kg); Cadastro posterior adota a entrada; identificação em uso recusada sem gravar; nascimento com mãe | PASS |
+| F02 | Saídas (Venda, Abate, Transferência enviada, Morte, Doação, Ajuste) | idem, tela Rebanho › Saídas | `livestock:operations:verify` | Venda/Abate exigem peso; Morte sem peso = nulo; operação atômica; ajuste com justificativa; cancelamento reabre o animal. Carência no abate: F10 | PASS (carência → F10) |
+| F03 | Movimentações / livro de movimentos | idem + `weighingMovements` (`lotEvents`), tela Rebanho › Movimentações | `livestock:operations:verify` | movimentação sem pesagem; pesagem seguinte no lote novo não duplica; reconciliação idempotente; mudança de propriedade; ADR-058 | PASS |
 | F04 | Nascimento/idade com precisão conhecida | — | — | — | PENDENTE |
 | F05 | Idade × era × categoria produtiva × dentição | — | — | — | PENDENTE |
 | F06 | Identificadores / estoque de brincos | — | — | — | PENDENTE |
@@ -64,7 +64,7 @@ restaurável no app v9. Gate: `npm run migration:v9:verify` (no `test:quick`/`te
 | F14 | Planejado × realizado | — | — | — | PENDENTE |
 | F15 | Rastreabilidade interna | — | — | — | PENDENTE |
 | F16 | Documentos/anexos offline | — | — | — | PENDENTE |
-| F17 | Conciliação de inventário | — | — | — | PENDENTE |
+| F17 | Conciliação de inventário | `domain/inventory.js`, tela Rebanho › Inventário (CSV) | `inventory.test.js`, `livestock:operations:verify`, E2E passo 9 | saldo pela data do evento; lote/propriedade com internas separadas; conferência por animal; cancelado não conta | PASS (categoria na data → F05) |
 | F18 | Painel do gestor | — | — | — | PENDENTE |
 | F19 | Página Backup e Restauração | — | — | — | PENDENTE |
 | F20 | Backup periódico | — | — | — | PENDENTE |

@@ -156,3 +156,45 @@ essa identificação pertence a **um** animal.
 - **Dado sensível.** O aviso aparece na tela e no guia. A criptografia opcional fica para F22.
 - **Reparo geral.** `reconcileDerivations` (ADMIN, `maintenance.migrate`) cria um backup verificado antes de
   rodar `reconcileAllAnimalDerivations`.
+
+## ADR-058 — Operações de rebanho com efeito único no livro (F01, F02, F03, F17)
+
+**Decisão.**
+- **Operação.** Uma operação tem cabeçalho (`operacoes`) e itens por animal (`operacaoItens`). A confirmação
+  roda numa **única transação Dexie** sobre todas as stores. As pesagens geradas usam o mesmo
+  `createEntry`/`bulkDeleteEntries` do Lançamento: o Dexie aninha essas transações na da operação. Assim a
+  operação herda linha do tempo, movimentos, lotes, derivados e estado. Um animal inválido desfaz a operação
+  inteira.
+- **Efeito no livro.** Cada item gera um único efeito:
+  - **ENTRADA:** movimento da operação, com o tipo real (Compra, Nascimento…) e sem pesagem. Se houver peso, o
+    Cadastro gerado **adota** esse movimento. A reconciliação casa o movimento adotado pela pesagem, não pelo
+    tipo, e por isso não cria uma segunda entrada.
+  - **SAÍDA:** pesagem de Saída com `operacao_id`. O movimento SAIDA deriva dela, e "uma saída por animal"
+    continua valendo.
+  - **MOVIMENTAÇÃO:** movimento INTERNO sem pesagem. Ele entra como `lotEvents` na derivação de permanências e
+    movimentos (`weighingMovements`): a projeção não desfaz a movimentação e a pesagem seguinte no lote novo
+    não gera outra mudança de lote.
+- **Entrada sem peso.** O animal fica `PENDENTE_PESAGEM`; sem número, fica `PENDENTE_IDENTIFICACAO`. O
+  primeiro Cadastro com o mesmo número e marca, sem `animal_id`, usa o animal pendente: não cria outro.
+- **Peso.**
+  - Venda e Abate exigem peso, medido ou informado no negócio.
+  - Morte, Doação e Transferência aceitam saída sem peso.
+  - O Ajuste de saída (motivo "Outros", só por operação) aceita saída sem peso.
+- **Cancelamento.**
+  - Exige motivo; a operação não é apagada.
+  - **Entrada** com pesagens ou movimentações posteriores não pode ser cancelada. Sem histórico posterior, o
+    animal sai junto.
+  - **Saída** cancelada reabre o animal.
+  - **Operação legada** se corrige pela Relação de Pesagens.
+- **Inventário (F17).** É calculado puro sobre o livro (`domain/inventory.js`), pela **data do evento**:
+  `saldo_inicial + entradas − saídas = saldo_final`, com a classe tirada do subtipo da operação ou do tipo.
+  - **Por lote ou propriedade:** permanências, com transferências internas separadas.
+  - **Conferência:** compara com o cadastro (entrada e `data_saida`) e lista divergências por animal, sem
+    corrigir nada.
+- **Permissões.** Valem as ações existentes (`weighing.read`, `weighing.write`, `weighing.edit`), checadas no
+  serviço.
+
+**Limites desta versão.**
+- Retorno de um animal que já saiu do rebanho não é aceito na Entrada.
+- A categoria no filtro do inventário é a **atual** do animal; a era e a categoria na data entram com F05.
+- Pasto não tem cadastro próprio; a movimentação é por lote e propriedade.

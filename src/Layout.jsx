@@ -1,4 +1,4 @@
-import { BarChart3, CalendarCheck, Contact, Database, Dna, Handshake, Layers, ListChecks, MapPin, PlusCircle, Settings, Skull, Syringe, Tag, Upload, Users } from "lucide-react";
+import { ArrowLeftRight, BarChart3, CalendarCheck, ClipboardList, Contact, Database, Dna, Handshake, Layers, ListChecks, LogIn, LogOut, MapPin, PlusCircle, Settings, Skull, Syringe, Tag, Upload, Users } from "lucide-react";
 import { ModeloBase1AppShell } from "@/components/modelobase1";
 import RequirePermission from "@/components/auth/RequirePermission";
 import { useAuth } from "@/components/auth/useAuth";
@@ -77,6 +77,48 @@ const NAV_ITEMS = [
     Icon: Contact,
     group: "rebanho",
     permission: "animal.read",
+  },
+  // Operações do rebanho (Fase B, F01–F03) e inventário (F17): leitura com weighing.read; lançar,
+  // confirmar e cancelar decididos por ação dentro da tela e de novo no operationsService.
+  {
+    id: "pec-entradas",
+    title: "Entradas",
+    longTitle: "Entradas",
+    url: "Entradas",
+    Icon: LogIn,
+    group: "rebanho",
+    mobile: false,
+    permission: "weighing.read",
+  },
+  {
+    id: "pec-saidas",
+    title: "Saídas",
+    longTitle: "Saídas",
+    url: "Saidas",
+    Icon: LogOut,
+    group: "rebanho",
+    mobile: false,
+    permission: "weighing.read",
+  },
+  {
+    id: "pec-movimentacoes",
+    title: "Movimentações",
+    longTitle: "Movimentações",
+    url: "Movimentacoes",
+    Icon: ArrowLeftRight,
+    group: "rebanho",
+    mobile: false,
+    permission: "weighing.read",
+  },
+  {
+    id: "pec-inventario",
+    title: "Inventário",
+    longTitle: "Inventário",
+    url: "Inventario",
+    Icon: ClipboardList,
+    group: "rebanho",
+    mobile: false,
+    permission: "weighing.read",
   },
   {
     id: "pec-relatorios",
