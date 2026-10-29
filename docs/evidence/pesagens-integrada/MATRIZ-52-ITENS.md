@@ -36,7 +36,15 @@ Base: `origin/main` 9392274 (app 1.5.6, Dexie v8). Atualizado a cada checkpoint.
 | P25 | **confirmado** → corrigido: `docs/user/BACKUP-E-RESTAURACAO.md` reescrito para a versão vigente (banco 8, formato 3, botão único, verificação, reconciliar, exportação ≠ backup) | doc de usuário | `npm run docs:user:verify` | — | PASS (detalhes técnicos sob Avançado: ver F24) |
 | P26 | **confirmado** (risco, sem vazamento) → mitigado: aviso de dado sensível na tela e no guia; diagnóstico sem hash/salt (provado); permissões mantidas. Criptografia opcional do arquivo: F22 | tela, guia, `getDiagnosticSnapshot` | `scripts/verify-backup-recovery.mjs` (`npm run backup:recovery:verify`) | — | PASS parcial (criptografia em F22) |
 
+**Gate A:** CI verde (Testes + Gerar instalador) em 0cb292f.
+
 ## Fase B — novas capacidades (F01–F26)
+
+**Checkpoint B0 — base de dados v9 (aditiva):** Dexie v9 com `STORES_V9` (v7/v8 intactas), stores novas vazias,
+`natureza` ENTRADA/SAIDA/INTERNA nos movimentos, operações LEGADAS (Entrada por dia, Saída por dia e motivo) com
+item por pesagem, sem inventar parceiro/preço/documento; backfill idempotente com backup pré-migração; backup v8
+restaurável no app v9. Gate: `npm run migration:v9:verify` (no `test:quick`/`test:full`). Modelo:
+`docs/arquitetura-produto/17-MODELO-DADOS-V9.md`.
 
 | ID | Capacidade | Código | Teste automatizado | Evidência | Status |
 |---|---|---|---|---|---|

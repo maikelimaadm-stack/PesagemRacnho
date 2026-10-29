@@ -515,7 +515,17 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
           {relatorio && (
             <div className="border border-slate-200 rounded-md p-3 bg-slate-50 text-xs text-slate-600 space-y-1">
               <p className="font-semibold text-slate-700">Relatório da migração</p>
-              {relatorio.storesCriadas !== undefined ? (
+              {relatorio.operacoesLegadasEntrada !== undefined ? (
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                <li className="col-span-2">Stores criadas: {(relatorio.storesCriadas || []).join(", ") || "—"}</li>
+                <li>Movimentos classificados: {fmtInt(relatorio.movimentosComNatureza || 0)}</li>
+                <li>Movimentos sem classificação: {fmtInt(relatorio.movimentosSemNatureza || 0)}</li>
+                <li>Entradas legadas (operações): {fmtInt(relatorio.operacoesLegadasEntrada || 0)}</li>
+                <li>Saídas legadas (operações): {fmtInt(relatorio.operacoesLegadasSaida || 0)}</li>
+                <li>Itens legados: {fmtInt(relatorio.itensLegados || 0)}</li>
+                <li>Pesagens já convertidas: {fmtInt(relatorio.pesagensJaConvertidas || 0)}</li>
+              </ul>
+              ) : relatorio.storesCriadas !== undefined ? (
               <ul className="grid grid-cols-2 gap-x-4 gap-y-0.5">
                 <li className="col-span-2">Stores criadas: {(relatorio.storesCriadas || []).join(", ") || "—"}</li>
                 <li>Programas de sanidade: {fmtInt(relatorio.programasSanidade || 0)}</li>

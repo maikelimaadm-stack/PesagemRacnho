@@ -262,9 +262,18 @@ export async function resetAllData({ confirmedByAdmin = false } = {}) {
 }
 
 // Relatório resumido por versão: v7 descreve a conversão dos cadastros; v8
-// (ADR-049) só as contagens das stores de sanidade criadas.
+// (ADR-049) só as contagens das stores de sanidade criadas; v9 a natureza dos
+// movimentos e as operações legadas (17-MODELO-DADOS-V9.md).
 function reportSummary(relatorio) {
   if (!relatorio) return null;
+  if (relatorio.operacoesLegadasEntrada !== undefined) {
+    return {
+      storesCriadas: relatorio.storesCriadas || [],
+      movimentosComNatureza: relatorio.movimentosComNatureza, movimentosSemNatureza: relatorio.movimentosSemNatureza,
+      operacoesLegadasEntrada: relatorio.operacoesLegadasEntrada, operacoesLegadasSaida: relatorio.operacoesLegadasSaida,
+      itensLegados: relatorio.itensLegados, pesagensJaConvertidas: relatorio.pesagensJaConvertidas,
+    };
+  }
   if (relatorio.storesCriadas !== undefined) {
     return {
       storesCriadas: relatorio.storesCriadas || [],

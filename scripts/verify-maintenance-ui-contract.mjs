@@ -25,8 +25,9 @@ const adapter = join(root, 'src/modules/maintenance/infrastructure/maintenanceDa
 assert(existsSync(page), 'ManutencaoSistema.jsx exists');
 const pageSrc = readFileSync(page, 'utf8');
 assert(pageSrc.includes('maintenanceService'), 'page uses maintenanceService');
-assert(pageSrc.includes('Criar backup do banco'), 'backup sqlite button');
-assert(pageSrc.includes('Criar backup completo'), 'backup full button');
+// P19 (missão pesagens-integrada): um comando só de backup, gravado e verificado.
+assert(pageSrc.includes('Criar backup agora'), 'single backup button');
+assert(!pageSrc.includes('Criar backup do banco') && !pageSrc.includes('Criar backup completo'), 'no duplicated backup buttons');
 assert(pageSrc.includes('Exportar pesagens em CSV'), 'export csv');
 assert(pageSrc.includes('Exportar pesagens em JSON'), 'export json');
 assert(pageSrc.includes('Importar dados'), 'import apply');

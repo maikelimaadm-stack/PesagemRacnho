@@ -13,7 +13,7 @@ O **cabeçalho dos relatórios** de cada propriedade (produtor, endereço, docum
 cadastro da propriedade e vai junto no backup.
 
 O arquivo traz:
-- um manifesto com a versão do programa, a versão do banco (8), o formato do backup (3) e a contagem de registros por tabela;
+- um manifesto com a versão do programa, a versão do banco (9), o formato do backup (3) e a contagem de registros por tabela;
 - um código de conferência SHA-256 do conteúdo.
 
 > **Atenção: o backup é um arquivo sensível.** Ele contém os valores comerciais e os usuários do sistema.
