@@ -193,6 +193,8 @@ export default function LancamentoPesagensIndividuais() {
   const handleSalvarRef = useRef(null);
   // Trava imediata do salvamento (o estado isSaving só vale no próximo render: Enter duplo passava).
   const salvandoRef = useRef(false);
+  // P10: falha ao carregar o banco local (null = carregou).
+  const [erroCarregamento, setErroCarregamento] = useState(null);
   // Id do lançamento em curso: o mesmo envio repetido não cria duas pesagens (o adapter recusa id repetido).
   const cicloLancamentoRef = useRef(crypto.randomUUID());
   const pesoUiRafRef = useRef(0);
@@ -895,6 +897,7 @@ export default function LancamentoPesagensIndividuais() {
 
   const loadAllData = async () => {
     setIsLoading(true);
+    setErroCarregamento(null);
     try {
       const [allPesagens, allApartacoes, allLotes, allEmbarques, allDocs] = await Promise.all([
         weighingService.listEntries({ empresaId: empresaSelecionadaId }),
@@ -910,7 +913,10 @@ export default function LancamentoPesagensIndividuais() {
       setEmbarques(allEmbarques);
       setDocumentosEmbarque(allDocs);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      // P10: sem os dados do banco a tela não sabe quem já está cadastrado nem o que já foi pesado hoje:
+      // mostra o erro e bloqueia o salvar (lista vazia não é "nenhuma pesagem").
+      setErroCarregamento(error?.message || 'Falha ao ler o banco local.');
+      toast.error(error?.message || 'Falha ao ler o banco local.');
     } finally {
       setIsLoading(false);
     }
@@ -1056,6 +1062,10 @@ export default function LancamentoPesagensIndividuais() {
     const loteIdOverride = options?.loteId;
     // Evitar cliques duplos (a trava em ref vale já no segundo Enter, antes do novo render)
     if (isSaving || salvandoRef.current) return;
+    if (erroCarregamento) {
+      toast.error('Os dados do banco local não carregaram; nada foi gravado. Recarregue a tela antes de lançar.');
+      return;
+    }
 
     // Validações com avisos
     if (!parseCivilDate(dataPesagem)) {
@@ -1625,6 +1635,13 @@ export default function LancamentoPesagensIndividuais() {
         title="Lançamento de Pesagens"
         description="Registro operacional de movimentação, pesagem e apartação."
       />
+      {erroCarregamento ? (
+        <div role="alert" className="d17d-load-error mb-2 flex flex-wrap items-center gap-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+          <strong>Os dados não carregaram.</strong>
+          <span>{erroCarregamento}</span>
+          <button type="button" className="ios-btn tb-btn ml-auto" onClick={() => loadAllData()}>Tentar de novo</button>
+        </div>
+      ) : null}
       {/* FORMULÁRIO DE LANÇAMENTO */}
       <ModeloBase1ActionBar
         className="d17b-page-actionbar d17d-launch-commandbar"

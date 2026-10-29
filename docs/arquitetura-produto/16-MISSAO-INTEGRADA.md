@@ -69,3 +69,68 @@ relatórios.
 
 **Revisão futura.** Se o proprietário decidir por arredondamento ou decimal, a mudança vale só para as
 pesagens novas. A regra precisa de versão própria e de relatório de impacto.
+
+## ADR-053 — Linha do tempo do animal validada na transação (P05, P07, P12)
+
+**Decisão.** `domain/animalTimeline.js` define as invariantes de uma série de pesagens:
+1. um Cadastro e nada antes dele;
+2. uma Saída e nada depois dela;
+3. no mesmo dia vale a ordem Cadastro → Manejo → Saída;
+4. no máximo um Manejo oficial por animal e dia;
+5. toda data é um dia civil válido.
+
+**Como é aplicada.** `assertAnimalTimeline` roda **dentro** da transação de `createEntry`, `updateEntry`,
+edição em massa e repesagem. Ela valida a série inteira depois da mudança, e o IndexedDB serializa as
+gravações concorrentes do mesmo animal.
+
+**O que é recusado.** Só a violação **criada pela mudança**. Uma anomalia antiga (por exemplo, dois Manejos
+no mesmo dia aceitos de propósito na importação) não trava lançamento em outra data.
+
+**Importação.** A importação inteligente mantém a opção explícita "aceitar duplicatas" (decisão já
+existente); só o caminho de lançamento, edição e repesagem segue a regra de um Manejo por dia.
+
+**Data impossível.** `calculateWeightGain` passa a validar também a data anterior com `parseCivilDate`.
+
+## ADR-054 — Derivados das pesagens reconciliados, idempotentes e na mesma transação (P04, P08, P09, P13)
+
+**Decisão.** Lotes, movimentos, GMD e estado do animal são reconciliados, e não refeitos do zero.
+
+**Regra pura.** `domain/weighingMovements.js` deriva da série ativa:
+- os movimentos esperados (Entrada, motivo da Saída, Mudança de lote);
+- as permanências em lote.
+
+**Reconciliação no adapter.**
+- `reconcileWeighingMovements` cancela, com auditoria, o movimento cuja pesagem saiu ou mudou, e cria o
+  que falta.
+- Movimento sem `pesagem_id` (movimentação própria, fase B) nunca é tocado.
+- `rebuildAnimalLotProjection` só grava a diferença.
+- `recalculateAnimalSeriesInTransaction` recalcula os derivados na mesma transação.
+
+**Uso.** `reconcileAnimalAfterChange` (lotes → movimentos → derivados → estado) roda no fim de toda
+gravação de pesagem. Se algo falhar, nada fica gravado: não existe "gravou, mas o GMD ficou velho".
+
+**Reparo.** `reconcileAllAnimalDerivations` limpa bancos com resíduo de versões anteriores, em blocos e de
+forma idempotente. A manutenção chama com backup antes.
+
+**Custo medido.** `salvamento_local` com 36 mil pesagens: p95 de 164 → 189 ms (orçamento de 250 ms).
+
+## ADR-055 — Falha do banco local é erro, nunca lista vazia (P10)
+
+**Decisão.**
+- **Serviço:** `weighingService.listEntries` lança `WEIGHING_STORAGE_001` com mensagem para o operador
+  ("Nada foi apagado…"), em vez de devolver `[]`.
+- **Lançamento:** mostra um aviso com "Tentar de novo" e bloqueia o salvar enquanto os dados não carregam.
+- **Relação e relatórios:** já propagavam o erro (react-query `isError`, `loadEventRows`).
+
+## ADR-056 — Identidade legada cautelosa (P11) e fechamento do dia (P17)
+
+**Identidade legada.** Uma pesagem antiga sem `animal_id` só é ligada a um animal pelo número + marca quando
+essa identificação pertence a **um** animal.
+- **Caso ambíguo** (número reaproveitado na marca): ela não entra em nenhum histórico
+  (`ambiguousLegacyKeys`) e aparece em `logicalIntegrity().warnings` para conciliação manual.
+
+**Fechamento do dia.**
+- **Fechar:** fecha **todas** as sessões abertas da data. Antes fechava só a primeira; um lançamento depois
+  do fechamento abria outra sessão, que ficava aberta.
+- **Reabrir:** reabre a sessão mais recente.
+- **Preservado:** lançar num dia fechado continua permitido, como antes. Mudar isso é decisão de produto.
