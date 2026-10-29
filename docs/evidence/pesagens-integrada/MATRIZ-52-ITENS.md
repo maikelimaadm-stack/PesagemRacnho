@@ -9,9 +9,9 @@ Base: `origin/main` 9392274 (app 1.5.6, Dexie v8). Atualizado a cada checkpoint.
 
 | ID | Diagnóstico (inicial → final) | Código | Teste automatizado | Evidência | Status |
 |---|---|---|---|---|---|
-| P01 | confirmado na leitura: após salvar com pesagem automática, o próximo formulário recebe `status.lastWeightKg ?? getLastStableReading()` (Lançamento, pós-save) — o animal B pode ser salvo com o peso do A sem leitura nova | — | — | — | PENDENTE |
-| P02 | confirmado na leitura: `captureWeightForLaunch()` resolve `{...lastReading, stable:true}` após 5 s | — | — | — | PENDENTE |
-| P03 | confirmado na leitura: `disconnectScale()` limpa `lastReading` mas não `lastStable`; `tearDown` não limpa nenhum dos dois | — | — | — | PENDENTE |
+| P01 | **confirmado** → corrigido: o animal B era liberado com o peso do A (campo pós-save = monitor) | `domain/captureGate.js`, `scaleService.js` (`evaluateCapture`/`consumeCapture`), Lançamento (salva o peso da leitura liberada; `consumeCapture` só após gravar; `is-waiting`) | `captureGate.test.js` (A→B, plataforma vazia, troca sem esvaziar, mesmo peso, leitura tardia), `scaleService.test.js` (P01), E2E 7003/7004 | E2E falha com o portão desligado (7004 salvo com 328) | PASS |
+| P02 | **confirmado** → corrigido: `captureWeightForLaunch` promovia `lastReading` a estável após 5 s | `scaleService.captureWeightForLaunch` rejeita `SCALE_NOT_STABLE` | `scaleService.test.js` (oscilação > 5 s), `captureGate.test.js` (oscilação contínua) | — | PASS |
+| P03 | **confirmado** → corrigido: `lastStable` sobrevivia à desconexão/tearDown | `scaleService` (`epoch`, `bumpEpoch` em conexão/queda/tearDown/disconnect; `getLastStableReading` só da época atual; silêncio durante queda não confirma) | `scaleService.test.js` (queda do link, desconectar, troca de aparelho, seq monotônica), `captureGate.test.js` (reconexão) | — | PASS |
 | P04 | confirmado na leitura: `bulkDeleteEntries` não cancela o `movimentosAnimais` da pesagem cancelada (só no animal órfão); o comentário de `replaceEntries` admite | — | — | — | PENDENTE |
 | P05 | risco a reproduzir: editar o Cadastro ignora o próprio registro e não confere eventos anteriores à nova data | — | — | — | PENDENTE |
 | P06 | confirmado na leitura: `updateEntry` (Cadastro) muda número/marca em `animais` sem tocar `animalIdentificadores` nem checar colisão | — | — | — | PENDENTE |
@@ -23,8 +23,8 @@ Base: `origin/main` 9392274 (app 1.5.6, Dexie v8). Atualizado a cada checkpoint.
 | P12 | confirmado na leitura: `calculateWeightGain` valida a data atual com `parseCivilDate`, mas a anterior só com `toUtcDay` (30/02 vira 02/03) | — | — | — | PENDENTE |
 | P13 | confirmado na leitura: `rebuildAnimalLotProjection` apaga (soft) e recria todas as permanências a cada chamada | — | — | — | PENDENTE |
 | P14 | confirmado: só há backups pré-operação; não há agenda periódica nem cópia externa | — | — | — | PENDENTE |
-| P15 | decisão de produto: campo Peso inteiro (`Math.floor`) — manter e documentar, guardar metadados brutos | — | — | — | PENDENTE |
-| P16 | homologação física da S3 — depende do equipamento real | — | — | — | PENDENTE |
+| P15 | **decisão preservada**: peso inteiro (`Math.floor`) mantido; leitura bruta guardada em `balanca_leitura.kg_bruto` | ADR-052 (`docs/arquitetura-produto/16-MISSAO-INTEGRADA.md`), allowlist `peso_origem`/`balanca_leitura` | `equipment:contract:verify` (formatWeightForField), E2E (bruto 328,4 → gravado 328) | — | PASS |
+| P16 | homologação física da S3 — sem balança no ambiente da missão | roteiro `VALIDACAO-MANUAL-WINDOWS-S3.md` (12 cenários) | simulador modo S3 + E2E + testes de unidade/serviço | não executado com equipamento real | BLOQUEADO (pendente de homologação física) |
 | P17 | sem defeito relatado; auditar sessão/cache/refresh pós-importação e repesagem | — | — | — | PENDENTE |
 | P18 | configuração administrativa do GitHub (proteção da `main`) — fora do alcance; registrar recomendação | — | — | — | PENDENTE |
 | P19 | confirmado: `createDatabaseBackup` e `createFullDataBackup` chamam `persistFullBackup` igual; dois botões | — | — | — | PENDENTE |

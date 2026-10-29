@@ -196,6 +196,32 @@ try {
   await win.getByRole('button', { name: 'Ligar pesagem automática' }).click();
   await win.locator('.d17d-weight-control.is-auto.is-stable').waitFor({ timeout: 15000 });
   assert.equal(await win.getByPlaceholder('Ex: 320').inputValue(), '328', 'peso estável do monitor no campo');
+
+  // P01: o peso estável salva UM animal; o próximo, sem a balança mudar, é recusado.
+  await escolherTipo(win, 'Cadastro (Novo Animal)');
+  await win.getByRole('combobox', { name: 'Marca do animal' }).click();
+  await win.getByRole('option', { name: /E2E/ }).first().click();
+  const salvarAuto = async (numero) => {
+    const ident = win.getByPlaceholder('Ex: 1234');
+    await ident.fill(numero);
+    await ident.press('Tab');
+    await win.getByRole('button', { name: /^Salvar/ }).click();
+  };
+  await salvarAuto('7003');
+  await linhasDoNumero(win, '7003').filter({ hasText: '328' }).first().waitFor();
+  await win.locator('.d17d-weight-control.is-auto.is-waiting').waitFor({ timeout: 5000 });
+  await salvarAuto('7004');
+  await win.getByText('Esse peso já foi usado no animal anterior').first().waitFor();
+  assert.equal(await contarLinhas(win, '7004', 0), 0, 'P01: animal seguinte não herda o peso do anterior');
+  const origem = await win.evaluate(async () => {
+    const req = indexedDB.open('pesagens-individuais');
+    const db = await new Promise((ok, err) => { req.onsuccess = () => ok(req.result); req.onerror = () => err(req.error); });
+    const rows = await new Promise((ok) => { const r = db.transaction('pesagens').objectStore('pesagens').getAll(); r.onsuccess = () => ok(r.result); });
+    db.close();
+    const row = rows.find((item) => item.legacy_payload?.numero_animal === '7003' && !item.deleted_at);
+    return { origem: row?.legacy_payload?.peso_origem, bruto: row?.legacy_payload?.balanca_leitura?.kg_bruto };
+  });
+  assert.deepEqual(origem, { origem: 'BALANCA', bruto: 328.4 }, 'pesagem pela balança grava a origem e o peso bruto');
   await win.getByRole('button', { name: 'Desligar pesagem automática' }).click();
 
   // 8. Relatórios abre sem erro.
