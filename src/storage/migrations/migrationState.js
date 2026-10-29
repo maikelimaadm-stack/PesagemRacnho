@@ -21,6 +21,7 @@ export class MigrationError extends Error {
 // Relatório por versão: cada backfill tem o seu (o da v7 descreve a conversão dos
 // cadastros; o da v8 só as contagens das stores de sanidade criadas, ADR-049).
 export function emptyMigrationReport(version = 7) {
+  if (Number(version) >= 9) return emptyMigrationReportV9();
   if (Number(version) >= 8) return emptyMigrationReportV8();
   return {
     marcas: 0,
@@ -50,6 +51,19 @@ export function emptyMigrationReportV8() {
     programasSanidade: 0,
     medicamentos: 0,
     aplicacoesSanidade: 0,
+  };
+}
+
+/** v9 aditiva (17-MODELO-DADOS-V9): stores novas, natureza dos movimentos e operações legadas. */
+export function emptyMigrationReportV9() {
+  return {
+    storesCriadas: [],
+    movimentosComNatureza: 0,
+    movimentosSemNatureza: 0,
+    operacoesLegadasEntrada: 0,
+    operacoesLegadasSaida: 0,
+    itensLegados: 0,
+    pesagensJaConvertidas: 0,
   };
 }
 

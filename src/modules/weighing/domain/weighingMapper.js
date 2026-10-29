@@ -22,6 +22,8 @@ export const LEGACY_PAYLOAD_ALLOWLIST = Object.freeze([
   // Missão pesagens-integrada (P01/P15): de onde veio o peso (BALANCA | MANUAL) e a leitura bruta da
   // balança usada { kg_bruto, seq, epoch, fonte, lida_em } — o peso gravado continua inteiro.
   'peso_origem', 'balanca_leitura',
+  // v9 (Fase B): operação de Entrada/Saída que gerou a pesagem (17-MODELO-DADOS-V9).
+  'operacao_id',
 ]);
 
 // Proibidas em gravação nova: redundantes com colunas/timestamps do registro

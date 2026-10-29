@@ -9,6 +9,7 @@
 // E1G: Cadastro antecipado pelo Histórico — no mesmo lote (mesma transação) o Cadastro gravado
 // vira Manejo (auditado como ATUALIZAR, com derivados), o movimento "Entrada" dele é cancelado,
 // o identificador visual passa a valer desde o novo Cadastro e a série é recalculada.
+import { naturezaDoTipo } from '../../livestock/domain/movementNature.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
 import { isOpenSessionStatus } from '../../../storage/indexedDb/normalize.js';
 import { filterLegacyPayload, storageRecordToViewModel, uiToStorageRecord } from '../../weighing/domain/weighingMapper.js';
@@ -142,6 +143,7 @@ function buildMovements(mergedViewModels, newIds, animalId, ts) {
     lote_origem_id: origem || null,
     lote_destino_id: destino,
     motivo: event.motivo_saida || null,
+    natureza: naturezaDoTipo(tipo),
     origem: 'importacao',
     created_at: ts,
     updated_at: ts,

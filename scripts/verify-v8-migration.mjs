@@ -18,12 +18,13 @@ import assert from 'node:assert/strict';
 import { CATEGORIAS_SEED } from '../src/modules/catalog/domain/seeds.js';
 import { createHash } from 'node:crypto';
 import Dexie from 'dexie';
-import { DB_NAME, DB_VERSION, SANITY_STORES, STORES_V6, STORES_V7, STORE_NAMES } from '../src/storage/indexedDb/schema.js';
+import { DB_NAME, DB_VERSION, SANITY_STORES, STORES_V6, STORES_V7, STORE_NAMES, V9_STORES } from '../src/storage/indexedDb/schema.js';
 import { deleteDbForTests, ensureStorageReady, resetDbForTests } from '../src/storage/indexedDb/db.js';
 import * as coordinator from '../src/storage/migrations/migrationCoordinator.js';
 import { MIGRATION_STATUS, clearWriteBlock, emptyMigrationState, getWriteBlock, isWriteBlocked, readMigrationState } from '../src/storage/migrations/migrationState.js';
 import { V7_STEPS } from '../src/storage/migrations/v7Backfill.js';
 import { V8_STEPS } from '../src/storage/migrations/v8Backfill.js';
+import { V9_STEPS } from '../src/storage/migrations/v9Backfill.js';
 import { logicalIntegrity } from '../src/storage/indexedDb/health/health.js';
 import { setActorProvider } from '../src/storage/indexedDb/auditActor.js';
 import storage from '../src/storage/storageAdapter.js';
@@ -151,6 +152,13 @@ const dataStores = Object.keys(STORES_V7).filter((name) => !['appSettings', 'bac
 // O passo S2 aplica o pré-cadastro de categorias (e audita o que fez): essas duas stores mudam
 // de propósito na v8. Todo o resto tem de sair exatamente como entrou.
 const storesIntactas = dataStores.filter((name) => !['categoriasAnimal', 'auditoria'].includes(name));
+// v9 (aditiva) grava `natureza` (e o vínculo com a operação legada) nos movimentos existentes: fora esses
+// campos, o movimento tem de sair exatamente como entrou.
+const V9_MOVEMENT_FIELDS = ['natureza', 'operacao_id', 'updated_at'];
+const semCamposV9 = (name, rows) => (name === 'movimentosAnimais'
+  ? rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !V9_MOVEMENT_FIELDS.includes(key))))
+  : rows);
+const CADEIA = [7, 8, 9];
 
 // ---------------------------------------------------------------------------
 // Caso A — upgrade v7 → v8 com dados reais simulados.
@@ -159,9 +167,9 @@ let v7BackupJson = null;
 {
   const before = await seedV7();
   const inspection = await coordinator.inspectDatabase();
-  assert.deepEqual({ currentVersion: inspection.currentVersion, targetVersion: inspection.targetVersion, needsMigration: inspection.needsMigration, blockers: inspection.blockers }, { currentVersion: 7, targetVersion: 8, needsMigration: true, blockers: [] });
-  assert.deepEqual(coordinator.MIGRATION_CHAIN, [7, 8], 'cadeia de backfills v7 → v8');
-  assert.deepEqual(coordinator.chainVersionsAfter(7), [8]);
+  assert.deepEqual({ currentVersion: inspection.currentVersion, targetVersion: inspection.targetVersion, needsMigration: inspection.needsMigration, blockers: inspection.blockers }, { currentVersion: 7, targetVersion: DB_VERSION, needsMigration: true, blockers: [] });
+  assert.deepEqual(coordinator.MIGRATION_CHAIN, CADEIA, 'cadeia de backfills v7 → v8 → v9');
+  assert.deepEqual(coordinator.chainVersionsAfter(7), [8, 9]);
 
   const files = makeFilesPort();
   const pendingSeen = {};
@@ -191,18 +199,21 @@ let v7BackupJson = null;
   assert.equal(result.migrated, true);
   assert.equal(result.blocked, false, JSON.stringify(result.error));
   assert.equal(isWriteBlocked(), false);
-  assert.equal(result.state.versao, 8);
+  assert.equal(result.state.versao, DB_VERSION, 'a cadeia termina na versão vigente');
   assert.equal(result.state.status, MIGRATION_STATUS.CONCLUIDA);
-  assert.deepEqual(result.state.passos_concluidos, V8_STEPS);
-  assert.deepEqual(result.state.relatorio, { storesCriadas: SANITY_STORES, programasSanidade: 0, medicamentos: 0, aplicacoesSanidade: 0, categoriasCriadas: result.state.relatorio.categoriasCriadas, categoriasAtualizadas: result.state.relatorio.categoriasAtualizadas, categoriasRemovidas: result.state.relatorio.categoriasRemovidas }, 'relatório próprio da v8');
-assert.equal(typeof result.state.relatorio.categoriasCriadas, 'number', 'S2 registra o pré-cadastro de categorias aplicado');
+  const v8 = result.states[8];
+  assert.equal(v8.status, MIGRATION_STATUS.CONCLUIDA);
+  assert.deepEqual(v8.passos_concluidos, V8_STEPS);
+  assert.deepEqual(v8.relatorio, { storesCriadas: SANITY_STORES, programasSanidade: 0, medicamentos: 0, aplicacoesSanidade: 0, categoriasCriadas: v8.relatorio.categoriasCriadas, categoriasAtualizadas: v8.relatorio.categoriasAtualizadas, categoriasRemovidas: v8.relatorio.categoriasRemovidas }, 'relatório próprio da v8');
+assert.equal(typeof v8.relatorio.categoriasCriadas, 'number', 'S2 registra o pré-cadastro de categorias aplicado');
+  assert.deepEqual(result.states[9].passos_concluidos, V9_STEPS, 'v9 roda depois da v8');
   assert.deepEqual(result.states[7], before.appSettings.find((item) => item.key === 'migration:v7').value, 'estado da v7 intacto (a v7 não é reexecutada)');
-  assert.ok(progress.length > 0 && progress.every((p) => p.versao === 8 && V8_STEPS.includes(p.passo)), 'só o backfill v8 reporta progresso');
+  assert.ok(progress.length > 0 && progress.every((p) => (p.versao === 8 && V8_STEPS.includes(p.passo)) || (p.versao === 9 && V9_STEPS.includes(p.passo))), 'só os backfills v8 e v9 reportam progresso (a v7 não reexecuta)');
 
   // Backup pré-migração: nome da versão alvo, formato/dados da v7, validado por SHA-256 e tamanho.
   const backupFile = files.written.find((file) => file.subdir === 'backups');
   assert.ok(backupFile, 'backup pré-migração gravado');
-  assert.match(backupFile.filename, /^pre-migration-v8-\d{8}-\d{6}\.json$/);
+  assert.match(backupFile.filename, new RegExp(`^pre-migration-v${DB_VERSION}-\\d{8}-\\d{6}\\.json$`));
   assert.equal(files.written.length, 1, 'somente o backup pré-migração foi gravado');
   v7BackupJson = JSON.parse(backupFile.content);
   assert.equal(v7BackupJson.formatVersion, 3, 'banco v7 → backup formato 3 (inalterado na v8)');
@@ -214,13 +225,13 @@ assert.equal(typeof result.state.relatorio.categoriasCriadas, 'number', 'S2 regi
   assert.equal(result.state.backup.sha256, backupFile.sha256);
   assert.equal(result.state.backup.size, backupFile.size);
   assert.equal(result.state.backup.sourceVersion, 7);
-  assert.equal(result.state.backup.targetVersion, 8);
+  assert.equal(result.state.backup.targetVersion, DB_VERSION);
 
   // Dados intactos store a store, linha a linha; stores novas vazias.
   const db = await ensureStorageReady();
   assert.equal(db.verno, DB_VERSION);
   for (const name of storesIntactas) {
-    assert.deepEqual(await db.table(name).toArray(), before[name], `store ${name} intacta após a v8 (${before[name].length} registro(s))`);
+    assert.deepEqual(semCamposV9(name, await db.table(name).toArray()), semCamposV9(name, before[name]), `store ${name} intacta após a v8/v9 (${before[name].length} registro(s))`);
   }
   // S2: o pré-cadastro de categorias entra sem apagar o que já existia e sem duplicar nomes.
   const categoriasDepois = (await db.table('categoriasAnimal').toArray()).filter((row) => !row.deleted_at);
@@ -235,10 +246,10 @@ assert.equal(typeof result.state.relatorio.categoriasCriadas, 'number', 'S2 regi
   }
   for (const name of SANITY_STORES) assert.equal(await db.table(name).count(), 0, `${name} nasce vazia`);
   const settings = await db.table('appSettings').toArray();
-  assert.equal(settings.length, before.appSettings.length + 1, 'appSettings ganha só migration:v8');
+  assert.equal(settings.length, before.appSettings.length + 2, 'appSettings ganha só migration:v8 e migration:v9');
   assert.deepEqual(settings.find((item) => item.key === SANIDADE_LEGADA), before.appSettings.find((item) => item.key === SANIDADE_LEGADA), 'chave legada de sanidade não é convertida nem apagada pela v8');
   const history = (await db.table('backupHistory').toArray()).map((item) => item.tipo);
-  assert.deepEqual(history, ['migration-v7', 'pre-migration', 'migration-v8'], `histórico: ${history.join(',')}`);
+  assert.deepEqual(history, ['migration-v7', 'pre-migration', 'migration-v8', 'migration-v9'], `histórico: ${history.join(',')}`);
   const integrity = await logicalIntegrity();
   assert.deepEqual(integrity.issues, [], 'integridade do banco migrado');
   assert.equal(integrity.v7Contract, true);
@@ -248,17 +259,17 @@ assert.equal(typeof result.state.relatorio.categoriasCriadas, 'number', 'S2 regi
   const again = await coordinator.openWithMigration({ files: makeFilesPort() });
   assert.equal(again.migrated, false);
   assert.equal(again.state.status, MIGRATION_STATUS.CONCLUIDA);
-  assert.equal((await (await ensureStorageReady()).table('backupHistory').count()), 3, 'reabrir não grava histórico novo');
+  assert.equal((await (await ensureStorageReady()).table('backupHistory').count()), 4, 'reabrir não grava histórico novo');
   const dry = await coordinator.dryRunBackfill();
   assert.equal(dry.pendente, false);
-  assert.equal(dry.versao, 8);
-  assert.deepEqual(dry.cadeia, [{ versao: 7, status: 'CONCLUIDA', pendente: false }, { versao: 8, status: 'CONCLUIDA', pendente: false }]);
+  assert.equal(dry.versao, DB_VERSION);
+  assert.deepEqual(dry.cadeia, CADEIA.map((versao) => ({ versao, status: 'CONCLUIDA', pendente: false })));
   assert.equal(dry.marcas.novas, 0, 'forma histórica da v7 no topo do dry-run');
   assert.deepEqual((await coordinator.dryRunBackfill(8)).sanidade, { programasSanidade: 0, medicamentos: 0, aplicacoesSanidade: 0 });
   await rejectsCode(() => coordinator.dryRunBackfill(99), 'MIGRATION_UNKNOWN_VERSION', 'dry-run de versão sem backfill');
   const status = await coordinator.getMigrationState();
-  assert.equal(status.versao, 8);
-  assert.deepEqual(status.cadeia, [{ versao: 7, status: 'CONCLUIDA' }, { versao: 8, status: 'CONCLUIDA' }]);
+  assert.equal(status.versao, DB_VERSION);
+  assert.deepEqual(status.cadeia, CADEIA.map((versao) => ({ versao, status: 'CONCLUIDA' })));
   assert.equal((await coordinator.getMigrationState(7)).state.finished_at, V7_FINISHED_AT);
   summary.casos.push({ caso: 'upgrade-v7-v8', stores: dataStores.length, pesagens: before.pesagens.length, backup: backupFile.filename });
 }
@@ -287,7 +298,7 @@ assert.equal(typeof result.state.relatorio.categoriasCriadas, 'number', 'S2 regi
   assert.equal(diag.blocked, true);
   const dry = await coordinator.dryRunBackfill();
   assert.equal(dry.pendente, true);
-  assert.deepEqual(dry.cadeia.map((item) => item.pendente), [false, true]);
+  assert.deepEqual(dry.cadeia.map((item) => item.pendente), [false, true, true]);
 
   resetDbForTests();
   clearWriteBlock();
@@ -304,10 +315,10 @@ assert.equal(typeof result.state.relatorio.categoriasCriadas, 'number', 'S2 regi
   assert.equal(resumed.completed, true);
   assert.equal(resumed.state.status, MIGRATION_STATUS.CONCLUIDA);
   assert.equal(resumed.state.error, null);
-  assert.deepEqual(resumed.results, [{ versao: 7, completed: true, alreadyDone: true }, { versao: 8, completed: true, alreadyDone: false }]);
+  assert.deepEqual(resumed.results, [{ versao: 7, completed: true, alreadyDone: true }, { versao: 8, completed: true, alreadyDone: false }, { versao: 9, completed: true, alreadyDone: false }]);
   assert.equal(isWriteBlocked(), false, '"Continuar migração" libera a escrita');
   const db = await ensureStorageReady();
-  for (const name of storesIntactas) assert.deepEqual(await db.table(name).toArray(), before[name], `store ${name} intacta após falha e retomada`);
+  for (const name of storesIntactas) assert.deepEqual(semCamposV9(name, await db.table(name).toArray()), semCamposV9(name, before[name]), `store ${name} intacta após falha e retomada`);
   assert.ok((await sanity.saveProgram({ nome: 'Aftosa', tipo: 'VACINACAO' })).id, 'gravação de sanidade liberada após concluir');
   summary.casos.push({ caso: 'falha-e-retomada-v8', passoFalho: 'S1' });
 }
@@ -365,9 +376,9 @@ assert.equal(typeof result.state.relatorio.categoriasCriadas, 'number', 'S2 regi
 
   const dry = await storage.dryRunRestore(v7BackupJson);
   assert.equal(dry.sourceDbVersion, 7);
-  assert.equal(dry.targetDbVersion, 8);
+  assert.equal(dry.targetDbVersion, DB_VERSION);
   assert.equal(dry.schemaUpgradeRequired, true);
-  assert.deepEqual([...dry.newStores].sort(), [...SANITY_STORES].sort(), 'stores de sanidade nascem vazias no restore da v7');
+  assert.deepEqual([...dry.newStores].sort(), [...SANITY_STORES, ...V9_STORES].sort(), 'stores de sanidade e da v9 nascem vazias no restore da v7');
   assert.deepEqual(dry.ignoredStores, []);
   const restored = await storage.applyRestore(v7BackupJson, { safetyEvidence });
   assert.equal(restored.restored, true);
@@ -376,7 +387,7 @@ assert.equal(typeof result.state.relatorio.categoriasCriadas, 'number', 'S2 regi
   for (const name of storesIntactas) {
     const expected = v7BackupJson.stores[name].map(({ localId: _localId, ...rest }) => rest);
     const actual = (await db.table(name).toArray()).map(({ localId: _localId, ...rest }) => rest);
-    assert.deepEqual(actual, expected, `dados v7 intactos após restore: ${name}`);
+    assert.deepEqual(semCamposV9(name, actual), semCamposV9(name, expected), `dados v7 intactos após restore: ${name}`);
   }
   const v7State = await readMigrationState(db, 7);
   const v8State = await readMigrationState(db, 8);
@@ -467,7 +478,7 @@ assert.ok((await db.table('categoriasAnimal').toArray()).every((row) => row.peso
   assert.equal(await db.table('categoriasAnimal').count(), CATEGORIAS_SEED.length, 'cadeia v6 → v8: seeds da v7 mais o pré-cadastro completado pelo S2');
   for (const name of SANITY_STORES) assert.equal(await db.table(name).count(), 0);
   const history = (await db.table('backupHistory').toArray()).map((item) => item.tipo);
-  assert.deepEqual(history, ['pre-migration', 'migration-v7', 'migration-v8'], `ordem da cadeia no histórico (${history.join(',')})`);
+  assert.deepEqual(history, ['pre-migration', 'migration-v7', 'migration-v8', 'migration-v9'], `ordem da cadeia no histórico (${history.join(',')})`);
   assert.deepEqual((await logicalIntegrity()).issues, []);
   summary.casos.push({ caso: 'cadeia-v6-v8' });
 }
@@ -491,8 +502,8 @@ assert.ok((await db.table('categoriasAnimal').toArray()).every((row) => row.peso
   for (const name of SANITY_STORES) expected[name] = (await db.table(name).toArray()).map(strip);
 
   const { backup } = await storage.createFullBackup();
-  assert.equal(backup.manifest.dbVersion, 8);
-  assert.equal(backup.formatVersion, 3, 'backup v8 continua no formato 3');
+  assert.equal(backup.manifest.dbVersion, DB_VERSION);
+  assert.equal(backup.formatVersion, 3, 'backup vigente continua no formato 3');
   const dry = await storage.dryRunRestore(backup);
   assert.equal(dry.schemaUpgradeRequired, false);
   assert.deepEqual(dry.newStores, []);
@@ -504,7 +515,7 @@ assert.ok((await db.table('categoriasAnimal').toArray()).every((row) => row.peso
   for (const name of SANITY_STORES) assert.deepEqual((await db.table(name).toArray()).map(strip), expected[name], `restore do backup v8 preserva ${name}`);
 
   const futuro = structuredClone(backup);
-  futuro.manifest.dbVersion = 9;
+  futuro.manifest.dbVersion = DB_VERSION + 1;
   delete futuro.integrity;
   await assert.rejects(storage.dryRunRestore(futuro), (err) => err.code === 'DEXIE_BACKUP_005', 'backup de versão futura recusado');
 

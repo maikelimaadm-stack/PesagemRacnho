@@ -28,7 +28,7 @@ export const DATA_CONTRACT_VERSION = 2;
 // Literal, não interpolado: o gate de pacote procura este marcador dentro do bundle
 // (uma interpolação viraria "schema-v"+N no código minificado). A coerência com
 // DB_SCHEMA_VERSION é verificada por release:version-contract:verify.
-export const DATA_BUILD_ID = 'schema-v8';
+export const DATA_BUILD_ID = 'schema-v9';
 
 // Vite injeta __BUILD_INFO__ = { gitCommit, buildTimestamp } (vite.config.js).
 // Em Node (gates, scripts) a constante não existe e os campos ficam nulos.

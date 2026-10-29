@@ -30,6 +30,7 @@ import {
 } from './migrationState.js';
 import { V7_VERSION, dryRunV7, runV7Backfill } from './v7Backfill.js';
 import { V8_VERSION, dryRunV8, runV8Backfill } from './v8Backfill.js';
+import { V9_VERSION, dryRunV9, runV9Backfill } from './v9Backfill.js';
 
 // Versão do app que ainda lê a store `lotes` (orientação do bloqueio MIGRATION_BLOCKED_LOTES).
 export const LEGACY_LOTES_APP_VERSION = '1.1.17';
@@ -38,6 +39,7 @@ export const LEGACY_LOTES_APP_VERSION = '1.1.17';
 const BACKFILLS = {
   [V7_VERSION]: { run: runV7Backfill, dryRun: dryRunV7 },
   [V8_VERSION]: { run: runV8Backfill, dryRun: dryRunV8 },
+  [V9_VERSION]: { run: runV9Backfill, dryRun: dryRunV9 },
 };
 
 /** Versões com backfill até a vigente, em ordem crescente. */

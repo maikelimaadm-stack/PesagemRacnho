@@ -10,6 +10,7 @@ import { compareWeighingEvents, recalculateWeightSeries } from '../domain/weighi
 import { filterLegacyPayload, storageRecordToViewModel } from '../domain/weighingMapper.js';
 import { TimelineError, validateAnimalTimeline } from '../domain/animalTimeline.js';
 import { deriveLotStays, deriveWeighingMovements, movementKey, stayKey } from '../domain/weighingMovements.js';
+import { naturezaDoTipo } from '../../livestock/domain/movementNature.js';
 import storage from '../../../storage/storageAdapter.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
 import { isOpenSessionStatus, normalizeName, situacaoFromExitReason } from '../../../storage/indexedDb/normalize.js';
@@ -280,6 +281,12 @@ export async function removeOrphanAnimal(db, animalId, timestamp = new Date().to
   const restantes = (await db.table('pesagens').where('animal_id').equals(animalId).toArray())
     .filter((row) => !row.deleted_at);
   if (restantes.length) return false;
+  // v9: animal que entrou por OPERAÇÃO (compra/nascimento sem peso) existe sem pesagem — não é órfão.
+  // Quem chama inclui operacaoItens no escopo da transação (bulkDeleteEntries, repesagem).
+  {
+    const itens = (await db.table('operacaoItens').where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at && row.status !== 'CANCELADO');
+    if (itens.length) return false;
+  }
 
   await db.table('animais').update(animal.localId, { deleted_at: timestamp, updated_at: timestamp });
   for (const [store, campo] of [['animalIdentificadores', 'animal_id'], ['animalLotes', 'animal_id'], ['movimentosAnimais', 'animal_id']]) {
@@ -351,13 +358,29 @@ export async function reconcileWeighingMovements(db, animalId, timestamp = new D
   }
   const matched = new Set();
   const adds = [];
+  // v9: entrada sem peso registrada por OPERAÇÃO (movimento sem pesagem_id, origem 'operacao'): o primeiro
+  // Cadastro do animal ADOTA esse movimento em vez de criar uma segunda entrada (saldo +1, não +2).
+  const operacaoSemPesagem = (await table.where('animal_id').equals(animalId).toArray())
+    .filter((row) => !row.deleted_at && !row.pesagem_id && row.origem === 'operacao' && (row.natureza || naturezaDoTipo(row.tipo)) === 'ENTRADA');
   for (const movement of expected) {
     const row = byKey.get(movementKey(movement));
-    if (row) matched.add(row.localId);
-    else adds.push({ id: crypto.randomUUID(), animal_id: animalId, ...movement, origem, created_at: timestamp, updated_at: timestamp, deleted_at: null });
+    if (row) { matched.add(row.localId); continue; }
+    const natureza = naturezaDoTipo(movement.tipo);
+    if (natureza === 'ENTRADA' && operacaoSemPesagem.length) {
+      const adotado = operacaoSemPesagem.shift();
+      await table.update(adotado.localId, { pesagem_id: movement.pesagem_id, data_evento: adotado.data_evento || movement.data_evento, lote_destino_id: adotado.lote_destino_id || movement.lote_destino_id, updated_at: timestamp });
+      continue;
+    }
+    adds.push({ id: crypto.randomUUID(), animal_id: animalId, ...movement, natureza, origem, created_at: timestamp, updated_at: timestamp, deleted_at: null });
   }
   const stale = existing.filter((row) => !matched.has(row.localId));
   for (const row of stale) {
+    // Movimento da operação que fora adotado por um Cadastro agora cancelado: volta a ser só da operação
+    // (o animal entrou de fato); não é apagado.
+    if (row.origem === 'operacao' && !duplicates.includes(row)) {
+      await table.update(row.localId, { pesagem_id: null, updated_at: timestamp });
+      continue;
+    }
     await table.update(row.localId, { deleted_at: timestamp, updated_at: timestamp });
     await db.table('auditoria').add(auditRow({
       entidade: 'movimentosAnimais', entidade_id: row.id, acao: 'CANCELAR', antes: row,
@@ -612,7 +635,7 @@ export async function deleteEntry(id, { motivo } = {}) {
 // createEntry e bulkDeleteEntries abrem transações com subconjuntos destas tabelas, que o Dexie aninha nesta.
 const REWEIGH_TABLES = Object.freeze([
   'pesagens', 'auditoria', 'sessoesPesagem', 'animalLotes', 'categoriasAnimal', 'animais', 'movimentosAnimais',
-  'animalIdentificadores', 'marcas', 'racas', 'propriedades', ...LAUNCH_SANITY_TABLES,
+  'animalIdentificadores', 'marcas', 'racas', 'propriedades', 'operacaoItens', ...LAUNCH_SANITY_TABLES,
 ]);
 
 export async function replaceEntries(previousIds, payload, { motivo, aplicacoesSanidade = [] } = {}) {
@@ -827,7 +850,7 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
         if (!movementType && currentLot) movementType = 'Mudança de lote';
       }
       if (movementType) movements.push({
-        id: crypto.randomUUID(), animal_id: animalId, pesagem_id: entry.id, tipo: movementType,
+        id: crypto.randomUUID(), animal_id: animalId, pesagem_id: entry.id, tipo: movementType, natureza: naturezaDoTipo(movementType),
         data_evento: payload.data_pesagem, lote_origem_id: currentLot?.lote_id || null, lote_destino_id: payload.lote_id || null,
         motivo: ui.motivo_saida || null, origem: 'importacao', created_at: ts, updated_at: ts, deleted_at: null,
       });
@@ -1076,7 +1099,8 @@ export async function bulkDeleteEntries(ids, { motivo } = {}) {
   let removed = 0;
   const affectedAnimals = new Set();
   const removedIds = [];
-  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalIdentificadores'), db.table('animalLotes'), db.table('movimentosAnimais'), db.table('auditoria'), db.table('categoriasAnimal'), db.table(APLICACOES_STORE), async () => {
+  // operacaoItens (v9) entra no escopo: removeOrphanAnimal confere se o animal veio de operação.
+  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalIdentificadores'), db.table('animalLotes'), db.table('movimentosAnimais'), db.table('auditoria'), db.table('categoriasAnimal'), db.table(APLICACOES_STORE), db.table('operacaoItens'), async () => {
     for (const id of ids) {
       const rows = await db.table('pesagens').where('id').equals(id).toArray();
       const existing = [...rows].reverse().find((row) => !row.deleted_at);

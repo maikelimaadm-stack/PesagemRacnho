@@ -29,20 +29,21 @@ export function deriveWeighingMovements(rows = []) {
     const tipo = tipoOf(row);
     const ui = uiOf(row);
     const lote = row.lote_id ?? ui.lote_id ?? null;
+    const operacao = ui.operacao_id || null;
     if (tipo === 'Cadastro') {
-      movements.push({ pesagem_id: row.id, tipo: 'Entrada', data_evento: row.data_pesagem, lote_origem_id: null, lote_destino_id: lote, motivo: null });
+      movements.push({ pesagem_id: row.id, operacao_id: operacao, tipo: 'Entrada', data_evento: row.data_pesagem, lote_origem_id: null, lote_destino_id: lote, motivo: null });
       if (lote) current = lote;
       continue;
     }
     if (tipo === 'Saída') {
       const motivo = ui.motivo_saida || null;
-      movements.push({ pesagem_id: row.id, tipo: motivo || 'Saída', data_evento: row.data_pesagem, lote_origem_id: current, lote_destino_id: lote, motivo });
+      movements.push({ pesagem_id: row.id, operacao_id: operacao, tipo: motivo || 'Saída', data_evento: row.data_pesagem, lote_origem_id: current, lote_destino_id: lote, motivo });
       current = null;
       continue;
     }
     if (lote && lote !== current) {
       if (current) {
-        movements.push({ pesagem_id: row.id, tipo: 'Mudança de lote', data_evento: row.data_pesagem, lote_origem_id: current, lote_destino_id: lote, motivo: null });
+        movements.push({ pesagem_id: row.id, operacao_id: operacao, tipo: 'Mudança de lote', data_evento: row.data_pesagem, lote_origem_id: current, lote_destino_id: lote, motivo: null });
       }
       current = lote;
     }

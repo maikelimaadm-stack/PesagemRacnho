@@ -3,7 +3,7 @@
 // compatibilidade dos registros locais entre versões do aplicativo.
 // Contrato: docs/arquitetura-produto/12-MODELO-DADOS-V7-V8.md (Programa 2.0).
 export const DB_NAME = 'pesagens-individuais';
-export const DB_VERSION = 8; // v8: sanidade mínima em stores próprias (ADR-049); v7: cadastros mestres, identidade, usuários (ADR-018/034)
+export const DB_VERSION = 9; // v9: operações, livro de movimentos com natureza, identificadores, posologia, sazonal, metas, documentos (17-MODELO-DADOS-V9); v8: sanidade (ADR-049); v7: cadastros mestres (ADR-018/034)
 export const BACKUP_FORMAT = 'pesagens-individuais-indexeddb-backup';
 
 // ---------------------------------------------------------------------------
@@ -104,13 +104,44 @@ export const STORES_V8 = {
     '++localId, &id, empresa_id, animal_id, data, [animal_id+data], programa_sanidade_id, medicamento_id, pesagem_id, sessao_id, cancelled_at, created_at, updated_at, deleted_at',
 };
 
+// ---------------------------------------------------------------------------
+// v9 (missão pesagens-integrada, docs/arquitetura-produto/17-MODELO-DADOS-V9.md): ADITIVA.
+// Stores novas (operações e itens, dentição, livro de identificadores, posologias, calendário
+// sazonal, metas, documentos) e índices novos em `animais` (situacao_cadastro) e
+// `movimentosAnimais` (natureza, operacao_id, pesagem_id). NUNCA editar STORES_V8 no lugar.
+// ---------------------------------------------------------------------------
+export const STORES_V9 = {
+  ...STORES_V8,
+  animais:
+    '++localId, &id, empresa_id, identificacao_normalizada, situacao, situacao_cadastro, marca_id, raca_id, categoria_id, propriedade_id, lote_atual_id, ultima_pesagem_data, created_at, updated_at, deleted_at',
+  movimentosAnimais:
+    '++localId, &id, animal_id, tipo, natureza, data_evento, lote_origem_id, lote_destino_id, operacao_id, pesagem_id, created_at, updated_at, deleted_at',
+  operacoes:
+    '++localId, &id, empresa_id, tipo, subtipo, status, data, parceiro_id, propriedade_origem_id, propriedade_destino_id, origem, created_at, updated_at, deleted_at',
+  operacaoItens:
+    '++localId, &id, operacao_id, animal_id, [operacao_id+animal_id], status, pesagem_id, origem_pesagem_id, created_at, updated_at, deleted_at',
+  avaliacoesDenticao: '++localId, &id, animal_id, data, created_at, updated_at, deleted_at',
+  movimentosIdentificadores:
+    '++localId, &id, faixa_id, tipo, valor_normalizado, [tipo+valor_normalizado], acao, animal_id, data, created_at, updated_at, deleted_at',
+  posologias: '++localId, &id, medicamento_id, status, vigencia_inicio, created_at, updated_at, deleted_at',
+  calendariosSazonais: '++localId, &id, propriedade_id, ano, periodo, inicio, fim, created_at, updated_at, deleted_at',
+  metasDesempenho: '++localId, &id, escopo, alvo_id, vigencia_inicio, vigencia_fim, created_at, updated_at, deleted_at',
+  documentos: '++localId, &id, tipo, numero, data, operacao_id, animal_id, propriedade_id, sha256, created_at, updated_at, deleted_at',
+};
+
+// Stores acrescentadas pela v9.
+export const V9_STORES = Object.freeze([
+  'operacoes', 'operacaoItens', 'avaliacoesDenticao', 'movimentosIdentificadores',
+  'posologias', 'calendariosSazonais', 'metasDesempenho', 'documentos',
+]);
+
 // Stores acrescentadas pela v8 (serviço de sanidade, migração, integridade e gates).
 export const SANITY_REGISTRY_STORES = Object.freeze(['programasSanidade', 'medicamentos']);
 export const SANITY_APPLICATIONS_STORE = 'aplicacoesSanidade';
 export const SANITY_STORES = Object.freeze([...SANITY_REGISTRY_STORES, SANITY_APPLICATIONS_STORE]);
 
 // Esquema vigente.
-export const STORES = STORES_V8;
+export const STORES = STORES_V9;
 
 // Stores que entram no backup completo (todas as vigentes).
 export const STORE_NAMES = Object.keys(STORES);
@@ -131,6 +162,10 @@ export const MASTER_REGISTRY_STORES = [
   'faixasIdentificadores',
   'excecoesIdentificadores',
   ...SANITY_REGISTRY_STORES,
+  // v9: regras e parâmetros com vigência (não são fatos do rebanho).
+  'posologias',
+  'calendariosSazonais',
+  'metasDesempenho',
 ];
 
 // Stores de segurança/configuração preservadas por qualquer limpeza não destrutiva.
