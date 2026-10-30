@@ -69,7 +69,8 @@ export function planRetention(catalogo = [], { manter = BACKUP_POLICY_DEFAULTS.m
  * pode ser lida. `copia`: OK só com a cópia externa conferida AGORA (`copiaExterna.valida`), não pelo registro.
  */
 export function coverage({ status, externo, copiaExterna = null }) {
-  const LOCAL = { VERIFICADO: 'OK', NAO_VERIFICADO: 'NAO_VERIFICADO', ALTERADO: 'ALTERADO', INDISPONIVEL: 'INDISPONIVEL' };
+  // R2-01: PARCIAL (só backup de segurança sem anexos que já faltavam) nunca é OK.
+  const LOCAL = { VERIFICADO: 'OK', NAO_VERIFICADO: 'NAO_VERIFICADO', ALTERADO: 'ALTERADO', INDISPONIVEL: 'INDISPONIVEL', PARCIAL: 'PARCIAL' };
   const local = LOCAL[status?.protecao] || 'SEM_BACKUP';
   let copia = 'NAO_CONFIGURADA';
   if (externo?.configurado) {

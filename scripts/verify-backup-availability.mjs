@@ -152,6 +152,25 @@ try {
   rmSync(b2.backupPath);
   rmSync(b2.backupPath.replace(/\.json$/, '.anexos'), { recursive: true, force: true });
 
+  // R2-06: os 3 mais novos corrompidos e um 4º íntegro mais antigo — a conferência é limitada a 3 e o resultado
+  // diz isso (não declara "sem backup" com falsa certeza); Verificar no 4º devolve a proteção.
+  {
+    const extras = [];
+    for (let i = 0; i < 3; i += 1) extras.push(await center.createBackupNow());
+    for (const b of extras) {
+      const t = readFileSync(b.backupPath, 'utf8');
+      writeFileSync(b.backupPath, t.replace('"reason"', '"Reason"'));
+    }
+    q = await quadro();
+    assert.notEqual(q.local, 'OK', 'nenhum dos 3 relidos confere');
+    assert.deepEqual(q.st.conferenciaLimitada, { conferidos: 3, naoConferidos: 1 }, 'limite da conferência declarado');
+    assert.match(q.st.motivo, /não foram relidos agora/, 'motivo explica a conferência limitada');
+    for (const b of extras) { rmSync(b.backupPath); rmSync(b.backupPath.replace(/\.json$/, '.anexos'), { recursive: true, force: true }); }
+    q = await quadro();
+    assert.equal(q.local, 'OK', 'sem os corrompidos, o íntegro anterior volta a proteger');
+    resumo.push('R2-06 3 mais novos corrompidos + 1 íntegro: conferência limitada declarada, sem falsa certeza');
+  }
+
   // Cópia externa válida só conferida agora.
   bstore.setExternalDir(pendrive);
   q = await quadro();

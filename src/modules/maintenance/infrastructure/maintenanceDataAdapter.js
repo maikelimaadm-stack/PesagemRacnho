@@ -244,7 +244,11 @@ export async function getBackupStatus({ conferir = true } = {}) {
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   const created = history.filter((h) => h.tipo === 'full-durable');
   const verifies = history.filter((h) => h.tipo === 'verify');
-  const ultimaVerificacao = verifies.find((h) => h.ok) || null; // histórico: "Verificado em [data]"
+  // R2-01: verificação de backup PARCIAL (exceção da restauração: anexos que já faltavam no app ficaram fora) é
+  // guardada no histórico, mas não é "backup verificado" nem proteção completa.
+  const parcial = (h) => Boolean(h?.ok && (h.incompleto || (h.anexosAusentesNaOrigem || []).length));
+  const ultimaVerificacao = verifies.find((h) => h.ok && !parcial(h)) || null; // histórico: "Verificado em [data]"
+  const ultimoParcial = verifies.find((h) => parcial(h)) || null;
   let filesList = [];
   let unavailable = false;
   let erroPasta = null;
@@ -262,9 +266,9 @@ export async function getBackupStatus({ conferir = true } = {}) {
       ...file,
       reason: origin?.reason || verify?.reason || null,
       automatic: origin?.automatic ?? verify?.automatic ?? null,
-      estado: !verify ? 'NAO_VERIFICADO' : !verify.ok ? 'FALHOU' : alterado ? 'ALTERADO' : 'VERIFICADO',
+      estado: !verify ? 'NAO_VERIFICADO' : !verify.ok ? 'FALHOU' : alterado ? 'ALTERADO' : parcial(verify) ? 'PARCIAL' : 'VERIFICADO',
       verifiedAt: verify?.verifiedAt || null,
-      erro: verify && !verify.ok ? verify.error : alterado ? 'Arquivo modificado depois da verificação.' : null,
+      erro: verify && !verify.ok ? verify.error : alterado ? 'Arquivo modificado depois da verificação.' : parcial(verify) ? `Backup PARCIAL: ${(verify.anexosAusentesNaOrigem || []).length} anexo(s) já faltavam no app — não é proteção completa.` : null,
       _verify: verify,
     };
   });
@@ -275,7 +279,11 @@ export async function getBackupStatus({ conferir = true } = {}) {
   let lastVerified = null;
   let conferencia = null;
   const candidatos = catalog.filter((c) => c.estado === 'VERIFICADO').sort((x, y) => String(y.verifiedAt).localeCompare(String(x.verifiedAt)));
-  for (const c of candidatos.slice(0, conferir ? MAX_CANDIDATOS_CONFERIDOS : 1)) {
+  // R2-06: a releitura é limitada aos mais novos (custo); se nenhum deles confere e há outros não relidos, o
+  // resultado diz isso — "sem proteção" seria uma certeza que a conferência não tem.
+  const conferidos = candidatos.slice(0, conferir ? MAX_CANDIDATOS_CONFERIDOS : 1);
+  const naoConferidos = candidatos.length - conferidos.length;
+  for (const c of conferidos) {
     const r = conferir ? await conferirAgora(c._verify) : { ok: true, motivo: null, naoConferido: true };
     if (r.ok) { lastVerified = c._verify; conferencia = { em: new Date().toISOString(), ok: true, name: c.name, naoConferido: Boolean(r.naoConferido) }; break; }
     c.estado = 'ALTERADO';
@@ -286,16 +294,21 @@ export async function getBackupStatus({ conferir = true } = {}) {
   if (lastVerified) protecao = 'VERIFICADO';
   else if (unavailable && files()?.listUserFiles) protecao = 'INDISPONIVEL';
   else if (ultimaVerificacao) protecao = 'ALTERADO';
+  else if (ultimoParcial && catalog.some((c) => c.estado === 'PARCIAL')) protecao = 'PARCIAL';
   else protecao = catalog.length ? 'NAO_VERIFICADO' : 'SEM_BACKUP';
   let motivo = null;
   if (protecao === 'INDISPONIVEL') motivo = `Pasta de backups inacessível agora${erroPasta ? ` (${erroPasta})` : ''}.`;
   else if (protecao === 'ALTERADO') motivo = !ultimoArquivo ? `O backup verificado em ${ultimaVerificacao.verifiedAt} não está mais na pasta (apagado ou renomeado).` : (conferencia?.motivo || ultimoArquivo.erro || 'O backup verificado mudou depois da verificação.');
+  else if (protecao === 'PARCIAL') motivo = 'Só há backup PARCIAL (anexos que já faltavam no app ficaram fora): não é proteção completa. Crie um backup completo.';
+  if (!lastVerified && naoConferidos > 0) motivo = `${motivo || 'Nenhum dos backups mais novos confere agora.'} Outros ${naoConferidos} backup(s) verificado(s) antes não foram relidos agora (limite de ${MAX_CANDIDATOS_CONFERIDOS}): use Verificar neles.`;
   return {
     protecao,
     motivo,
     lastCreated: created[0] || null,
     lastVerified,
     ultimaVerificacao,
+    ultimoParcial,
+    conferenciaLimitada: !lastVerified && naoConferidos > 0 ? { conferidos: conferidos.length, naoConferidos } : null,
     disponivelAgora,
     integroAgora: Boolean(lastVerified) && !conferencia?.naoConferido,
     conferencia,

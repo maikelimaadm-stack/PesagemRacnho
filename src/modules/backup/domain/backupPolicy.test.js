@@ -26,6 +26,8 @@ describe('backup periódico', () => {
     const ext = { configurado: true, disponivel: true };
     expect(coverage({ status: { protecao: 'ALTERADO' }, externo: ext, copiaExterna: { valida: true } })).toEqual({ local: 'ALTERADO', copia: 'PENDENTE' });
     expect(coverage({ status: { protecao: 'INDISPONIVEL' }, externo: ext })).toEqual({ local: 'INDISPONIVEL', copia: 'PENDENTE' });
+    // R2-01: só backup parcial nunca é OK, nem valida a cópia externa.
+    expect(coverage({ status: { protecao: 'PARCIAL' }, externo: ext, copiaExterna: { valida: true } })).toEqual({ local: 'PARCIAL', copia: 'PENDENTE' });
     expect(coverage({ status: { protecao: 'VERIFICADO' }, externo: ext, copiaExterna: { valida: false } }).copia).toBe('PENDENTE');
     expect(coverage({ status: { protecao: 'VERIFICADO' }, externo: ext, copiaExterna: { valida: true } }).copia).toBe('OK');
     expect(coverage({ status: { protecao: 'VERIFICADO' }, externo: { configurado: true, disponivel: false }, copiaExterna: { valida: true } }).copia).toBe('INDISPONIVEL');

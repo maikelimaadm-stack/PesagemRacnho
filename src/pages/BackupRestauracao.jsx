@@ -17,7 +17,7 @@ import '@/styles/rebanho.css';
 const POR_PAGINA = 15;
 const fmtDataHora = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR') : '—');
 const fmtTam = (n) => (n == null ? '—' : n > 1048576 ? `${(n / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
-const ESTADO_LABEL = { VERIFICADO: 'Verificado', FALHOU: 'Falhou', NAO_VERIFICADO: 'Não verificado', ALTERADO: 'Alterado/indisponível agora' };
+const ESTADO_LABEL = { VERIFICADO: 'Verificado', FALHOU: 'Falhou', NAO_VERIFICADO: 'Não verificado', ALTERADO: 'Alterado/indisponível agora', PARCIAL: 'Parcial — anexos ausentes na origem; não é proteção completa' };
 const MOTIVO_LABEL = (r) => ({ 'manual-ui': 'Manual', periodico: 'Periódico', 'pre-restore': 'Antes de restaurar', 'pre-import': 'Antes de importar', 'pre-clear-operational': 'Antes de limpar', 'pre-reset-all': 'Antes do reset', protegido: 'Protegido' }[r] || (r && r.startsWith('pre-migration') ? 'Antes da migração' : r || '—'));
 
 // R03: quatro fatos separados — quando foi verificado (histórico), se está disponível agora, se está íntegro
@@ -27,12 +27,13 @@ function Cobertura({ ov }) {
   const copia = ov?.cobertura?.copia;
   const st = ov?.status || {};
   const sim = (v) => (v ? 'Sim' : 'Não');
-  const titulo = { OK: 'Protegido', NAO_VERIFICADO: 'Atenção', ALTERADO: 'Atenção', INDISPONIVEL: 'Pasta inacessível' }[local] || 'Sem backup';
+  const titulo = { OK: 'Protegido', NAO_VERIFICADO: 'Atenção', ALTERADO: 'Atenção', INDISPONIVEL: 'Pasta inacessível', PARCIAL: 'Só backup parcial' }[local] || 'Sem backup';
   const textoLocal = {
     OK: `Backup íntegro agora (verificado em ${fmtDataHora(st.lastVerified?.verifiedAt)}).`,
     NAO_VERIFICADO: 'Há backups, mas nenhum verificado.',
     ALTERADO: st.motivo || 'O backup verificado não está mais íntegro.',
     INDISPONIVEL: st.motivo || 'A pasta de backups não pode ser lida agora.',
+    PARCIAL: st.motivo || 'Só há backup parcial: não é proteção completa.',
   }[local] || 'Nenhum backup ainda.';
   const textoCopia = { OK: `Cópia externa conferida agora (${ov?.copiaExterna?.destino || ov?.externo?.destino || ''})`, PENDENTE: ov?.copiaExterna?.motivo ? `Cópia externa pendente: ${ov.copiaExterna.motivo}` : 'Cópia externa pendente: copie o último backup para o destino', INDISPONIVEL: 'Destino externo desconectado: cópia não conferida', NAO_CONFIGURADA: 'Sem destino externo: o backup está só neste computador' }[copia] || '—';
   const maisNovoAlterado = st.lastVerified && st.ultimaVerificacao && st.lastVerified.path !== st.ultimaVerificacao.path;
@@ -49,6 +50,8 @@ function Cobertura({ ov }) {
         <div><dt>Íntegro agora</dt><dd data-r03="integro">{sim(st.integroAgora)}{st.conferencia?.em ? ` (conferido ${fmtDataHora(st.conferencia.em)})` : ''}</dd></div>
         <div><dt>Cópia externa válida</dt><dd data-r03="copia">{ov?.externo?.configurado ? sim(ov?.copiaExterna?.valida === true) : 'Sem destino'}</dd></div>
       </dl>
+      {st.ultimoParcial ? <p className="rb-note rb-note--warn" data-r2="parcial">Backup parcial de {fmtDataHora(st.ultimoParcial.verifiedAt)} ({st.ultimoParcial.name}): guardado para recuperação, sem {(st.ultimoParcial.anexosAusentesNaOrigem || []).length} anexo(s) que já faltavam. Não conta como proteção completa.</p> : null}
+      {st.conferenciaLimitada ? <p className="rb-note rb-note--warn">{fmtInt(st.conferenciaLimitada.naoConferidos)} backup(s) verificado(s) mais antigo(s) não foram relidos agora: use Verificar na lista.</p> : null}
       {maisNovoAlterado ? <p className="rb-note rb-note--warn">O backup verificado mais recente ({st.ultimaVerificacao.name}) não confere agora; a proteção vale pelo anterior, de {fmtDataHora(st.lastVerified.verifiedAt)}.</p> : null}
     </>
   );
