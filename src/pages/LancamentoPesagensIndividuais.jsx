@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
+import React, { useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { ensureEmpresaId } from "@/api/db";
 import * as weighingService from "@/modules/weighing/application/weighingService";
 import * as apartacaoService from "@/modules/auxiliary/application/apartacaoService";
@@ -69,6 +69,19 @@ import { getAnimalRecord } from "@/modules/operations/application/operationalIns
 import { categoriesForSex, eraOfCategory, suggestCategory } from "@/modules/operations/domain/categorySuggestion";
 import SanidadeLancamentoPanel from "../components/pesagens/SanidadeLancamentoPanel";
 import { listApplications, listMedicamentos, listProgramas } from "@/modules/sanity/application/sanityService";
+import { cancelOperation, findOperationOfEntry, findPendingEntryAnimal, registerLaunchOperation } from "@/modules/livestock/application/operationsService";
+import {
+  ENTRADA_SUBTIPOS_LANCAMENTO,
+  ENTRADA_SUBTIPO_LABELS,
+  ENTRADA_SUBTIPO_PADRAO,
+  LAUNCH_MODE_LABELS,
+  MOTIVOS_SAIDA_ORDEM,
+  MOTIVO_SAIDA_LABELS,
+  buildLaunchOperationInput,
+  launchOperationMessage,
+  launchUsesOperation,
+} from "@/modules/weighing/domain/launchOperation";
+import OperacaoAvisosDialog from "../components/pesagens/OperacaoAvisosDialog";
 import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
 import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
 import { formatWeightForField } from "@/modules/equipment/domain/scaleContract";
@@ -143,6 +156,8 @@ export default function LancamentoPesagensIndividuais() {
   const auth = useAuth();
   // Painel de Sanidade só para quem registra pesagens (o serviço repete a verificação).
   const podeRegistrarSanidade = auth ? Boolean(auth.can?.('weighing.write')) : true;
+  // Cadastrar/alterar medicamento e posologia no contexto do curral: mesma regra da tela Sanidade (registry.write).
+  const podeCadastrarSanidade = auth ? Boolean(auth.can?.('registry.write')) : true;
 
   // Contexto da sequência guardado na sessão (R-03): por empresa + usuário, só campos
   // de contexto (serializeLaunchState nunca leva dado do animal). Lido uma vez na montagem.
@@ -363,6 +378,12 @@ export default function LancamentoPesagensIndividuais() {
   const [showResumoConfig, setShowResumoConfig] = useState(false);
   const [resumoPersonalizado, setResumoPersonalizado] = useState([]);
   const [deleteLaunchRequest, setDeleteLaunchRequest] = useState(null);
+  // Integração com o livro de operações: motivo da Entrada (subtipo), Entrada sem peso, avisos da conferência e
+  // vínculo da pesagem com uma operação (exclusão = cancelamento auditado da operação).
+  const [subtipoEntrada, setSubtipoEntrada] = useState(ENTRADA_SUBTIPO_PADRAO);
+  const [entradaSemPeso, setEntradaSemPeso] = useState(false);
+  const [operacaoAvisos, setOperacaoAvisos] = useState(null);
+  const [exclusaoVinculo, setExclusaoVinculo] = useState(null);
   const [outlierDialog, setOutlierDialog] = useState({ open: false, warnings: [], options: null });
   // M1 — Repesagem no mesmo dia: { anterioresIds, resumo, avisoSanidade, options } enquanto o diálogo está aberto.
   const [repesagemDialog, setRepesagemDialog] = useState(null);
@@ -728,21 +749,22 @@ export default function LancamentoPesagensIndividuais() {
 
   // Cadastros ativos de sanidade para os seletores do painel. A chegada tardia não
   // mexe nos rascunhos já escolhidos; programa/medicamento inativo é recusado ao salvar.
+  // Recarregável: medicamento novo/alterado no diálogo do painel aparece na hora, sem sair do lançamento.
+  const carregarCatalogoSanidade = useCallback(async () => {
+    try {
+      const [programas, medicamentos] = await Promise.all([
+        listProgramas({ empresaId: empresaSelecionadaId }),
+        listMedicamentos({ empresaId: empresaSelecionadaId }),
+      ]);
+      setCatalogoSanidade({ programas: programas || [], medicamentos: medicamentos || [], carregado: true, erro: false });
+    } catch {
+      setCatalogoSanidade({ ...CATALOGO_SANIDADE_VAZIO, carregado: true, erro: true });
+    }
+  }, [empresaSelecionadaId]);
   useEffect(() => {
-    if (!podeRegistrarSanidade) return undefined;
-    let ativo = true;
-    Promise.all([
-      listProgramas({ empresaId: empresaSelecionadaId }),
-      listMedicamentos({ empresaId: empresaSelecionadaId }),
-    ])
-      .then(([programas, medicamentos]) => {
-        if (ativo) setCatalogoSanidade({ programas: programas || [], medicamentos: medicamentos || [], carregado: true, erro: false });
-      })
-      .catch(() => {
-        if (ativo) setCatalogoSanidade({ ...CATALOGO_SANIDADE_VAZIO, carregado: true, erro: true });
-      });
-    return () => { ativo = false; };
-  }, [empresaSelecionadaId, podeRegistrarSanidade]);
+    if (!podeRegistrarSanidade) return;
+    carregarCatalogoSanidade();
+  }, [carregarCatalogoSanidade, podeRegistrarSanidade]);
 
   // Em edição, o painel mostra (somente leitura) as aplicações gravadas com esta pesagem.
   useEffect(() => {
@@ -1043,6 +1065,8 @@ export default function LancamentoPesagensIndividuais() {
     if (!lotesCandidatosAtalho.length) return undefined;
     const onKeyDown = (event) => {
       if (event.altKey || event.ctrlKey || event.metaKey || event.repeat) return;
+      // Com um diálogo aberto (medicamento, posologia, avisos…) nenhum atalho salva o lançamento por baixo dele.
+      if (document.querySelector('[role="dialog"]')) return;
       const index = ATALHO_LOTE_TECLAS.indexOf(event.key);
       if (index < 0) return;
       const lote = lotesCandidatosAtalho[index];
@@ -1081,7 +1105,8 @@ export default function LancamentoPesagensIndividuais() {
       numeroInputRef.current?.focus();
       return;
     }
-    const permiteMovimentoSemPeso = tipoManejo === 'Saída' && ['Morte', 'Doação', 'Transferência'].includes(motivoSaida);
+    const entradaSemPesoAtiva = tipoManejo === 'Cadastro' && entradaSemPeso && !editingId && !isSnIdentifier(numeroAnimal);
+    const permiteMovimentoSemPeso = entradaSemPesoAtiva || (tipoManejo === 'Saída' && ['Morte', 'Doação', 'Transferência', 'Outros'].includes(motivoSaida));
     // Pesagem automática (P01–P03): o peso salvo é o da leitura ESTÁVEL NOVA liberada pelo portão
     // da captura (não o texto do campo, que só espelha o monitor). Sem leitura liberada, não salva.
     let capturaBalanca = null;
@@ -1096,7 +1121,8 @@ export default function LancamentoPesagensIndividuais() {
     }
     // Peso no sistema é inteiro por truncamento (monitor 58,5 → 58) — decisão de produto P15, regra ÚNICA (R07) para
     // o peso digitado, a balança e as operações; o bruto vai em balanca_leitura.
-    const pesoNormalizado = normalizeLaunchWeight(capturaBalanca ? Number(capturaBalanca.weightKg) : peso);
+    // Entrada marcada "sem peso": nenhum peso entra (nem o do campo/monitor) — o animal fica pendente de pesagem.
+    const pesoNormalizado = normalizeLaunchWeight(entradaSemPesoAtiva ? '' : capturaBalanca ? Number(capturaBalanca.weightKg) : peso);
     if (!pesoNormalizado.ok) {
       toast.error(`⚠️ ${pesoNormalizado.erro}`);
       if (!pesagemAutoRef.current) pesoInputRef.current?.focus();
@@ -1137,6 +1163,11 @@ export default function LancamentoPesagensIndividuais() {
     if (!sanidadeValidada.ok) {
       setMostrarSanidade(true);
       toast.error(sanidadeValidada.errors[0]);
+      return;
+    }
+    if (entradaSemPesoAtiva && sanidadeValidada.payload.length) {
+      setMostrarSanidade(true);
+      toast.error('Aplicação de sanidade no Lançamento é gravada com a pesagem. Informe o peso ou registre a aplicação avulsa em Sanidade.');
       return;
     }
     // F09: a dose calculada pela posologia usou o peso da tela; na pesagem automática o peso gravado é o da
@@ -1419,7 +1450,49 @@ export default function LancamentoPesagensIndividuais() {
     };
 
     try {
-      if (!editingId) {
+      const viaOperacao = launchUsesOperation({ tipoManejo, editing: Boolean(editingId), numeroAnimal: numeroDigitado, repesagem: Boolean(repesagemAnterioresIds) });
+      // Entrada para um animal que já entrou SEM peso (mesmo número e marca): é a 1ª pesagem dele, não outra entrada.
+      const pendenteEntrada = viaOperacao && tipoManejo === 'Cadastro' && !entradaSemPesoAtiva
+        ? await findPendingEntryAnimal({ numero: numeroDigitado, marcaId: marcaId || null })
+        : null;
+      if (viaOperacao && !pendenteEntrada) {
+        // Entrada/Saída do Lançamento = operação no livro (Rebanho › Entradas/Saídas), confirmada numa só transação
+        // com a pesagem (quando há peso), o movimento e as aplicações de sanidade.
+        const usaDocEmbarque = tipoManejo === 'Saída' && exitReasonUsesShipment(motivoSaida);
+        const valorItem = tipoManejo === 'Cadastro' ? data.valor_pago_cabeca
+          : motivoSaida === 'Venda' ? data.valor_venda_total : motivoSaida === 'Abate' ? data.valor_total_abate : null;
+        const input = buildLaunchOperationInput({
+          id: cicloLancamentoRef.current,
+          empresaId: empresaSelecionadaId,
+          tipoManejo,
+          subtipoEntrada,
+          motivoSaida,
+          dataPesagem,
+          pesagem: { ...data, aplicacoes_sanidade: sanidadeValidada.payload },
+          numeroAnimal: numeroDigitado,
+          animalId: tipoManejo === 'Saída' ? animalIdSelecionado : null,
+          marcaId: marcaId || null,
+          sexo,
+          racaId: racaId || null,
+          loteId,
+          pesoKg: pesoNum,
+          pesoOrigem: capturaBalanca ? 'BALANCA' : 'MANUAL',
+          valor: valorItem ?? null,
+          causaMorteId: motivoSaida === 'Morte' ? (auxiliaryCatalogs.causasMorte.find((item) => item.nome === causaMorte)?.id || null) : null,
+          observacao: observacao || null,
+          gtaNumero: tipoManejo === 'Cadastro' ? numeroGTA : (usaDocEmbarque ? selectedDoc?.numero_gta : null),
+          nfNumero: tipoManejo === 'Cadastro' ? numeroNFeCompra : (usaDocEmbarque ? selectedDoc?.numero_nfe : null),
+          // Entrada "sem peso" marcada = ciência explícita; os demais avisos (carência na venda…) pedem confirmação.
+          aceitarAvisos: options?.aceitarAvisosOperacao === true || entradaSemPesoAtiva,
+        });
+        const resultado = await registerLaunchOperation(input);
+        if (capturaBalanca) consumeCapture(capturaBalanca);
+        cicloLancamentoRef.current = crypto.randomUUID();
+        const aplicacoesGravadas = sanidadeValidada.payload.length;
+        toast.success(`✓ ${launchOperationMessage(resultado, { numeroAnimal: numeroDigitado })}${aplicacoesGravadas > 0 ? ` · ${fmtInt(aplicacoesGravadas)} ${aplicacoesGravadas === 1 ? 'aplicação' : 'aplicações'} de sanidade` : ''}.`);
+        if (entradaSemPesoAtiva) setEntradaSemPeso(false);
+        await refreshAnimalSeries(resultado?.itens?.[0]?.animal_id || data.animal_id);
+      } else if (!editingId) {
         // Repesagem confirmada: grava a nova e cancela a de hoje (motivo "repesagem") numa única transação; se falhar,
         // nada muda e a pesagem de hoje continua valendo (a mensagem do serviço diz isso).
         const savedEntry = repesagemAnterioresIds
@@ -1429,7 +1502,9 @@ export default function LancamentoPesagensIndividuais() {
         if (capturaBalanca) consumeCapture(capturaBalanca);
         cicloLancamentoRef.current = crypto.randomUUID();
         const aplicacoesGravadas = Array.isArray(savedEntry?.aplicacoes_sanidade) ? savedEntry.aplicacoes_sanidade.length : 0;
-        const salvo = repesagemAnterioresIds ? '✓ Repesado! A pesagem anterior de hoje foi cancelada.' : '✓ Salvo!';
+        const salvo = repesagemAnterioresIds ? '✓ Repesado! A pesagem anterior de hoje foi cancelada.'
+          : pendenteEntrada ? `✓ Primeira pesagem do animal ${numeroDigitado}: mesmo animal da ${ENTRADA_SUBTIPO_LABELS[pendenteEntrada.operacao?.subtipo] || 'entrada'} de ${formatarData(pendenteEntrada.operacao?.data || pendenteEntrada.animal?.created_at?.slice(0, 10))} (operação ${String(pendenteEntrada.operacao?.id || '').slice(0, 8)}); nenhuma entrada nova.`
+          : '✓ Salvo!';
         toast.success(aplicacoesGravadas > 0 ? `${salvo} ${fmtInt(aplicacoesGravadas)} ${aplicacoesGravadas === 1 ? 'aplicação' : 'aplicações'} de sanidade.` : salvo);
         await refreshAnimalSeries(savedEntry?.animal_id || data.animal_id);
       } else {
@@ -1500,7 +1575,13 @@ export default function LancamentoPesagensIndividuais() {
         setTimeout(() => numeroInputRef.current?.focus(), 0);
       }
     } catch (error) {
-      toast.error('Erro: ' + error.message);
+      // Conferência da operação com avisos (ex.: carência na venda): o operador confirma e o mesmo lançamento é
+      // salvo de novo (mesmo ciclo — nada foi gravado na tentativa).
+      if (error?.code === 'OPERACAO_AVISOS' && error.conferencia?.avisos?.length) {
+        setOperacaoAvisos({ avisos: error.conferencia.avisos, options: { ...options, aceitarAvisosOperacao: true } });
+      } else {
+        toast.error('Erro: ' + error.message);
+      }
     } finally {
       setIsSaving(false);
       salvandoRef.current = false;
@@ -1510,12 +1591,29 @@ export default function LancamentoPesagensIndividuais() {
 
   // ========== EXCLUIR PESAGEM ==========
   const handleExcluir = async (pesagem) => {
+    // Pesagem que é a Entrada/Saída de uma operação: excluir = cancelar a operação (motivo, auditoria), para o
+    // livro, o inventário e a pesagem continuarem coerentes.
+    let vinculo = null;
+    try { vinculo = pesagem?.id ? await findOperationOfEntry(pesagem.id) : null; } catch { vinculo = null; }
+    setExclusaoVinculo(vinculo);
     setDeleteLaunchRequest(pesagem);
   };
 
-  const confirmarExclusaoLancamento = async () => {
+  const confirmarExclusaoLancamento = async (motivoCancelamento) => {
     const pesagem = deleteLaunchRequest;
     if (!pesagem) return;
+    if (exclusaoVinculo?.operacao) {
+      try {
+        await cancelOperation(exclusaoVinculo.operacao.id, { motivo: motivoCancelamento });
+        setDeleteLaunchRequest(null);
+        setExclusaoVinculo(null);
+        setAvisoTela({ tipo: 'info', mensagem: `Operação cancelada (${String(exclusaoVinculo.operacao.id).slice(0, 8)}): o lançamento saiu do rebanho e do livro, com o motivo na auditoria.` });
+        await loadAllData();
+      } catch (error) {
+        toast.error('Erro: ' + error.message);
+      }
+      return;
+    }
     const result = await deleteEntriesRespectingHistory({ entries: pesagens, ids: [pesagem.id], empresaId: empresaSelecionadaId });
     setDeleteLaunchRequest(null);
     setAvisoTela({
@@ -1668,9 +1766,9 @@ export default function LancamentoPesagensIndividuais() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Cadastro">Cadastro (Novo Animal)</SelectItem>
-                <SelectItem value="Manejo">Manejo (Pesagem Periódica)</SelectItem>
-                <SelectItem value="Saída">Saída (Venda/Morte/Doação)</SelectItem>
+                <SelectItem value="Cadastro">{LAUNCH_MODE_LABELS.Cadastro}</SelectItem>
+                <SelectItem value="Manejo">{LAUNCH_MODE_LABELS.Manejo}</SelectItem>
+                <SelectItem value="Saída">{LAUNCH_MODE_LABELS['Saída']}</SelectItem>
               </SelectContent>
             </Select>
 
@@ -1692,12 +1790,7 @@ export default function LancamentoPesagensIndividuais() {
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Venda">Venda</SelectItem>
-                    <SelectItem value="Morte">Morte</SelectItem>
-                    <SelectItem value="Doação">Doação</SelectItem>
-                    <SelectItem value="Abate">Abate</SelectItem>
-                    <SelectItem value="Transferência">Transferência</SelectItem>
-                    <SelectItem value="Outros">Outros</SelectItem>
+                    {MOTIVOS_SAIDA_ORDEM.map((motivo) => <SelectItem key={motivo} value={motivo}>{MOTIVO_SAIDA_LABELS[motivo]}</SelectItem>)}
                   </SelectContent>
                 </Select>
 
@@ -1747,6 +1840,19 @@ export default function LancamentoPesagensIndividuais() {
               </>
             }
 
+            {tipoManejo === 'Cadastro' && !editingId && <>
+              <Label className="text-xs font-medium">Motivo da Entrada <span className="text-red-500">*</span></Label>
+              <Select value={subtipoEntrada} onValueChange={setSubtipoEntrada}>
+                <SelectTrigger className="h-8 text-xs w-48" aria-label="Motivo da Entrada"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {ENTRADA_SUBTIPOS_LANCAMENTO.map((subtipo) => <SelectItem key={subtipo} value={subtipo}>{ENTRADA_SUBTIPO_LABELS[subtipo]}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Label htmlFor="entrada-sem-peso" className="text-xs font-medium flex items-center gap-1" title="O animal entra no rebanho pendente de pesagem; nenhum peso é gravado.">
+                <Checkbox id="entrada-sem-peso" checked={entradaSemPeso} onCheckedChange={(checked) => setEntradaSemPeso(checked === true)} aria-label="Entrada sem peso" />
+                <span>Sem peso</span>
+              </Label>
+            </>}
             {tipoManejo === 'Cadastro' && <>
               <Button type="button" variant="outline" size="icon" onClick={() => setMostrarSequenciaBrinco(!mostrarSequenciaBrinco)} className="d17d-icon-action h-8 w-8" title={mostrarSequenciaBrinco ? 'Ocultar Sequência de Brincos' : 'Sequência de Brincos'}>
                 <Tag className="w-4 h-4" />
@@ -2178,7 +2284,11 @@ export default function LancamentoPesagensIndividuais() {
               origem: pesagemAuto ? 'BALANCA' : 'MANUAL',
               estavel: !pesagemAuto || pesoEstagioBalanca === 'stable',
             }}
-            dataAplicacao={dataPesagem} />
+            dataAplicacao={dataPesagem}
+            animalChave={tipoManejo === 'Cadastro' ? `${numeroAnimal}|${marcaId || ''}` : (animalIdSelecionado || numeroAnimal)}
+            podeCadastrar={podeCadastrarSanidade}
+            empresaId={empresaSelecionadaId}
+            onCatalogoAtualizado={carregarCatalogoSanidade} />
           }
 
           {/* Dados de Saída (Venda) */}
@@ -2829,9 +2939,16 @@ export default function LancamentoPesagensIndividuais() {
 
       <ConfirmarExclusaoLancamentoDialog
         pesagem={deleteLaunchRequest}
-        bloqueado={deleteLaunchPlan.cascades.some((cascade) => cascade.blocked)}
-        onCancel={() => setDeleteLaunchRequest(null)}
+        bloqueado={exclusaoVinculo ? exclusaoVinculo.quantidade > 1 : deleteLaunchPlan.cascades.some((cascade) => cascade.blocked)}
+        operacao={exclusaoVinculo}
+        onCancel={() => { setDeleteLaunchRequest(null); setExclusaoVinculo(null); }}
         onConfirm={confirmarExclusaoLancamento}
+      />
+
+      <OperacaoAvisosDialog
+        avisos={operacaoAvisos?.avisos || null}
+        onCancel={() => setOperacaoAvisos(null)}
+        onConfirm={() => { const pendente = operacaoAvisos; setOperacaoAvisos(null); if (pendente) handleSalvarRef.current?.(pendente.options); }}
       />
 
       <ConferirPesoDialog

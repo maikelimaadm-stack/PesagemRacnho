@@ -147,6 +147,12 @@ export async function registerLaunchOperation(input = {}) {
   });
 }
 
+/** Animal que entrou sem peso com este número/marca (a Entrada no Lançamento vira a 1ª pesagem dele). */
+export async function findPendingEntryAnimal({ numero, marcaId = null } = {}) {
+  requirePermission('weighing.read');
+  return adapter.findPendingEntryAnimal({ numero, marcaId });
+}
+
 /** Operação de origem de uma pesagem (para editar/excluir no Lançamento sem descasar o livro). */
 export async function findOperationOfEntry(pesagemId) {
   requirePermission('weighing.read');

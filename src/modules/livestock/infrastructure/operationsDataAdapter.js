@@ -501,6 +501,25 @@ export async function registerLaunchOperation({ id, header, item, launch = null,
   return { ...(await getOperation(id)), repetida, avisos };
 }
 
+/**
+ * Animal que entrou por operação SEM peso (PENDENTE_PESAGEM, sem pesagens) com este número e marca: a "Entrada"
+ * digitada no Lançamento para ele é a PRIMEIRA PESAGEM dele (mesmo animal, nenhuma entrada nova).
+ */
+export async function findPendingEntryAnimal({ numero, marcaId = null }) {
+  const chave = normalized(numero);
+  if (!chave) return null;
+  const db = await readyDb();
+  const candidatos = (await db.table('animais').where('identificacao_normalizada').equals(chave).toArray())
+    .filter((row) => active(row) && row.situacao === 'ATIVO' && row.situacao_cadastro === 'PENDENTE_PESAGEM' && (row.marca_id || null) === (marcaId || null));
+  for (const animal of candidatos) {
+    const pesagens = (await db.table('pesagens').where('animal_id').equals(animal.id).toArray()).filter(active);
+    if (pesagens.length) continue;
+    const operacao = animal.operacao_entrada_id ? await byId(db, 'operacoes', animal.operacao_entrada_id) : null;
+    return { animal: strip(animal), operacao: operacao ? strip(operacao) : null };
+  }
+  return null;
+}
+
 /** Operação (não legada) a que uma pesagem pertence, com o item; null se a pesagem não veio de operação. */
 export async function findOperationOfEntry(pesagemId) {
   if (!pesagemId) return null;

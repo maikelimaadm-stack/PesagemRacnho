@@ -192,7 +192,7 @@ let draftSequence = 0;
 const DRAFT_FIELDS = ['programa_sanidade_id', 'medicamento_id', 'dose', 'unidade', 'via_aplicacao', 'observacao'];
 // F09: dose pela posologia aprovada — campos do ANIMAL atual (peso usado, sugestão, confirmação). Nunca seguem
 // para o próximo animal nem para o sessionStorage do contexto: o próximo tem outro peso.
-const POSOLOGY_FIELDS = ['posologia_id', 'dose_sugerida', 'peso_base_kg', 'peso_base_data', 'peso_base_origem', 'dose_confirmada'];
+const POSOLOGY_FIELDS = ['posologia_id', 'dose_sugerida', 'peso_base_kg', 'peso_base_data', 'peso_base_origem', 'peso_base_animal', 'dose_confirmada'];
 
 /** Rascunho de aplicação (valores de formulário em texto; `key` só identifica a linha na tela). */
 export function newSanityDraft(template = {}) {

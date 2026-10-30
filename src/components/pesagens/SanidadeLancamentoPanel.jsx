@@ -5,7 +5,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronUp, Plus, Syringe, X } from "lucide-react";
+import { BookOpen, ChevronUp, Pencil, Plus, Syringe, X } from "lucide-react";
+import { toast } from "sonner";
 import { fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
 import {
   PROGRAMA_TIPO_LABELS,
@@ -13,8 +14,11 @@ import {
   VIAS_APLICACAO,
   VIA_LABELS,
   getDoseSuggestion,
+  saveMedicamento,
   suggestedDose,
 } from "@/modules/sanity/application/sanityService";
+import MedicamentoFormDialog from "@/components/sanidade/MedicamentoFormDialog";
+import PosologiaDialog from "@/components/sanidade/PosologiaDialog";
 import { applyMedicamentoToDraft, clearPosologyFromDraft, formatDoseInput, newSanityDraft } from "@/modules/weighing/domain/launchContext";
 import { createPageUrl } from "@/utils";
 import "@/styles/launch-sanity-panel.css";
@@ -30,29 +34,41 @@ import "@/styles/launch-visual.css";
 // dose aplicada exige confirmação; se o peso mudar, a dose calculada é desfeita.
 const NENHUM = "__none__";
 
-function PosologiaHint({ draft, numero, pesoBase, dataAplicacao, onChange }) {
+function PosologiaHint({ draft, numero, pesoBase, dataAplicacao, animalChave, versaoRegras, onChange }) {
   const [sug, setSug] = useState(null);
+  const [erro, setErro] = useState(null);
   const kg = pesoBase?.kg;
   const pronto = Boolean(draft.medicamento_id) && kg > 0 && pesoBase?.estavel !== false;
   useEffect(() => {
     let ativo = true;
-    if (!pronto) { setSug(null); return undefined; }
-    getDoseSuggestion({ medicamentoId: draft.medicamento_id, peso: { kg, data: dataAplicacao, origem: pesoBase.origem }, dataAplicacao })
+    setErro(null);
+    if (!draft.medicamento_id) { setSug(null); return undefined; }
+    // Sem peso pronto ainda se consulta a SITUAÇÃO da regra (sem posologia, rascunho…), sem calcular dose.
+    getDoseSuggestion({ medicamentoId: draft.medicamento_id, peso: { kg: pronto ? kg : null, data: dataAplicacao, origem: pesoBase?.origem }, dataAplicacao })
       .then((r) => { if (ativo) setSug(r); })
-      .catch(() => { if (ativo) setSug(null); });
+      .catch((e) => { if (ativo) { setSug(null); setErro(e?.message || 'falha ao consultar a posologia'); } });
     return () => { ativo = false; };
-  }, [pronto, draft.medicamento_id, kg, pesoBase?.origem, dataAplicacao]);
-  // Peso mudou depois de usar a sugestão: a dose calculada sai (o operador recalcula).
+  }, [pronto, draft.medicamento_id, kg, pesoBase?.origem, dataAplicacao, versaoRegras]);
+  // A dose da regra vale para ESTE animal com ESTE peso estável: peso diferente, balança instável/desconectada ou
+  // outro animal desfazem a sugestão usada e a confirmação (o operador recalcula e confirma de novo).
   useEffect(() => {
-    if (draft.posologia_id && String(draft.peso_base_kg) !== String(kg ?? '')) onChange((atual) => ({ ...clearPosologyFromDraft(atual), dose: '' }));
-  }, [draft.posologia_id, draft.peso_base_kg, kg, onChange]);
+    if (!draft.posologia_id) return;
+    const pesoMudou = String(draft.peso_base_kg) !== String(kg ?? '');
+    const animalMudou = (draft.peso_base_animal || '') !== (animalChave || '');
+    if (pesoMudou || animalMudou || !pronto) onChange((atual) => ({ ...clearPosologyFromDraft(atual), dose: '' }));
+  }, [draft.posologia_id, draft.peso_base_kg, draft.peso_base_animal, kg, animalChave, pronto, onChange]);
   if (!draft.medicamento_id) return null;
+  const situacao = sug?.situacaoLabel ? <span className="d17d-sanity-table__status" data-posologia-situacao={sug.situacao}>Posologia: {sug.situacaoLabel}. </span> : null;
+  if (erro) return <tr className="d17d-sanity-table__hint is-error"><td colSpan={7}>Não foi possível consultar a posologia: {erro}</td></tr>;
+  if (sug && sug.situacao && sug.situacao !== 'APROVADA') {
+    return <tr className="d17d-sanity-table__hint"><td colSpan={7}>{situacao}{sug.bloqueios[0]} Dose manual (sem cálculo por peso).</td></tr>;
+  }
   if (!pronto) {
-    return <tr className="d17d-sanity-table__hint"><td colSpan={7}>{pesoBase?.estavel === false ? 'Dose pela posologia: aguardando peso estável da balança.' : 'Dose pela posologia: informe o peso do animal.'}</td></tr>;
+    return <tr className="d17d-sanity-table__hint"><td colSpan={7}>{situacao}{pesoBase?.estavel === false ? 'Dose pela posologia: aguardando peso estável da balança.' : 'Dose pela posologia: informe o peso do animal.'}</td></tr>;
   }
   if (!sug) return null;
   if (!sug.ok) {
-    return <tr className="d17d-sanity-table__hint"><td colSpan={7}>{sug.posologia ? sug.bloqueios[0] : 'Sem posologia aprovada para este produto: dose manual.'}</td></tr>;
+    return <tr className="d17d-sanity-table__hint"><td colSpan={7}>{situacao}{sug.bloqueios[0]} Dose manual.</td></tr>;
   }
   const usar = () => onChange((atual) => ({
     ...atual,
@@ -64,19 +80,21 @@ function PosologiaHint({ draft, numero, pesoBase, dataAplicacao, onChange }) {
     peso_base_kg: String(kg),
     peso_base_data: dataAplicacao,
     peso_base_origem: pesoBase.origem,
+    peso_base_animal: animalChave || '',
     dose_confirmada: '',
   }));
   return (
     <tr className="d17d-sanity-table__hint" data-dose-sugerida={sug.dose}>
       <td colSpan={7}>
-        <span>Dose sugerida pela posologia: <strong>{fmtNum(sug.dose)} {sug.unidade}</strong> ({sug.regra}; peso {fmtInt(kg)} kg {pesoBase.origem === 'BALANCA' ? 'da balança' : 'digitado'}).</span>
+        {situacao}
+        <span>Dose sugerida: <strong>{fmtNum(sug.dose)} {sug.unidade}</strong> ({sug.regra}; peso {fmtInt(kg)} kg {pesoBase.origem === 'BALANCA' ? 'estável da balança' : 'digitado'}).</span>
         {sug.avisos.length ? <span> {sug.avisos.join(' ')}</span> : null}
         {!draft.posologia_id ? (
           <Button type="button" variant="outline" size="sm" className="ml-2" onClick={usar} aria-label={`Usar dose sugerida na aplicação ${numero}`}>Usar dose sugerida</Button>
         ) : (
           <Label className="ml-2 inline-flex items-center gap-1">
             <Checkbox checked={draft.dose_confirmada === 'true'} onCheckedChange={(checked) => onChange((atual) => ({ ...atual, dose_confirmada: checked === true ? 'true' : '' }))} aria-label={`Confirmo a dose aplicada na aplicação ${numero}`} />
-            <span>Confirmo a dose aplicada</span>
+            <span>Confirmo a dose aplicada{draft.dose ? ` (${draft.dose} ${draft.unidade || ''})` : ''}</span>
           </Label>
         )}
       </td>
@@ -98,9 +116,38 @@ export default function SanidadeLancamentoPanel({
   onRecolher,
   pesoBase = null,
   dataAplicacao = null,
+  animalChave = "",
+  podeCadastrar = false,
+  empresaId = null,
+  onCatalogoAtualizado,
 }) {
   const semCadastros = catalogoCarregado && !erroCatalogo && programas.length === 0 && medicamentos.length === 0;
   const medicamentoPorId = (id) => medicamentos.find((item) => item.id === id) || null;
+  // Cadastro no contexto do curral (registry.write): medicamento e posologia em diálogo, sem sair do lançamento.
+  const [dialogMedicamento, setDialogMedicamento] = useState(null); // { record, linhaKey }
+  const [dialogPosologia, setDialogPosologia] = useState(null); // medicamento
+  const [salvandoMedicamento, setSalvandoMedicamento] = useState(false);
+  const [versaoRegras, setVersaoRegras] = useState(0);
+  const salvarMedicamento = async (input) => {
+    setSalvandoMedicamento(true);
+    try {
+      const salvo = await saveMedicamento(input);
+      toast.success(dialogMedicamento?.record ? 'Medicamento atualizado.' : 'Medicamento cadastrado.');
+      await onCatalogoAtualizado?.();
+      // Novo a partir de uma linha: já fica escolhido nela (unidade/via do cadastro; dose continua do operador).
+      const linha = dialogMedicamento?.linhaKey;
+      if (!dialogMedicamento?.record && salvo?.id) {
+        if (linha) atualizar(linha, (atual) => applyMedicamentoToDraft(atual, salvo, suggestedDose(salvo)));
+        else onAplicacoesChange?.([...aplicacoes, applyMedicamentoToDraft(newSanityDraft(), salvo, suggestedDose(salvo))]);
+      }
+      setVersaoRegras((v) => v + 1);
+      setDialogMedicamento(null);
+    } catch (error) {
+      toast.error(error?.message || 'Não foi possível salvar o medicamento.');
+    } finally {
+      setSalvandoMedicamento(false);
+    }
+  };
 
   const atualizar = (key, alterar) => {
     onAplicacoesChange?.(aplicacoes.map((draft) => (draft.key === key ? alterar(draft) : draft)));
@@ -131,6 +178,11 @@ export default function SanidadeLancamentoPanel({
               />
               <span>Aplicar esta configuração aos próximos animais</span>
             </Label>
+          )}
+          {!modoEdicao && podeCadastrar && (
+            <Button type="button" variant="outline" size="sm" className="d17d-sanity-panel__add" onClick={() => setDialogMedicamento({ record: null, linhaKey: null })}>
+              <Plus className="w-3.5 h-3.5" aria-hidden="true" /> Novo medicamento
+            </Button>
           )}
           {!modoEdicao && (
             <Button type="button" variant="outline" size="sm" className="d17d-sanity-panel__add" onClick={adicionar} disabled={semCadastros}>
@@ -170,7 +222,9 @@ export default function SanidadeLancamentoPanel({
           )}
           {semCadastros && (
             <p className="d17d-sanity-panel__message">
-              Nenhum programa ou medicamento ativo. Cadastre-os na <Link to={createPageUrl("Sanidade")} className="font-medium text-emerald-800 underline">tela Sanidade</Link> para registrar aplicações no lançamento.
+              Nenhum programa ou medicamento ativo. {podeCadastrar
+                ? <>Use <strong>Novo medicamento</strong> aqui mesmo (ou a <Link to={createPageUrl("Sanidade")} className="font-medium text-emerald-800 underline">tela Sanidade</Link>, para programas).</>
+                : <>Peça a um gestor para cadastrar na <Link to={createPageUrl("Sanidade")} className="font-medium text-emerald-800 underline">tela Sanidade</Link>.</>}
             </p>
           )}
           {!semCadastros && (
@@ -182,7 +236,7 @@ export default function SanidadeLancamentoPanel({
                 <tr>
                   <th>Programa/Procedimento</th>
                   <th>Medicamento/Produto</th>
-                  <th>Dose</th>
+                  <th>Dose aplicada</th>
                   <th>Unidade</th>
                   <th>Via</th>
                   <th>Observação</th>
@@ -196,6 +250,7 @@ export default function SanidadeLancamentoPanel({
                 {aplicacoes.map((draft, index) => {
                   const medicamento = draft.medicamento_id ? medicamentoPorId(draft.medicamento_id) : null;
                   const sugestaoTexto = medicamento?.dose_padrao && suggestedDose(medicamento) == null ? medicamento.dose_padrao : '';
+                  const alterarDraft = (alterar) => atualizar(draft.key, alterar);
                   const numero = index + 1;
                   return (
                     <React.Fragment key={draft.key}>
@@ -217,13 +272,21 @@ export default function SanidadeLancamentoPanel({
                               {medicamentos.map((item) => <SelectItem key={item.id} value={item.id}>{item.nome}</SelectItem>)}
                             </SelectContent>
                           </Select>
+                          <span className="d17d-sanity-row__tools">
+                            <button type="button" className="d17d-sanity-table__tool" disabled={!medicamento} onClick={() => setDialogMedicamento({ record: medicamento, linhaKey: draft.key })} aria-label={`${podeCadastrar ? 'Editar' : 'Consultar'} medicamento da aplicação ${numero}`} title={podeCadastrar ? 'Editar medicamento' : 'Consultar medicamento'}>
+                              <Pencil className="w-3.5 h-3.5" aria-hidden="true" />
+                            </button>
+                            <button type="button" className="d17d-sanity-table__tool" disabled={!medicamento} onClick={() => setDialogPosologia(medicamento)} aria-label={`${podeCadastrar ? 'Configurar' : 'Consultar'} posologia da aplicação ${numero}`} title={podeCadastrar ? 'Configurar posologia' : 'Consultar posologia'}>
+                              <BookOpen className="w-3.5 h-3.5" aria-hidden="true" />
+                            </button>
+                          </span>
                         </td>
                         <td>
                           <Input
                             type="text"
                             inputMode="decimal"
                             value={draft.dose}
-                            onChange={(e) => { const dose = e.target.value; atualizar(draft.key, (atual) => ({ ...atual, dose })); }}
+                            onChange={(e) => { const dose = e.target.value; atualizar(draft.key, (atual) => ({ ...atual, dose, ...(atual.posologia_id ? { dose_confirmada: '' } : {}) })); }}
                             placeholder="Ex: 5"
                             aria-label={`Dose da aplicação ${numero}`}
                             title={sugestaoTexto ? `Sugestão: ${sugestaoTexto}` : undefined}
@@ -262,9 +325,9 @@ export default function SanidadeLancamentoPanel({
                         </td>
                       </tr>
                       {sugestaoTexto && (
-                        <tr className="d17d-sanity-table__hint"><td colSpan={7}>Sugestão: {sugestaoTexto}</td></tr>
+                        <tr className="d17d-sanity-table__hint"><td colSpan={7}>Referência do cadastro (texto, não calcula pelo peso): {sugestaoTexto}</td></tr>
                       )}
-                      <PosologiaHint draft={draft} numero={numero} pesoBase={pesoBase} dataAplicacao={dataAplicacao} onChange={(alterar) => atualizar(draft.key, alterar)} />
+                      <PosologiaHint draft={draft} numero={numero} pesoBase={pesoBase} dataAplicacao={dataAplicacao} animalChave={animalChave} versaoRegras={versaoRegras} onChange={alterarDraft} />
                     </React.Fragment>
                   );
                 })}
@@ -273,6 +336,26 @@ export default function SanidadeLancamentoPanel({
           )}
         </div>
       )}
+      <MedicamentoFormDialog
+        open={Boolean(dialogMedicamento)}
+        record={dialogMedicamento?.record || null}
+        readOnly={!podeCadastrar}
+        busy={salvandoMedicamento}
+        unidades={UNIDADES_DOSE}
+        vias={VIAS_APLICACAO}
+        viaLabels={VIA_LABELS}
+        empresaId={empresaId}
+        onOpenChange={(open) => { if (!open) setDialogMedicamento(null); }}
+        onSubmit={salvarMedicamento}
+      />
+      <PosologiaDialog
+        open={Boolean(dialogPosologia)}
+        medicamento={dialogPosologia}
+        medicamentos={medicamentos}
+        canWrite={podeCadastrar}
+        onOpenChange={(open) => { if (!open) setDialogPosologia(null); }}
+        onChanged={() => setVersaoRegras((v) => v + 1)}
+      />
     </div>
   );
 }
