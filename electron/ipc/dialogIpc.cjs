@@ -2,6 +2,7 @@ const { dialog, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { wrapIpcHandler, AppError } = require('../ipcErrors.cjs');
+const { rememberSelectedBackup } = require('./attachmentIpc.cjs');
 
 function focusedWindow() {
   return BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null;
@@ -46,6 +47,8 @@ function registerDialogIpc(ipcMain, getDataDir) {
       } catch {
         throw new AppError('IMPORT_001', 'Arquivo JSON inválido');
       }
+      // F16: a restauração busca os anexos na pasta "<arquivo>.anexos" ao lado do JSON escolhido.
+      rememberSelectedBackup(filePath);
       return {
         canceled: false,
         fileName: path.basename(filePath),

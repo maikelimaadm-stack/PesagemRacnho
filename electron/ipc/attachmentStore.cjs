@@ -1,0 +1,132 @@
+// Anexos de documentos (F16) guardados OFFLINE na pasta de dados do usuário, fora do IndexedDB:
+//   <dados>/anexos/<sha256>.<ext>   — endereçado pelo conteúdo (mesmo arquivo = um objeto só)
+//   <dados>/backups/<backup>.anexos/<sha256>.<ext> — cópia junto do backup completo (pacote: JSON + pasta)
+// Regras: extensões permitidas e tamanho máximo; o renderer nunca manda caminho (só sha256 + extensão
+// validados, ou o nome do backup reduzido a basename); toda cópia é temporário + rename e é conferida pelo
+// SHA-256 lido de volta. Nada aqui apaga anexo (retenção: anexo de fato cancelado continua guardado).
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+
+const EXTENSOES = Object.freeze(['.pdf', '.jpg', '.jpeg', '.png', '.webp', '.xml', '.txt', '.csv']);
+const MAX_BYTES = 25 * 1024 * 1024;
+const SHA_RE = /^[a-f0-9]{64}$/;
+
+class AttachmentError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
+
+const sha256 = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
+
+function normalizeExt(ext) {
+  const e = `.${String(ext || '').replace(/^\./, '').toLowerCase()}`;
+  if (!EXTENSOES.includes(e)) throw new AttachmentError('ANEXO_EXTENSAO', `Tipo de arquivo não permitido (${e}). Use PDF, imagem, XML, TXT ou CSV.`);
+  return e;
+}
+
+function assertSha(value) {
+  if (!SHA_RE.test(String(value || ''))) throw new AttachmentError('ANEXO_INVALIDO', 'Identificador do anexo inválido.');
+  return String(value);
+}
+
+function backupDirName(backupFile) {
+  const base = path.basename(String(backupFile || ''));
+  if (!/^[\w.-]+\.json$/i.test(base)) throw new AttachmentError('ANEXO_INVALIDO', 'Nome de backup inválido.');
+  return `${base.replace(/\.json$/i, '')}.anexos`;
+}
+
+function atomicCopy(src, dest) {
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  const tmp = `${dest}.tmp-${process.pid}-${Date.now()}`;
+  fs.copyFileSync(src, tmp);
+  fs.renameSync(tmp, dest);
+}
+
+function createAttachmentStore(dataDir) {
+  const root = path.resolve(dataDir);
+  const anexosDir = path.join(root, 'anexos');
+  const backupsDir = path.join(root, 'backups');
+  const objectPath = (dir, sha, ext) => path.join(dir, `${assertSha(sha)}${normalizeExt(ext)}`);
+
+  /** Copia um arquivo escolhido no diálogo nativo para a pasta de anexos (endereçado pelo SHA-256). */
+  function importFromPath(srcPath) {
+    const resolved = path.resolve(srcPath);
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) throw new AttachmentError('ANEXO_INVALIDO', 'Arquivo não encontrado.');
+    const ext = normalizeExt(path.extname(resolved));
+    const size = fs.statSync(resolved).size;
+    if (size === 0) throw new AttachmentError('ANEXO_VAZIO', 'Arquivo vazio.');
+    if (size > MAX_BYTES) throw new AttachmentError('ANEXO_GRANDE', 'Arquivo maior que 25 MB.');
+    const bytes = fs.readFileSync(resolved);
+    const hash = sha256(bytes);
+    const dest = objectPath(anexosDir, hash, ext);
+    if (!fs.existsSync(dest) || sha256(fs.readFileSync(dest)) !== hash) atomicCopy(resolved, dest);
+    if (sha256(fs.readFileSync(dest)) !== hash) throw new AttachmentError('ANEXO_CORROMPIDO', 'A cópia do anexo não confere (SHA-256).');
+    const nome = path.basename(resolved).replace(/[^\w.\- ()À-ÿ]/g, '_').slice(0, 120);
+    return { sha256: hash, size, ext: ext.slice(1), nome_original: nome };
+  }
+
+  function checkObject(dir, { sha256: sha, ext }) {
+    const full = objectPath(dir, sha, ext);
+    if (!fs.existsSync(full)) return { sha256: sha, estado: 'FALTANDO' };
+    return sha256(fs.readFileSync(full)) === sha ? { sha256: sha, estado: 'OK', size: fs.statSync(full).size } : { sha256: sha, estado: 'CORROMPIDO' };
+  }
+
+  const summarize = (checks) => ({
+    total: checks.length,
+    ok: checks.filter((c) => c.estado === 'OK').length,
+    faltando: checks.filter((c) => c.estado === 'FALTANDO').map((c) => c.sha256),
+    corrompidos: checks.filter((c) => c.estado === 'CORROMPIDO').map((c) => c.sha256),
+  });
+
+  function verify(objects = []) {
+    return summarize(objects.map((o) => checkObject(anexosDir, o)));
+  }
+
+  /** Copia os anexos para a pasta do backup e confere cada um. Anexo ausente na origem = backup incompleto. */
+  function snapshot(backupFile, objects = []) {
+    const dir = path.join(backupsDir, backupDirName(backupFile));
+    const checks = objects.map((o) => {
+      const origem = checkObject(anexosDir, o);
+      if (origem.estado !== 'OK') return origem;
+      const dest = objectPath(dir, o.sha256, o.ext);
+      if (!fs.existsSync(dest) || sha256(fs.readFileSync(dest)) !== o.sha256) atomicCopy(objectPath(anexosDir, o.sha256, o.ext), dest);
+      return checkObject(dir, o);
+    });
+    return { pasta: path.basename(dir), ...summarize(checks) };
+  }
+
+  function verifyBackup(backupFile, objects = [], baseDir = backupsDir) {
+    const dir = path.join(baseDir, backupDirName(backupFile));
+    return { pasta: path.basename(dir), ...summarize(objects.map((o) => checkObject(dir, o))) };
+  }
+
+  /** Restaura os anexos da pasta do backup (em `baseDir`) para a pasta de anexos, conferindo o hash. */
+  function restore(backupFile, objects = [], baseDir = backupsDir) {
+    const dir = path.join(baseDir, backupDirName(backupFile));
+    const checks = objects.map((o) => {
+      const naOrigem = checkObject(dir, o);
+      if (naOrigem.estado !== 'OK') {
+        // Já presente e íntegro na pasta de anexos (mesmo conteúdo): restaurado.
+        const local = checkObject(anexosDir, o);
+        return local.estado === 'OK' ? local : naOrigem;
+      }
+      const dest = objectPath(anexosDir, o.sha256, o.ext);
+      if (!fs.existsSync(dest) || sha256(fs.readFileSync(dest)) !== o.sha256) atomicCopy(objectPath(dir, o.sha256, o.ext), dest);
+      return checkObject(anexosDir, o);
+    });
+    return { pasta: path.basename(dir), ...summarize(checks) };
+  }
+
+  function pathOf(sha, ext) {
+    const full = objectPath(anexosDir, sha, ext);
+    if (!fs.existsSync(full)) throw new AttachmentError('ANEXO_FALTANDO', 'Arquivo do anexo não encontrado.');
+    return full;
+  }
+
+  return { importFromPath, verify, snapshot, verifyBackup, restore, pathOf, anexosDir, backupsDir };
+}
+
+module.exports = { createAttachmentStore, AttachmentError, EXTENSOES, MAX_BYTES };

@@ -8,6 +8,7 @@
 import storage from '../../../storage/storageAdapter.js';
 import { describeVersions } from '../../../versioning/versionInfo.js';
 import { runSaidaDerivedBackfill } from '../../weighing/application/weighingDerivedBackfill.js';
+import { attachmentObjects } from '../../documents/domain/documentRules.js';
 
 function files() {
   return window.pesagemApp?.files || null;
@@ -15,6 +16,15 @@ function files() {
 function getDialogs() {
   return window.pesagemApp?.dialogs || null;
 }
+// F16: anexos dos documentos (pasta de dados do usuário, fora do IndexedDB).
+function attachments() {
+  return window.pesagemApp?.attachments || null;
+}
+/** Objetos de anexo (sha256 + ext) de um backup (todos os documentos com arquivo, inclusive cancelados). */
+function backupAttachmentObjects(backup) {
+  return attachmentObjects(backup?.stores?.documentos || []);
+}
+const anexosResumo = (r) => (r ? { total: r.total, ok: r.ok, faltando: r.faltando || [], corrompidos: r.corrompidos || [], pasta: r.pasta || null } : null);
 function unwrapDialog(result) {
   if (result?.ok === false) {
     const err = new Error(result.error?.message || 'Operação de arquivo falhou');
@@ -41,7 +51,16 @@ async function saveFile(subdir, filename, content) {
 async function persistFullBackup({ reason, automatic = false } = {}) {
   const { backup, counts } = await storage.createFullBackup({ reason, automatic });
   const saved = await saveFile('backups', `backup-completo-${stamp()}.json`, JSON.stringify(backup, null, 2));
+  // F16: pacote = JSON + pasta "<backup>.anexos" com cada anexo conferido pelo SHA-256.
+  const objetos = backupAttachmentObjects(backup);
+  let anexos = { total: 0, ok: 0, faltando: [], corrompidos: [], pasta: null };
+  if (objetos.length) {
+    anexos = attachments()?.snapshot
+      ? anexosResumo(unwrapDialog(await attachments().snapshot({ backupFile: baseName(saved.path), objects: objetos })))
+      : { total: objetos.length, ok: 0, faltando: objetos.map((o) => o.sha256), corrompidos: [], pasta: null };
+  }
   await storage.recordBackupHistory('full-durable', {
+    anexos,
     backupId: backup.manifest?.backupId,
     reason,
     automatic,
@@ -51,7 +70,7 @@ async function persistFullBackup({ reason, automatic = false } = {}) {
     payloadSha256: backup.integrity?.sha256,
     counts,
   });
-  return { backup, counts, ...saved };
+  return { backup, counts, anexos, ...saved };
 }
 
 function safetyEvidenceOf(saved) {
@@ -89,7 +108,18 @@ export async function verifyBackupFile({ name, expectedFileSha256 = null } = {})
       throw Object.assign(new Error('Arquivo truncado ou corrompido: não é um JSON válido.'), { code: 'BACKUP_VERIFY_JSON' });
     }
     const dry = await storage.dryRunRestore(payload);
+    // F16: backup só é COMPLETO com todos os anexos presentes e íntegros na pasta dele.
+    const objetos = backupAttachmentObjects(payload);
+    let anexos = { total: 0, ok: 0, faltando: [], corrompidos: [], pasta: null };
+    if (objetos.length) {
+      if (!attachments()?.verifyBackup) throw Object.assign(new Error('Não foi possível conferir os anexos do backup (abra pelo aplicativo desktop).'), { code: 'BACKUP_VERIFY_ANEXOS' });
+      anexos = anexosResumo(unwrapDialog(await attachments().verifyBackup({ backupFile: baseName(read.path), objects: objetos })));
+      if (anexos.faltando.length || anexos.corrompidos.length) {
+        throw Object.assign(new Error(`Backup incompleto: ${anexos.faltando.length} anexo(s) faltando e ${anexos.corrompidos.length} corrompido(s) na pasta ${anexos.pasta}.`), { code: 'BACKUP_VERIFY_ANEXOS' });
+      }
+    }
     const result = {
+      anexos,
       ok: true, path: read.path, name: baseName(read.path), size: read.size, fileSha256: read.sha256,
       payloadSha256: payload?.integrity?.sha256 || null, backupId: payload?.manifest?.backupId || null,
       createdAt: payload?.manifest?.createdAt || payload?.createdAt || null, reason: payload?.manifest?.reason || null,
@@ -110,11 +140,15 @@ export async function verifyBackupFile({ name, expectedFileSha256 = null } = {})
  */
 export async function createBackupNow({ reason = 'manual-ui', automatic = false } = {}) {
   const saved = await persistFullBackup({ reason, automatic });
+  if (saved.anexos.faltando.length || saved.anexos.corrompidos.length) {
+    await storage.recordBackupHistory('verify', { ok: false, path: saved.path, name: baseName(saved.path), size: saved.size, fileSha256: saved.sha256, error: 'Anexos faltando na origem: backup incompleto.', code: 'BACKUP_ANEXOS_INCOMPLETO', verifiedAt: new Date().toISOString() });
+    throw Object.assign(new Error(`O backup foi gravado, mas NÃO está completo: ${saved.anexos.faltando.length} anexo(s) não encontrado(s) na pasta de anexos e ${saved.anexos.corrompidos.length} corrompido(s). Confira em Documentos.`), { code: 'BACKUP_ANEXOS_INCOMPLETO', backupPath: saved.path, anexos: saved.anexos });
+  }
   const verification = await verifyBackupFile({ name: baseName(saved.path), expectedFileSha256: saved.sha256 });
   if (!verification.ok) {
     throw Object.assign(new Error(`O backup foi gravado, mas a verificação falhou: ${verification.error}`), { code: 'BACKUP_VERIFY_FAILED', backupPath: saved.path });
   }
-  return { ok: true, backupPath: saved.path, counts: saved.counts, size: saved.size, sha256: saved.sha256, verified: true, verifiedAt: verification.verifiedAt };
+  return { ok: true, backupPath: saved.path, counts: saved.counts, size: saved.size, sha256: saved.sha256, verified: true, verifiedAt: verification.verifiedAt, anexos: saved.anexos };
 }
 
 // Compatibilidade: os dois nomes antigos são o MESMO backup completo (antes dois botões sugeriam
@@ -225,6 +259,14 @@ export async function applyRestoreBackup(backup) {
   // E1G (1.4.2): backup de antes da 1.4.2 volta sem o marcador 'derivados-saida-v1' — o GMD das saídas com peso é
   // recalculado já, sem esperar a próxima abertura (nunca lança; com o marcador, não faz nada).
   await runSaidaDerivedBackfill();
+  // F16: anexos do backup voltam da pasta "<backup>.anexos" ao lado do arquivo escolhido, conferidos pelo hash.
+  // Anexo faltando ou corrompido é erro VISÍVEL no resultado (o banco já restaurado aponta para ele).
+  const objetos = backupAttachmentObjects(backup);
+  if (objetos.length) {
+    result.anexos = attachments()?.restore
+      ? anexosResumo(unwrapDialog(await attachments().restore({ origem: 'selecionado', objects: objetos })))
+      : { total: objetos.length, ok: 0, faltando: objetos.map((o) => o.sha256), corrompidos: [], pasta: null };
+  }
   return result;
 }
 

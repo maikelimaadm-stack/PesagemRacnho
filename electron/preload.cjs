@@ -20,6 +20,15 @@ contextBridge.exposeInMainWorld('pesagemApp', {
     print: (args) => ipcRenderer.invoke('reports:print', args),
     saveFile: (args) => ipcRenderer.invoke('reports:save-file', args),
   },
+  // Anexos de documentos (F16): o renderer só envia sha256 + extensão e o nome do backup; nunca caminho.
+  attachments: {
+    selectAndImport: () => ipcRenderer.invoke('attachments:select-and-import'),
+    verify: (args) => ipcRenderer.invoke('attachments:verify', args),
+    open: (args) => ipcRenderer.invoke('attachments:open', args),
+    snapshot: (args) => ipcRenderer.invoke('attachments:snapshot', args),
+    verifyBackup: (args) => ipcRenderer.invoke('attachments:verify-backup', args),
+    restore: (args) => ipcRenderer.invoke('attachments:restore', args),
+  },
   dialogs: {
     selectImportJson: () => ipcRenderer.invoke('dialog:select-import-json'),
     selectExportDirectory: () => ipcRenderer.invoke('dialog:select-export-directory'),

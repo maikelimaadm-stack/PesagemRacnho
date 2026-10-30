@@ -4,6 +4,7 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { registerDialogIpc } = require('./ipc/dialogIpc.cjs');
 const { registerReportIpc } = require('./ipc/reportIpc.cjs');
+const { registerAttachmentIpc } = require('./ipc/attachmentIpc.cjs');
 const { registerEquipmentSessionHandlers, registerEquipmentIpc, attachBluetoothHandlerToContents } = require('./ipc/equipmentIpc.cjs');
 const appLogger = require('./logging/appLogger.cjs');
 const appRuntime = require('./appRuntime.cjs');
@@ -210,6 +211,8 @@ app.whenReady().then(() => {
   });
 
   registerDialogIpc(ipcMain, () => dataDir);
+  // Anexos de documentos (F16): pasta de dados do usuário, seleção pelo diálogo nativo.
+  registerAttachmentIpc(ipcMain, () => dataDir);
   // Emissão de relatórios (PDF, impressão, salvar arquivo) — destino sempre escolhido no diálogo nativo.
   registerReportIpc(ipcMain);
 
