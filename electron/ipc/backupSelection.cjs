@@ -27,7 +27,10 @@ function createSelectionRegistry({ max = 16 } = {}) {
   function remember(filePath, bytes) {
     const token = crypto.randomBytes(16).toString('hex');
     const full = path.resolve(filePath);
-    selecoes.set(token, { dir: path.dirname(full), fileName: path.basename(full), size: bytes.length, sha256: sha256(bytes) });
+    // R2-02: SHA-256 do CONTEÚDO do backup (integrity.sha256) para o renderer provar que restaura o que foi lido.
+    let conteudoSha256 = null;
+    try { conteudoSha256 = JSON.parse(bytes.toString('utf8'))?.integrity?.sha256 || null; } catch { conteudoSha256 = null; }
+    selecoes.set(token, { dir: path.dirname(full), fileName: path.basename(full), size: bytes.length, sha256: sha256(bytes), conteudoSha256 });
     while (selecoes.size > max) selecoes.delete(selecoes.keys().next().value);
     return { token, sha256: sha256(bytes), size: bytes.length };
   }

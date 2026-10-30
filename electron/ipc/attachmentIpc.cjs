@@ -40,7 +40,7 @@ function registerAttachmentIpc(ipcMain, getDataDir) {
   // R02 — restauração em fases: conferir (nada muda) → preparar (pasta de preparo) → [banco] → efetivar | descartar.
   ipcMain.handle('attachments:preflight-selected', wrapIpcHandler(async (_e, { selecao, objects } = {}) => {
     const sel = selecoes.resolve(selecao);
-    return { arquivo: { fileName: sel.fileName, sha256: sel.sha256, size: sel.size }, ...store().verifyBackup(sel.fileName, objectsOf(objects), sel.dir) };
+    return { arquivo: { fileName: sel.fileName, sha256: sel.sha256, size: sel.size }, conteudoSha256: sel.conteudoSha256, ...(objectsOf(objects).length ? store().verifyBackup(sel.fileName, objectsOf(objects), sel.dir) : { total: 0, ok: 0, faltando: [], corrompidos: [] }) };
   }));
   ipcMain.handle('attachments:stage', wrapIpcHandler(async (_e, { selecao, objects, inline } = {}) => {
     if (Array.isArray(inline)) return store().stageInline(inline.slice(0, 100000).map((a) => ({ sha256: a?.sha256, ext: a?.ext, base64: a?.base64 })));

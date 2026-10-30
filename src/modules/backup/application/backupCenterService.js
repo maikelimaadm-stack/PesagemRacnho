@@ -281,6 +281,9 @@ export async function restoreGuided(inspecao, { confirmacao, onLogout, aceitarAn
   requirePermission('maintenance.restore');
   if (confirmacao !== CONFIRMACAO_RESTAURAR) throw new Error(`Para restaurar, digite ${CONFIRMACAO_RESTAURAR}.`);
   if (!inspecao?.backup || !inspecao?.dry?.restorable) throw new Error('Backup não restaurável.');
+  // R2-02: pela tela, backup comum só é restaurado vinculado ao arquivo inspecionado (token); o protegido traz os
+  // anexos no próprio envelope já aberto. Sem isso, chamada fora do assistente restauraria uma cópia qualquer.
+  if (!inspecao.anexosInline && !inspecao.selecao) throw Object.assign(new Error('Restauração sem a seleção do arquivo inspecionado: selecione o backup de novo.'), { code: 'BACKUP_SELECAO_INVALIDA' });
   const result = await maintenanceAdapter.applyRestoreBackup(inspecao.backup, {
     selecao: inspecao.selecao || null,
     anexosInline: inspecao.anexosInline ? inspecao.anexosInline : null,
@@ -288,6 +291,8 @@ export async function restoreGuided(inspecao, { confirmacao, onLogout, aceitarAn
     aceitarAnexosFaltandoNoPacote: aceitarAnexosFaltandoNoPacote === true,
   });
   const integridade = await storage.logicalIntegrity();
+  // Só chega aqui com a restauração aplicada e conferida (falha = exceção, sem logout). Os usuários do banco agora
+  // são os do backup: a sessão atual é encerrada mesmo se a recuperação de anexos foi parcial e aceita.
   if (inspecao.usuarios > 0 && typeof onLogout === 'function') onLogout();
   return { ...result, integridade: { ok: integridade.ok, issues: integridade.issues || [] }, sessaoEncerrada: inspecao.usuarios > 0 };
 }

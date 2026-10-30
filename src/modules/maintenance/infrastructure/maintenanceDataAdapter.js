@@ -9,6 +9,7 @@ import storage from '../../../storage/storageAdapter.js';
 import { describeVersions } from '../../../versioning/versionInfo.js';
 import { runSaidaDerivedBackfill } from '../../weighing/application/weighingDerivedBackfill.js';
 import { attachmentObjects } from '../../documents/domain/documentRules.js';
+import { setWriteBlocked } from '../../../storage/migrations/migrationState.js';
 
 function files() {
   return window.pesagemApp?.files || null;
@@ -390,6 +391,15 @@ export async function applyRestoreBackup(backup, { selecao = null, anexosInline 
   const objetos = backupAttachmentObjects(backup);
   const api = attachments();
   // 1. Conferir.
+  // R2-02: com arquivo selecionado, o arquivo é reconferido (token + SHA-256) MESMO sem anexos, e o conteúdo em
+  // memória tem de ser o do arquivo (SHA-256 do conteúdo do backup lido no processo principal). Sem seleção, só é
+  // aceita a cópia em memória de backup SEM anexos (uso programático; a tela sempre passa a seleção).
+  if (selecao && api?.preflightSelected && !Array.isArray(anexosInline)) {
+    const conf = unwrapDialog(await api.preflightSelected({ selecao, objects: [] }));
+    if (conf?.conteudoSha256 && backup?.integrity?.sha256 && conf.conteudoSha256 !== backup.integrity.sha256) {
+      throw falhaRestauracao('BACKUP_CONTEUDO_DIVERGENTE', 'O conteúdo a restaurar não é o do arquivo selecionado (SHA-256 do conteúdo diferente). Selecione e inspecione de novo. Nada foi alterado.');
+    }
+  }
   let faltandoNoPacote = [];
   if (objetos.length) {
     let pre;
@@ -421,64 +431,103 @@ export async function applyRestoreBackup(backup, { selecao = null, anexosInline 
     }
   }
   const descartar = async () => { if (stageId) { try { unwrapDialog(await api.discardStage({ stageId })); } catch { /* pasta de preparo fica para limpeza; banco e anexos intactos */ } } };
-  // 4. Banco.
+  // A partir daqui a base PODE mudar (R2-02): toda falha — na troca da base, na migração/backfills que ela dispara,
+  // na efetivação dos anexos, nos derivados ou na conferência final — passa pela compensação (volta ao backup de
+  // segurança verificado). Não há transação única entre IndexedDB e disco: os anexos são endereçados pelo conteúdo e
+  // nunca sobrescritos quando íntegros, então o estado antigo deles continua lá; o banco é o que volta.
   let result;
-  try {
-    result = await storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
-  } catch (err) {
-    await descartar();
-    throw err;
-  }
-  // 5. Efetivar anexos; se falhar, compensar o banco com o backup de segurança.
   let efetivado = null;
-  if (stageId) {
-    try {
+  let fase = 'banco';
+  try {
+    // 4. Banco (inclui a migração/backfill quando o backup é de esquema anterior).
+    result = await storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+    await faltaInjetada('banco');
+    // 5. Efetivar anexos.
+    fase = 'anexos';
+    if (stageId) {
       efetivado = anexosResumo(unwrapDialog(await api.commitStage({ stageId, objects: aPreparar })));
       if (efetivado.faltando.length || efetivado.corrompidos.length) throw falhaRestauracao('ANEXO_EFETIVAR', `${efetivado.faltando.length} faltando e ${efetivado.corrompidos.length} corrompido(s) após mover os anexos.`);
-    } catch (err) {
-      const compensacao = await compensarRestauracao(safety);
-      await storage.recordBackupHistory('restore-compensated', { error: err.message, code: err.code || null, compensado: compensacao.ok, safetyPath: safety.path });
-      throw falhaRestauracao(compensacao.ok ? 'BACKUP_RESTAURACAO_REVERTIDA' : 'BACKUP_RESTAURACAO_INCOMPLETA',
-        compensacao.ok
-          ? `Os anexos não puderam ser gravados (${err.message}). O banco foi devolvido ao estado anterior pelo backup de segurança; nada do backup escolhido ficou aplicado.`
-          : `Os anexos não puderam ser gravados (${err.message}) e a volta automática também falhou (${compensacao.error}). Restaure manualmente o backup de segurança ${baseName(safety.path)}.`,
-        { compensado: compensacao.ok, safetyBackup: safetyEvidenceOf(safety), recuperacaoCompleta: false });
     }
+    await faltaInjetada('anexos');
+    // E1G (1.4.2): backup de antes da 1.4.2 volta sem o marcador 'derivados-saida-v1' — o GMD das saídas com peso é
+    // recalculado já. Ele não lança: devolve o erro, que aqui é falha da restauração (antes era ignorado).
+    fase = 'derivados';
+    const derivados = await runSaidaDerivedBackfill();
+    if (derivados?.error) throw falhaRestauracao('DERIVADOS_FALHOU', `Recálculo do GMD das saídas falhou: ${derivados.error.message || derivados.error.code}.`);
+    await faltaInjetada('derivados');
+    // 6. Conferir de novo: contagens do banco e anexos na pasta do app.
+    // (Histórico de backup e configurações técnicas recebem registros da própria restauração; backup de esquema
+    // anterior passa pela migração, que cria derivados — nesses casos vale a contagem conferida na transação.)
+    fase = 'conferencia';
+    const db = await storage.ensureReady();
+    const esperado = result.schemaUpgradeRequired ? {} : (await storage.dryRunRestore(backup)).counts || {};
+    const contagensDivergentes = [];
+    for (const [store, n] of Object.entries(esperado)) {
+      if (store === 'backupHistory' || store === 'appSettings' || !db.tables.some((t) => t.name === store)) continue;
+      const atual = await db.table(store).count();
+      if (atual !== n) contagensDivergentes.push({ store, esperado: n, atual });
+    }
+    await faltaInjetada('conferencia', { contagensDivergentes });
+    if (contagensDivergentes.length) throw falhaRestauracao('CONFERENCIA_FINAL', `Contagens diferentes do backup depois de restaurar: ${contagensDivergentes.map((c) => `${c.store} ${c.atual}/${c.esperado}`).join(', ')}.`);
+    if (objetos.length) {
+      const pos = api?.verify ? anexosResumo(unwrapDialog(await api.verify({ objects: objetos }))) : { total: objetos.length, ok: 0, faltando: objetos.map((o) => o.sha256), corrompidos: [], pasta: null };
+      // Só podem faltar os anexos que o ADMIN aceitou restaurar sem (ausentes no pacote); nenhum corrompido.
+      const inesperados = pos.faltando.filter((sha) => !ausentes.has(sha));
+      if (inesperados.length || pos.corrompidos.length) throw falhaRestauracao('CONFERENCIA_FINAL', `Anexos depois de restaurar: ${inesperados.length} faltando e ${pos.corrompidos.length} corrompido(s).`);
+      result.anexos = { ...pos, pasta: efetivado?.pasta ?? null };
+    }
+    result.contagensDivergentes = contagensDivergentes;
+  } catch (err) {
+    await descartar();
+    const compensacao = await compensarRestauracao(safety);
+    await storage.recordBackupHistory('restore-compensated', { fase, error: err.message, code: err.code || null, compensado: compensacao.ok, compensacaoErro: compensacao.error || null, safetyPath: safety.path });
+    if (!compensacao.ok) {
+      // CRÍTICO: base possivelmente inconsistente. Escrita bloqueada nesta sessão até restaurar um backup íntegro.
+      setWriteBlocked({ code: 'RESTAURACAO_CRITICA', message: `restauração falhou (${fase}) e a volta automática também falhou; restaure ${baseName(safety.path)}` });
+      await storage.recordBackupHistory('restore-critical', { fase, error: err.message, compensacaoErro: compensacao.error, safetyPath: safety.path });
+      throw falhaRestauracao('BACKUP_RESTAURACAO_CRITICA',
+        `RESTAURAÇÃO NÃO CONCLUÍDA E BASE POSSIVELMENTE INCONSISTENTE: falhou em "${fase}" (${err.message}) e a volta automática também falhou (${compensacao.error}). As gravações foram bloqueadas. Restaure em Sistema › Backup e Restauração o backup de segurança ${baseName(safety.path)} (verificado, SHA-256 ${safety.sha256}).`,
+        { fase, compensado: false, safetyBackup: safetyEvidenceOf(safety), recuperacaoCompleta: false, critico: true });
+    }
+    throw falhaRestauracao('BACKUP_RESTAURACAO_REVERTIDA',
+      `A restauração falhou em "${fase}" (${err.message}). O banco foi devolvido ao estado anterior pelo backup de segurança, conferido pelas contagens; nada do backup escolhido ficou aplicado.`,
+      { fase, causa: err.code || null, compensado: true, safetyBackup: safetyEvidenceOf(safety), recuperacaoCompleta: false });
   }
-  // E1G (1.4.2): backup de antes da 1.4.2 volta sem o marcador 'derivados-saida-v1' — o GMD das saídas com peso é
-  // recalculado já, sem esperar a próxima abertura (nunca lança; com o marcador, não faz nada).
-  await runSaidaDerivedBackfill();
-  // 6. Conferir de novo: contagens do banco e anexos na pasta do app.
-  // (Histórico de backup e configurações técnicas recebem registros da própria restauração; backup de esquema
-  // anterior passa pela migração, que cria derivados — nesses casos vale a contagem conferida na transação.)
-  const db = await storage.ensureReady();
-  const esperado = result.schemaUpgradeRequired ? {} : (await storage.dryRunRestore(backup)).counts || {};
-  const contagensDivergentes = [];
-  for (const [store, n] of Object.entries(esperado)) {
-    if (store === 'backupHistory' || store === 'appSettings' || !db.tables.some((t) => t.name === store)) continue;
-    const atual = await db.table(store).count();
-    if (atual !== n) contagensDivergentes.push({ store, esperado: n, atual });
-  }
-  if (objetos.length) {
-    const pos = api?.verify ? anexosResumo(unwrapDialog(await api.verify({ objects: objetos }))) : { total: objetos.length, ok: 0, faltando: objetos.map((o) => o.sha256), corrompidos: [], pasta: null };
-    result.anexos = { ...pos, pasta: efetivado?.pasta ?? null };
-  }
-  result.contagensDivergentes = contagensDivergentes;
-  result.recuperacaoCompleta = contagensDivergentes.length === 0 && (!result.anexos || (result.anexos.ok === result.anexos.total && !result.anexos.faltando.length && !result.anexos.corrompidos.length));
+  result.recuperacaoCompleta = !result.anexos || (result.anexos.ok === result.anexos.total && !result.anexos.faltando.length && !result.anexos.corrompidos.length);
   result.safetyBackup = safetyEvidenceOf(safety);
   return result;
 }
 
-/** Compensação pós-commit: devolve o banco ao conteúdo do backup de segurança (já verificado). */
+/**
+ * Compensação (R2-02): devolve o banco ao conteúdo do backup de segurança (verificado; relido e conferido pelo
+ * SHA-256) e confere as contagens. Idempotente: pode rodar mesmo se a base não chegou a mudar.
+ */
 async function compensarRestauracao(safety) {
   try {
+    await faltaInjetada('compensacao');
     const lido = await readUserFile('backups', baseName(safety.path));
     if (lido.sha256 !== safety.sha256) throw new Error('backup de segurança mudou no disco');
-    await storage.applyRestore(JSON.parse(lido.content), { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+    const conteudo = JSON.parse(lido.content);
+    await storage.applyRestore(conteudo, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+    const esperado = (await storage.dryRunRestore(conteudo)).counts || {};
+    const db = await storage.ensureReady();
+    for (const [store, n] of Object.entries(esperado)) {
+      if (store === 'backupHistory' || store === 'appSettings' || !db.tables.some((t) => t.name === store)) continue;
+      if (await db.table(store).count() !== n) throw new Error(`contagem de ${store} não voltou ao backup de segurança`);
+    }
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
   }
+}
+
+/**
+ * Falha injetada SÓ para os gates (R2-02): pontos depois da troca da base que não dá para forçar de verdade num
+ * banco sintético. `faltas.em(fase, contexto)` pode lançar. Em uso normal fica nulo.
+ */
+export const faltasRestauracaoParaTestes = { em: null };
+async function faltaInjetada(fase, contexto = {}) {
+  if (typeof faltasRestauracaoParaTestes.em === 'function') await faltasRestauracaoParaTestes.em(fase, contexto);
 }
 
 // --- Versões, migração, limpeza em dois níveis, diagnóstico ---

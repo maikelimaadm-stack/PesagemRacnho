@@ -35,7 +35,7 @@ export function createGateAttachmentBridge(dataDir, { importar = null } = {}) {
     read: wrap(async ({ sha256, ext }) => store.readObject(sha256, ext)),
     preflightSelected: wrap(async ({ selecao, objects }) => {
       const sel = selecoes.resolve(selecao);
-      return { arquivo: { fileName: sel.fileName, sha256: sel.sha256, size: sel.size }, ...store.verifyBackup(sel.fileName, objectsOf(objects), sel.dir) };
+      return { arquivo: { fileName: sel.fileName, sha256: sel.sha256, size: sel.size }, conteudoSha256: sel.conteudoSha256, ...(objectsOf(objects).length ? store.verifyBackup(sel.fileName, objectsOf(objects), sel.dir) : { total: 0, ok: 0, faltando: [], corrompidos: [] }) };
     }),
     stage: wrap(async ({ selecao, objects, inline }) => {
       const antesDeCopiar = () => { if (falhas.preparo) throw falhaGravacao(); };

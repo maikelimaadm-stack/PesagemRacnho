@@ -145,6 +145,10 @@ export function assertWritable(operation = 'Gravação', options = {}) {
   if (!writeBlock) return;
   const store = typeof options === 'string' ? options : options?.store;
   if (store && isWriteBlockExempt(store)) return;
+  // R2-02: bloqueio por restauração que falhou sem conseguir voltar — a orientação é restaurar, não migrar.
+  if (writeBlock.code === 'RESTAURACAO_CRITICA') {
+    throw new MigrationError('RESTAURACAO_CRITICA', `${operation} bloqueada: a última restauração falhou e a volta automática também (${writeBlock.message}). Abra Sistema › Backup e Restauração e restaure o backup de segurança indicado.`, { reason: writeBlock.code });
+  }
   throw new MigrationError(
     'MIGRATION_BLOCKED',
     `${operation} bloqueada: a migração do banco está pendente ou falhou (${writeBlock.message}). Abra Backup e Manutenção › Migração e use "Continuar migração".`,

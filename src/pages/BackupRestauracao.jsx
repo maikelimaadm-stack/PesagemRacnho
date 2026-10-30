@@ -154,7 +154,8 @@ function RestauracaoGuiada({ onDone }) {
             {insp.usuarios ? <li>Depois de restaurar, entre de novo com um usuário do backup.</li> : null}
           </ul>
           {recusa ? (
-            <div className="rb-alerts rb-alerts--warn" role="alert">
+            <div className={`rb-alerts ${recusa.code === 'BACKUP_RESTAURACAO_CRITICA' ? 'rb-alerts--error' : 'rb-alerts--warn'}`} role="alert" data-restauracao={recusa.code || 'recusada'}>
+              {recusa.code === 'BACKUP_RESTAURACAO_CRITICA' ? <p><strong>Restauração NÃO concluída — base possivelmente inconsistente. Gravações bloqueadas.</strong></p> : recusa.code === 'BACKUP_RESTAURACAO_REVERTIDA' ? <p><strong>Restauração NÃO concluída — o banco voltou ao estado anterior.</strong></p> : null}
               <p>{recusa.message}</p>
               {recusa.code === 'BACKUP_PRE_OPERACAO_FALHOU' && recusa.causa === 'BACKUP_ANEXOS_INCOMPLETO' ? (
                 <label className="rb-check"><input type="checkbox" checked={aceites.ausentesNaOrigem} onChange={(e) => setAceites((a) => ({ ...a, ausentesNaOrigem: e.target.checked }))} /> Anexos que JÁ faltam neste computador ficam fora do backup de segurança (ele será marcado incompleto).</label>
