@@ -298,6 +298,9 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
         setRestoreDry(null);
         setRestorePath("");
         setRestoreFileName("");
+        // F16: anexo que não veio com o backup é aviso VISÍVEL (o documento restaurado aponta para ele).
+        const faltando = (result?.anexos?.faltando?.length || 0) + (result?.anexos?.corrompidos?.length || 0);
+        if (faltando) toast.error(`Restaurado, mas ${faltando} anexo(s) não vieram com o backup (pasta "${result.anexos.pasta || 'arquivo.anexos'}" ao lado do arquivo). Os documentos ficam sem o arquivo até você copiar a pasta e restaurar de novo.`, { duration: 15000 });
         return result;
       },
       "Restauração concluída.",

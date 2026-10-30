@@ -146,3 +146,16 @@ completo** só para entregar o computador "zerado".
 - Não apague a pasta de dados do programa.
 - Não use a base de trabalho para testes.
 - Não edite o arquivo de backup à mão: o código de conferência deixa de bater e o programa recusa o arquivo.
+
+## Anexos de documentos
+
+Quando houver documentos com arquivo anexado, o backup completo vira um **pacote** com duas partes, lado a lado
+na pasta `backups`:
+
+- o arquivo **`backup-completo-….json`**;
+- a pasta **`backup-completo-….anexos`**, com os arquivos dos documentos.
+
+O backup só é **verificado** quando todos os anexos estão na pasta dele e conferem pelo SHA-256. Se faltar
+algum, a tela diz que o backup **não está completo**.
+
+Para guardar ou restaurar o backup em outro lugar, copie **o arquivo e a pasta juntos**.

@@ -323,3 +323,26 @@ essa identificação pertence a **um** animal.
   - `reports.read` para o painel e a projeção;
   - `reports.export` para exportar;
   - `settings.manage` para calendário, metas e cenários.
+
+## ADR-062 — Documentos com anexos offline e backup completo em pacote (F16)
+
+**Decisão.**
+- **Metadados.** Ficam na store `documentos` (v9): tipo, número, data, emissor, referência e vínculo a
+  operação, animal e/ou propriedade (ao menos um).
+  - O documento guarda só o SHA-256, a extensão, o tamanho e o nome do anexo.
+  - Cancelar é exclusão lógica com motivo e auditoria. O arquivo **nunca** é apagado: a retenção conserva a
+    evidência de fato cancelado.
+- **Bytes.** Ficam fora do IndexedDB, em `<dados>/anexos/<sha256>.<ext>`, endereçados pelo conteúdo
+  (`electron/ipc/attachmentStore.cjs`).
+  - A seleção é feita só pelo diálogo nativo; o renderer nunca envia caminho.
+  - Extensões permitidas: pdf, jpg, jpeg, png, webp, xml, txt e csv. Limite de 25 MB. Arquivo vazio é recusado.
+  - A cópia é feita em arquivo temporário, depois renomeada, e conferida pelo SHA-256 lido de volta.
+- **Backup completo = pacote.** É o JSON (formato existente) mais a pasta `<backup>.anexos/` ao lado dele.
+  - O manifesto dos objetos é a própria store `documentos` do JSON, inclusive cancelados.
+  - O `createBackupNow` só devolve backup **verificado** se todos os anexos foram copiados e conferidos.
+    Anexo ausente na origem gera `BACKUP_ANEXOS_INCOMPLETO`: o backup não é chamado de completo.
+  - O `verifyBackupFile` também confere a pasta: anexo faltando ou corrompido faz a verificação FALHAR.
+- **Restauração.** Depois do restore do banco, os anexos voltam da pasta `<arquivo>.anexos` ao lado do JSON
+  escolhido no diálogo. O processo principal lembra o caminho; o renderer não o informa.
+  - Faltando ou corrompido é erro visível no resultado e na tela.
+  - Backups anteriores à v9 (sem documentos com arquivo) seguem o fluxo antigo.

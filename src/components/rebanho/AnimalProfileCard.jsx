@@ -26,6 +26,7 @@ import {
   updateBirth,
 } from '@/modules/livestock/application/animalProfileService';
 import { csvEscape, describeError, fmtDate, todayIso } from './rebanhoModel';
+import DocumentosPanel from './DocumentosPanel';
 import '@/styles/rebanho.css';
 
 const birthForm = (animal) => ({
@@ -192,6 +193,7 @@ export default function AnimalProfileCard({ animal, canEdit, canWrite, onChanged
           </div>
         </div>
       ) : null}
+      <DocumentosPanel animalId={animal.id} canWrite={canWrite} canCancel={canEdit} titulo="Documentos do animal" />
       <p className="rb-note">{AVISO_DOSSIE}</p>
     </section>
   );

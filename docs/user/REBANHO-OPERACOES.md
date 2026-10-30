@@ -147,3 +147,26 @@ Abra **Cadastros › Identificadores**.
 O cadastro **Marcas** passou a se chamar **Marcas a Fogo**, que é a marca a ferro no animal. Os dados e as
 planilhas de importação continuam iguais, e a coluna **Marca** dos modelos continua aceita. Brinco, RFID e
 SISBOV ficam em **Identificadores**.
+
+## Documentos e anexos
+
+Na consulta de uma **operação** e na **Ficha do Animal**, o quadro **Documentos** registra os documentos ligados
+a ela: GTA, NF-e, romaneio, laudo, comprovante, certificado, evidência sanitária ou outro.
+
+1. Clique em **+ Documento** e informe o tipo, o número, a data e o emissor.
+2. Para guardar o arquivo, clique em **Anexar arquivo** e escolha o arquivo no seu computador.
+   - Formatos aceitos: PDF, imagem, XML, TXT ou CSV.
+   - Tamanho máximo: 25 MB.
+   - O arquivo é copiado para a pasta **anexos**, dentro da pasta de dados do aplicativo. O banco guarda só a
+     "impressão digital" (SHA-256) do arquivo.
+3. **Cancelar documento** pede um motivo. O arquivo continua guardado.
+
+### Anexos no backup
+
+- **Criar backup agora** grava o arquivo do backup e, ao lado dele, a pasta
+  **`backup-completo-….anexos`** com todos os anexos, cada um conferido.
+- **Anexo que sumiu** da pasta de anexos impede o backup de ser chamado de completo, e o aviso diz quantos
+  faltam.
+- **Ao copiar o backup** para um pendrive, leve o **arquivo `.json` e a pasta `.anexos`** juntos.
+- **Na restauração,** os anexos voltam da pasta `.anexos` ao lado do arquivo escolhido. Se a pasta não estiver
+  lá, o aplicativo avisa quantos anexos faltaram.

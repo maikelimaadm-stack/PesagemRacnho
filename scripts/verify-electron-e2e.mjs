@@ -251,6 +251,14 @@ try {
   await win.getByRole('button', { name: /Conferir e confirmar/ }).click();
   await win.getByText('Compra confirmada: 2 animal(is).').first().waitFor({ timeout: 15000 });
   await win.locator('.rb-row').filter({ hasText: 'Compra' }).first().waitFor();
+  // F16: documento (GTA) registrado na operação confirmada.
+  await win.locator('.rb-row').filter({ hasText: 'Compra' }).first().click();
+  const docsOperacao = win.getByRole('region', { name: 'Documentos da operação' });
+  await docsOperacao.getByRole('button', { name: 'Documento' }).click();
+  await docsOperacao.getByLabel('Número do documento').fill('GTA-E2E-1');
+  await docsOperacao.getByRole('button', { name: 'Salvar documento' }).click();
+  await win.getByText('Documento registrado.').first().waitFor();
+  await docsOperacao.getByText('GTA-E2E-1').first().waitFor();
   await irPara(win, 'Inventario');
   const compras = win.locator('.rb-table--balance tr').filter({ hasText: '+ Compras' });
   await compras.first().waitFor({ timeout: 15000 });

@@ -39,6 +39,7 @@ import {
   rebanhoPermissions,
   todayIso,
 } from './rebanhoModel';
+import DocumentosPanel from './DocumentosPanel';
 import '@/styles/rebanho.css';
 
 const EMPTY_CATALOG = { animais: [], marcas: [], racas: [], lotes: [], propriedades: [], parceiros: [], causasMorte: [] };
@@ -394,6 +395,7 @@ export default function OperacoesView({ tipo, title, singular, description }) {
               })}
             </tbody>
           </table>
+          <DocumentosPanel operacaoId={op.id} canWrite={canWrite && op.status !== 'CANCELADA'} canCancel={canCancel} titulo="Documentos da operação" />
           {podeCancelar ? (
             <section className="rb-card rb-card--danger" aria-label="Cancelar operação">
               <p className="rb-note">Cancelar desfaz o efeito no rebanho (entradas, saídas ou movimentações) e preserva o histórico com o motivo. Entrada de animal que já tem pesagens ou movimentações posteriores não pode ser cancelada.</p>
