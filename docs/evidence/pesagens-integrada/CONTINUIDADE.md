@@ -23,7 +23,7 @@ Este arquivo diz onde a missão está e como continuar sem refazer nada.
 | Final | versão 1.6.0 (sem tag), docs, rollback, desempenho | feito | final-hardening |
 | R1 | auditoria corretiva R01–R09 (`AUDITORIA-CORRETIVA-R1.md`) | feito; R04 Windows bloqueado (homologação) | `fix(R1-R0x)`, `perf(R1-R08)`, `test(R1-R09)` |
 | R2 | auditoria corretiva R2-01 a R2-06 (`AUDITORIA-CORRETIVA-R2.md`) | feito; `test:full` termina (36k medido à parte) | `fix(R2-0x)`, `test(R2-05/R2-06)` |
-| R3 | auditoria corretiva R3-01 a R3-03 (`AUDITORIA-CORRETIVA-R3.md`) | feito | `fix(R3-03)`, `fix(R3-01/R3-02)`, `perf(R3-02)` |
+| R3 | auditoria corretiva R3-01 a R3-03 (`AUDITORIA-CORRETIVA-R3.md`), com 2ª passada no Electron real (login e faixa sob o estado crítico) | feito | `fix(R3-03)`, `fix(R3-01/R3-02)`, `perf(R3-02)`, `fix(R3-01)` |
 
 A situação item a item (os 52, com evidência) está em `MATRIZ-52-ITENS.md`.
 
@@ -92,7 +92,8 @@ O E2E (`scripts/verify-electron-e2e.mjs`) percorre, no Electron real:
 - o backup e a manutenção;
 - compra e inventário, com documento;
 - identificadores e a ficha;
-- posologias, parametrização e desempenho.
+- posologias, parametrização e desempenho;
+- o estado crítico de restauração ao reabrir (R3-01): login, aviso global e gravação recusada.
 
 ## Arquitetura
 
@@ -130,6 +131,8 @@ Cada limite também está documentado no ADR correspondente.
 - R3-01: o estado crítico tem duas cópias: um arquivo na pasta de dados e uma chave em `appSettings`. Se o arquivo
   não puder ser gravado, a tela pede para não fechar o app. A cópia no banco reinstala o bloqueio ao reabrir, desde
   que o banco ainda seja legível. Fora do aplicativo desktop (navegador), só existe a cópia no banco.
+- R3-01: no Electron real, a reabertura com o marcador é coberta pelo E2E. A falha real de restauração e de
+  compensação só é forçada nos gates em Node. A abertura do app não ficou mais lenta (`R3-ABERTURA-ELECTRON.txt`).
 - R3-02: a conferência de conteúdo pós-restauração custa cerca de 8 s com 36 mil pesagens no Electron real
   (`R3-BENCH-CONFERENCIA-ELECTRON.txt`).
 - A abertura do Lançamento com 36 mil pesagens já estava acima do orçamento antes da missão (aprox. 1,7 s;

@@ -2,12 +2,13 @@
 // curral pela interface, como o usuário faria. Diferente dos gates que leem o
 // fonte, este prova comportamento: primeiro acesso → marca → Cadastro → Manejo →
 // repesagem → peso fora da faixa (justificativa) → desfazer → Relação → fechar e
-// reabrir com os dados no lugar → balança chegando a estável → Relatórios.
+// reabrir com os dados no lugar → balança chegando a estável → Relatórios → estado crítico de
+// restauração persistente (R3-01) ao reabrir.
 //
 // Linux sem tela: xvfb-run -a npm run e2e:electron:verify
 // Pede o build da interface (npm run build) antes: o main carrega dist/.
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -319,6 +320,31 @@ try {
 
   await app.close();
   assert.deepEqual(errors, [], `sem erros no console da interface:\n${errors.join('\n')}`);
+
+  // 14. R3-01 no Electron real: marcador de restauração crítica na pasta de dados (mesmo formato do processo
+  // principal) → reabrir: login funciona, a faixa global orienta a restauração (não a migração), gravar é recusado,
+  // a página Backup mostra o backup de segurança indicado e o marcador continua lá.
+  const pastaDados = join(userData, 'data');
+  mkdirSync(pastaDados, { recursive: true });
+  const marcador = join(pastaDados, 'estado-restauracao-critica.json');
+  writeFileSync(marcador, JSON.stringify({ codigo: 'RESTAURACAO_CRITICA', em: new Date().toISOString(), fase: 'compensacao', backupNome: 'pre-restauracao-e2e.json', backupSha256: 'a'.repeat(64) }));
+  ({ app, win } = await abrir());
+  await entrar(win);
+  const faixaGlobal = win.locator('[data-estado-critico-global="RESTAURACAO_CRITICA"]');
+  await faixaGlobal.waitFor();
+  const textoFaixa = await faixaGlobal.innerText();
+  assert.ok(textoFaixa.includes('pre-restauracao-e2e.json') && !/Continuar migração/.test(textoFaixa), 'faixa global orienta a restauração');
+  await irPara(win, 'Marcas');
+  await win.locator('.aux-new-button').first().click();
+  await win.getByLabel('Marca a fogo', { exact: true }).fill('CRT');
+  await win.getByLabel('Abreviação').fill('CRT');
+  await win.getByTitle('Salvar (Enter)').click();
+  await win.getByText(/Gravação em marcas bloqueada: a última restauração falhou/).first().waitFor();
+  await irPara(win, 'BackupRestauracao');
+  await win.locator('[data-estado-critico="RESTAURACAO_CRITICA"]').filter({ hasText: 'pre-restauracao-e2e.json' }).waitFor();
+  await app.close();
+  assert.ok(existsSync(marcador), 'reabrir não apaga o marcador crítico');
+  assert.deepEqual(errors, [], `sem erros no console da interface (estado crítico):\n${errors.join('\n')}`);
   console.log('OK verify-electron-e2e');
 } finally {
   rmSync(userData, { recursive: true, force: true });

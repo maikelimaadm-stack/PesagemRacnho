@@ -113,6 +113,19 @@ export async function writeMigrationState(db, version, patch) {
 export const WRITE_BLOCK_EXEMPT_STORES = Object.freeze(['usuarios', 'auditoria']);
 
 let writeBlock = null;
+
+/** Códigos de erro dos dois bloqueios de escrita (migração e restauração crítica). */
+export const WRITE_BLOCK_ERROR_CODES = Object.freeze(['MIGRATION_BLOCKED', 'RESTAURACAO_CRITICA']);
+/** true quando o erro é um bloqueio de escrita — gravações best-effort (login, auditoria de acesso) o toleram. */
+export function isWriteBlockError(error) {
+  return Boolean(error) && (WRITE_BLOCK_ERROR_CODES.includes(error.code) || WRITE_BLOCK_ERROR_CODES.includes(error.reason));
+}
+// Avisa a tela (faixa global) quando um bloqueio entra ou sai. Fora do navegador (gates em Node) não faz nada.
+function avisarMudanca() {
+  try {
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof Event === 'function') window.dispatchEvent(new Event('pesagens:bloqueio-escrita'));
+  } catch { /* só aviso de tela */ }
+}
 // R3-01: bloqueio CRÍTICO de restauração em espaço próprio. A migração (`setWriteBlocked`/`clearWriteBlock`) e a
 // restauração comum nunca o desfazem; só `clearCriticalBlock` — chamado depois de uma restauração conferida — e um
 // novo processo só o perde se o marcador durável (fora do banco) também não existir.
@@ -129,6 +142,7 @@ export function getWriteBlock() {
 
 export function setCriticalBlock({ message = 'restauração falhou e a volta automática também', fase = null, backupNome = null, backupSha256 = null, persistido = null } = {}) {
   criticalBlock = { code: 'RESTAURACAO_CRITICA', message, fase, backupNome, backupSha256, persistido, since: new Date().toISOString() };
+  avisarMudanca();
   return { ...criticalBlock };
 }
 
@@ -138,16 +152,19 @@ export function getCriticalBlock() {
 
 export function clearCriticalBlock() {
   criticalBlock = null;
+  avisarMudanca();
 }
 
 export function setWriteBlocked({ code = 'MIGRATION_BLOCKED', message = 'Migração pendente ou com falha.', version = null } = {}) {
   writeBlock = { code, message, version, since: new Date().toISOString() };
+  avisarMudanca();
   return getWriteBlock();
 }
 
 /** Libera só o bloqueio de MIGRAÇÃO; o crítico de restauração (R3-01) não é afetado. */
 export function clearWriteBlock() {
   writeBlock = null;
+  avisarMudanca();
 }
 
 /** true quando a store pode ser gravada mesmo com o bloqueio ativo (usuarios, auditoria). */

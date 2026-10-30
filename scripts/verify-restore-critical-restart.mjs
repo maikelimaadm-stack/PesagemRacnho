@@ -3,7 +3,7 @@
 //   • falha depois da troca da base + falha na compensação → marcador em arquivo (nome fixo, conteúdo mínimo, sem
 //     caminho nem dados) e escrita bloqueada;
 //   • PROCESSO NOVO apontando para a MESMA pasta de dados, pela abertura real do app (bootstrapLocalDb): escrita
-//     continua bloqueada, inclusive depois de clearWriteBlock (migração); login (usuarios/auditoria) segue liberado;
+//     continua bloqueada, inclusive depois de clearWriteBlock (migração); o login REAL (authenticate) funciona;
 //     processo novo com OUTRA pasta não herda o bloqueio;
 //   • histórico de backup falhando no ramo crítico: o erro continua CRÍTICO e a escrita bloqueada;
 //   • marcador em arquivo sem conseguir gravar (disco cheio): CRÍTICO avisa e fica a cópia no banco, que reinstala o
@@ -75,7 +75,23 @@ if (modo === 'abrir') {
     await ops.confirmOperation(r.operacao.id);
     crud = (await db.table('animais').toArray()).some((a) => a.numero_animal === '77');
   }
-  console.log(JSON.stringify({ ready: boot.ready, escrita: antes, escritaDepoisDeClearWriteBlock: depoisClear, loginLiberado: login, crud }));
+  // Com a escrita bloqueada: o FLUXO REAL de login (authenticate grava last_login_at e o evento de acesso) precisa
+  // funcionar — é por ele que o ADMIN chega à restauração de recuperação. Senha errada continua AUTH_INVALID e o
+  // login não libera a escrita. (Importado só aqui: o serviço de autenticação liga a exigência de sessão.)
+  let loginReal = null;
+  if (!antes.ok) {
+    const auth = await import('../src/modules/auth/application/localAuthService.js');
+    try {
+      if ((await auth.countActiveUsers()) === 0) await auth.bootstrapFirstAdmin({ nome: 'Admin Gate', login: 'gestor', senha: 'Curral#2026' });
+      const sessao = await auth.authenticate('gestor', 'Curral#2026');
+      let senhaErrada = null;
+      try { await auth.authenticate('gestor', 'Errada#2026'); } catch (e) { senhaErrada = e.code; }
+      loginReal = { ok: sessao?.login === 'gestor', senhaErrada, escritaDepois: escreve().code || 'liberada' };
+    } catch (e) {
+      loginReal = { ok: false, erro: e.code || e.message };
+    }
+  }
+  console.log(JSON.stringify({ ready: boot.ready, escrita: antes, escritaDepoisDeClearWriteBlock: depoisClear, loginLiberado: login, loginReal, crud }));
   process.exit(0);
 }
 const abrirDeNovo = (pasta = dataDir) => {
@@ -130,9 +146,10 @@ try {
   assert.deepEqual(reaberto.escrita, { ok: false, code: 'RESTAURACAO_CRITICA' }, 'reabrir o app não libera');
   assert.deepEqual(reaberto.escritaDepoisDeClearWriteBlock, { ok: false, code: 'RESTAURACAO_CRITICA' }, 'clearWriteBlock (migração) não libera');
   assert.equal(reaberto.loginLiberado, true, 'login (usuarios/auditoria) continua possível');
+  assert.deepEqual(reaberto.loginReal, { ok: true, senhaErrada: 'AUTH_INVALID', escritaDepois: 'RESTAURACAO_CRITICA' }, 'login real (authenticate) funciona ao reabrir; senha errada recusada; escrita continua bloqueada');
   const outroPerfil = abrirDeNovo(join(mkdtempSync(join(tmpdir(), 'pesagens-outro-')), 'dados'));
   assert.equal(outroPerfil.escrita.ok, true, 'outro perfil não herda o bloqueio');
-  resumo.push('R3-01 processo novo na MESMA pasta: escrita bloqueada (também depois de clearWriteBlock), login liberado; outra pasta: livre');
+  resumo.push('R3-01 processo novo na MESMA pasta: escrita bloqueada (também depois de clearWriteBlock); login REAL (authenticate) funciona, senha errada recusada; outra pasta: livre');
 
   // 3. Recuperação que falha: marcador continua.
   faltasRestauracaoParaTestes.em = (fase) => { if (fase === 'derivados') throw new Error('falha na recuperação (simulado)'); };

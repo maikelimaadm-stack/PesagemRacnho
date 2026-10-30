@@ -256,11 +256,12 @@ Gera um arquivo `.pbk` **cifrado** (AES-GCM 256) com o banco e os anexos.
 #### Estado crítico (gravações bloqueadas)
 
 Quando a restauração e a volta automática falham, a página mostra uma faixa vermelha **"Estado CRÍTICO"** com
-o nome do backup de segurança a restaurar.
+o nome do backup de segurança a restaurar. Um aviso no topo de todas as telas repete a orientação.
 
 - O bloqueio **continua depois de fechar e abrir o aplicativo**. Ele fica anotado num arquivo da pasta de dados,
   fora do banco, e uma cópia fica no próprio banco. Reiniciar o computador também não o libera.
-- Enquanto isso, ainda dá para entrar no sistema e consultar os dados. Gravar não dá.
+- Enquanto isso, ainda dá para entrar no sistema (login) e consultar os dados. Gravar não dá: a tela explica
+  o motivo.
 - **Para sair do estado crítico:** em **Backup e Restauração**, restaure o backup de segurança indicado, pelo nome
   e pelo SHA-256. Também serve outro backup íntegro e conferido. Só uma restauração **conferida** (conteúdo e
   anexos) libera as gravações.

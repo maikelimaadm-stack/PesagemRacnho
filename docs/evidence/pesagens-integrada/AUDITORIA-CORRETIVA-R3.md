@@ -7,7 +7,7 @@
 | PR | #4, em **DRAFT** |
 | HEAD auditado (R2) | `b3f8b618a5f62216d4914e3a0c73edd171bf0c63` |
 | `main` | `9392274972d41efb29007122c7a9ed826be9b283`, não alterada |
-| Commits da R3 | `f102e6d` (R3-03), `aee8303` (R3-01/R3-02), `7ea8880` (custo da conferência), mais o commit desta documentação |
+| Commits da R3 | `f102e6d` (R3-03), `aee8303` (R3-01/R3-02), `7ea8880` (custo da conferência), `3c9d960` e `a4b84fe` (docs), mais o commit da 2ª passada (login e faixa sob o estado crítico, E2E) |
 | Versão | app 1.6.0, Dexie v9 aditiva, backup formato 3. Sem v10, `STORES_V7`/`STORES_V8` intactos |
 
 ## Método
@@ -133,8 +133,64 @@ R3-01 bloqueio de migração continua funcionando e independente do crítico
 - No gate, o `fake-indexeddb` vive na memória de cada processo. Num processo filho, quem reinstala o bloqueio é o
   **arquivo**.
 - A cópia em `appSettings` foi provada reabrindo no mesmo processo, numa conexão nova.
-- No Electron real, as duas cópias valem. A abertura do app e as regressões ficam no E2E, mas uma reinicialização
-  crítica no Electron real não foi encenada.
+- No Electron real, a reabertura com o marcador é encenada pelo E2E (passo 14, abaixo). O marcador é escrito
+  pelo próprio teste, no formato do processo principal. Uma falha real de restauração e de compensação dentro do
+  Electron não foi forçada, porque os pontos de falha só existem nos gates em Node.
+
+### 2ª passada da R3: login e faixa global sob o estado crítico (Electron real)
+
+O mesmo prompt foi reexecutado sobre `a4b84fe`, e a lacuna do item anterior foi encenada no Electron real. Foram
+usados um perfil temporário, o marcador na pasta de dados e duas reaberturas. Apareceram dois defeitos que os
+gates em Node não pegavam, porque checavam `assertWritable('…', { store: 'usuarios' })` e não o fluxo de login:
+
+1. **Login impossível.** `authenticate` grava o evento de acesso por `recordAccessEvent`, que chama `assertWritable`
+   sem informar a store. A tolerância best-effort (`isMigrationBlocked`) só reconhecia `MIGRATION_BLOCKED`. Com o
+   estado crítico, o código é `RESTAURACAO_CRITICA`, então o login falhava e a tela mostrava "Login ou senha
+   inválidos". O ADMIN não chegava à restauração de recuperação.
+2. **Orientação errada.** A faixa global (`DbBootstrap`), presente em todas as telas, dizia "A migração do banco não
+   foi concluída… Continuar migração". Ela também era calculada só na abertura.
+
+**VERMELHO em `a4b84fe`.** O código de `src/` foi guardado e os testes novos rodaram contra ele:
+
+```text
+restore:critical-restart:verify → AssertionError: login real (authenticate) funciona ao reabrir; senha errada recusada; escrita continua bloqueada
+  actual: { ok: false, erro: 'RESTAURACAO_CRITICA' }
+e2e:electron:verify (passo 14) → TimeoutError: waiting for getByText('Relação de Pesagens') (o login não completa)
+```
+
+**Correção.**
+
+- `isMigrationBlocked` (auth) e `appConfigService` toleram os dois bloqueios de escrita: `MIGRATION_BLOCKED` e
+  `RESTAURACAO_CRITICA`. `migrationState` passou a exportar `WRITE_BLOCK_ERROR_CODES` e `isWriteBlockError`. As
+  gravações de dados continuam recusadas: só o que já era best-effort no acesso passa a tolerar o crítico.
+- `DbBootstrap` mostra, no estado crítico, a faixa global `data-estado-critico-global` com o backup de segurança
+  indicado e "Não use reset nem limpeza de dados". A faixa acompanha a sessão: `migrationState` emite
+  `pesagens:bloqueio-escrita` quando um bloqueio entra ou sai.
+
+**VERDE.**
+
+- `restore:critical-restart:verify`: no processo filho na mesma pasta, o `authenticate` real funciona, a senha
+  errada dá `AUTH_INVALID` e a escrita continua `RESTAURACAO_CRITICA`.
+- `e2e:electron:verify`, passo 14 (novo, roda no CI): marcador na pasta de dados, depois reabrir. Confere:
+  - o login funciona;
+  - a faixa global orienta a restauração, não a migração;
+  - gravar uma marca é recusado com "Gravação em marcas bloqueada: a última restauração falhou…";
+  - a página Backup mostra o backup indicado;
+  - o marcador continua na pasta;
+  - não há erros no console.
+
+### Tempo de abertura no Electron real
+
+Medido no app empacotado (`dist/`), num perfil temporário novo por rodada. O tempo vai do launch até o campo
+Login visível. Foram 5 rodadas por série, e cada série foi repetida duas vezes por versão:
+
+| Versão | Primeira abertura (mediana) | Reabertura do mesmo perfil (mediana) |
+|---|---|---|
+| R2 (`b3f8b61`) | 726 ms / 671 ms | 484 ms / 467 ms |
+| R3 (`a4b84fe`) | 668 ms / 653 ms | 432 ms / 467 ms |
+
+A diferença fica dentro do ruído: a leitura do marcador (um IPC e um `get` em `appSettings`) não pesa na
+abertura. Uma primeira rodada fria da R2 levou 13,8 s (cache do sistema) e ficou fora da mediana.
 
 ### Ponto de falha só nos gates
 

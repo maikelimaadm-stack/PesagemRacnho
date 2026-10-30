@@ -20,7 +20,11 @@ export function authError(code, extra = {}) {
   return error;
 }
 
-/** true quando o erro é o bloqueio de escrita da migração (ADR-038) — gravações best-effort o toleram. */
+// Bloqueios de escrita: migração (ADR-038) e restauração crítica (R3-01). Gravações best-effort do acesso
+// (last_login_at, evento de auditoria) toleram os dois — o login continua possível para chegar à recuperação.
+const WRITE_BLOCK_CODES = ['MIGRATION_BLOCKED', 'RESTAURACAO_CRITICA'];
+
+/** true quando o erro é um bloqueio de escrita (migração ou restauração crítica) — gravações best-effort o toleram. */
 export function isMigrationBlocked(error) {
-  return Boolean(error) && (error.code === 'MIGRATION_BLOCKED' || error.reason === 'MIGRATION_BLOCKED');
+  return Boolean(error) && (WRITE_BLOCK_CODES.includes(error.code) || WRITE_BLOCK_CODES.includes(error.reason));
 }

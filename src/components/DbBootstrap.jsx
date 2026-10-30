@@ -9,13 +9,27 @@ export default function DbBootstrap({ children }) {
   const [ready, setReady] = useState(false);
   const [erro, setErro] = useState(null);
   const [writeBlocked, setWriteBlocked] = useState(false);
+  const [critico, setCritico] = useState(null);
+
+  // R3-01: a faixa acompanha os bloqueios durante a sessão (restauração crítica ou recuperação conferida).
+  useEffect(() => {
+    const atualizar = () => {
+      const estado = getMigrationBootstrapState();
+      setWriteBlocked(Boolean(estado?.writeBlocked));
+      setCritico(estado?.criticalBlock || null);
+    };
+    window.addEventListener('pesagens:bloqueio-escrita', atualizar);
+    return () => window.removeEventListener('pesagens:bloqueio-escrita', atualizar);
+  }, []);
 
   useEffect(() => {
     let ativo = true;
     bootstrapLocalDb()
       .then((result) => {
         if (!ativo) return;
-        setWriteBlocked(Boolean(result?.blocked) || Boolean(getMigrationBootstrapState()?.writeBlocked));
+        const estado = getMigrationBootstrapState();
+        setWriteBlocked(Boolean(result?.blocked) || Boolean(estado?.writeBlocked));
+        setCritico(estado?.criticalBlock || null);
         setReady(true);
       })
       .catch((err) => {
@@ -66,7 +80,14 @@ export default function DbBootstrap({ children }) {
 
   return (
     <>
-      {writeBlocked ? (
+      {critico ? (
+        <div className="db-write-blocked-banner" role="alert" data-estado-critico-global="RESTAURACAO_CRITICA">
+          A última restauração falhou e a volta automática também. As gravações estão bloqueadas, inclusive ao reabrir o
+          sistema: abra <strong>Sistema › Backup e Restauração</strong> e restaure o backup de segurança
+          {critico.backupNome ? <> <code>{critico.backupNome}</code></> : ' indicado'} ou outro backup verificado. Não use
+          reset nem limpeza de dados.
+        </div>
+      ) : writeBlocked ? (
         <div className="db-write-blocked-banner" role="status">
           A migração do banco não foi concluída. O sistema está em modo somente leitura: abra
           <strong> Backup e Manutenção › Migração › Continuar migração</strong>. Seus dados e o backup de segurança estão preservados.

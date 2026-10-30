@@ -85,7 +85,7 @@ export const bootstrapLocalDb = async ({ onProgress } = {}) => {
 };
 
 /** Estado da última abertura (migrado / bloqueado / erro) para o DbBootstrap e a Manutenção. */
-export const getMigrationBootstrapState = () => ({ ...bootstrapState, writeBlocked: storage.isWriteBlocked() });
+export const getMigrationBootstrapState = () => ({ ...bootstrapState, writeBlocked: storage.isWriteBlocked(), criticalBlock: storage.getCriticalBlock() });
 
 /** Retomada manual da migração (Manutenção › "Continuar migração"). */
 export const resumeMigration = async ({ onProgress } = {}) => {
