@@ -25,6 +25,7 @@ import {
   TIPO_MOVIMENTO_INTERNO,
   checkConference,
 } from '../domain/operationRules.js';
+import { withdrawalStatus } from '../../sanity/domain/posology.js';
 
 export const DEFAULT_EMPRESA_ID = 'local';
 const SAIDA_DEFINITIVA = new Set(['VENDIDO', 'ABATIDO', 'MORTO', 'DOADO', 'TRANSFERIDO', 'CANCELADO', 'INATIVO']);
@@ -217,6 +218,7 @@ export async function confirmOperation(id, { aceitarAvisos = false, operador = n
     if (operacao.status !== OPERACAO_STATUS.RASCUNHO) fail('OPERACAO_NAO_EDITAVEL', 'A operação já foi confirmada ou cancelada.');
     const itens = await itensDa(db, operacao.id);
     const conferencia = checkConference(operacao, itens);
+    if (operacao.tipo === OPERACAO_TIPOS.SAIDA) await checkWithdrawals(db, operacao, itens, conferencia);
     if (!conferencia.ok) fail('OPERACAO_CONFERENCIA', conferencia.bloqueios[0], { conferencia });
     if (conferencia.avisos.length && !aceitarAvisos) fail('OPERACAO_AVISOS', 'Confira os avisos antes de confirmar.', { conferencia });
     const ctx = { db, operacao, ts, operador, parceiro: await byId(db, 'parceiros', operacao.parceiro_id) };
@@ -236,6 +238,44 @@ export async function confirmOperation(id, { aceitarAvisos = false, operador = n
     resultado = { quantidade: itens.length, avisos: conferencia.avisos };
   });
   return { ...(await getOperation(id)), ...resultado };
+}
+
+/**
+ * Carência (F10) na data da saída. Abate com carência de carne em aberto é BLOQUEIO, salvo liberação técnica
+ * registrada na operação (responsável, motivo, evidência). Venda, transferência e doação com carência aberta,
+ * e qualquer saída com aplicação de carência DESCONHECIDA recente, são AVISOS (exigem ciência).
+ */
+async function checkWithdrawals(db, operacao, itens, conferencia) {
+  const ids = itens.map((item) => item.animal_id).filter(Boolean);
+  if (!ids.length || ['MORTE', 'AJUSTE_SAIDA'].includes(operacao.subtipo)) return;
+  const aplicacoes = (await db.table('aplicacoesSanidade').where('animal_id').anyOf(ids).toArray()).filter((a) => !a.deleted_at && !a.cancelled_at);
+  const animais = new Map((await db.table('animais').where('id').anyOf(ids).toArray()).map((a) => [a.id, a]));
+  for (const id of ids) {
+    const status = withdrawalStatus(aplicacoes.filter((a) => a.animal_id === id), operacao.data);
+    const rotulo = animais.get(id)?.numero_animal ? `Animal ${animais.get(id).numero_animal}` : 'Animal';
+    if (status.emCarencia) {
+      const texto = `${rotulo} em carência de carne até ${status.ate} (${status.abertas.map((a) => a.medicamento || 'medicamento').join(', ')}).`;
+      if (operacao.subtipo === 'ABATE' && !operacao.liberacao_carencia) conferencia.bloqueios.push(`${texto} Abate exige liberação técnica registrada.`);
+      else conferencia.avisos.push(operacao.subtipo === 'ABATE' ? `${texto} Liberação técnica: ${operacao.liberacao_carencia.responsavel}.` : texto);
+    }
+    if (status.desconhecidas.length) conferencia.avisos.push(`${rotulo}: aplicação recente de medicamento sem carência cadastrada (${status.desconhecidas.map((a) => a.medicamento || 'medicamento').join(', ')}) — carência desconhecida, não zero.`);
+  }
+  conferencia.ok = conferencia.bloqueios.length === 0;
+}
+
+/** Liberação técnica de carência (abate) na operação em rascunho; auditada. */
+export async function registerWithdrawalRelease(id, liberacao) {
+  const db = await readyDb('Liberação técnica de carência');
+  const ts = new Date().toISOString();
+  await db.transaction('rw', db.table('operacoes'), db.table('auditoria'), async () => {
+    const operacao = await byId(db, 'operacoes', id);
+    if (!operacao) fail('OPERACAO_NAO_ENCONTRADA', 'Operação não encontrada.');
+    if (operacao.status !== OPERACAO_STATUS.RASCUNHO) fail('OPERACAO_NAO_EDITAVEL', 'A liberação é registrada antes de confirmar a saída.');
+    const registro = { ...liberacao, registrado_em: ts };
+    await db.table('operacoes').update(operacao.localId, { liberacao_carencia: registro, updated_at: ts });
+    await db.table('auditoria').add(auditRow({ entidade: 'operacoes', entidade_id: id, acao: 'LIBERAR_CARENCIA', depois: registro, resumo: `Liberação técnica de carência por ${liberacao.responsavel}`, motivo: liberacao.motivo, created_at: ts }));
+  });
+  return getOperation(id);
 }
 
 async function nomeDe(db, store, id, campo = 'nome') {

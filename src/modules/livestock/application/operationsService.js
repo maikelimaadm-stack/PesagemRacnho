@@ -15,6 +15,7 @@ import {
   validateItem,
 } from '../domain/operationRules.js';
 import * as adapter from '../infrastructure/operationsDataAdapter.js';
+import { validateRelease } from '../../sanity/domain/posology.js';
 
 export {
   ITEM_STATUS,
@@ -88,6 +89,15 @@ export async function discardDraft(id) {
 export async function confirmOperation(id, { aceitarAvisos = false } = {}) {
   const actor = requirePermission('weighing.write');
   return adapter.confirmOperation(id, { aceitarAvisos, operador: actor?.nome || actor?.login || null });
+}
+
+/**
+ * Liberação técnica de carência para ABATE (F10): só GESTOR/ADMIN (registry.write), com responsável técnico,
+ * motivo e evidência. Fica na operação e na auditoria; sem ela o abate de animal em carência é bloqueado.
+ */
+export async function registerWithdrawalRelease(id, input = {}) {
+  const actor = requirePermission('registry.write');
+  return adapter.registerWithdrawalRelease(id, { ...validateRelease(input), registrado_por: actor?.nome || null });
 }
 
 /** Cancela operação confirmada com motivo obrigatório (fato cancelado, nunca apagado). */

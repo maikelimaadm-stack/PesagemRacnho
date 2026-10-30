@@ -158,7 +158,9 @@ await db.table('medicamentos').add({ ...base, id: 'MED2', nome: 'Suplemento', no
 await sanityService.registerApplication({ animal_id: a10.id, data: '2026-02-10', medicamento_id: 'MED', dose: '5', unidade: 'mL' });
 await sanityService.registerApplication({ animal_id: a10.id, data: '2026-02-11', medicamento_id: 'MED2' });
 const venda = await ops.saveDraft({ tipo: 'SAIDA', subtipo: 'VENDA', data: '2026-04-01', parceiro_id: 'PARC', nf_numero: 'NF-9', itens: [{ animal_id: a10.id, peso: 330, peso_origem: 'BALANCA' }] });
-await ops.confirmOperation(venda.operacao.id);
+// F10: carência desconhecida (medicamento sem carência) avisa — não é tratada como zero.
+await assert.rejects(ops.confirmOperation(venda.operacao.id), (err) => err.code === 'OPERACAO_AVISOS' && err.conferencia.avisos.some((a) => /carência desconhecida/.test(a)));
+await ops.confirmOperation(venda.operacao.id, { aceitarAvisos: true });
 const dossie = await profile.getTraceabilityDossier(a10.id, { hoje: '2026-02-20' });
 assert.match(dossie.aviso, /Não é certificado/);
 assert.equal(dossie.origem.operacao.gta, 'GTA-77');

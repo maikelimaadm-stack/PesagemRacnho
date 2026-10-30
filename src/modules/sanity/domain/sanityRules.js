@@ -216,6 +216,17 @@ export function validateApplicationInput(input = {}, { requireAnimal = true, tod
   }
   const observacao = trimOrNull(source.observacao);
   checkLength(erros, observacao, MAX_TEXTO_LONGO, 'Observação');
+  // F09: dose pela posologia aprovada. A sugestão nunca é gravada sozinha: a dose APLICADA (`dose`) é
+  // obrigatória e o operador confirma; o peso usado no cálculo e a dose sugerida ficam no registro.
+  const posologiaId = cleanId(source.posologia_id);
+  const doseSugerida = parseDose(source.dose_sugerida);
+  const pesoBase = parseDose(source.peso_base_kg);
+  if (posologiaId) {
+    if (!medicamentoId) erros.push('Posologia exige o medicamento.');
+    if (dose.value === null) erros.push('Informe a dose aplicada (a sugestão não é aplicada sozinha).');
+    if (source.dose_confirmada !== true) erros.push('Confirme a dose aplicada.');
+    if (!doseSugerida.ok || !pesoBase.ok) erros.push('Dose sugerida e peso usado devem ser números maiores que zero.');
+  }
   if (erros.length) throw invalid(erros);
   return {
     animal_id: animalId,
@@ -227,6 +238,14 @@ export function validateApplicationInput(input = {}, { requireAnimal = true, tod
     via_aplicacao: via,
     observacao,
     sessao_id: cleanId(source.sessao_id),
+    ...(posologiaId ? {
+      posologia_id: posologiaId,
+      dose_sugerida: doseSugerida.value,
+      dose_confirmada: true,
+      peso_base_kg: pesoBase.value,
+      peso_base_data: trimOrNull(source.peso_base_data),
+      peso_base_origem: trimOrNull(source.peso_base_origem),
+    } : {}),
   };
 }
 
@@ -254,7 +273,7 @@ export function validateLaunchApplications(list, { data, today = new Date() } = 
  * Registro gravado em `aplicacoesSanidade`. Snapshot dos nomes no momento do fato;
  * unidade e via omitidas herdam o padrão do medicamento (unidade só quando há dose).
  */
-export function buildApplicationRecord({ id, input, programa = null, medicamento = null, empresaId, actor, ts, pesagemId = null, sessaoId = null }) {
+export function buildApplicationRecord({ id, input, programa = null, medicamento = null, posologia = null, carencia = null, empresaId, actor, ts, pesagemId = null, sessaoId = null }) {
   return {
     id,
     empresa_id: empresaId,
@@ -270,6 +289,19 @@ export function buildApplicationRecord({ id, input, programa = null, medicamento
     observacao: input.observacao ?? null,
     sessao_id: sessaoId ?? input.sessao_id ?? null,
     pesagem_id: pesagemId ?? null,
+    // F08–F10: regra usada (snapshot — mudar o cadastro depois não altera o passado), sugerida × aplicada,
+    // peso usado e fim da carência pela data civil (null = carência desconhecida, nunca zero).
+    posologia_id: posologia?.id ?? null,
+    posologia_snapshot: posologia ? snapshotPosologia(posologia, medicamento) : null,
+    dose_sugerida: input.dose_sugerida ?? null,
+    dose_aplicada: input.dose ?? null,
+    dose_confirmada: input.dose_confirmada === true,
+    peso_base_kg: input.peso_base_kg ?? null,
+    peso_base_data: input.peso_base_data ?? null,
+    peso_base_origem: input.peso_base_origem ?? null,
+    carencia_carne_ate: carencia?.carencia_carne_ate ?? null,
+    carencia_leite_ate: carencia?.carencia_leite_ate ?? null,
+    carencia_conhecida: medicamento ? carencia?.carencia_carne_dias !== null && carencia?.carencia_carne_dias !== undefined : null,
     created_by: actor?.usuario_id ?? null,
     created_by_nome: actor?.usuario_nome_snapshot ?? null,
     created_at: ts,
@@ -278,4 +310,12 @@ export function buildApplicationRecord({ id, input, programa = null, medicamento
     motivo_cancelamento: null,
     deleted_at: null,
   };
+}
+
+/** Cópia da regra no momento da aplicação (o histórico não muda quando a posologia muda). */
+export function snapshotPosologia(posologia, medicamento) {
+  const {
+    localId: _l, created_at: _c, updated_at: _u, deleted_at: _d, ...rest
+  } = posologia;
+  return { ...rest, medicamento_nome: medicamento?.nome ?? null };
 }

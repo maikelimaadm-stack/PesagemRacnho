@@ -7,6 +7,7 @@
 // (weighingDataAdapter.createEntry/bulkDeleteEntries), que inclui as stores de
 // LAUNCH_SANITY_TABLES no seu escopo.
 import storage from '../../../storage/storageAdapter.js';
+import { withdrawalEnd } from '../domain/posology.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
 import { normalizeName } from '../../../storage/indexedDb/normalize.js';
 import { SANITY_APPLICATIONS_STORE } from '../../../storage/indexedDb/schema.js';
@@ -24,7 +25,8 @@ export const MEDICAMENTOS_STORE = 'medicamentos';
 export const APLICACOES_STORE = SANITY_APPLICATIONS_STORE;
 
 // Stores que a transação da pesagem acrescenta quando o lançamento traz aplicações.
-export const LAUNCH_SANITY_TABLES = Object.freeze([APLICACOES_STORE, PROGRAMAS_STORE, MEDICAMENTOS_STORE]);
+export const POSOLOGIAS_STORE = 'posologias';
+export const LAUNCH_SANITY_TABLES = Object.freeze([APLICACOES_STORE, PROGRAMAS_STORE, MEDICAMENTOS_STORE, POSOLOGIAS_STORE]);
 
 const REGISTRY = {
   [PROGRAMAS_STORE]: {
@@ -189,8 +191,14 @@ async function resolveReferences(db, input, empresaId) {
     if (!medicamento || empresaDe(medicamento) !== empresaId) erros.push('Medicamento não encontrado.');
     else if (medicamento.ativo === false) erros.push(`Medicamento "${medicamento.nome}" está inativo.`);
   }
+  let posologia = null;
+  if (input.posologia_id) {
+    posologia = await findRow(db.table(POSOLOGIAS_STORE), input.posologia_id);
+    if (!posologia || posologia.medicamento_id !== input.medicamento_id) erros.push('Posologia não encontrada para este medicamento.');
+    else if (posologia.status !== 'APROVADA') erros.push('A posologia não está aprovada: a dose não pode vir dela.');
+  }
   if (erros.length) throw new SanityError('SANITY_INVALID', erros.join(' '), { erros });
-  return { programa, medicamento };
+  return { programa, medicamento, posologia, carencia: medicamento ? withdrawalEnd(input.data, { posologia, medicamento }) : null };
 }
 
 function applicationSummary(row) {
@@ -211,8 +219,8 @@ export async function prepareApplicationRowsInTransaction(db, items, { animalId,
   const audits = [];
   for (const item of items) {
     const input = { ...item, animal_id: animalId, data };
-    const { programa, medicamento } = await resolveReferences(db, input, empresaId);
-    const row = buildApplicationRecord({ id: crypto.randomUUID(), input, programa, medicamento, empresaId, actor, ts, pesagemId, sessaoId });
+    const { programa, medicamento, posologia, carencia } = await resolveReferences(db, input, empresaId);
+    const row = buildApplicationRecord({ id: crypto.randomUUID(), input, programa, medicamento, posologia, carencia, empresaId, actor, ts, pesagemId, sessaoId });
     rows.push(row);
     audits.push(auditRecord({
       entidade: APLICACOES_STORE, entidade_id: row.id, acao: ACOES.CRIAR_APLICACAO,
@@ -226,7 +234,7 @@ export async function prepareApplicationRowsInTransaction(db, items, { animalId,
 export async function insertApplication(input, { empresaId = DEFAULT_EMPRESA_ID } = {}) {
   storage.assertWritable('Registro de aplicação de sanidade');
   const db = await storage.ensureReady();
-  const tables = [APLICACOES_STORE, PROGRAMAS_STORE, MEDICAMENTOS_STORE, 'animais', 'pesagens', 'sessoesPesagem', 'auditoria'].map((name) => db.table(name));
+  const tables = [APLICACOES_STORE, PROGRAMAS_STORE, MEDICAMENTOS_STORE, POSOLOGIAS_STORE, 'animais', 'pesagens', 'sessoesPesagem', 'auditoria'].map((name) => db.table(name));
   return db.transaction('rw', tables, async () => {
     const animal = await findRow(db.table('animais'), input.animal_id);
     if (!animal) throw invalid('Animal não encontrado.');

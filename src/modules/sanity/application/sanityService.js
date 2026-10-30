@@ -19,6 +19,8 @@ import {
   validateProgramInput,
 } from '../domain/sanityRules.js';
 import * as adapter from '../infrastructure/sanityDataAdapter.js';
+import * as posologyAdapter from '../infrastructure/posologyDataAdapter.js';
+import { PosologyError, computeDose, validatePosologyInput, withdrawalStatus } from '../domain/posology.js';
 
 export {
   MOTIVO_PESAGEM_CANCELADA,
@@ -32,6 +34,20 @@ export {
   suggestedDose,
   validateApplicationInput,
 } from '../domain/sanityRules.js';
+export {
+  ARREDONDAMENTOS,
+  ARREDONDAMENTO_LABELS,
+  FONTES as POSOLOGIA_FONTES,
+  FONTE_LABELS as POSOLOGIA_FONTE_LABELS,
+  MODOS as POSOLOGIA_MODOS,
+  POSOLOGIA_STATUS,
+  POSOLOGIA_STATUS_LABELS,
+  PosologyError,
+  computeDose,
+  describeRule,
+  missingForApproval,
+  withdrawalStatus,
+} from '../domain/posology.js';
 
 function requireSanityPermission(action) {
   const actor = getCurrentActor();
@@ -129,4 +145,53 @@ export async function listApplications({ animalId, from, to, programaId, medicam
     includeCancelled: includeCancelled === true,
     empresaId,
   });
+}
+
+// ---------------------------------------------------------------------------
+// Posologia (F08), dose sugerida (F09) e carência (F10)
+// ---------------------------------------------------------------------------
+
+export async function listPosologies(filters = {}) {
+  requireSanityPermission('registry.read');
+  return posologyAdapter.listPosologies(filters);
+}
+
+/** Rascunho (novo ou edição). Aprovada é imutável: mudança = nova versão. */
+export async function savePosologyDraft(input = {}) {
+  requireSanityPermission('registry.write');
+  return posologyAdapter.saveDraft({ id: input.id || null, fields: validatePosologyInput(input) });
+}
+
+/** Aprovação exige responsável técnico (nome e registro) e regra completa. */
+export async function approvePosology(id, { responsavel } = {}) {
+  requireSanityPermission('registry.write');
+  const nome = trimOrNull(responsavel);
+  if (!nome || nome.length < 5) throw new PosologyError('Informe o responsável técnico pela aprovação (nome e registro).');
+  return posologyAdapter.approve(requireId(id, 'Posologia'), { responsavel: nome });
+}
+
+export async function suspendPosology(id, { motivo } = {}) {
+  requireSanityPermission('registry.write');
+  const texto = trimOrNull(motivo);
+  if (!texto || texto.length < 5) throw new PosologyError('Informe o motivo da suspensão.');
+  return posologyAdapter.suspend(requireId(id, 'Posologia'), { motivo: texto });
+}
+
+/**
+ * Dose sugerida para { medicamentoId, peso: { kg, data, origem }, dataAplicacao }. Sem posologia aprovada
+ * vigente, ou com peso inadequado, devolve ok=false com o motivo (o operador aplica a própria dose).
+ */
+export async function getDoseSuggestion({ medicamentoId, peso, dataAplicacao } = {}) {
+  requireSanityPermission('weighing.read');
+  const posologia = await posologyAdapter.activePosology(medicamentoId, dataAplicacao);
+  return { posologia, ...computeDose(posologia, peso, { dataAplicacao }) };
+}
+
+/** Carência dos animais numa data: { [animal_id]: { emCarencia, ate, abertas, desconhecidas } }. */
+export async function getWithdrawalStatus(animalIds = [], data) {
+  requireSanityPermission('weighing.read');
+  const aplicacoes = await posologyAdapter.applicationsOf(animalIds);
+  const out = {};
+  for (const id of animalIds) out[id] = withdrawalStatus(aplicacoes.filter((a) => a.animal_id === id), data);
+  return out;
 }
