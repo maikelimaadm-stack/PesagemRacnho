@@ -96,9 +96,12 @@ em **Calcular**. A conta é:
 - **Por lote ou por propriedade:** as transferências internas aparecem separadas. Elas não contam como compra
   nem como venda.
 - **Propriedade na data:** vale a propriedade de destino da entrada e as mudanças de propriedade registradas,
-  **não a propriedade de hoje** do animal. Animal sem nenhum desses registros fica com **local indeterminado**:
-  ele aparece listado à parte e não entra no saldo da propriedade. Com uma só propriedade cadastrada, isso não
-  acontece.
+  **não a propriedade de hoje** do animal.
+  - **Local indeterminado:** animal sem local registrado **na data final**. Ele aparece listado à parte e não entra no
+    saldo de nenhuma propriedade. A soma das propriedades mais essa lista dá o rebanho total.
+  - **Incerteza histórica:** animal que passou parte do período sem local, mas tem local conhecido no fim. É só um
+    alerta e não muda o saldo.
+  - Com uma só propriedade cadastrada, nada disso acontece.
 - **Categoria:** o filtro usa a categoria **atual** de cada animal, não a da data. A tela avisa isso.
 - **Conferência:** o saldo é comparado com o cadastro dos animais. As **divergências** aparecem por animal,
   com o motivo. **Nada é corrigido automaticamente**: corrija na operação ou na pesagem de origem.
