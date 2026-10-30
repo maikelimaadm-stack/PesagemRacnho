@@ -7,7 +7,7 @@
 // (weighingDataAdapter.createEntry/bulkDeleteEntries), que inclui as stores de
 // LAUNCH_SANITY_TABLES no seu escopo.
 import storage from '../../../storage/storageAdapter.js';
-import { validateWithdrawalClarification, withdrawalEnd } from '../domain/posology.js';
+import { checkPosologyApplication, validateWithdrawalClarification, withdrawalEnd } from '../domain/posology.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
 import { normalizeName } from '../../../storage/indexedDb/normalize.js';
 import { SANITY_APPLICATIONS_STORE } from '../../../storage/indexedDb/schema.js';
@@ -195,7 +195,7 @@ async function resolveReferences(db, input, empresaId) {
   if (input.posologia_id) {
     posologia = await findRow(db.table(POSOLOGIAS_STORE), input.posologia_id);
     if (!posologia || posologia.medicamento_id !== input.medicamento_id) erros.push('Posologia não encontrada para este medicamento.');
-    else if (posologia.status !== 'APROVADA') erros.push('A posologia não está aprovada: a dose não pode vir dela.');
+    else erros.push(...checkPosologyApplication({ posologia, item: input, data: input.data, pesoPesagemKg: input.peso_pesagem_kg ?? null }));
   }
   if (erros.length) throw new SanityError('SANITY_INVALID', erros.join(' '), { erros });
   return { programa, medicamento, posologia, carencia: medicamento ? withdrawalEnd(input.data, { posologia, medicamento }) : null };
@@ -211,14 +211,14 @@ function applicationSummary(row) {
  * rodar DENTRO da transação da pesagem: referências inválidas lançam e abortam a
  * transação inteira (pesagem incluída).
  */
-export async function prepareApplicationRowsInTransaction(db, items, { animalId, data, sessaoId = null, pesagemId = null, empresaId = DEFAULT_EMPRESA_ID, ts = nowIso(), origem = 'lancamento' }) {
+export async function prepareApplicationRowsInTransaction(db, items, { animalId, data, sessaoId = null, pesagemId = null, pesoPesagemKg = null, empresaId = DEFAULT_EMPRESA_ID, ts = nowIso(), origem = 'lancamento' }) {
   if (!items?.length) return { rows: [], audits: [] };
   if (!animalId) throw invalid('A aplicação de sanidade exige um animal identificado na pesagem.');
   const actor = getActor();
   const rows = [];
   const audits = [];
   for (const item of items) {
-    const input = { ...item, animal_id: animalId, data };
+    const input = { ...item, animal_id: animalId, data, peso_pesagem_kg: pesoPesagemKg };
     const { programa, medicamento, posologia, carencia } = await resolveReferences(db, input, empresaId);
     const row = buildApplicationRecord({ id: crypto.randomUUID(), input, programa, medicamento, posologia, carencia, empresaId, actor, ts, pesagemId, sessaoId });
     rows.push(row);

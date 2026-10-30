@@ -525,7 +525,7 @@ export async function createEntry(payload, { aplicacoesSanidade = [], carenciaCo
 
   const tableNames = ['pesagens', 'auditoria', 'sessoesPesagem', 'animalLotes', 'categoriasAnimal'];
   if (animalId) tableNames.push('animais', 'movimentosAnimais');
-  if (isRegistration) tableNames.push('animalIdentificadores', 'marcas', 'racas', 'propriedades');
+  if (isRegistration) tableNames.push('animalIdentificadores', 'marcas', 'racas', 'propriedades', 'operacaoItens');
   const sanityItems = Array.isArray(aplicacoesSanidade) ? aplicacoesSanidade : [];
   if (sanityItems.length) tableNames.push(...LAUNCH_SANITY_TABLES);
   const tables = [...new Set(tableNames)].map((name) => db.table(name));
@@ -552,13 +552,21 @@ export async function createEntry(payload, { aplicacoesSanidade = [], carenciaCo
       if (pendente) {
         animalId = pendente.id;
         entry.animal_id = animalId;
+        // Vínculo com a operação de origem: a pesagem leva o operacao_id e o item da entrada passa a apontar
+        // para ela (a entrada continua uma só — o movimento da operação é adotado pela reconciliação).
+        if (pendente.operacao_entrada_id) {
+          entry.legacy_payload = { ...(entry.legacy_payload || {}), operacao_id: pendente.operacao_entrada_id };
+          const itemOrigem = (await db.table('operacaoItens').where('[operacao_id+animal_id]').equals([pendente.operacao_entrada_id, animalId]).toArray())
+            .find((row) => !row.deleted_at && row.status !== 'CANCELADO' && !row.pesagem_id);
+          if (itemOrigem) await db.table('operacaoItens').update(itemOrigem.localId, { pesagem_id: entryId, updated_at: ts });
+        }
       }
     }
     // Linha do tempo (P05/P07) dentro da transação: série inteira, sem duplicar Manejo no dia.
     await assertAnimalTimeline(db, animalId, { upsert: [entry] });
     // Referências das aplicações resolvidas antes de gravar a pesagem: erro aborta tudo.
     const sanity = await prepareApplicationRowsInTransaction(db, sanityItems, {
-      animalId, data: payload.data_pesagem, sessaoId: sessionId, pesagemId: entryId, empresaId: ui.empresa_id || EMPRESA_ID, ts, origem: 'lancamento',
+      animalId, data: payload.data_pesagem, sessaoId: sessionId, pesagemId: entryId, pesoPesagemKg: entry.peso_kg ?? null, empresaId: ui.empresa_id || EMPRESA_ID, ts, origem: 'lancamento',
     });
     const existingForCategory = !isRegistration && animalId ? await db.table('animais').where('id').equals(animalId).first() : null;
     await stampAutomaticCategory(db, entry, isRegistration
@@ -644,7 +652,7 @@ export async function updateEntry(id, payload) {
   storage.assertWritable('Edição de pesagem');
   const db = await storage.ensureReady();
   const ts = new Date().toISOString();
-  const tables = ['pesagens', 'animais', 'animalLotes', 'auditoria', 'marcas', 'racas', 'categoriasAnimal', 'movimentosAnimais', 'animalIdentificadores'].map((name) => db.table(name));
+  const tables = ['pesagens', 'animais', 'animalLotes', 'auditoria', 'marcas', 'racas', 'categoriasAnimal', 'movimentosAnimais', 'animalIdentificadores', 'operacaoItens'].map((name) => db.table(name));
   let updated = null;
   await db.transaction('rw', tables, async () => {
     const rows = await db.table('pesagens').where('id').equals(id).toArray();
@@ -652,6 +660,25 @@ export async function updateEntry(id, payload) {
     if (!existing) return;
     updated = { ...existing, ...payload, id, updated_by_user_id: actorUserId(), updated_at: ts };
     const ui = typeof updated.legacy_payload === 'object' ? updated.legacy_payload : {};
+    // Pesagem que é o efeito de uma operação de Entrada/Saída (item.pesagem_id): peso, lote, observação e demais
+    // dados se corrigem aqui e o item acompanha; tipo, motivo, data e animal definem a operação — mudar exige
+    // cancelar a operação (com motivo) e lançar de novo, senão o livro e a pesagem se descasam.
+    const vinculo = (await db.table('operacaoItens').where('pesagem_id').equals(String(id)).toArray())
+      .find((row) => !row.deleted_at && row.status !== 'CANCELADO') || null;
+    if (vinculo) {
+      const antes = typeof existing.legacy_payload === 'object' ? existing.legacy_payload : {};
+      const mudouOperacao = ['tipo_manejo', 'motivo_saida'].some((campo) => (antes[campo] ?? null) !== (ui[campo] ?? antes[campo] ?? null))
+        || String(existing.data_pesagem || '') !== String(updated.data_pesagem || '')
+        || (existing.animal_id || null) !== (updated.animal_id || null);
+      if (mudouOperacao) {
+        throw new WeighingError('OPERACAO_VINCULADA', 'Esta pesagem é a Entrada/Saída de uma operação. Peso, lote e observação podem ser corrigidos aqui; para mudar tipo, motivo, data ou animal, exclua o lançamento (a operação é cancelada com motivo) e lance de novo.');
+      }
+      await db.table('operacaoItens').update(vinculo.localId, {
+        peso_kg: updated.peso_kg ?? null,
+        peso_origem: updated.peso_kg == null ? null : (ui.peso_origem === 'BALANCA' ? 'BALANCA' : 'MANUAL'),
+        updated_at: ts,
+      });
+    }
     // Série inteira (P05): mover o Cadastro para depois dos Manejos ou a Saída para antes deles é recusado.
     await assertAnimalTimeline(db, updated.animal_id, { upsert: [updated] });
     const trocouAnimal = existing.animal_id && existing.animal_id !== updated.animal_id;

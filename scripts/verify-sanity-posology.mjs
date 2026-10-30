@@ -118,12 +118,13 @@ assert.equal(reread.posologia_snapshot.dose_por_unidade, 1, 'regra alterada no f
 await assert.rejects(sanity.registerApplication({ ...appBase, dose: 7, dose_confirmada: true }), /não está aprovada/);
 ok('F09 aplicação exige confirmação, guarda sugerida × aplicada, peso e snapshot; nova versão não altera o passado');
 
-// Aplicação pelo Lançamento (mesma transação da pesagem) também calcula carência.
-await weighingService.createEntry({ tipo_manejo: 'Manejo', animal_id: a2.id, numero_animal: '2', marca: 'ALFA', data_pesagem: '2026-03-01', peso: 330,
-  aplicacoes_sanidade: [{ medicamento_id: medB.id, posologia_id: faixas.id, dose: 4.25, dose_sugerida: 4.25, dose_confirmada: true, peso_base_kg: 330, peso_base_data: '2026-03-01', peso_base_origem: 'BALANCA', unidade: 'ml' }] }).catch((err) => {
-  // 330 kg está fora das faixas, mas o serviço não recalcula: a dose aplicada é do operador; a regra só registra.
-  throw err;
-});
+// Aplicação pelo Lançamento (mesma transação da pesagem) também calcula carência. O serviço RECALCULA a dose da
+// regra com o peso-base (integração do Lançamento): 330 kg está fora das faixas — a regra não sugere, então uma
+// "dose sugerida" vinculada a ela é recusada e nada é gravado; com 180 kg (faixa 100–200 → 4,25 ml) grava.
+await assert.rejects(weighingService.createEntry({ tipo_manejo: 'Manejo', animal_id: a2.id, numero_animal: '2', marca: 'ALFA', data_pesagem: '2026-03-01', peso: 330,
+  aplicacoes_sanidade: [{ medicamento_id: medB.id, posologia_id: faixas.id, dose: 4.25, dose_sugerida: 4.25, dose_confirmada: true, peso_base_kg: 330, peso_base_data: '2026-03-01', peso_base_origem: 'BALANCA', unidade: 'ml' }] }), /fora das faixas/);
+await weighingService.createEntry({ tipo_manejo: 'Manejo', animal_id: a2.id, numero_animal: '2', marca: 'ALFA', data_pesagem: '2026-03-01', peso: 180,
+  aplicacoes_sanidade: [{ medicamento_id: medB.id, posologia_id: faixas.id, dose: 4.25, dose_sugerida: 4.25, dose_confirmada: true, peso_base_kg: 180, peso_base_data: '2026-03-01', peso_base_origem: 'BALANCA', unidade: 'ml' }] });
 const doLancamento = (await db.table('aplicacoesSanidade').where('animal_id').equals(a2.id).toArray())[0];
 assert.equal(doLancamento.carencia_carne_ate, '2026-03-01', 'carência zero = libera no mesmo dia');
 assert.equal(doLancamento.carencia_conhecida, true);
