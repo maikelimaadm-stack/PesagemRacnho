@@ -62,6 +62,36 @@ Problema **preexistente**: `abertura_lancamento_simulada` com 36 mil pesagens j�
 
 Cada checkpoint roda o gate do que mudou e, antes de cada push: `npm run lint`, `npm run test:unit`, `xvfb-run -a npm run test:quick`, `xvfb-run -a npm run e2e:electron:verify`. Resultados por checkpoint ficam em `MATRIZ-52-ITENS.md` e no fim deste arquivo.
 
+## Auditoria corretiva R3 (30/10/2026) — gates no HEAD da R3
+
+| Comando | Resultado | Tempo |
+|---|---|---|
+| `npm ci` | OK | 11s |
+| `npm run lint` | OK | 11s |
+| `npm run test:unit` | OK | 9s |
+| `npm run build` | OK | 11s |
+| `xvfb-run -a npm run test:quick` | OK | 108s |
+| `xvfb-run -a npm run test:full` | OK | 144s |
+| `xvfb-run -a npm run e2e:electron:verify` | OK | 25s |
+| `npm run storage:all:verify` | OK | 22s |
+| `npm run migration:v9:verify` | OK | 1s |
+| `npm run backup:recovery:verify` | OK | 0s |
+| `npm run documents:backup:verify` | OK | 1s |
+| `npm run safety:backup:verify` | OK | 1s |
+| `npm run restore:preflight:verify` | OK | 1s |
+| `npm run backup:availability:verify` | OK | 0s |
+| `npm run backup:partial:verify` | OK | 0s |
+| `npm run restore:compensation:verify` | OK | 1s |
+| `npm run livestock:operations:verify` | OK | 1s |
+| `npm run sanity:posology:verify` | OK | 0s |
+| `npm run cross:surface:verify` | OK | 1s |
+| `npm run restore:critical-restart:verify` | OK | 1s |
+| `npm run restore:content-integrity:verify` | OK | 1s |
+
+- Gates novos: `restore:critical-restart:verify` (R3-01) e `restore:content-integrity:verify` (R3-02).
+  `sanity:posology:verify` cobre o R3-03.
+- Custo da conferência de conteúdo no Electron real, com 36k pesagens: 8,1 s (`R3-BENCH-CONFERENCIA-ELECTRON.txt`).
+
 ## Auditoria corretiva R2 (30/10/2026) — gates no HEAD da R2
 
 | Comando | Resultado | Tempo |
