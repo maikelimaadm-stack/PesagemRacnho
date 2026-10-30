@@ -285,7 +285,12 @@ try {
   await win.locator('.rb-table tbody tr').filter({ hasText: 'E1' }).filter({ hasText: 'Aplicado' }).first().waitFor();
   assert.equal((await disponiveis.innerText()).trim(), '2', 'aplicar o brinco tira exatamente um do saldo');
 
-  // 11. Relatórios abre sem erro.
+  // 11. Sanidade › Posologias (F08): a aba abre; sem posologia aprovada a dose é manual.
+  await irPara(win, 'Sanidade');
+  await win.getByRole('tab', { name: 'Posologias' }).click();
+  await win.getByText('Nenhuma posologia. Sem posologia aprovada, a dose é sempre manual.').first().waitFor();
+
+  // 12. Relatórios abre sem erro.
   await irPara(win, 'Relatorios');
   await win.getByText('Relatório de Pesagens Individuais').first().waitFor();
 

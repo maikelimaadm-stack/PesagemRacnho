@@ -21,6 +21,7 @@ import {
   discardDraft,
   getOperation,
   listOperations,
+  registerWithdrawalRelease,
   saveDraft,
   summarizeOperation,
 } from '@/modules/livestock/application/operationsService';
@@ -93,6 +94,8 @@ export default function OperacoesView({ tipo, title, singular, description }) {
   const [busy, setBusy] = useState(false);
   const [motivoCancel, setMotivoCancel] = useState('');
   const [erros, setErros] = useState([]);
+  const [liberacao, setLiberacao] = useState({ motivo: '', responsavel: '', evidencia: '', data: todayIso() });
+  const canRelease = auth ? Boolean(auth.can?.('registry.write')) : true;
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -245,6 +248,21 @@ export default function OperacoesView({ tipo, title, singular, description }) {
       toast.success('Operação cancelada. O histórico foi preservado.');
       await refreshCatalog();
       await voltar();
+    } catch (error) {
+      toast.error(describeError(error));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const liberar = async () => {
+    if (!current?.operacao?.id) return;
+    setBusy(true);
+    try {
+      const updated = await registerWithdrawalRelease(current.operacao.id, liberacao);
+      setCurrent((c) => ({ ...c, ...updated }));
+      setErros([]);
+      toast.success('Liberação técnica registrada. Confira e confirme a saída.');
     } catch (error) {
       toast.error(describeError(error));
     } finally {
@@ -502,6 +520,21 @@ export default function OperacoesView({ tipo, title, singular, description }) {
             {mostraValor ? <div><dt>Valor total / por cabeça</dt><dd>{fmtMoney(resumoLocal.valor_total)} / {fmtMoney(resumoLocal.valor_por_cabeca)}</dd></div> : null}
           </dl>
           {erros.length ? <ul className="rb-alerts rb-alerts--error">{erros.map((e) => <li key={e}>{e}</li>)}</ul> : null}
+          {header.subtipo === 'ABATE' && erros.some((e) => /carência/.test(e)) && current?.operacao?.id ? (
+            canRelease ? (
+              <div className="rb-subsection" aria-label="Liberação técnica de carência">
+                <p className="rb-note">Animal em carência não vai para abate sem <strong>liberação técnica</strong> registrada (responsável, motivo e evidência). Fica na operação e na auditoria.</p>
+                <div className="rb-inline rb-inline--wrap">
+                  <input className="rb-control" value={liberacao.responsavel} onChange={(e) => setLiberacao((l) => ({ ...l, responsavel: e.target.value }))} placeholder="Responsável técnico (nome e registro)" aria-label="Responsável técnico" />
+                  <input className="rb-control" value={liberacao.motivo} onChange={(e) => setLiberacao((l) => ({ ...l, motivo: e.target.value }))} placeholder="Motivo da liberação" aria-label="Motivo da liberação" />
+                  <input className="rb-control rb-control--compact" value={liberacao.evidencia} onChange={(e) => setLiberacao((l) => ({ ...l, evidencia: e.target.value }))} placeholder="Evidência (laudo, documento)" aria-label="Evidência da liberação" />
+                  <MakDateControl value={liberacao.data} onChange={(e) => setLiberacao((l) => ({ ...l, data: e.target.value }))} ariaLabel="Data da liberação" />
+                  <button type="button" className="rb-btn" onClick={liberar} disabled={busy}>Registrar liberação</button>
+                </div>
+              </div>
+            ) : <p className="rb-note rb-note--warn">Peça a um gestor para registrar a liberação técnica de carência.</p>
+          ) : null}
+          {current?.operacao?.liberacao_carencia ? <p className="rb-note">Liberação técnica: {current.operacao.liberacao_carencia.responsavel} — {current.operacao.liberacao_carencia.motivo}</p> : null}
           {conferencia?.avisos?.length ? (
             <>
               <ul className="rb-alerts rb-alerts--warn">{conferencia.avisos.map((a) => <li key={a}>{a}</li>)}</ul>

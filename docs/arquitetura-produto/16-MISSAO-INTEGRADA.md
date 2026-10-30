@@ -244,3 +244,39 @@ essa identificação pertence a **um** animal.
 - A identificação **principal** (número visual da pesagem) continua sendo corrigida pela edição do Cadastro. O
   estoque controla os brincos e códigos adicionais.
 - A propriedade de nascimento e a geolocalização da origem ficam como "não informado" até haver dado real.
+
+## ADR-060 — Posologia versionada, dose sugerida × aplicada e carência no abate (F08, F09, F10)
+
+**Decisão.**
+- **Posologia.** Fica na store `posologias` (v9), por medicamento, com versão e status: RASCUNHO, APROVADA,
+  SUBSTITUIDA ou SUSPENSA.
+  - **Modos:** PROPORCIONAL (dose ÷ kg) ou FAIXAS da bula, validadas sem sobreposição.
+  - **Arredondamento:** é da regra (NENHUM, PROXIMO, ACIMA ou ABAIXO, com passo); não há arredondamento
+    universal. A regra pode ter dose mínima e máxima.
+  - **Carência:** de carne e de leite, separadas. `null` significa desconhecida, nunca zero.
+  - **Aprovação:** exige a regra completa (`missingForApproval`) e um responsável técnico.
+  - **Imutável depois de aprovada:** a nova versão aprovada fecha a anterior na véspera (SUBSTITUIDA).
+  - **Legado:** o `dose_padrao` em texto continua só como referência.
+- **Cálculo.** `computeDose` é puro e nunca lança exceção. Ele só calcula com posologia APROVADA, completa e
+  vigente na data, e com peso real.
+  - Peso de BALANCA, MANUAL, PESAGEM_REGISTRADA ou INFORMADO calcula. ESTIMADO ou PROJETADO bloqueia.
+  - Peso antigo (mais de 30 dias) e peso informado geram aviso.
+  - Não há produto nem dose fixa no código: o gate procura nomes comerciais.
+- **Aplicação.** `posologia_id` exige a dose aplicada e `dose_confirmada`. O registro guarda:
+  - `posologia_snapshot`, a cópia da regra;
+  - `dose_sugerida` e `dose_aplicada`;
+  - `peso_base_*`, o peso usado;
+  - `carencia_carne_ate` e `carencia_leite_ate`, calculadas na transação (`withdrawalEnd`), e
+    `carencia_conhecida`.
+- **Lançamento.** O painel pede a sugestão ao serviço e não faz conta de dose.
+  - Na pesagem automática, só sugere com o peso **estável** da Fase A.
+  - Ao salvar, se o peso liberado pelo portão for diferente do peso usado na dose, a gravação é recusada.
+  - Os campos de dose calculada nunca seguem para o próximo animal nem para o `sessionStorage`.
+- **Carência na saída (F10).** A confirmação da Saída verifica as aplicações ativas na data
+  (`withdrawalStatus`):
+  - **ABATE** com carência de carne aberta é **bloqueio**, salvo `liberacao_carencia` registrada. A
+    liberação exige `registry.write`, responsável técnico, motivo, evidência e data, e é auditada como
+    `LIBERAR_CARENCIA`.
+  - **Venda, transferência e doação** com carência aberta geram **aviso**.
+  - **Carência desconhecida** recente (120 dias) gera **aviso**.
+  - **Morte e ajuste** não são verificados.

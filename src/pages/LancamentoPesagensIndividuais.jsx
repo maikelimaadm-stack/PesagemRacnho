@@ -1133,6 +1133,14 @@ export default function LancamentoPesagensIndividuais() {
       toast.error(sanidadeValidada.errors[0]);
       return;
     }
+    // F09: a dose calculada pela posologia usou o peso da tela; na pesagem automática o peso gravado é o da
+    // leitura estável liberada pelo portão — se forem diferentes, a dose não vale (recalcular).
+    const pesoGravadoBalanca = capturaBalanca ? Math.floor(Number(capturaBalanca.weightKg)) : null;
+    if (pesoGravadoBalanca !== null && sanidadeValidada.payload.some((item) => item.posologia_id && Number(item.peso_base_kg) !== pesoGravadoBalanca)) {
+      setMostrarSanidade(true);
+      toast.error('O peso da balança mudou depois da dose sugerida. Confira a dose e confirme de novo.');
+      return;
+    }
 
     // Snapshot submetido: o contexto seguinte nasce dele, nunca de um fechamento antigo (V-01).
     // Atalho F11/F12 pode passar loteId antes do setState pintar.
@@ -2158,7 +2166,13 @@ export default function LancamentoPesagensIndividuais() {
             erroCatalogo={catalogoSanidade.erro}
             modoEdicao={Boolean(editingId)}
             aplicacoesRegistradas={aplicacoesRegistradasEdicao}
-            onRecolher={() => setMostrarSanidade(false)} />
+            onRecolher={() => setMostrarSanidade(false)}
+            pesoBase={{
+              kg: Number.isFinite(parseBrazilianNumber(peso)) ? Math.floor(parseBrazilianNumber(peso)) : null,
+              origem: pesagemAuto ? 'BALANCA' : 'MANUAL',
+              estavel: !pesagemAuto || pesoEstagioBalanca === 'stable',
+            }}
+            dataAplicacao={dataPesagem} />
           }
 
           {/* Dados de Saída (Venda) */}

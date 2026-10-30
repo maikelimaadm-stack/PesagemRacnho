@@ -166,7 +166,8 @@ function checkPermissionWiring(files) {
   const page = stripComments(files[PAGE]);
   assert.match(page, /sanityPermissions\(auth\)/, 'tela decide pelas permissões do modelo');
   assert.match(page, /if \(!canRead\) return <AccessDenied[^>]*permission=\{SANITY_READ_PERMISSION\}/, 'sem weighing.read a tela mostra Acesso não permitido');
-  assert.equal((page.match(/canWrite=\{canWriteRegistry\}/g) || []).length, 2, 'programas e medicamentos: escrita só com registry.write');
+  // Missão pesagens-integrada F08: a aba Posologias também grava com registry.write (3 = programas, medicamentos, posologias).
+  assert.equal((page.match(/canWrite=\{canWriteRegistry\}/g) || []).length, 3, 'programas, medicamentos e posologias: escrita só com registry.write');
   assert.equal((page.match(/readOnly=\{!canWriteRegistry\}/g) || []).length, 2, 'diálogos de cadastro somente leitura sem registry.write');
   assert.match(page, /const runSave = async[^\n]*\n\s*if \(!canWriteRegistry \|\| busy\) return;/, 'salvar cadastro recusa sem registry.write');
   assert.match(page, /const runSetActive = async[^\n]*\n\s*if \(!canWriteRegistry \|\| busy/, 'inativar/reativar recusa sem registry.write');
@@ -254,7 +255,7 @@ ok('sem-stores-v5');
 // 6. Estrutura ModeloBase1, abas, estados vazios e tema escuro.
 // ---------------------------------------------------------------------------
 {
-  assert.deepEqual(model.SANIDADE_TABS.map((tab) => [tab.id, tab.label]), [['programas', 'Programas/Procedimentos'], ['medicamentos', 'Medicamentos/Produtos'], ['aplicacoes', 'Aplicações']], 'três abas na ordem');
+  assert.deepEqual(model.SANIDADE_TABS.map((tab) => [tab.id, tab.label]), [['programas', 'Programas/Procedimentos'], ['medicamentos', 'Medicamentos/Produtos'], ['posologias', 'Posologias'], ['aplicacoes', 'Aplicações']], 'quatro abas na ordem (F08: Posologias)');
   const page = sources[PAGE];
   assert.match(page, /className="d17b-page d17b-list-page d17b-list-page--mother cadastro-emp-scope mg-empresas-scope aux-registry-page/, 'Tela Mãe do ModeloBase1 com o escopo dos cadastros');
   for (const tab of ['programas', 'medicamentos', 'aplicacoes']) assert.ok(page.includes(`activeTab === '${tab}'`), `aba ${tab} renderizada`);

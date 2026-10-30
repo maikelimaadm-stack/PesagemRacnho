@@ -134,3 +134,62 @@ Selecione o cadastro e clique em **Inativar**. Ele some das listas de escolha do
 ## Dados e backup
 
 Programas, medicamentos e aplicações ficam em áreas próprias do banco local e entram no **backup completo** (veja `BACKUP-E-RESTAURACAO.md`). Toda gravação, inativação e cancelamento fica registrada na auditoria com o usuário responsável.
+
+## Posologias, dose sugerida e carência
+
+### Posologia (aba Posologias)
+
+A posologia é a **regra de dose** de um medicamento, tirada da bula, do receituário ou do protocolo do
+veterinário responsável. Ela pode ser de dois modos:
+
+- **proporcional ao peso**: por exemplo, 1 ml a cada 50 kg;
+- **tabela de faixas da bula**: peso mínimo, peso máximo e a dose de cada faixa.
+
+1. Clique em **Nova posologia** e preencha:
+   - princípio ativo, apresentação, indicação e via;
+   - o modo e a unidade;
+   - o arredondamento, se a bula pedir (nenhum, ao mais próximo, para cima ou para baixo, com o passo);
+   - a dose mínima e a máxima;
+   - a **carência de carne** e a **de leite**, em dias;
+   - a fonte e o início da vigência.
+2. **Carência:** campo vazio = **desconhecida**. Isso é diferente de **0 dias**.
+3. **Aprovar:** só um **responsável técnico** aprova (nome e registro), e só quando a regra está completa.
+4. **Depois de aprovada,** a posologia não se edita. Para mudar, crie uma **nova versão**; a anterior vira
+   "Substituída". A dose **padrão em texto** do medicamento continua apenas como referência.
+5. **Testar:** em **Testar**, digite um peso para ver a dose calculada. Nada é gravado.
+
+### Dose sugerida (Lançamento e aplicação avulsa)
+
+Com uma posologia **aprovada e vigente**, o painel de Sanidade mostra a **dose sugerida** pelo peso do animal.
+
+- **No Lançamento,** é usado o peso da tela. Na pesagem automática, a sugestão só aparece com o peso **estável**
+  da balança.
+- **Na aplicação avulsa,** é usado o **último peso registrado**, com aviso se for antigo.
+
+Usar a sugestão é opcional:
+
+1. Clique em **Usar dose sugerida**, ajuste a dose se necessário e marque **Confirmo a dose aplicada**.
+2. O registro guarda a dose sugerida, a dose aplicada, o peso usado e uma **cópia da regra**. Se a posologia
+   mudar depois, as aplicações antigas não mudam.
+3. Se o peso mudar depois da sugestão, a dose calculada é desfeita e precisa ser recalculada.
+
+O sistema não calcula dose quando:
+
+- a posologia está em rascunho, incompleta ou vencida;
+- o animal não tem peso;
+- o peso é estimado;
+- o peso está fora das faixas da bula.
+
+Nesses casos, você pode aplicar a sua própria dose manualmente.
+
+### Carência
+
+O fim da carência é **a data da aplicação + os dias de carência**, contados no calendário. Eles vêm da
+posologia ou, sem posologia, da carência do medicamento.
+
+- **Saída para abate** de animal em carência de carne é **bloqueada**. Para liberar, um gestor registra a
+  **liberação técnica**: responsável técnico, motivo, evidência (laudo, documento) e data. A liberação fica na
+  operação e na auditoria.
+- **Venda, transferência e doação** de animal em carência mostram um aviso que precisa ser conferido.
+- **Aplicação de medicamento sem carência cadastrada** gera o aviso "**carência desconhecida**". Ela nunca é
+  tratada como zero.

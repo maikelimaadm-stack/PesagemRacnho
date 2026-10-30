@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import MakDateControl from '@/components/mak/MakDateControl';
+import { getDoseSuggestion } from '@/modules/sanity/application/sanityService';
 import AnimalSearchField from './AnimalSearchField.jsx';
 import { SanidadeField, SanidadeSelect, SanidadeTextArea, SanidadeTextInput } from './SanidadeFormFields.jsx';
 import {
@@ -42,13 +43,36 @@ export default function AplicacaoFormDialog({
 
   const chooseMedicamento = (id) => {
     const escolhido = medicamentos.find((item) => item.id === id) || null;
-    setForm((current) => applyMedicamentoDefaults({ ...current, medicamento_id: id }, escolhido, suggestDose));
+    setForm((current) => applyMedicamentoDefaults({ ...current, medicamento_id: id, posologia: null }, escolhido, suggestDose));
   };
+
+  // F09: dose sugerida pela posologia aprovada com o ÚLTIMO peso registrado do animal (aviso se antigo).
+  const [sugestao, setSugestao] = useState(null);
+  const pesoKg = form.animal?.ultimoPesoKg ?? null;
+  const pesoData = form.animal?.ultimaPesagemData ?? null;
+  useEffect(() => {
+    let ativo = true;
+    setSugestao(null);
+    if (!open || !form.medicamento_id || !form.data) return undefined;
+    getDoseSuggestion({ medicamentoId: form.medicamento_id, peso: { kg: pesoKg, data: pesoData, origem: 'PESAGEM_REGISTRADA' }, dataAplicacao: form.data })
+      .then((r) => { if (ativo) setSugestao(r); })
+      .catch(() => {});
+    return () => { ativo = false; };
+  }, [open, form.medicamento_id, form.data, pesoKg, pesoData]);
+  useEffect(() => { setForm((current) => (current.posologia ? { ...current, posologia: null } : current)); }, [form.animal?.id, form.data]);
+  const usarSugestao = () => setForm((current) => ({
+    ...current,
+    dose: String(sugestao.dose).replace('.', ','),
+    unidade: sugestao.unidade || current.unidade,
+    via_aplicacao: sugestao.via || current.via_aplicacao,
+    posologia: { posologia_id: sugestao.posologia.id, dose_sugerida: sugestao.dose, peso_base_kg: pesoKg, peso_base_data: pesoData, peso_base_origem: 'PESAGEM_REGISTRADA', confirmada: false },
+  }));
 
   const submit = (event) => {
     event?.preventDefault?.();
     if (busy) return;
     const erros = validateAplicacaoForm(form);
+    if (form.posologia && !form.posologia.confirmada) erros.push('Confirme a dose aplicada (calculada pela posologia).');
     if (erros.length) {
       toast.error(erros.join(' '));
       return;
@@ -83,6 +107,18 @@ export default function AplicacaoFormDialog({
           <SanidadeField id="aplicacao-dose" label="Dose">
             <SanidadeTextInput id="aplicacao-dose" value={form.dose} onChange={setField('dose')} inputMode="decimal" maxLength={12} placeholder="Ex.: 10 ou 2,5" />
           </SanidadeField>
+          {sugestao && form.medicamento_id ? (
+            <div className="sanidade-form__field sanidade-form__field--wide" aria-label="Dose pela posologia">
+              {sugestao.ok ? (
+                <p className="sanidade-form__hint">
+                  Dose sugerida pela posologia: <strong>{String(sugestao.dose).replace('.', ',')} {sugestao.unidade}</strong> ({sugestao.regra}; último peso {pesoKg} kg em {pesoData?.split('-').reverse().join('/')}). {sugestao.avisos.join(' ')}
+                  {' '}{!form.posologia ? <Button type="button" variant="outline" size="sm" onClick={usarSugestao}>Usar dose sugerida</Button> : (
+                    <label><input type="checkbox" checked={form.posologia.confirmada} onChange={(e) => setForm((current) => ({ ...current, posologia: { ...current.posologia, confirmada: e.target.checked } }))} /> Confirmo a dose aplicada</label>
+                  )}
+                </p>
+              ) : <p className="sanidade-form__hint">{sugestao.posologia ? sugestao.bloqueios[0] : 'Sem posologia aprovada para este produto: dose manual.'}</p>}
+            </div>
+          ) : null}
           <SanidadeField id="aplicacao-unidade" label="Unidade">
             <SanidadeSelect id="aplicacao-unidade" value={form.unidade} onChange={setField('unidade')} noneLabel="Nenhuma" options={unidades.map((unidade) => ({ value: unidade, label: unidade }))} />
           </SanidadeField>

@@ -18,6 +18,8 @@ export const SANITY_CANCEL_PERMISSION = 'weighing.edit';
 export const SANIDADE_TABS = [
   { id: 'programas', label: 'Programas/Procedimentos' },
   { id: 'medicamentos', label: 'Medicamentos/Produtos' },
+  // F08: regra de dose versionada por medicamento (dose sugerida só de posologia aprovada).
+  { id: 'posologias', label: 'Posologias' },
   { id: 'aplicacoes', label: 'Aplicações' },
 ];
 
@@ -93,6 +95,9 @@ export function buildAnimalIndex(animals = []) {
         nome: hasText(animal.nome) ? String(animal.nome).trim() : '',
         situacao: hasText(animal.situacao) ? String(animal.situacao) : '',
         label: `${numero} · ${marca}`,
+        // F09: último peso registrado (base da dose sugerida na aplicação avulsa, com aviso de idade do peso).
+        ultimoPesoKg: Number(animal.ultimo_peso_kg) > 0 ? Number(animal.ultimo_peso_kg) : null,
+        ultimaPesagemData: hasText(animal.ultima_pesagem_data) ? String(animal.ultima_pesagem_data) : null,
         numeroNormalizado: normalizeText(animal.numero_animal),
         busca: normalizeText(`${animal.numero_animal ?? ''} ${animal.marca ?? ''} ${animal.nome ?? ''}`),
       };
@@ -295,6 +300,14 @@ export function aplicacaoInputFromForm(form) {
     unidade: cleanOrNull(form.unidade),
     via_aplicacao: cleanOrNull(form.via_aplicacao),
     observacao: multilineOrNull(form.observacao),
+    ...(form.posologia ? {
+      posologia_id: form.posologia.posologia_id,
+      dose_sugerida: form.posologia.dose_sugerida,
+      peso_base_kg: form.posologia.peso_base_kg,
+      peso_base_data: form.posologia.peso_base_data,
+      peso_base_origem: form.posologia.peso_base_origem,
+      dose_confirmada: form.posologia.confirmada === true,
+    } : {}),
   };
 }
 
