@@ -54,7 +54,7 @@ A **carência** é informativa: aparece como lembrete e não bloqueia vendas nem
 
 É o jeito mais rápido no curral: a aplicação é gravada **junto com a pesagem**.
 
-1. Abra **Lançamento** no tipo **Cadastro** ou **Manejo**.
+1. Abra **Lançamento** no tipo **Entrada (novo animal)** ou **Manejo / Pesagem**. A Saída não registra aplicação.
 2. Informe o animal e o peso normalmente.
 3. Abra o painel **Sanidade** e clique em **Adicionar aplicação**.
 4. Escolha **Programa/Procedimento:** Vermifugação e **Medicamento/Produto:** Produto X. A dose (10), a unidade (ml) e a via (SC) vêm preenchidas; altere se precisar.
@@ -63,6 +63,35 @@ A **carência** é informativa: aparece como lembrete e não bloqueia vendas nem
 7. Passe para o próximo animal: a mesma aplicação já vem pronta. Desmarque a opção quando terminar.
 
 A aplicação recebe a **data da pesagem** e fica ligada a ela. Se a pesagem ou qualquer aplicação tiver erro, **nada é gravado** — corrija e salve de novo. Registrar sanidade no lançamento é opcional.
+
+## Exemplo 3b — cadastrar o medicamento e a posologia sem sair do Lançamento
+
+Precisa da permissão de cadastros (GESTOR ou ADMIN). O OPERADOR consulta e aplica, mas não cadastra nem aprova.
+
+1. No painel **Sanidade** do Lançamento, clique em **Novo medicamento**, preencha e salve. Ele já aparece escolhido
+   na aplicação.
+2. Ao lado do produto, clique no ícone de livro (**Configurar posologia**). Na janela que abre:
+   1. clique em **Nova posologia**;
+   2. preencha a regra (por exemplo, proporcional: dose e "a cada (kg)"), a via, a fonte, a carência e o início da
+      vigência;
+   3. clique em **Salvar rascunho**, depois em **Aprovar** e informe o responsável técnico.
+3. Clique em **Voltar ao lançamento**. O animal, o peso e as aplicações continuam como estavam.
+4. Com o peso do animal (digitado ou estável da balança), a linha mostra **Posologia: Aprovada** e a **dose
+   sugerida**.
+5. Clique em **Usar dose sugerida**. A dose vai para o campo **Dose aplicada**, que pode ser mudado.
+6. Marque **Confirmo a dose aplicada** e salve.
+
+Ficam gravadas a dose **sugerida** e a dose **aplicada** (as duas, separadas), a versão da regra, o peso usado e a
+carência.
+
+- **Mudanças que desfazem a sugestão.** A sugestão e a confirmação são desfeitas, e é preciso confirmar de novo,
+  quando:
+  - o peso muda;
+  - a balança fica instável ou desconecta;
+  - o animal é trocado;
+  - a dose é editada depois de confirmada.
+- **Sem dose sugerida.** A linha diz o motivo: sem posologia, rascunho, suspensa ou fora da vigência. A dose padrão
+  em texto do medicamento (por exemplo, "1 ml / 50 kg") aparece só como referência, sem cálculo pelo peso.
 
 ## Exemplo 4 — aplicação avulsa (sem pesar)
 
