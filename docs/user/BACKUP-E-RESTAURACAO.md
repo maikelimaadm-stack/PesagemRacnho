@@ -63,7 +63,13 @@ O programa cria backups sozinho, no mesmo formato, antes de qualquer operação 
   conferido, a migração não começa.
 - **pré-importação**, **pré-restauração**, **pré-limpeza** e **pré-reconciliação**: antes dessas operações.
 
-Eles ficam na pasta de dados do programa, subpasta `backups`. O botão **Abrir pasta data** abre essa pasta.
+Cada backup de segurança é **gravado e conferido** antes da operação: o programa lê o arquivo de volta e confere
+o SHA-256, o conteúdo, as contagens e os anexos. Se a conferência falhar, a operação é **cancelada sem alterar
+nada**. Isso vale para arquivo truncado, disco cheio, falha de leitura ou anexo sumido. A tela mostra o motivo e
+a tentativa fica no histórico.
+
+Eles ficam na pasta de dados do programa, subpasta `backups`. O botão **Abrir pasta data** abre essa pasta. A
+retenção nunca apaga um backup de segurança.
 
 ## Exportar pesagens não é backup
 
@@ -125,7 +131,12 @@ Em **Diagnóstico**, o ADMIN tem o botão **Reconciliar derivados**. Ele recalcu
 
 Use quando **Verificar integridade** acusar movimento de pesagem cancelada ou lote duplicado, comum em bases
 vindas de versões antigas. Antes de começar, o programa cria e confere um backup. Rodar de novo num banco
-coerente não muda nada.
+coerente não grava nada.
+
+Durante a execução, o botão mostra o andamento ("Reconciliando… 1.250 de 12.000"). **Cancelar** para a execução no
+fim do bloco atual: o que já foi feito fica gravado e coerente, e rodar de novo termina o restante. Numa medição no
+Electron, 12 mil animais levaram cerca de 1 min 40 s na primeira vez e cerca de 15 s numa base já coerente. O
+tempo varia com o computador.
 
 ## Dois níveis de limpeza
 
@@ -166,7 +177,12 @@ Para guardar ou restaurar o backup em outro lugar, copie **o arquivo e a pasta j
 Em **Sistema › Backup e Restauração** fica tudo o que protege os dados. Destrutivo, só a restauração guiada.
 
 - **Situação da proteção.** A página mostra:
-  - se há um **backup verificado** e quando foi feito;
+  - **Verificado em**: quando o último backup foi conferido. É o histórico;
+  - **Disponível agora**: se esse arquivo ainda está na pasta, com o mesmo nome e tamanho;
+  - **Íntegro agora**: se o arquivo, relido agora, ainda confere (SHA-256 e anexos). "Protegido" só aparece com
+    um backup íntegro agora. Arquivo apagado, renomeado, truncado ou alterado deixa de contar, e o backup periódico
+    roda na próxima oportunidade. Pasta inacessível aparece como **Pasta inacessível**;
+  - **Cópia externa válida**: se a cópia no pendrive ou disco existe agora e confere com o backup;
   - se a **cópia em outro disco** está em dia;
   - quando roda o **backup periódico**.
 - **Criar backup agora.** É o mesmo botão de sempre: grava o backup e o confere lendo de volta.
@@ -218,8 +234,20 @@ Gera um arquivo `.pbk` **cifrado** (AES-GCM 256) com o banco e os anexos.
 1. **Selecionar:** escolha o `.json` (com a pasta `.anexos` ao lado) ou o `.pbk`. Para o `.pbk`, informe a senha.
 2. **Inspecionar e comparar:** veja a data, a versão, os usuários e os anexos do backup, e as quantidades de
    hoje lado a lado com as do backup. Nada é gravado nesta etapa.
-3. **Confirmar:** digite **RESTAURAR**. Antes de restaurar, o aplicativo grava e verifica um backup da situação
-   de hoje.
-4. **Resultado:** a página mostra a integridade do banco depois da restauração e os anexos que voltaram.
+3. **Confirmar:** digite **RESTAURAR**. Antes de mexer em qualquer dado, o aplicativo:
+   - confere os anexos do arquivo **exato** que foi inspecionado. Se o arquivo foi trocado ou alterado depois da
+     inspeção, a restauração é recusada;
+   - grava e verifica um backup da situação de hoje;
+   - prepara os anexos numa pasta à parte.
+
+   Se faltar ou não conferir algum anexo, nada é alterado. Num `.pbk`, um anexo adulterado também faz recusar.
+   Só depois disso o banco é trocado. Se os anexos não puderem ser gravados depois disso, o banco volta sozinho à
+   situação de antes, pelo backup de segurança.
+4. **Resultado:** a página confere tudo de novo e diz **Recuperação completa** ou **Recuperação INCOMPLETA**, com o
+   que não voltou. Ela mostra as contagens, os anexos e a integridade do banco.
+
+Exceções existem só depois de uma recusa, e só para o ADMIN:
+- restaurar um pacote ao qual **faltam** anexos. Anexo corrompido nunca é aceito. A recuperação sai incompleta;
+- restaurar quando anexos **já sumiram** deste computador. O backup de segurança é marcado como incompleto.
 
 Se o backup trouxe usuários, a sessão é encerrada e você entra de novo com um usuário do backup.

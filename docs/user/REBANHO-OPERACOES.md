@@ -47,6 +47,8 @@ nenhum animal da operação é gravado, e a mensagem diz qual animal causou o pr
 ## Entradas
 
 - **Animal sem peso** fica **pendente de pesagem**. O sistema não inventa peso, nem 0 kg.
+- **Peso com vírgula** é gravado **inteiro, sem arredondar para cima**: 328,4, 328,5 e 328,99 viram 328. É a mesma
+  regra do Lançamento e da balança.
   - Quando o animal for pesado pela primeira vez, faça o **Cadastro** no Lançamento com o mesmo número e marca.
   - O sistema reconhece o animal da entrada e não cria um segundo animal nem uma segunda entrada.
 - **Animal sem número** fica **pendente de identificação**.
@@ -93,6 +95,11 @@ em **Calcular**. A conta é:
 - **Operações canceladas** não entram na conta.
 - **Por lote ou por propriedade:** as transferências internas aparecem separadas. Elas não contam como compra
   nem como venda.
+- **Propriedade na data:** vale a propriedade de destino da entrada e as mudanças de propriedade registradas,
+  **não a propriedade de hoje** do animal. Animal sem nenhum desses registros fica com **local indeterminado**:
+  ele aparece listado à parte e não entra no saldo da propriedade. Com uma só propriedade cadastrada, isso não
+  acontece.
+- **Categoria:** o filtro usa a categoria **atual** de cada animal, não a da data. A tela avisa isso.
 - **Conferência:** o saldo é comparado com o cadastro dos animais. As **divergências** aparecem por animal,
   com o motivo. **Nada é corrigido automaticamente**: corrija na operação ou na pesagem de origem.
 - **CSV** exporta o resumo, a lista de animais do saldo final e as divergências.

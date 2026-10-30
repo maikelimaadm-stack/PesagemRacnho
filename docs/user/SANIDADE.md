@@ -191,5 +191,11 @@ posologia ou, sem posologia, da carência do medicamento.
   **liberação técnica**: responsável técnico, motivo, evidência (laudo, documento) e data. A liberação fica na
   operação e na auditoria.
 - **Venda, transferência e doação** de animal em carência mostram um aviso que precisa ser conferido.
-- **Aplicação de medicamento sem carência cadastrada** gera o aviso "**carência desconhecida**". Ela nunca é
-  tratada como zero.
+- **Aplicação de medicamento sem carência cadastrada** nos últimos **180 dias** tem **carência desconhecida**. Ela
+  nunca é tratada como zero:
+  - no **abate**, ela **bloqueia** a saída. Só libera com a liberação técnica **documentada**: responsável, motivo
+    e **evidência** (bula, receituário ou laudo). Só conferir o aviso não basta;
+  - na **venda, transferência e doação**, ela mostra um aviso que precisa ser conferido.
+- O **abate lançado direto no Lançamento** (Saída › Abate) segue a mesma regra. Com carência aberta ou
+  desconhecida, ele é recusado. Faça o abate em **Rebanho › Saídas**, onde a liberação técnica é registrada.
+- Aplicação cancelada não conta. Carência de 0 dia libera no mesmo dia. Carência já vencida não prende.
