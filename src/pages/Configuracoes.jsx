@@ -14,7 +14,6 @@ import { DEFAULT_EMPRESA_ID, getAppConfig, updateAppConfig } from '@/modules/set
 import { parseBrazilianNumber } from '@/modules/weighing/domain/brazilianValues';
 import { GMD_DIAS_MINIMOS_OPCOES, GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinimos } from '@/modules/weighing/domain/gmdQuality';
 import { describeVersions } from '@/versioning/versionInfo';
-import ScaleEquipmentCard from '@/components/equipment/ScaleEquipmentCard';
 import '@/styles/auxiliary-registries.css';
 import '@/styles/launch-visual.css';
 
@@ -44,6 +43,8 @@ const SECTIONS = [
     id: 'curral',
     title: 'Curral',
     permission: 'settings.manage',
+    // F25: na Parametrização esta seção aparece como "Pesagens e alertas" (mesmas chaves).
+    parametrizacao: 'Pesagens e alertas',
     description: 'Apartação sugerida no Lançamento e limites que geram os avisos de conferência do Lançamento.',
     fields: [
       { id: 'apartacao_padrao_id', label: 'Apartação padrão', kind: 'ref', source: 'apartacoes', width: 'CAMPO_PRINCIPAL', help: 'Apartação já selecionada ao abrir o Lançamento.' },
@@ -58,6 +59,7 @@ const SECTIONS = [
     id: 'comercial',
     title: 'Comercial',
     permission: 'settings.manage',
+    parametrizacao: 'Comercial e saídas',
     description: 'Políticas aplicadas nas saídas por venda e abate (ADR-025, ADR-033).',
     fields: [
       { id: 'exigir_documento_venda', label: 'Exigir documento na venda', kind: 'boolean', width: 'SIM_NAO', help: 'Com "Sim", o Lançamento e o Fechamento só concluem uma venda com documento vinculado.' },
@@ -79,6 +81,7 @@ const SECTIONS = [
     id: 'relatorios',
     title: 'Relatórios',
     permission: 'settings.reports',
+    parametrizacao: 'GMD e indicadores',
     // M1 (1.5.0): uma linha para as duas arrobas (que nunca se somam) e uma para o mínimo do GMD, com o N escolhido.
     description: (form) => [
       '@ de peso vivo é o peso do boi dividido por 30 (ou 15). @ de carcaça é o que o frigorífico paga: peso × rendimento ÷ 15.',
@@ -235,7 +238,13 @@ function refOptions(rows, currentId, none) {
   ];
 }
 
-function ConfiguracoesContent() {
+// F25/F26: Configurações gerais = padrões do lançamento (Geral) e Segurança. As regras de negócio (Curral →
+// "Pesagens e alertas", Comercial → "Comercial e saídas", Relatórios → "GMD e indicadores") são as MESMAS chaves
+// de appSettings, editadas na Parametrização seção por seção (`ConfigSection`), sem duplicar fonte de verdade.
+// A balança fica em Sistema › Balança e Equipamentos.
+export const CONFIGURACOES_GERAIS = Object.freeze(['geral', 'seguranca']);
+
+function ConfiguracoesContent({ secoes = CONFIGURACOES_GERAIS, embedded = false }) {
   const auth = useAuth();
   const actor = auth?.user;
   const navigate = useNavigate();
@@ -243,7 +252,8 @@ function ConfiguracoesContent() {
   // Seções visíveis/editáveis conforme a permissão do papel (settings.manage, settings.auth ou
   // settings.reports). O cartão Dados segue settings.manage (ADMIN).
   const sections = useMemo(() => SECTIONS.filter((section) => auth?.can?.(section.permission)), [auth]);
-  const fields = useMemo(() => sections.flatMap((section) => section.fields), [sections]);
+  // Só as seções desta tela (Configurações gerais ou uma seção da Parametrização) entram no formulário.
+  const fields = useMemo(() => sections.filter((section) => secoes.includes(section.id)).flatMap((section) => section.fields), [sections, secoes]);
   const canSeeData = Boolean(auth?.can?.('settings.manage'));
   const [config, setConfig] = useState(null);
   const [form, setForm] = useState({});
@@ -347,8 +357,8 @@ function ConfiguracoesContent() {
     cancel();
   };
 
-  // Deep link por seção (?secao=) é responsabilidade da tela de Backup e Manutenção.
-  const goToMaintenance = () => navigate(createPageUrl('ManutencaoSistema'));
+  // Backup e restauração têm página própria (F19); a manutenção avançada é outra (F24).
+  const goToMaintenance = () => navigate(createPageUrl('BackupRestauracao'));
 
   const renderField = (field) => {
     const error = errorField === field.id;
@@ -370,11 +380,38 @@ function ConfiguracoesContent() {
     const section = sectionById(id);
     if (!section) return null;
     return (
-      <FormCard title={section.title} description={typeof section.description === 'function' ? section.description(form) : section.description}>
+      <FormCard title={embedded && section.parametrizacao ? section.parametrizacao : section.title} description={typeof section.description === 'function' ? section.description(form) : section.description}>
         {section.fields.map(renderField)}
       </FormCard>
     );
   };
+
+  // Seção da Parametrização: cartão próprio com Salvar/Descartar (salvamento isolado por seção).
+  if (embedded) {
+    const section = sectionById(secoes[0]);
+    if (!section) return null;
+    const titulo = section.parametrizacao || section.title;
+    return (
+      <section className="rb-card cadastro-emp-scope mg-empresas-scope app-config-embedded" aria-label={titulo}>
+        <div className="rb-section-head">
+          <h3>{titulo}</h3>
+          {dirty ? <span className="rb-tag rb-tag--warn">alterações não salvas</span> : null}
+          <span className="rb-toolbar__spacer" />
+          <button type="button" className="rb-btn rb-btn--primary" onClick={save} disabled={saving || loading || !dirty}>{saving ? 'Salvando…' : 'Salvar seção'}</button>
+          <button type="button" className="rb-btn" onClick={cancel} disabled={saving || !dirty}>Descartar alterações</button>
+        </div>
+        <form className="aux-modelobase1-form" onSubmit={(event) => save(event)} onKeyDown={onKeyDown}>
+          <fieldset className="emp-form-fieldset" disabled={loading}>
+            <div className="emp-form-cards-layout cad-form-cards-layout mg-prototype-cards-layout">
+              <div className="emp-form-cards-row">{renderSection(section.id)}</div>
+            </div>
+          </fieldset>
+          <button type="submit" className="sr-only">Salvar {titulo}</button>
+        </form>
+        <p className="rb-note">Vale para os lançamentos e relatórios daqui em diante; pesagens já gravadas não são reescritas.</p>
+      </section>
+    );
+  }
 
   return (
     <ModeloBase1PageContainer
@@ -436,33 +473,25 @@ function ConfiguracoesContent() {
                     <fieldset className="emp-form-fieldset" disabled={loading}>
                       <div className="emp-form-fields emp-form-fields-corp cad-form-fields cad-form-fields-corp">
                         <div className="emp-form-cards-layout cad-form-cards-layout mg-prototype-cards-layout">
-                          {hasSection('geral', 'curral') ? (
+                          {hasSection('geral', 'seguranca') ? (
                             <div className="emp-form-cards-row">
                               {renderSection('geral')}
-                              {renderSection('curral')}
-                            </div>
-                          ) : null}
-                          {hasSection('comercial', 'seguranca') ? (
-                            <div className="emp-form-cards-row">
-                              {renderSection('comercial')}
                               {renderSection('seguranca')}
                             </div>
                           ) : null}
-                          {hasSection('relatorios') ? (
-                            <div className="emp-form-cards-row">
-                              {renderSection('relatorios')}
-                            </div>
-                          ) : null}
-                          {auth?.can?.('settings.manage') ? (
-                            <div className="emp-form-cards-row">
-                              <ScaleEquipmentCard />
-                            </div>
-                          ) : null}
+                          <div className="emp-form-cards-row">
+                            <FormCard title="Regras de negócio e equipamentos" description="Pesagens e alertas, GMD e indicadores, comercial, idade/era, calendário de seca e metas ficam em Sistema › Parametrização; a balança, em Sistema › Balança e Equipamentos." full>
+                              <div className="app-config__actions flex flex-wrap items-center gap-2" data-width-type="CAMPO_PRINCIPAL" style={{ flex: '1 1 100%' }}>
+                                <button type="button" className="rb-btn" onClick={() => navigate(createPageUrl('Parametrizacao'))}>Abrir Parametrização</button>
+                                <button type="button" className="rb-btn" onClick={() => navigate(createPageUrl('Equipamentos'))}>Abrir Balança e Equipamentos</button>
+                              </div>
+                            </FormCard>
+                          </div>
                           {canSeeData ? (
                             <div className="emp-form-cards-row">
-                              <FormCard title="Dados" description="Backup, restauração, importação, migração e verificação de integridade ficam em Backup e Manutenção." full>
+                              <FormCard title="Dados" description="Backup e restauração ficam em Sistema › Backup e Restauração; migração, integridade e limpeza, em Manutenção avançada; importação, em Operação › Importação." full>
                                 <div className="app-config__actions flex flex-wrap items-center gap-2" data-width-type="CAMPO_PRINCIPAL" style={{ flex: '1 1 100%' }}>
-                                  <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" onClick={goToMaintenance} title="Abrir Backup e Manutenção" aria-label="Abrir Backup e Manutenção">
+                                  <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" onClick={goToMaintenance} title="Abrir Backup e Restauração" aria-label="Abrir Backup e Restauração">
                                     <HardDriveDownload className="h-3.5 w-3.5" aria-hidden="true" />
                                   </button>
                                   <span className="app-config__meta ml-auto text-[10px]" style={{ color: 'var(--mb1-text-3)' }}>
@@ -496,4 +525,9 @@ export default function Configuracoes() {
       <ConfiguracoesContent />
     </RequirePermission>
   );
+}
+
+/** Uma seção das cinco chaves de appSettings editada isoladamente (Parametrização, F25). */
+export function ConfigSection({ id }) {
+  return <ConfiguracoesContent secoes={[id]} embedded />;
 }

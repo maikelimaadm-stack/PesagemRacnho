@@ -43,6 +43,37 @@ export async function createFullDataBackup(options) {
   return adapter.createFullDataBackup(options);
 }
 
+/** Comando único (P19): cria e verifica o backup completo. */
+export async function createBackupNow(options) {
+  requireMaintenanceAction('Backup', 'maintenance.backup');
+  return adapter.createBackupNow(options);
+}
+
+/** Lê o arquivo de volta e valida (P21). */
+export async function verifyBackupFile(options) {
+  requireMaintenanceAction('Verificar backup', 'maintenance.backup');
+  return adapter.verifyBackupFile(options);
+}
+
+/**
+ * Reparo geral (P04/P08/P13): reconcilia lotes, movimentos derivados e GMD de todos os animais.
+ * ADMIN (maintenance.migrate). Cria e verifica um backup ANTES; sem backup verificado, não roda.
+ */
+export async function reconcileDerivations({ onProgress, signal } = {}) {
+  requireMaintenanceAction('Reconciliar derivados', 'maintenance.migrate');
+  const safety = await adapter.createBackupNow({ reason: 'pre-reconcile', automatic: true });
+  const { reconcileAllAnimalDerivations } = await import('../../weighing/infrastructure/weighingDataAdapter.js');
+  // R08: andamento por bloco e cancelamento entre blocos (`signal.aborted`).
+  const result = await reconcileAllAnimalDerivations({ onProgress, signal });
+  return { ...result, safetyBackup: { path: safety.backupPath, size: safety.size, sha256: safety.sha256 } };
+}
+
+/** Situação da proteção: último verificado × arquivos encontrados (P21). */
+export async function getBackupStatus() {
+  requireMaintenanceAction('Situação do backup', 'maintenance.backup');
+  return adapter.getBackupStatus();
+}
+
 export async function exportWeighingJson(filters) {
   requireMaintenanceAction('Exportação JSON', 'maintenance.backup');
   return adapter.exportWeighingJson(filters);
@@ -68,9 +99,18 @@ export async function dryRunRestoreBackup(backupPath) {
   return adapter.dryRunRestoreBackup(backupPath);
 }
 
-export async function applyRestoreBackup(backupPath) {
+export async function applyRestoreBackup(backupPath, options = {}) {
   requireMaintenanceAction('Restauração', 'maintenance.restore');
-  return adapter.applyRestoreBackup(backupPath);
+  // R01: `aceitarAnexosAusentesNaOrigem` é a única exceção ao backup de segurança completo — para recuperar
+  // anexos que JÁ sumiram do app; o pré-backup é verificado sem eles e marcado incompleto.
+  // R02: `selecao` é o token do arquivo escolhido no diálogo; `aceitarAnexosFaltandoNoPacote` é a exceção
+  // explícita para restaurar sem anexos AUSENTES do pacote (o resultado fica com recuperacaoCompleta = false).
+  return adapter.applyRestoreBackup(backupPath, {
+    selecao: options.selecao || null,
+    anexosInline: Array.isArray(options.anexosInline) ? options.anexosInline : null,
+    aceitarAnexosAusentesNaOrigem: options.aceitarAnexosAusentesNaOrigem === true,
+    aceitarAnexosFaltandoNoPacote: options.aceitarAnexosFaltandoNoPacote === true,
+  });
 }
 
 export async function runIntegrityCheck() {

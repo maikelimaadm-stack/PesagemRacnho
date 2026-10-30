@@ -10,7 +10,7 @@ Menu **Cadastros**:
 
 | Cadastro | Serve para |
 |---|---|
-| **Marcas** | Marca a fogo (ou marca do dono) que identifica de quem é o animal. Faz parte da identidade do animal junto com o número. |
+| **Marcas a Fogo** | Marca a fogo (ou marca do dono) que identifica de quem é o animal. Faz parte da identidade do animal junto com o número. |
 | **Raças** | Raça do animal (Nelore, Angus, Cruzado etc.). |
 | **Categorias** | Classificação do animal por sexo e idade (Bezerro, Garrote, Novilha, Boi, Vaca, Touro...). |
 | **Parceiros** | Compradores, vendedores, frigoríficos, transportadores e donos de marca. Uma pessoa ou empresa é um único parceiro, mesmo que tenha vários papéis. |
@@ -43,7 +43,7 @@ aparecem, mas sem os botões de criar, editar e inativar).
 - **Contagem de uso.** A lista mostra quantos animais (ou operações) usam cada
   item, para você saber o impacto antes de inativar.
 
-## Marcas
+## Marcas a Fogo
 
 Campos: **Nome** (obrigatório), **Abreviação** (até 6 letras, aparece nas
 tabelas), **Proprietário** (um parceiro com o papel "dono de marca"),

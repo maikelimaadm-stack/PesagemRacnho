@@ -16,6 +16,7 @@
 // a tela de Configurações os grava e ela nunca os mostrou ao GESTOR; a recusa por dentro fecha o caminho.
 import storage from '../../../storage/storageAdapter.js';
 import { ensureStorageReady } from '../../../storage/indexedDb/db.js';
+import { isWriteBlockError } from '../../../storage/migrations/migrationState.js';
 import { authorize, roleOf } from '../../auth/domain/permissionService.js';
 import { actorFields } from '../../auth/application/auditContext.js';
 import { GMD_DIAS_MINIMOS_PADRAO, normalizeGmdDiasMinimos } from '../../weighing/domain/gmdQuality.js';
@@ -212,7 +213,7 @@ export async function migrateLegacyConfig(empresaId = DEFAULT_EMPRESA_ID) {
     const db = await ensureStorageReady();
     await db.table('appSettings').delete(configKey(empresaId));
   } catch (err) {
-    if (err?.code !== 'MIGRATION_BLOCKED') throw err;
+    if (!isWriteBlockError(err)) throw err;
   }
   return flat;
 }

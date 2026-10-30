@@ -15,6 +15,16 @@ const FichaAnimal = lazy(() => import('./pages/FichaAnimal'));
 const Relatorios = lazy(() => import('./pages/Relatorios'));
 // Sanidade (stores próprias da v8): programas, medicamentos e aplicações numa única rota.
 const Sanidade = lazy(() => import('./pages/Sanidade'));
+// Rebanho (missão pesagens-integrada, Fase B): operações e inventário pelo livro de movimentos.
+const Entradas = lazy(() => import('./pages/Entradas'));
+const Saidas = lazy(() => import('./pages/Saidas'));
+const Movimentacoes = lazy(() => import('./pages/Movimentacoes'));
+const Inventario = lazy(() => import('./pages/Inventario'));
+const Identificadores = lazy(() => import('./pages/Identificadores'));
+const Parametrizacao = lazy(() => import('./pages/Parametrizacao'));
+const Desempenho = lazy(() => import('./pages/Desempenho'));
+const BackupRestauracao = lazy(() => import('./pages/BackupRestauracao'));
+const Equipamentos = lazy(() => import('./pages/Equipamentos'));
 // Cadastros mestres (Programa 2.0 · ADR-018)
 const Marcas = lazy(() => import('./pages/Marcas'));
 const Racas = lazy(() => import('./pages/Racas'));
@@ -32,6 +42,15 @@ export const PAGES = {
     "Importacao": Importacao,
     "FechamentoDia": FechamentoDia,
     "FichaAnimal": FichaAnimal,
+    "Entradas": Entradas,
+    "Saidas": Saidas,
+    "Movimentacoes": Movimentacoes,
+    "Inventario": Inventario,
+    "Identificadores": Identificadores,
+    "Parametrizacao": Parametrizacao,
+    "Desempenho": Desempenho,
+    "BackupRestauracao": BackupRestauracao,
+    "Equipamentos": Equipamentos,
     "Sanidade": Sanidade,
     "Relatorios": Relatorios,
     "Marcas": Marcas,

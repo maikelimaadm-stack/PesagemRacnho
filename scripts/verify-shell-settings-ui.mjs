@@ -120,9 +120,11 @@ function checkSettings(s) {
   assert.match(page, /id: 'relatorios',\s*title: 'Relatórios',\s*permission: 'settings\.reports'/, 'seção Relatórios com settings.reports (ADMIN e GESTOR)');
   assert.match(page, /const canSeeData = Boolean\(auth\?\.can\?\.\('settings\.manage'\)\);/, 'cartão Dados decide por settings.manage');
   assert.match(page, /\{canSeeData \? \(\s*<div className="emp-form-cards-row">\s*<FormCard title="Dados"/, 'cartão Dados só aparece com settings.manage');
-  for (const ids of ["'geral', 'curral'", "'comercial', 'seguranca'", "'relatorios'"]) {
+  // F25/F26: Configurações gerais = Geral + Segurança; Curral/Comercial/Relatórios na Parametrização (ConfigSection).
+  for (const ids of ["'geral', 'seguranca'"]) {
     assert.ok(page.includes(`{hasSection(${ids}) ? (`), `linha de cartões (${ids}) só existe com seção visível (sem linha vazia para o GESTOR)`);
   }
+  assert.match(page, /export function ConfigSection\(\{ id \}\) \{\s*return <ConfiguracoesContent secoes=\{\[id\]\} embedded \/>;/, 'seção isolada reaproveita o mesmo formulário (mesmas chaves)');
   // Revisão E1C: a busca da seção e o teste da linha passam pela lista JÁ filtrada por can();
   // SECTIONS só aparece na declaração, em ALL_FIELDS (rótulos) e no filtro.
   assert.ok(page.includes('const sectionById = (id) => sections.find((section) => section.id === id);'), 'sectionById busca só nas seções permitidas');
@@ -169,15 +171,17 @@ function checkSettings(s) {
   assert.ok(relatorios.includes('`GMD de intervalo menor que ${normalizeGmdDiasMinimos(form.gmd_dias_minimos)} dias aparece em cinza e não entra na média, porque o enchimento do boi atrapalha a conta.`'), 'M1: linha de ajuda do mínimo do GMD com o N escolhido');
   assert.match(page, /description=\{typeof section\.description === 'function' \? section\.description\(form\) : section\.description\}/, 'M1: a ajuda acompanha o valor escolhido no formulário');
   assert.ok(page.includes("value={form[field.id] || field.defaultValue || field.options[0].value}"), 'M1: escolha sem valor usa o padrão declarado do campo');
-  assert.ok(page.includes("{renderSection('relatorios')}"), 'seção Relatórios renderizada');
+  assert.ok(readFileSync(new URL('../src/pages/Parametrizacao.jsx', import.meta.url), 'utf8').includes('<ConfigSection id="relatorios" />'), 'seção Relatórios (GMD e indicadores) renderizada na Parametrização');
+  assert.ok(page.includes("{renderSection('geral')}") && page.includes("{renderSection('seguranca')}"), 'Configurações gerais renderizam Geral e Segurança');
   assert.match(page, /<form className="aux-modelobase1-form" onSubmit=\{save\}/, 'Enter salva (form onSubmit=save)');
   assert.match(page, /emp-toolbar-btn emp-toolbar-btn-save d17c-launch-button aux-form-action" onClick=\{save\}/, 'Salvar na barra de ações');
   assert.match(page, /aux-cancel-button aux-form-action" onClick=\{cancel\}/, 'Cancelar na barra de ações');
   assert.match(page, /function FormCard\(/, 'layout em FormCard (padrão registro do ModeloBase1)');
   assert.match(page, /mg-prototype-cards-layout/, 'cards no layout de cartões do modelo');
   assert.match(page, /cmd-select aux-model-cmd-select/, 'selects na estrutura cmd-select do modelo');
-  assert.match(page, /createPageUrl\('ManutencaoSistema'\)/, 'Dados navega para Backup e Manutenção (deep link ?secao é da tela de manutenção)');
-  assert.match(page, /onClick=\{goToMaintenance\} title="Abrir Backup e Manutenção" aria-label="Abrir Backup e Manutenção">\s*<HardDriveDownload[^>]*\/>/, 'botão de ícone "Abrir Backup e Manutenção" (título e rótulo acessível)');
+  // F19/F24: o cartão Dados leva à página própria de Backup e Restauração.
+  assert.match(page, /createPageUrl\('BackupRestauracao'\)/, 'Dados navega para Backup e Restauração');
+  assert.match(page, /onClick=\{goToMaintenance\} title="Abrir Backup e Restauração" aria-label="Abrir Backup e Restauração">\s*<HardDriveDownload[^>]*\/>/, 'botão de ícone "Abrir Backup e Restauração" (título e rótulo acessível)');
   assert.match(page, /err\?\.code === 'CONFIG_INVALID' && err\.field/, 'erro de validação do serviço aponta o campo');
   assert.match(page, /focusField\(err\.field\)/, 'campo inválido recebe o foco');
   assert.ok(!/console\.(log|info|debug)/.test(page), 'página sem console.log');
@@ -219,14 +223,14 @@ const negatives = [
   ['Configurações sem uma chave do contrato', mutated('settings', "{ id: 'inactivity_lock_minutes',", "{ id: 'bloqueio_inatividade',")],
   ['Configurações gravando sem ator', mutated('settings', 'updateAppConfig(actor, patch, empresaId)', 'updateAppConfig(null, patch, empresaId)')],
   ['Configurações sem seção Dados', mutated('settings', 'title="Dados"', 'title="Outros"')],
-  ['Configurações sem navegar para Manutenção', mutated('settings', "createPageUrl('ManutencaoSistema')", "createPageUrl('Outra')")],
-  ['Configurações sem a seção Relatórios', mutated('settings', "{renderSection('relatorios')}", '')],
+  ['Configurações sem navegar para Backup e Restauração', mutated('settings', "createPageUrl('BackupRestauracao')", "createPageUrl('Outra')")],
+  ['Configurações sem a seção Segurança', mutated('settings', "{renderSection('seguranca')}", '')],
   ['divisor da @ como texto livre', mutated('settings', "kind: 'choice',", "kind: 'integer',")],
   ['Relatórios sem settings.reports (GESTOR sem a seção)', mutated('settings', "permission: 'settings.reports'", "permission: 'settings.manage'")],
   ['Geral visível ao GESTOR', mutated('settings', "title: 'Geral',\n    permission: 'settings.manage'", "title: 'Geral',\n    permission: 'settings.operational'")],
   ['Comercial visível ao GESTOR', mutated('settings', "title: 'Comercial',\n    permission: 'settings.manage'", "title: 'Comercial',\n    permission: 'settings.operational'")],
   ['Dados visível a todos', mutated('settings', "const canSeeData = Boolean(auth?.can?.('settings.manage'));", 'const canSeeData = true;')],
-  ['linha vazia para o GESTOR', mutated('settings', "{hasSection('geral', 'curral') ? (", '{true ? (')],
+  ['linha vazia para o GESTOR', mutated('settings', "{hasSection('geral', 'seguranca') ? (", '{true ? (')],
   // Revisão E1C: estas duas passavam no gate e mudam a tela do GESTOR (seções de ADMIN à mostra ou
   // linhas vazias), conferido por render SSR.
   ['sectionById sem o filtro (GESTOR vê as seções do ADMIN)', mutated('settings', 'const sectionById = (id) => sections.find(', 'const sectionById = (id) => SECTIONS.find(')],

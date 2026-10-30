@@ -5,6 +5,7 @@ import { AccessDenied } from '@/components/auth/RequirePermission';
 import { useAuth } from '@/components/auth/useAuth';
 import { ModeloBase1PageContainer, ModeloBase1PageHeader } from '@/components/modelobase1';
 import AplicacoesPanel from '@/components/sanidade/AplicacoesPanel';
+import PosologiasPanel from '@/components/sanidade/PosologiasPanel';
 import MedicamentoFormDialog from '@/components/sanidade/MedicamentoFormDialog';
 import ProgramaFormDialog from '@/components/sanidade/ProgramaFormDialog';
 import SanidadeCatalogPanel from '@/components/sanidade/SanidadeCatalogPanel';
@@ -182,6 +183,10 @@ export default function Sanidade() {
           onSetActive={(records, ativo) => runSetActive(setMedicamentoActive, records, ativo)}
           onRefresh={refreshCatalogs}
         />
+      ) : null}
+
+      {activeTab === 'posologias' ? (
+        <PosologiasPanel medicamentos={medicamentos.filter((item) => item.ativo !== false)} canWrite={canWriteRegistry} />
       ) : null}
 
       {activeTab === 'aplicacoes' ? (

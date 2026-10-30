@@ -74,9 +74,10 @@ export function calculateWeightGain({ history = [], date, weight, diasMinimos } 
   let previous = null;
   for (const entry of history || []) {
     if (!entry || typeof entry !== 'object') continue;
-    const entryDate = asIsoDate(entry.data_pesagem);
-    // Data que não vira dia (ex.: dia 00) não é referência: daria dias NaN e um GMD inventado.
-    if (!(entryDate < currentDate) || Number.isNaN(toUtcDay(entryDate)) || weightValue(entry.peso ?? entry.peso_kg) === null) continue;
+    // P12: a data anterior passa pela MESMA validação civil da atual — dia 00 ou 30/02 não é referência
+    // (toUtcDay normalizaria 30/02 para 02/03 e inventaria dias e GMD).
+    const entryDate = parseCivilDate(entry.data_pesagem);
+    if (!entryDate || !(entryDate < currentDate) || weightValue(entry.peso ?? entry.peso_kg) === null) continue;
     if (!previous || entryDate >= asIsoDate(previous.data_pesagem)) previous = entry;
   }
 

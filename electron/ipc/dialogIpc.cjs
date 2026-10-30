@@ -2,6 +2,7 @@ const { dialog, BrowserWindow } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { wrapIpcHandler, AppError } = require('../ipcErrors.cjs');
+const { rememberSelectedBackup } = require('./attachmentIpc.cjs');
 
 function focusedWindow() {
   return BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || null;
@@ -33,23 +34,30 @@ function registerDialogIpc(ipcMain, getDataDir) {
       const result = await dialog.showOpenDialog(win, {
         title: 'Selecionar arquivo JSON para importação',
         properties: ['openFile'],
-        filters: [{ name: 'JSON', extensions: ['json'] }],
+        // F22: backup protegido por senha (.pbk) também é escolhido aqui (envelope JSON cifrado).
+        filters: [{ name: 'Backup ou JSON', extensions: ['json', 'pbk'] }],
       });
       if (result.canceled || !result.filePaths?.[0]) {
         return { canceled: true };
       }
       const filePath = assertRegularFile(result.filePaths[0]);
-      assertExtension(filePath, ['.json']);
+      assertExtension(filePath, ['.json', '.pbk']);
+      const bytes = fs.readFileSync(filePath);
       let payload;
       try {
-        payload = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        payload = JSON.parse(bytes.toString('utf8'));
       } catch {
         throw new AppError('IMPORT_001', 'Arquivo JSON inválido');
       }
+      // F16/R02: a restauração busca os anexos na pasta "<arquivo>.anexos" ao lado do JSON escolhido — e só
+      // deste arquivo, identificado pelo token (conferido pelo SHA-256 destes mesmos bytes antes de cada uso).
+      const selecao = rememberSelectedBackup(filePath, bytes);
       return {
         canceled: false,
         fileName: path.basename(filePath),
         payload,
+        selecao: selecao.token,
+        fileSha256: selecao.sha256,
       };
     })
   );

@@ -92,7 +92,8 @@ assert.match(relationPage, /title="Lançar pesagem"[\s\S]{0,200}<Plus/, 'ação 
 assert.match(relationPage, /title="Editar"[\s\S]{0,1200}title="Duplicar"[\s\S]{0,1200}title="Excluir"/, 'Editar/Duplicar/Excluir ficam sempre na barra (como a referência Marcas)');
 assert.doesNotMatch(relationPage, /<MgDesktopSearch/, 'Relação não mostra o campo de pesquisa da barra');
 assert.match(relationPage, /<MgViewSeg /, 'Relação expõe o view-seg (Registro/Tabela/Cards) como a referência');
-assert.match(relationPage, /<MgSpeedDialMenu[\s\S]{0,700}Atualizar[\s\S]{0,200}Exportar relatório \(CSV\)[\s\S]{0,200}Exportar para reimportação \(CSV\)[\s\S]{0,300}Importar CSV[\s\S]{0,200}Baixar modelo CSV/, 'Atualizar, exportar (relatório e reimportação), importar e modelo ficam em "Mais opções"');
+// F24: a exportação técnica (JSON) entra no mesmo "Mais opções", entre as exportações e a importação.
+assert.match(relationPage, /<MgSpeedDialMenu[\s\S]{0,700}Atualizar[\s\S]{0,200}Exportar relatório \(CSV\)[\s\S]{0,200}Exportar para reimportação \(CSV\)[\s\S]{0,600}Importar CSV[\s\S]{0,200}Baixar modelo CSV/, 'Atualizar, exportar (relatório e reimportação), importar e modelo ficam em "Mais opções"');
 assert.match(relationPage, /aria-label="Configurar colunas da tabela"[\s\S]{0,700}<MgSpeedDialMenu/, 'Configurar colunas fica ao lado de Mais opções');
 assert.match(visualCss, /Referência Marcas[\s\S]{0,1200}background:\s*#f1f3f4\s*!important/i, 'Tela Mãe trava a ação principal em pílula cinza #f1f3f4 (não fill verde)');
 assert.match(visualCss, /\.mg-action-bar \.view-mode-btn\.active\s*\{[\s\S]{0,120}color:\s*#40de63\s*!important/i, 'view ativo da Tela Mãe usa lima #40de63');

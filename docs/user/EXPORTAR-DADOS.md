@@ -17,7 +17,7 @@ Use JSON quando quiser guardar uma cópia estruturada das pesagens ou importar d
 
 ## Como exportar pesagens
 
-1. Abra **Backup e Manutenção**.
+1. Abra a **Relação de Pesagens** › **Mais opções** (exportações) ou **Sistema › Backup e Restauração** (backup completo).
 2. Clique em **Exportar pesagens em CSV** ou **Exportar pesagens em JSON**.
 3. Aguarde a mensagem de sucesso.
 

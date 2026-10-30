@@ -6,6 +6,7 @@
 // pré-migração validado ANTES de abrir na versão nova, backfill resumível depois.
 import storage from '../storage/storageAdapter.js';
 import { runSaidaDerivedBackfill } from '../modules/weighing/application/weighingDerivedBackfill.js';
+import { carregarBloqueioCritico } from '../storage/criticalRestoreState.js';
 
 export const DEFAULT_EMPRESA_ID = 'local';
 
@@ -50,7 +51,11 @@ function blockedError(err) {
 export const bootstrapLocalDb = async ({ onProgress } = {}) => {
   ensureEmpresaId();
   try {
+    // R3-01: o marcador em ARQUIVO de restauração crítica é lido antes de abrir o banco (nada grava antes dele); a
+    // cópia em appSettings é conferida na primeira storage.ensureReady() logo abaixo.
+    await carregarBloqueioCritico(null);
     const result = await storage.migration.openWithMigration({ files: filesPort(), onProgress });
+    await storage.ensureReady();
     bootstrapState = {
       ready: true,
       migrated: Boolean(result.migrated),
@@ -80,7 +85,7 @@ export const bootstrapLocalDb = async ({ onProgress } = {}) => {
 };
 
 /** Estado da última abertura (migrado / bloqueado / erro) para o DbBootstrap e a Manutenção. */
-export const getMigrationBootstrapState = () => ({ ...bootstrapState, writeBlocked: storage.isWriteBlocked() });
+export const getMigrationBootstrapState = () => ({ ...bootstrapState, writeBlocked: storage.isWriteBlocked(), criticalBlock: storage.getCriticalBlock() });
 
 /** Retomada manual da migração (Manutenção › "Continuar migração"). */
 export const resumeMigration = async ({ onProgress } = {}) => {

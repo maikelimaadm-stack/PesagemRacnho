@@ -166,7 +166,7 @@ assert.equal((page.match(/<SanidadeLancamentoPanel/g) || []).length, 1, 'um úni
 assert.match(page, /listProgramas\(\{ empresaId: empresaSelecionadaId \}\)/, 'programas ativos');
 assert.match(page, /listMedicamentos\(\{ empresaId: empresaSelecionadaId \}\)/, 'medicamentos ativos');
 assert.match(page, /if \(!podeRegistrarSanidade\) return undefined;/, 'sem weighing.write nem carrega os cadastros');
-assert.match(page, /weighingService\.createEntry\(\{ \.\.\.data, aplicacoes_sanidade: sanidadeValidada\.payload \}\)/, 'createEntry recebe aplicacoes_sanidade');
+assert.match(page, /weighingService\.createEntry\(\{ \.\.\.data, (?:id: cicloLancamentoRef\.current, )?aplicacoes_sanidade: sanidadeValidada\.payload \}\)/, 'createEntry recebe aplicacoes_sanidade');
 assert.match(page, /const sanidadeNoLancamento = !editingId && podeRegistrarSanidade && modeSupportsSanity\(tipoManejo\);/, 'edição e Saída não enviam aplicações');
 assert.match(page, /buildSanityPayload\(sanidadeAplicacoes,/, 'payload montado pelo módulo puro');
 const dataBlock = between(page, 'const data = {', '\n    };');
@@ -183,7 +183,12 @@ for (const texto of ['Sanidade', 'Adicionar aplicação', 'Programa/Procedimento
 }
 assert.match(panel, /applyMedicamentoToDraft\(atual, medicamento, medicamento \? suggestedDose\(medicamento\) : null\)/, 'escolher medicamento pré-preenche pela dose padrão numérica');
 const panelCode = panel.split('\n').filter((line) => !line.trim().startsWith('//')).join('\n');
-assert.ok(!/\bpeso\b|pesoInformado|kg\s*\*|\*\s*peso/i.test(panelCode), 'NEGATIVO: painel não recebe peso nem calcula dose por peso');
+// Missão pesagens-integrada F09: o painel recebe o peso (pesoBase) para PEDIR a dose sugerida ao serviço, mas não faz
+// conta de dose: o cálculo fica em sanityService.getDoseSuggestion (posologia APROVADA) e a dose exige confirmação.
+assert.ok(!/pesoInformado|kg\s*[*/]|[*/]\s*(peso|kg)\b/i.test(panelCode), 'NEGATIVO: painel não calcula dose (sem aritmética de peso)');
+assert.match(panelCode, /getDoseSuggestion\(/, 'dose sugerida vem do serviço (posologia aprovada)');
+assert.ok(panel.includes('Confirmo a dose aplicada'), 'dose pela posologia exige confirmação do operador');
+assert.ok(panel.includes('aguardando peso estável da balança'), 'na pesagem automática só sugere com peso estável (portão da Fase A)');
 assert.match(panel, /d17d-detail-panel/, 'painel segue o padrão ModeloBase1 dos painéis do Lançamento');
 const edicaoPainel = between(panel, '{modoEdicao ? (', ') : (');
 assert.ok(!/<Select|<Input|onAplicacoesChange/.test(edicaoPainel), 'NEGATIVO: em edição o painel é somente leitura');

@@ -122,7 +122,8 @@ export async function createEntry(rawPayload) {
     // registro criado recebe os valores calculados acima. Séries posteriores
     // só precisam ser regravadas quando há inserção retroativa.
     if (hasLaterEntries) {
-      await recalculateWeightSeriesForKeys(new Set([animalIdentityKey(created)]));
+      // A transação do adapter já recalculou a série canônica (P08); aqui só regrava o que ainda difere (legado).
+      await recalculateWeightSeriesForKeys(new Set([animalIdentityKey(created)]), { onlyChanged: true });
     }
     const recalculatedAt = trace ? performance.now() : 0;
     const result = await weighingDataAdapter.getEntryById(created.id);
@@ -180,7 +181,8 @@ export async function replaceSameDayEntry(previousIds, rawPayload) {
     throw new WeighingError(code, `${REPESAGEM_NAO_GRAVADA} ${toUserMessage(err)}`, { cause: err });
   }
   try {
-    await recalculateWeightSeriesForKeys(new Set([animalIdentityKey(created)]));
+    // Série canônica já recalculada na mesma transação da repesagem (P08); isto só cobre identidade legada.
+    await recalculateWeightSeriesForKeys(new Set([animalIdentityKey(created)]), { onlyChanged: true });
   } catch (err) {
     throw new WeighingError('WEIGHING_SAVE_001', `A repesagem foi gravada, mas o recálculo das pesagens seguintes falhou: ${toUserMessage(err)}`, { cause: err });
   }
@@ -244,7 +246,8 @@ export async function bulkDeleteEntries(ids, { recalculate = true, motivo } = {}
 }
 
 export async function recalculateAllWeightSeries() {
-  return recalculateWeightSeriesForKeys(null);
+  // Só regrava o que mudou: os derivados canônicos já saem certos da transação de cada gravação (P08).
+  return recalculateWeightSeriesForKeys(null, { onlyChanged: true });
 }
 
 // E1G (revisão): derivado igual ao gravado? null/undefined/'' são "sem valor"; números comparados pelo valor.
@@ -322,7 +325,7 @@ export async function updateEntry(id, rawPayload) {
     const updated = await weighingDataAdapter.getEntryById(id);
     const affected = new Set([animalIdentityKey(updated)]);
     if (existing) affected.add(animalIdentityKey(existing));
-    await recalculateWeightSeriesForKeys(affected);
+    await recalculateWeightSeriesForKeys(affected, { onlyChanged: true });
     return weighingDataAdapter.getEntryById(id);
   } catch (err) {
     if (err instanceof WeighingError) throw err;
@@ -338,7 +341,7 @@ export async function deleteEntry(pesagemOrId, { motivo } = {}) {
   try {
     const existing = await weighingDataAdapter.getEntryById(id);
     const result = await weighingDataAdapter.deleteEntry(id, { motivo });
-    if (existing) await recalculateWeightSeriesForKeys(new Set([animalIdentityKey(existing)]));
+    if (existing) await recalculateWeightSeriesForKeys(new Set([animalIdentityKey(existing)]), { onlyChanged: true });
     return result;
   } catch (err) {
     if (err instanceof WeighingError) throw err;
@@ -350,14 +353,19 @@ export async function getEntryById(id) {
   return weighingDataAdapter.getEntryById(id);
 }
 
+// P10: falha do banco local é ERRO, nunca lista vazia (uma lista vazia diria "nenhuma pesagem" e zeraria
+// totais, relatórios e exportações). Quem chama mostra o erro e não oferece salvar/exportar sobre ele.
+export const MENSAGEM_BANCO_INDISPONIVEL = 'Não foi possível ler as pesagens do banco local. Nada foi apagado: feche e abra o programa; se continuar, use Backup e Manutenção › Verificar integridade.';
+
 export async function listEntries({ empresaId, ...filters } = {}) {
-  let entries = [];
+  let entries;
   try {
-    if (await weighingDataAdapter.isStorageAvailable()) {
-      entries = await weighingDataAdapter.listAllEntries(filters);
+    if (!(await weighingDataAdapter.isStorageAvailable())) {
+      throw new Error('banco local indisponível');
     }
+    entries = await weighingDataAdapter.listAllEntries(filters);
   } catch (err) {
-    console.warn('[weighingService] Falha ao consultar o armazenamento local:', err.message);
+    throw new WeighingError('WEIGHING_STORAGE_001', `${MENSAGEM_BANCO_INDISPONIVEL} (${toUserMessage(err)})`, { cause: err });
   }
 
   return empresaId

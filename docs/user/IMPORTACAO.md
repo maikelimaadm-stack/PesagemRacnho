@@ -120,7 +120,7 @@ Use o seletor **Mostrar** para filtrar por situação e o botão **Baixar relat�
 
 ## Gravar
 
-O botão **Importar** abre uma confirmação com o que será gravado. Vale **fazer um backup antes** de importar um arquivo grande: abra **Sistema › Backup e Manutenção** e faça o backup completo (a Importação não faz backup sozinha).
+O botão **Importar** abre uma confirmação com o que será gravado. Vale **fazer um backup antes** de importar um arquivo grande: abra **Sistema › Backup e Restauração** e clique em **Criar backup agora** (a Importação de planilha não faz backup sozinha). O **JSON técnico** exportado pelo sistema é importado no fim desta tela, em **Importar JSON de pesagens (técnico)**, que faz backup antes.
 
 Durante a gravação aparece a barra de progresso. Não feche a janela.
 

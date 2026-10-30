@@ -900,3 +900,13 @@ html.dark body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-e
   font-size: 18px !important;
   font-weight: 700 !important;
 }
+
+/* Missão pesagens-integrada (P01): peso estável já usado no animal anterior — a balança espera o
+   próximo animal (plataforma vazia ou troca). Cinza, sem a animação do "estabilizando". */
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto.is-waiting {
+  border-radius: 8px !important;
+  box-shadow: 0 0 0 2px #cbd5e1 !important;
+}
+html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto.is-waiting > input {
+  color: #94a3b8 !important;
+}

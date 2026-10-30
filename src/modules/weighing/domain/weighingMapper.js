@@ -19,6 +19,11 @@ export const LEGACY_PAYLOAD_ALLOWLIST = Object.freeze([
   // Rastro da importação conciliada (src/modules/import): job de origem e fingerprint canônico
   // do evento (empresa | animal | data | tipo | peso [| id_externo]). `id_externo` já consta acima.
   'importacao_id', 'import_fingerprint',
+  // Missão pesagens-integrada (P01/P15): de onde veio o peso (BALANCA | MANUAL) e a leitura bruta da
+  // balança usada { kg_bruto, seq, epoch, fonte, lida_em } — o peso gravado continua inteiro.
+  'peso_origem', 'balanca_leitura',
+  // v9 (Fase B): operação de Entrada/Saída que gerou a pesagem (17-MODELO-DADOS-V9).
+  'operacao_id',
 ]);
 
 // Proibidas em gravação nova: redundantes com colunas/timestamps do registro
@@ -59,7 +64,9 @@ export function validateUiPayload(payload, { isUpdate = false } = {}) {
   const peso = parseBrazilianNumber(pesoRaw);
   const movementType = pick(payload, 'tipo_manejo', 'tipo_pesagem', 'tipo');
   const exitReason = pick(payload, 'motivo_saida', 'motivoSaida');
-  const weightOptional = movementType === 'Saída' && ['Morte', 'Doação', 'Transferência'].includes(exitReason);
+  // v9: Saída gerada por OPERAÇÃO de ajuste de inventário (motivo "Outros") também dispensa peso.
+  const weightOptional = movementType === 'Saída'
+    && (['Morte', 'Doação', 'Transferência'].includes(exitReason) || (exitReason === 'Outros' && Boolean(payload.operacao_id)));
 
   if (!isUpdate && !parseCivilDate(dataPesagem)) {
     throw new WeighingError('WEIGHING_MAP_001', 'Data da pesagem é obrigatória');

@@ -6,8 +6,13 @@
 // valor_normalizado e a marca em marca_id; sessões nascem ABERTA; toda linha de
 // auditoria carrega o ator (auditActor) e ATUALIZAR em massa grava resumo +
 // campos_alterados em vez de antes/depois completos.
-import { compareWeighingEvents } from '../domain/weighingSeries.js';
+import { compareWeighingEvents, recalculateWeightSeries } from '../domain/weighingSeries.js';
 import { filterLegacyPayload, storageRecordToViewModel } from '../domain/weighingMapper.js';
+import { TimelineError, validateAnimalTimeline } from '../domain/animalTimeline.js';
+import { deriveLotStays, deriveWeighingMovements, movementKey, stayKey } from '../domain/weighingMovements.js';
+import { naturezaDoTipo } from '../../livestock/domain/movementNature.js';
+import { withdrawalExitPolicy, withdrawalStatus } from '../../sanity/domain/posology.js';
+import { WeighingError } from '../domain/weighingErrors.js';
 import storage from '../../../storage/storageAdapter.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
 import { isOpenSessionStatus, normalizeName, situacaoFromExitReason } from '../../../storage/indexedDb/normalize.js';
@@ -168,32 +173,33 @@ export function newVisualIdentifier({ animalId, ui, marcaId, inicio, ts }) {
   };
 }
 
+async function activeEventsOf(db, animalId) {
+  if (!animalId) return [];
+  return (await db.table('pesagens').where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at);
+}
+
+/**
+ * Linha do tempo do animal (P05/P07): valida a SÉRIE INTEIRA depois da mudança (domain/animalTimeline).
+ * Chamar DENTRO da transação de escrita: duas gravações concorrentes do mesmo animal são serializadas pelo
+ * IndexedDB e a segunda já enxerga a primeira (sem duplicar Manejo no dia).
+ * @param {{ upsert?: object[], removeIds?: string[] }} change
+ */
+export async function assertAnimalTimeline(db, animalId, change = {}) {
+  if (!animalId) return;
+  try {
+    validateAnimalTimeline(await activeEventsOf(db, animalId), change);
+  } catch (err) {
+    if (err instanceof TimelineError) throw Object.assign(new Error(err.message), { code: err.code });
+    throw err;
+  }
+}
+
+// Compatibilidade (contrato antigo): valida o evento como inclusão/edição na série do animal.
 export async function validateAnimalChronology(db, { animalId, data, ui, ignoredEntryId = null }) {
   if (!animalId || !data) return;
-  const events = (await db.table('pesagens').where('animal_id').equals(animalId).toArray())
-    .filter((row) => !row.deleted_at && row.id !== ignoredEntryId);
-  const registration = events
-    .filter((row) => weighingUi(row).tipo_manejo === 'Cadastro')
-    .sort(eventOrder)[0];
-  if (ui.tipo_manejo === 'Cadastro' && registration) {
-    throw new Error(`O animal já possui cadastro em ${registration.data_pesagem}. Use a edição do cadastro existente.`);
-  }
-  if (ui.tipo_manejo !== 'Cadastro' && registration && data < registration.data_pesagem) {
-    throw new Error(`A data ${data} é anterior ao cadastro do animal (${registration.data_pesagem}).`);
-  }
-  if (ui.tipo_manejo === 'Saída') {
-    const laterEvent = events.find((row) => row.data_pesagem > data);
-    if (laterEvent) {
-      throw new Error(`Existem lançamentos posteriores a ${data}. Corrija ou cancele esses eventos antes de registrar a saída retroativa.`);
-    }
-  }
-  const definitiveExit = events
-    .filter((row) => weighingUi(row).tipo_manejo === 'Saída')
-    .sort(eventOrder)[0];
-  if (definitiveExit && data >= definitiveExit.data_pesagem) {
-    const reason = weighingUi(definitiveExit).motivo_saida || 'Saída';
-    throw new Error(`O animal já possui ${reason.toLowerCase()} em ${definitiveExit.data_pesagem}. Cancele ou corrija esse evento antes de lançar outro.`);
-  }
+  await assertAnimalTimeline(db, animalId, {
+    upsert: [{ id: ignoredEntryId || `__novo__${crypto.randomUUID()}`, data_pesagem: data, legacy_payload: ui, created_at: new Date().toISOString() }],
+  });
 }
 
 // Pesagem de animal com categoria automática: grava no payload a categoria e a era
@@ -218,11 +224,12 @@ export function weightOf(row) {
   return row && (row.peso_kg != null || weighingUi(row).peso != null) && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-export async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date().toISOString()) {
+export async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date().toISOString(), pre = null) {
   if (!animalId) return null;
-  const animal = await db.table('animais').where('id').equals(animalId).first();
+  // R08: `pre` (reconciliação em lote) traz o animal, as pesagens ativas e as categorias já lidos.
+  const animal = pre ? pre.animal : await db.table('animais').where('id').equals(animalId).first();
   if (!animal || animal.deleted_at) return null;
-  const events = (await db.table('pesagens').where('animal_id').equals(animalId).toArray())
+  const events = [...(pre ? pre.eventos : (await db.table('pesagens').where('animal_id').equals(animalId).toArray()))]
     .filter((row) => !row.deleted_at)
     .sort(eventOrder);
   const latest = events.at(-1) || null;
@@ -238,7 +245,7 @@ export async function rebuildAnimalStateProjection(db, animalId, timestamp = new
   const latestWeighed = [...events].reverse().find((row) => weightOf(row) != null) || null;
   const categoryChanges = {};
   if (animal.categoria_automatica !== false && latestWeighed) {
-    const categorias = await db.table('categoriasAnimal').toArray();
+    const categorias = pre?.categorias || await db.table('categoriasAnimal').toArray();
     const categoria = suggestCategory({ categorias, sexo: animal.sexo, peso: weightOf(latestWeighed) });
     // Sem faixa correspondente, preserva a última categoria válida em vez de gravar null.
     if (categoria) {
@@ -246,6 +253,10 @@ export async function rebuildAnimalStateProjection(db, animalId, timestamp = new
       const era = eraOfCategory(categoria);
       if (era) categoryChanges.era = era;
     }
+  }
+  // v9: a primeira pesagem com peso tira o animal de PENDENTE_PESAGEM (identificação pendente continua).
+  if (animal.situacao_cadastro === 'PENDENTE_PESAGEM' && latestWeighed) {
+    categoryChanges.situacao_cadastro = animal.identificacao_normalizada ? 'OK' : 'PENDENTE_IDENTIFICACAO';
   }
   const changes = {
     ...categoryChanges,
@@ -257,10 +268,11 @@ export async function rebuildAnimalStateProjection(db, animalId, timestamp = new
     ultimo_peso_kg: latestWeighed ? weightOf(latestWeighed) : null,
     lote_atual_id: inactive ? null : currentLot?.lote_id || latest?.lote_id || null,
     apartacao_atual_id: inactive ? null : currentLot?.apartacao_id || latestUi.apartacao_id || null,
-    updated_at: timestamp,
   };
-  await db.table('animais').update(animal.localId, changes);
-  return changes;
+  // R08: só grava o que mudou — reconciliar de novo o mesmo estado não reescreve o animal (idempotente).
+  const diff = Object.fromEntries(Object.entries(changes).filter(([campo, valor]) => (animal[campo] ?? null) !== (valor ?? null)));
+  if (Object.keys(diff).length) await db.table('animais').update(animal.localId, { ...diff, updated_at: timestamp });
+  return { ...changes, updated_at: Object.keys(diff).length ? timestamp : animal.updated_at };
 }
 
 /**
@@ -277,6 +289,12 @@ export async function removeOrphanAnimal(db, animalId, timestamp = new Date().to
   const restantes = (await db.table('pesagens').where('animal_id').equals(animalId).toArray())
     .filter((row) => !row.deleted_at);
   if (restantes.length) return false;
+  // v9: animal que entrou por OPERAÇÃO (compra/nascimento sem peso) existe sem pesagem — não é órfão.
+  // Quem chama inclui operacaoItens no escopo da transação (bulkDeleteEntries, repesagem).
+  {
+    const itens = (await db.table('operacaoItens').where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at && row.status !== 'CANCELADO');
+    if (itens.length) return false;
+  }
 
   await db.table('animais').update(animal.localId, { deleted_at: timestamp, updated_at: timestamp });
   for (const [store, campo] of [['animalIdentificadores', 'animal_id'], ['animalLotes', 'animal_id'], ['movimentosAnimais', 'animal_id']]) {
@@ -294,32 +312,174 @@ export async function removeOrphanAnimal(db, animalId, timestamp = new Date().to
   return true;
 }
 
-export async function rebuildAnimalLotProjection(db, animalId, timestamp = new Date().toISOString()) {
+/**
+ * Permanência em lote derivada das pesagens (P13): compara o esperado (domain/weighingMovements) com o
+ * gravado e escreve só a diferença — reaplicar ao mesmo estado não gera soft-delete nem inserção.
+ * Mantém a linha existente (e a origem dela) quando lote e início batem; ajusta fim/apartação.
+ */
+/**
+ * Eventos de lote vindos de OPERAÇÕES (v9: Movimentação e Entrada com lote de destino), sem pesagem: entram
+ * na linha do tempo das permanências e dos movimentos derivados para que a projeção não desfaça a
+ * movimentação nem gere uma segunda "Mudança de lote" quando o animal for pesado no lote novo.
+ */
+const lotEventsFrom = (movements) => movements
+  .filter((row) => !row.deleted_at && row.origem === 'operacao' && row.lote_destino_id && (row.natureza || naturezaDoTipo(row.tipo)) !== 'SAIDA')
+  .map((row) => ({ id: row.id, data: row.data_evento, lote_id: row.lote_destino_id, created_at: row.created_at }));
+
+export async function operationLotEvents(db, animalId) {
+  if (!animalId) return [];
+  return lotEventsFrom(await db.table('movimentosAnimais').where('animal_id').equals(animalId).toArray());
+}
+
+export async function rebuildAnimalLotProjection(db, animalId, timestamp = new Date().toISOString(), pre = null) {
   if (!animalId) return 0;
-  const weighingTable = db.table('pesagens');
   const animalLotTable = db.table('animalLotes');
-  const rows = (await weighingTable.where('animal_id').equals(animalId).toArray())
-    .filter((row) => !row.deleted_at)
-    .sort((left, right) => String(left.data_pesagem || '').localeCompare(String(right.data_pesagem || '')) || String(left.created_at || '').localeCompare(String(right.created_at || '')) || String(left.id || '').localeCompare(String(right.id || '')));
-  const previous = (await animalLotTable.where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at);
-  if (previous.length) await animalLotTable.bulkUpdate(previous.map((row) => ({ key: row.localId, changes: { deleted_at: timestamp, updated_at: timestamp } })));
-  const projection = [];
-  let current = null;
-  for (const row of rows) {
-    const ui = typeof row.legacy_payload === 'object' ? row.legacy_payload : {};
-    if (ui.tipo_manejo === 'Saída') {
-      if (current && !current.fim) current.fim = row.data_pesagem;
-      current = null;
-      continue;
-    }
-    if (row.lote_id && current?.lote_id !== row.lote_id) {
-      if (current && !current.fim) current.fim = row.data_pesagem;
-      current = { id: crypto.randomUUID(), animal_id: animalId, lote_id: row.lote_id, apartacao_id: ui.apartacao_id || null, inicio: row.data_pesagem, fim: null, origem: 'projecao', created_at: timestamp, updated_at: timestamp, deleted_at: null };
-      projection.push(current);
+  const expected = deriveLotStays(pre ? pre.eventos : await activeEventsOf(db, animalId), { lotEvents: pre ? lotEventsFrom(pre.movimentos) : await operationLotEvents(db, animalId) });
+  const previous = (pre ? pre.lotes : await animalLotTable.where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at);
+  const byKey = new Map();
+  const extras = [];
+  for (const row of previous) {
+    const key = stayKey(row);
+    if (byKey.has(key)) extras.push(row); else byKey.set(key, row);
+  }
+  const used = new Set();
+  const adds = [];
+  for (const stay of expected) {
+    const row = byKey.get(stayKey(stay));
+    if (row) {
+      used.add(row.localId);
+      const changes = {};
+      if ((row.fim || null) !== (stay.fim || null)) changes.fim = stay.fim || null;
+      if ((row.apartacao_id || null) !== (stay.apartacao_id || null)) changes.apartacao_id = stay.apartacao_id || null;
+      if (Object.keys(changes).length) await animalLotTable.update(row.localId, { ...changes, updated_at: timestamp });
+    } else {
+      adds.push({ id: crypto.randomUUID(), animal_id: animalId, lote_id: stay.lote_id, apartacao_id: stay.apartacao_id, inicio: stay.inicio, fim: stay.fim, origem: 'projecao', created_at: timestamp, updated_at: timestamp, deleted_at: null });
     }
   }
-  if (projection.length) await animalLotTable.bulkAdd(projection);
-  return projection.length;
+  const stale = [...previous.filter((row) => !used.has(row.localId) && !extras.includes(row)), ...extras];
+  if (stale.length) await animalLotTable.bulkUpdate(stale.map((row) => ({ key: row.localId, changes: { deleted_at: timestamp, updated_at: timestamp } })));
+  if (adds.length) await animalLotTable.bulkAdd(adds);
+  return expected.length;
+}
+
+/**
+ * Movimentos derivados das pesagens (P04/P09): o esperado pela série ativa contra os movimentos ativos COM
+ * pesagem_id. Movimento de pesagem cancelada/alterada é cancelado com auditoria; o que falta é criado; o que
+ * bate fica como está (idempotente). Movimentos sem pesagem_id (movimentação própria) nunca são tocados.
+ */
+export async function reconcileWeighingMovements(db, animalId, timestamp = new Date().toISOString(), { origem = 'lancamento', pre = null } = {}) {
+  if (!animalId) return { criados: 0, cancelados: 0 };
+  const table = db.table('movimentosAnimais');
+  const allMovements = pre ? pre.movimentos : await table.where('animal_id').equals(animalId).toArray();
+  const expected = deriveWeighingMovements(pre ? pre.eventos : await activeEventsOf(db, animalId), { lotEvents: lotEventsFrom(allMovements) });
+  const existing = allMovements.filter((row) => !row.deleted_at && row.pesagem_id);
+  const byKey = new Map();
+  const duplicates = [];
+  // Movimento de ENTRADA da operação já adotado por um Cadastro: casa pela pesagem (o tipo é o da operação —
+  // Compra, Nascimento… — e não "Entrada"); sem isso a reconciliação seguinte criaria uma segunda entrada.
+  const adoptedByPesagem = new Map();
+  for (const row of existing) {
+    if (row.origem === 'operacao' && (row.natureza || naturezaDoTipo(row.tipo)) === 'ENTRADA' && !adoptedByPesagem.has(row.pesagem_id)) {
+      adoptedByPesagem.set(row.pesagem_id, row);
+      continue;
+    }
+    const key = movementKey(row);
+    if (byKey.has(key)) duplicates.push(row); else byKey.set(key, row);
+  }
+  const matched = new Set();
+  const adds = [];
+  // v9: entrada sem peso registrada por OPERAÇÃO (movimento sem pesagem_id, origem 'operacao'): o primeiro
+  // Cadastro do animal ADOTA esse movimento em vez de criar uma segunda entrada (saldo +1, não +2).
+  const operacaoSemPesagem = allMovements
+    .filter((row) => !row.deleted_at && !row.pesagem_id && row.origem === 'operacao' && (row.natureza || naturezaDoTipo(row.tipo)) === 'ENTRADA');
+  for (const movement of expected) {
+    const natureza = naturezaDoTipo(movement.tipo);
+    const adopted = natureza === 'ENTRADA' ? adoptedByPesagem.get(movement.pesagem_id) : null;
+    if (adopted) { matched.add(adopted.localId); continue; }
+    const row = byKey.get(movementKey(movement));
+    if (row) { matched.add(row.localId); continue; }
+    if (natureza === 'ENTRADA' && operacaoSemPesagem.length) {
+      const adotado = operacaoSemPesagem.shift();
+      await table.update(adotado.localId, { pesagem_id: movement.pesagem_id, data_evento: adotado.data_evento || movement.data_evento, lote_destino_id: adotado.lote_destino_id || movement.lote_destino_id, updated_at: timestamp });
+      continue;
+    }
+    adds.push({ id: crypto.randomUUID(), animal_id: animalId, ...movement, natureza, origem, created_at: timestamp, updated_at: timestamp, deleted_at: null });
+  }
+  const stale = existing.filter((row) => !matched.has(row.localId));
+  for (const row of stale) {
+    // Movimento da operação que fora adotado por um Cadastro agora cancelado: volta a ser só da operação
+    // (o animal entrou de fato); não é apagado.
+    if (row.origem === 'operacao' && !duplicates.includes(row)) {
+      await table.update(row.localId, { pesagem_id: null, updated_at: timestamp });
+      continue;
+    }
+    await table.update(row.localId, { deleted_at: timestamp, updated_at: timestamp });
+    await db.table('auditoria').add(auditRow({
+      entidade: 'movimentosAnimais', entidade_id: row.id, acao: 'CANCELAR', antes: row,
+      motivo: duplicates.includes(row) ? 'Reconciliação: movimento duplicado' : 'Reconciliação: pesagem de origem cancelada ou alterada',
+      created_at: timestamp,
+    }));
+  }
+  if (adds.length) await table.bulkAdd(adds);
+  return { criados: adds.length, cancelados: stale.length };
+}
+
+const DERIVED_FIELDS = ['data_anterior', 'peso_anterior', 'dias', 'ganho', 'gmd'];
+const sameDerivedValue = (a, b) => {
+  const blank = (v) => v === null || v === undefined || v === '';
+  if (blank(a) || blank(b)) return blank(a) && blank(b);
+  return String(a) === String(b) || Number(a) === Number(b);
+};
+
+/**
+ * Recalcula os derivados (anterior, dias, ganho, GMD) da série do animal DENTRO da transação de quem chama
+ * (P08): se algo falhar, nada fica gravado com GMD velho. Só reescreve as pesagens cujo derivado mudou.
+ */
+export async function recalculateAnimalSeriesInTransaction(db, animalId, timestamp = new Date().toISOString(), pre = null) {
+  if (!animalId) return 0;
+  const rows = pre ? pre.eventos : await activeEventsOf(db, animalId);
+  const views = rows.map((row) => storageRecordToViewModel(row));
+  const updates = recalculateWeightSeries(views, new Set([`id:${animalId}`]));
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  let written = 0;
+  for (const update of updates) {
+    const row = byId.get(update.id);
+    if (!row) continue;
+    const ui = weighingUi(row);
+    if (DERIVED_FIELDS.every((field) => sameDerivedValue(ui[field], update.patch[field]))) continue;
+    const legacy = filterLegacyPayload({ ...ui, ...update.patch });
+    await db.table('pesagens').update(row.localId, { legacy_payload: legacy, updated_at: timestamp });
+    if (pre) Object.assign(row, { legacy_payload: legacy, updated_at: timestamp }); // a cópia em memória segue o banco
+    written += 1;
+  }
+  return written;
+}
+
+/** Tudo o que deriva das pesagens do animal, na mesma transação: lotes, movimentos, derivados e estado. */
+export async function reconcileAnimalAfterChange(db, animalId, timestamp = new Date().toISOString(), options = {}) {
+  if (!animalId) return;
+  const { pre = null } = options;
+  await rebuildAnimalLotProjection(db, animalId, timestamp, pre);
+  await reconcileWeighingMovements(db, animalId, timestamp, options);
+  await recalculateAnimalSeriesInTransaction(db, animalId, timestamp, pre);
+  // As permanências acabaram de mudar: o estado lê as de agora (uma consulta indexada).
+  await rebuildAnimalStateProjection(db, animalId, timestamp, pre ? { ...pre, lotes: null } : null);
+}
+
+async function findPendingAnimal(db, ui) {
+  const numero = normalized(ui.numero_animal);
+  if (!numero) return null;
+  const candidatos = (await db.table('animais').where('identificacao_normalizada').equals(numero).toArray())
+    .filter((row) => !row.deleted_at && row.situacao_cadastro === 'PENDENTE_PESAGEM' && row.situacao === 'ATIVO');
+  if (!candidatos.length) return null;
+  // Mesma resolução de marca do Cadastro (id escolhido; senão o texto; senão a marca padrão).
+  const marcaId = await existingRegistryId(db, 'marcas', ui.marca_id) ?? await resolveRegistryId(db, 'marcas', ui.marca, new Date().toISOString(), { fallbackToDefault: true });
+  const mesmos = candidatos.filter((row) => (row.marca_id || null) === (marcaId || null));
+  for (const animal of mesmos) {
+    const pesagens = (await db.table('pesagens').where('animal_id').equals(animal.id).toArray()).filter((row) => !row.deleted_at);
+    if (!pesagens.length) return animal;
+  }
+  return null;
 }
 
 export async function isStorageAvailable() {
@@ -335,24 +495,37 @@ export async function isStorageAvailable() {
 // stores de sanidade entram no escopo da transação e as aplicações (com auditoria
 // CRIAR_APLICACAO_SANIDADE) são gravadas junto da pesagem; referência inválida
 // aborta a transação inteira. O retorno traz `aplicacoes_sanidade` (linhas criadas).
-export async function createEntry(payload, { aplicacoesSanidade = [] } = {}) {
+async function assertAbateSemCarencia(db, animalId, data, numero) {
+  const aplicacoes = (await db.table('aplicacoesSanidade').where('animal_id').equals(animalId).toArray()).filter((a) => !a.deleted_at && !a.cancelled_at);
+  const status = withdrawalStatus(aplicacoes, data);
+  // R2-03: mesma política da operação de Saída; aqui não há liberação técnica — ela é registrada em Rebanho › Saídas.
+  const { bloqueios } = withdrawalExitPolicy({ status, subtipo: 'ABATE', liberacao: null, rotulo: numero ? `Animal ${numero}` : 'Animal' });
+  if (bloqueios.length) {
+    throw new WeighingError('CARENCIA_ABATE', `${bloqueios[0]} Faça o abate pela operação de Saída (Rebanho › Saídas), onde a liberação é registrada.`, { ate: status.ate, desconhecidas: status.desconhecidas.map((a) => a.id) });
+  }
+}
+
+export async function createEntry(payload, { aplicacoesSanidade = [], carenciaConferida = false } = {}) {
   storage.assertWritable('Lançamento de pesagem');
   const db = await storage.ensureReady();
   const ui = typeof payload.legacy_payload === 'object' ? payload.legacy_payload : {};
+  // R05/R09: Saída por Abate lançada direto no Lançamento passa pela MESMA regra de carência das operações. Sem
+  // liberação técnica nesta tela, carência aberta ou desconhecida bloqueia; o abate com liberação documentada é
+  // feito em Rebanho › Saídas (a operação confere e chama esta função com `carenciaConferida`).
+  if (!carenciaConferida && ui.tipo_manejo === 'Saída' && ui.motivo_saida === 'Abate' && (payload.animal_id || ui.animal_id)) {
+    await assertAbateSemCarencia(db, payload.animal_id || ui.animal_id, payload.data_pesagem || ui.data_pesagem, ui.numero_animal);
+  }
   const ts = new Date().toISOString();
   const entryId = payload.id || crypto.randomUUID();
-  const animalId = payload.animal_id || ui.animal_id || (ui.tipo_manejo === 'Cadastro' ? crypto.randomUUID() : null);
+  const animalInformado = payload.animal_id || ui.animal_id || null;
+  let animalId = animalInformado || (ui.tipo_manejo === 'Cadastro' ? crypto.randomUUID() : null);
   let sessionId = ui.sessao_id || null;
   const entry = { ...payload, id: entryId, animal_id: animalId, sessao_id: sessionId, created_by_user_id: actorUserId(), updated_by_user_id: actorUserId(), created_at: payload.created_at || ts, updated_at: ts, deleted_at: null };
   const isRegistration = ui.tipo_manejo === 'Cadastro';
-  let movementType = isRegistration ? 'Entrada' : ui.tipo_manejo === 'Saída' ? ui.motivo_saida || 'Saída' : null;
-
-  await validateAnimalChronology(db, { animalId, data: payload.data_pesagem, ui });
 
   const tableNames = ['pesagens', 'auditoria', 'sessoesPesagem', 'animalLotes', 'categoriasAnimal'];
   if (animalId) tableNames.push('animais', 'movimentosAnimais');
   if (isRegistration) tableNames.push('animalIdentificadores', 'marcas', 'racas', 'propriedades');
-  if (movementType) tableNames.push('movimentosAnimais');
   const sanityItems = Array.isArray(aplicacoesSanidade) ? aplicacoesSanidade : [];
   if (sanityItems.length) tableNames.push(...LAUNCH_SANITY_TABLES);
   const tables = [...new Set(tableNames)].map((name) => db.table(name));
@@ -372,6 +545,17 @@ export async function createEntry(payload, { aplicacoesSanidade = [] } = {}) {
       entry.sessao_id = sessionId;
     }
     if (await db.table('pesagens').where('id').equals(entryId).first()) throw new Error(`Pesagem duplicada (${entryId})`);
+    // v9: Cadastro de um animal que entrou por operação SEM peso (PENDENTE_PESAGEM, mesmo número e marca, sem
+    // pesagens) é a primeira pesagem DELE — não um segundo animal. O movimento de entrada é adotado depois.
+    if (isRegistration && !animalInformado) {
+      const pendente = await findPendingAnimal(db, ui);
+      if (pendente) {
+        animalId = pendente.id;
+        entry.animal_id = animalId;
+      }
+    }
+    // Linha do tempo (P05/P07) dentro da transação: série inteira, sem duplicar Manejo no dia.
+    await assertAnimalTimeline(db, animalId, { upsert: [entry] });
     // Referências das aplicações resolvidas antes de gravar a pesagem: erro aborta tudo.
     const sanity = await prepareApplicationRowsInTransaction(db, sanityItems, {
       animalId, data: payload.data_pesagem, sessaoId: sessionId, pesagemId: entryId, empresaId: ui.empresa_id || EMPRESA_ID, ts, origem: 'lancamento',
@@ -400,29 +584,6 @@ export async function createEntry(payload, { aplicacoesSanidade = [] } = {}) {
     } else if (animalId && payload.lote_id && currentLot?.lote_id !== payload.lote_id) {
       if (currentLot) await db.table('animalLotes').update(currentLot.localId, { fim: payload.data_pesagem, updated_at: ts });
       await db.table('animalLotes').add({ id: crypto.randomUUID(), animal_id: animalId, lote_id: payload.lote_id, apartacao_id: ui.apartacao_id || null, inicio: payload.data_pesagem, fim: null, origem: 'lancamento', created_at: ts, updated_at: ts, deleted_at: null });
-      if (!movementType && currentLot) movementType = 'Mudança de lote';
-    }
-    if (movementType) {
-      await db.table('movimentosAnimais').add({
-        id: crypto.randomUUID(),
-        animal_id: animalId,
-        pesagem_id: entryId,
-        tipo: movementType,
-        data_evento: payload.data_pesagem,
-        lote_origem_id: currentLot?.lote_id || null,
-        lote_destino_id: payload.lote_id || null,
-        motivo: ui.motivo_saida || null,
-        created_at: ts,
-        updated_at: ts,
-        deleted_at: null,
-      });
-    }
-    // Lançamento retroativo (data anterior a outro evento do animal): a permanência em lote é
-    // reconstruída a partir de todos os eventos, senão o lote atual e o histórico ficam errados.
-    if (animalId) {
-      const later = (await db.table('pesagens').where('animal_id').equals(animalId).toArray())
-        .some((row) => !row.deleted_at && row.id !== entryId && String(row.data_pesagem) > String(payload.data_pesagem));
-      if (later) await rebuildAnimalLotProjection(db, animalId, ts);
     }
     await db.table('auditoria').add(auditRow({
       entidade: 'pesagens',
@@ -438,23 +599,63 @@ export async function createEntry(payload, { aplicacoesSanidade = [] } = {}) {
       await db.table('auditoria').bulkAdd(sanity.audits);
       sanityRows = sanity.rows;
     }
-    await rebuildAnimalStateProjection(db, animalId, ts);
+    // Lotes (idempotente), movimentos derivados (P04/P09), derivados da série (P08) e estado do animal —
+    // tudo na mesma transação: retroativo ou não, o histórico sai coerente ou nada é gravado.
+    await reconcileAnimalAfterChange(db, animalId, ts, { origem: ui.origem === 'importacao' ? 'importacao' : 'lancamento' });
   });
   return { ...storageRecordToViewModel(entry), aplicacoes_sanidade: sanityRows };
+}
+
+/**
+ * Correção da identificação no Cadastro (P06): número/marca mudam no animal E no identificador VISUAL
+ * ativo, na mesma transação, com checagem de colisão contra outro animal ativo e auditoria. É correção
+ * de digitação (o identificador é o mesmo); troca real de brinco é outro fluxo (Identificadores).
+ */
+async function correctVisualIdentification(db, animal, { numero, marcaId, marcaNome, ts }) {
+  const novoNumero = normalized(numero);
+  const atualNumero = normalized(animal.numero_animal || animal.identificacao_normalizada);
+  if (!novoNumero || (novoNumero === atualNumero && (marcaId || null) === (animal.marca_id || null))) return false;
+  const colisoes = (await db.table('animais').where('identificacao_normalizada').equals(novoNumero).toArray())
+    .filter((row) => !row.deleted_at && String(row.id) !== String(animal.id) && (row.marca_id || null) === (marcaId || null)
+      && !['VENDIDO', 'ABATIDO', 'MORTO', 'DOADO', 'TRANSFERIDO', 'CANCELADO', 'INATIVO'].includes(row.situacao));
+  if (colisoes.length) {
+    throw Object.assign(new Error(`A identificação ${numero} já pertence a outro animal ativo${marcaNome ? ` da marca ${marcaNome}` : ''}.`), { code: 'IDENTIFICACAO_EM_USO' });
+  }
+  const visuais = (await db.table('animalIdentificadores').where('animal_id').equals(animal.id).toArray())
+    .filter((row) => !row.deleted_at && row.tipo === 'VISUAL' && row.ativo !== false);
+  if (visuais.length) {
+    for (const row of visuais) {
+      await db.table('animalIdentificadores').update(row.localId, {
+        valor: numero, valor_normalizado: novoNumero, marca_id: marcaId || null, marca: marcaNome || null, updated_at: ts,
+      });
+    }
+  } else {
+    await db.table('animalIdentificadores').add(newVisualIdentifier({ animalId: animal.id, ui: { numero_animal: numero, marca: marcaNome }, marcaId: marcaId || null, inicio: animal.created_at?.slice(0, 10) || null, ts }));
+  }
+  await db.table('auditoria').add(auditRow({
+    entidade: 'animalIdentificadores', entidade_id: animal.id, acao: 'CORRIGIR',
+    resumo: `Correção da identificação do cadastro: ${animal.numero_animal || atualNumero} → ${numero}`,
+    campos_alterados: ['valor', 'valor_normalizado', 'marca_id'], created_at: ts,
+  }));
+  return true;
 }
 
 export async function updateEntry(id, payload) {
   storage.assertWritable('Edição de pesagem');
   const db = await storage.ensureReady();
-  const rows = await db.table('pesagens').where('id').equals(id).toArray();
-  const existing = [...rows].reverse().find((row) => !row.deleted_at);
-  if (!existing) return null;
   const ts = new Date().toISOString();
-  const updated = { ...existing, ...payload, id, updated_by_user_id: actorUserId(), updated_at: ts };
-  const ui = typeof updated.legacy_payload === 'object' ? updated.legacy_payload : {};
-  await validateAnimalChronology(db, { animalId: updated.animal_id, data: updated.data_pesagem, ui, ignoredEntryId: id });
-  const tables = ['pesagens', 'animais', 'animalLotes', 'auditoria', 'marcas', 'racas', 'categoriasAnimal'].map((name) => db.table(name));
+  const tables = ['pesagens', 'animais', 'animalLotes', 'auditoria', 'marcas', 'racas', 'categoriasAnimal', 'movimentosAnimais', 'animalIdentificadores'].map((name) => db.table(name));
+  let updated = null;
   await db.transaction('rw', tables, async () => {
+    const rows = await db.table('pesagens').where('id').equals(id).toArray();
+    const existing = [...rows].reverse().find((row) => !row.deleted_at);
+    if (!existing) return;
+    updated = { ...existing, ...payload, id, updated_by_user_id: actorUserId(), updated_at: ts };
+    const ui = typeof updated.legacy_payload === 'object' ? updated.legacy_payload : {};
+    // Série inteira (P05): mover o Cadastro para depois dos Manejos ou a Saída para antes deles é recusado.
+    await assertAnimalTimeline(db, updated.animal_id, { upsert: [updated] });
+    const trocouAnimal = existing.animal_id && existing.animal_id !== updated.animal_id;
+    if (trocouAnimal) await assertAnimalTimeline(db, existing.animal_id, { removeIds: [id] });
     const animalAtual = updated.animal_id ? await db.table('animais').where('id').equals(updated.animal_id).first() : null;
     const isRegistration = ui.tipo_manejo === 'Cadastro';
     await stampAutomaticCategory(db, updated, isRegistration
@@ -466,13 +667,16 @@ export async function updateEntry(id, payload) {
       if (animal) {
         const marcaId = await existingRegistryId(db, 'marcas', ui.marca_id) ?? (ui.marca ? await resolveRegistryId(db, 'marcas', ui.marca, ts) : animal.marca_id ?? null);
         const racaId = await existingRegistryId(db, 'racas', ui.raca_id) ?? (ui.raca ? await resolveRegistryId(db, 'racas', ui.raca, ts) : animal.raca_id ?? null);
+        const numero = ui.numero_animal || animal.numero_animal;
+        const marcaNome = ui.marca ?? animal.marca;
+        await correctVisualIdentification(db, animal, { numero, marcaId, marcaNome, ts });
         await db.table('animais').update(animal.localId, {
-          numero_animal: ui.numero_animal || animal.numero_animal,
-          identificacao_normalizada: String(ui.numero_animal || animal.numero_animal || '').trim().toUpperCase(),
+          numero_animal: numero,
+          identificacao_normalizada: String(numero || animal.identificacao_normalizada || '').trim().toUpperCase(),
           sexo: ui.sexo ?? animal.sexo,
           raca: ui.raca ?? animal.raca,
           era: ui.era ?? animal.era,
-          marca: ui.marca ?? animal.marca,
+          marca: marcaNome,
           marca_id: marcaId,
           raca_id: racaId,
           categoria_id: ui.categoria_id ?? animal.categoria_id ?? null,
@@ -481,11 +685,12 @@ export async function updateEntry(id, payload) {
         });
       }
     }
-    await rebuildAnimalLotProjection(db, updated.animal_id, ts);
     await db.table('auditoria').add(auditRow({ entidade: 'pesagens', entidade_id: id, acao: 'ATUALIZAR', antes: existing, depois: updated, origem: 'manual', operador: ui.operador || null, created_at: ts }));
-    await rebuildAnimalStateProjection(db, updated.animal_id, ts);
+    // Lotes, movimentos da versão anterior (P09), derivados (P08) e estado — na mesma transação.
+    await reconcileAnimalAfterChange(db, updated.animal_id, ts);
+    if (trocouAnimal) await reconcileAnimalAfterChange(db, existing.animal_id, ts);
   });
-  return storageRecordToViewModel(updated);
+  return updated ? storageRecordToViewModel(updated) : null;
 }
 
 export async function deleteEntry(id, { motivo } = {}) {
@@ -508,7 +713,7 @@ export async function deleteEntry(id, { motivo } = {}) {
 // createEntry e bulkDeleteEntries abrem transações com subconjuntos destas tabelas, que o Dexie aninha nesta.
 const REWEIGH_TABLES = Object.freeze([
   'pesagens', 'auditoria', 'sessoesPesagem', 'animalLotes', 'categoriasAnimal', 'animais', 'movimentosAnimais',
-  'animalIdentificadores', 'marcas', 'racas', 'propriedades', ...LAUNCH_SANITY_TABLES,
+  'animalIdentificadores', 'marcas', 'racas', 'propriedades', 'operacaoItens', ...LAUNCH_SANITY_TABLES,
 ]);
 
 export async function replaceEntries(previousIds, payload, { motivo, aplicacoesSanidade = [] } = {}) {
@@ -518,9 +723,6 @@ export async function replaceEntries(previousIds, payload, { motivo, aplicacoesS
   const db = await storage.ensureReady();
   const ui = typeof payload?.legacy_payload === 'object' ? payload.legacy_payload : {};
   const animalId = payload?.animal_id || ui.animal_id || null;
-  const activeMovementsOf = async () => (animalId
-    ? (await db.table('movimentosAnimais').where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at)
-    : []);
   let created = null;
   await db.transaction('rw', REWEIGH_TABLES.map((name) => db.table(name)), async () => {
     const cancelled = await bulkDeleteEntries(ids, { motivo });
@@ -528,17 +730,9 @@ export async function replaceEntries(previousIds, payload, { motivo, aplicacoesS
     if (cancelled !== ids.length) throw new Error('A pesagem de hoje deste animal não está mais ativa. Nada foi gravado; confira a lista do dia.');
     const animal = animalId ? await db.table('animais').where('id').equals(animalId).first() : null;
     if (animal?.deleted_at) throw new Error('Esse animal só tem a pesagem de hoje, sem cadastro. Para trocar o peso, use Editar na lista do dia.');
-    const previousMovements = (await activeMovementsOf()).filter((row) => ids.includes(String(row.pesagem_id)));
+    // Movimento da pesagem substituída: a reconciliação do createEntry (reconcileWeighingMovements) cancela o
+    // dela e cria o da nova quando ela também muda de lote — um único "Mudança de lote" ativo, da nova.
     created = await createEntry(payload, { aplicacoesSanidade });
-    if (previousMovements.length) {
-      const ts = new Date().toISOString();
-      let ownMovement = (await activeMovementsOf()).some((row) => row.pesagem_id === created.id);
-      for (const row of previousMovements) {
-        const handOver = !ownMovement && Boolean(payload.lote_id) && row.lote_destino_id === payload.lote_id;
-        await db.table('movimentosAnimais').update(row.localId, handOver ? { pesagem_id: created.id, updated_at: ts } : { deleted_at: ts, updated_at: ts });
-        if (handOver) ownMovement = true;
-      }
-    }
   });
   return created;
 }
@@ -734,7 +928,7 @@ export async function bulkCreateEntries(payloads, { importMetadata = null } = {}
         if (!movementType && currentLot) movementType = 'Mudança de lote';
       }
       if (movementType) movements.push({
-        id: crypto.randomUUID(), animal_id: animalId, pesagem_id: entry.id, tipo: movementType,
+        id: crypto.randomUUID(), animal_id: animalId, pesagem_id: entry.id, tipo: movementType, natureza: naturezaDoTipo(movementType),
         data_evento: payload.data_pesagem, lote_origem_id: currentLot?.lote_id || null, lote_destino_id: payload.lote_id || null,
         motivo: ui.motivo_saida || null, origem: 'importacao', created_at: ts, updated_at: ts, deleted_at: null,
       });
@@ -812,29 +1006,19 @@ export async function bulkUpdateEntries(items, { audit = true, origin = 'edicao-
     return operations.length;
   }
   const affectedAnimals = new Set();
-  const projectionAnimals = new Set();
   let updatedCount = 0;
-  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalLotes'), db.table('auditoria'), db.table('categoriasAnimal'), async () => {
+  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalLotes'), db.table('auditoria'), db.table('categoriasAnimal'), db.table('movimentosAnimais'), async () => {
     for (const item of items) {
       const rows = await db.table('pesagens').where('id').equals(item.id).toArray();
       const existing = [...rows].reverse().find((row) => !row.deleted_at);
       if (!existing) throw new Error(`pesagens: registro não encontrado (${item.id})`);
       const updated = { ...existing, ...item.patch, id: existing.id, updated_by_user_id: actorUserId(), updated_at: ts };
       const ui = weighingUi(updated);
-      await validateAnimalChronology(db, { animalId: updated.animal_id, data: updated.data_pesagem, ui, ignoredEntryId: existing.id });
+      await assertAnimalTimeline(db, updated.animal_id, { upsert: [updated] });
+      if (existing.animal_id && existing.animal_id !== updated.animal_id) await assertAnimalTimeline(db, existing.animal_id, { removeIds: [existing.id] });
       await db.table('pesagens').update(existing.localId, updated);
       if (existing.animal_id) affectedAnimals.add(existing.animal_id);
       if (updated.animal_id) affectedAnimals.add(updated.animal_id);
-      if (
-        existing.animal_id !== updated.animal_id
-        || existing.data_pesagem !== updated.data_pesagem
-        || existing.lote_id !== updated.lote_id
-        || weighingUi(existing).tipo_manejo !== ui.tipo_manejo
-        || weighingUi(existing).apartacao_id !== ui.apartacao_id
-      ) {
-        if (existing.animal_id) projectionAnimals.add(existing.animal_id);
-        if (updated.animal_id) projectionAnimals.add(updated.animal_id);
-      }
       if (audit) {
         // ATUALIZAR em massa: resumo + campos alterados (docs 12 §3.2), sem antes/depois completos.
         const campos = changedFields(existing, updated);
@@ -848,8 +1032,8 @@ export async function bulkUpdateEntries(items, { audit = true, origin = 'edicao-
       }
       updatedCount += 1;
     }
-    for (const animalId of projectionAnimals) await rebuildAnimalLotProjection(db, animalId, ts);
-    for (const animalId of affectedAnimals) await rebuildAnimalStateProjection(db, animalId, ts);
+    // Lotes (idempotente), movimentos (P09), derivados (P08) e estado de cada animal afetado.
+    for (const animalId of affectedAnimals) await reconcileAnimalAfterChange(db, animalId, ts);
   });
   return updatedCount;
 }
@@ -993,7 +1177,8 @@ export async function bulkDeleteEntries(ids, { motivo } = {}) {
   let removed = 0;
   const affectedAnimals = new Set();
   const removedIds = [];
-  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalIdentificadores'), db.table('animalLotes'), db.table('movimentosAnimais'), db.table('auditoria'), db.table('categoriasAnimal'), db.table(APLICACOES_STORE), async () => {
+  // operacaoItens (v9) entra no escopo: removeOrphanAnimal confere se o animal veio de operação.
+  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalIdentificadores'), db.table('animalLotes'), db.table('movimentosAnimais'), db.table('auditoria'), db.table('categoriasAnimal'), db.table(APLICACOES_STORE), db.table('operacaoItens'), async () => {
     for (const id of ids) {
       const rows = await db.table('pesagens').where('id').equals(id).toArray();
       const existing = [...rows].reverse().find((row) => !row.deleted_at);
@@ -1008,8 +1193,8 @@ export async function bulkDeleteEntries(ids, { motivo } = {}) {
     for (const animalId of affectedAnimals) {
       // Sem pesagem nenhuma, o animal sai junto (libera marca/raça/categoria do "Em uso").
       if (await removeOrphanAnimal(db, animalId, ts)) continue;
-      await rebuildAnimalLotProjection(db, animalId, ts);
-      await rebuildAnimalStateProjection(db, animalId, ts);
+      // P04: movimento da pesagem cancelada sai junto (auditado); lotes, derivados e estado recompostos.
+      await reconcileAnimalAfterChange(db, animalId, ts);
     }
   });
   return removed;
@@ -1038,4 +1223,57 @@ export async function countEntries(filters = {}) {
 export async function getSummary(filters = {}) {
   const s = await storage.weighing.summary(filters);
   return { total: s.total, pesoTotal: s.somaPeso, ...s };
+}
+
+/**
+ * Reparo (P04/P08/P13): reconcilia lotes, movimentos derivados, GMD e estado de TODOS os animais com
+ * pesagem ativa — limpa o que versões anteriores deixaram (movimento de pesagem cancelada, permanências
+ * duplicadas, derivados velhos). Idempotente: num banco coerente não grava nada. Quem chama faz o backup
+ * antes (Manutenção). Em blocos para não segurar uma transação gigante.
+ */
+/**
+ * "Reconciliar derivados" para todos os animais com pesagem (R08). Por bloco de animais, numa transação: lê de
+ * uma vez as pesagens, os movimentos, as permanências e os animais do bloco (índice, `anyOf`) e as categorias uma
+ * vez por execução — antes eram ~7 consultas por animal. Só grava o que difere (2ª execução não escreve nada).
+ * `onProgress({ feitos, total })` a cada bloco; `signal.aborted` interrompe entre blocos (o que foi feito fica
+ * consistente: cada bloco é atômico e reexecutar continua de onde parou, pois é idempotente).
+ */
+export async function reconcileAllAnimalDerivations({ chunkSize = 250, onProgress, signal } = {}) {
+  storage.assertWritable('Reconciliação de derivados');
+  const db = await storage.ensureReady();
+  const ids = [...new Set((await db.table('pesagens').toArray()).filter((row) => !row.deleted_at && row.animal_id).map((row) => row.animal_id))];
+  const tables = ['pesagens', 'animais', 'animalLotes', 'movimentosAnimais', 'auditoria', 'categoriasAnimal'].map((name) => db.table(name));
+  const before = { animalLotes: await db.table('animalLotes').count(), movimentosAnimais: await db.table('movimentosAnimais').count() };
+  const categorias = await db.table('categoriasAnimal').toArray();
+  const porAnimal = (rows) => {
+    const mapa = new Map();
+    for (const row of rows) { const lista = mapa.get(row.animal_id); if (lista) lista.push(row); else mapa.set(row.animal_id, [row]); }
+    return mapa;
+  };
+  let feitos = 0;
+  for (let start = 0; start < ids.length; start += chunkSize) {
+    if (signal?.aborted) return { animais: ids.length, feitos, cancelado: true, antes: before, chunk: chunkSize };
+    const chunk = ids.slice(start, start + chunkSize);
+    const ts = new Date().toISOString();
+    await db.transaction('rw', tables, async () => {
+      const [pesagens, movimentos, lotes, animais] = await Promise.all([
+        db.table('pesagens').where('animal_id').anyOf(chunk).toArray(),
+        db.table('movimentosAnimais').where('animal_id').anyOf(chunk).toArray(),
+        db.table('animalLotes').where('animal_id').anyOf(chunk).toArray(),
+        db.table('animais').where('id').anyOf(chunk).toArray(),
+      ]);
+      const eventosPor = porAnimal(pesagens.filter((row) => !row.deleted_at));
+      const movimentosPor = porAnimal(movimentos);
+      const lotesPor = porAnimal(lotes);
+      const animalPor = new Map(animais.map((row) => [row.id, row]));
+      for (const animalId of chunk) {
+        await reconcileAnimalAfterChange(db, animalId, ts, {
+          pre: { eventos: eventosPor.get(animalId) || [], movimentos: movimentosPor.get(animalId) || [], lotes: lotesPor.get(animalId) || [], animal: animalPor.get(animalId) || null, categorias },
+        });
+      }
+    });
+    feitos += chunk.length;
+    onProgress?.({ feitos, total: ids.length });
+  }
+  return { animais: ids.length, feitos, cancelado: false, antes: before, chunk: chunkSize };
 }

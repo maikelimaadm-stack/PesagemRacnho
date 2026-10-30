@@ -24,6 +24,9 @@ function payload(row) {
 export async function logicalIntegrity({ enforceV7 = null } = {}) {
   const db = await ensureStorageReady();
   const issues = [];
+  // Avisos (missão pesagens-integrada, P11): exceções para conciliar à mão que não reprovam o banco
+  // (identificação legada ambígua). Movimento de pesagem cancelada já é problema ("pesagem_id órfão").
+  const warnings = [];
   const migration = await readMigrationState(db, 7);
   const v7Contract = enforceV7 ?? migration?.status === MIGRATION_STATUS.CONCLUIDA;
 
@@ -60,7 +63,8 @@ export async function logicalIntegrity({ enforceV7 = null } = {}) {
     const row = payload(raw);
     if (!parseCivilDate(row.data_pesagem)) issues.push(`pesagens ${row.id}: data_pesagem inválida`);
     const weight = Number(row.peso_kg ?? row.peso);
-    const weightOptional = row.tipo_manejo === 'Saída' && ['Morte', 'Doação', 'Transferência'].includes(row.motivo_saida);
+    const weightOptional = row.tipo_manejo === 'Saída'
+      && (['Morte', 'Doação', 'Transferência'].includes(row.motivo_saida) || (row.motivo_saida === 'Outros' && Boolean(row.operacao_id)));
     if (!weightOptional && (!Number.isFinite(weight) || weight <= 0)) issues.push(`pesagens ${row.id}: peso inválido`);
     if (row.animal_id && animalIds.size && !animalIds.has(row.animal_id)) issues.push(`pesagens ${row.id}: animal_id órfão ${row.animal_id}`);
     if (row.lote_id && !lotIds.has(row.lote_id)) issues.push(`pesagens ${row.id}: lote_id órfão ${row.lote_id}`);
@@ -142,7 +146,28 @@ export async function logicalIntegrity({ enforceV7 = null } = {}) {
 
   await sanityIntegrity(db, { issues, animalIds, weighingIds, active });
 
-  return { ok: issues.length === 0, result: issues.length === 0 ? 'ok' : 'issues', issues, v7Contract };
+  // P11: pesagem antiga sem animal_id cujo número + marca pertence a mais de um animal — não é ligada
+  // sozinha a nenhum deles (domain/animalHistory) e fica nesta lista para conciliação manual.
+  const activeWeighings = await active('pesagens');
+  const legacyKeyOf = (row) => {
+    const ui = payload(row);
+    return `${String(ui.numero_animal ?? '').trim().toUpperCase()}::${String(ui.marca ?? '').trim().toUpperCase()}`;
+  };
+  const animalsByLegacyKey = new Map();
+  for (const row of activeWeighings) {
+    if (!row.animal_id) continue;
+    const key = legacyKeyOf(row);
+    const set = animalsByLegacyKey.get(key) || new Set();
+    set.add(row.animal_id);
+    animalsByLegacyKey.set(key, set);
+  }
+  for (const row of activeWeighings) {
+    if (row.animal_id) continue;
+    const owners = animalsByLegacyKey.get(legacyKeyOf(row));
+    if (owners && owners.size > 1) warnings.push(`pesagens ${row.id}: sem animal_id e a identificação ${legacyKeyOf(row)} pertence a ${owners.size} animais — conciliar à mão`);
+  }
+
+  return { ok: issues.length === 0, result: issues.length === 0 ? 'ok' : 'issues', issues, warnings, v7Contract };
 }
 
 const ISO_CIVIL_DATE = /^\d{4}-\d{2}-\d{2}$/;

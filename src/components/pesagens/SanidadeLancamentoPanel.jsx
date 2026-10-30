@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -12,9 +12,10 @@ import {
   UNIDADES_DOSE,
   VIAS_APLICACAO,
   VIA_LABELS,
+  getDoseSuggestion,
   suggestedDose,
 } from "@/modules/sanity/application/sanityService";
-import { applyMedicamentoToDraft, newSanityDraft } from "@/modules/weighing/domain/launchContext";
+import { applyMedicamentoToDraft, clearPosologyFromDraft, formatDoseInput, newSanityDraft } from "@/modules/weighing/domain/launchContext";
 import { createPageUrl } from "@/utils";
 import "@/styles/launch-sanity-panel.css";
 import "@/styles/launch-visual.css";
@@ -24,8 +25,64 @@ import "@/styles/launch-visual.css";
 // sozinha. As aplicações seguem no payload `aplicacoes_sanidade` do createEntry e
 // são gravadas pelo sanityService na mesma transação da pesagem. A dose padrão do
 // medicamento só pré-preenche quando é um número; texto vira apenas sugestão.
-// Sem cálculo de dose por peso.
+// F09: com posologia APROVADA e vigente, mostra a dose sugerida pelo peso do animal (na pesagem
+// automática, só com o peso ESTÁVEL do portão da Fase A). Usar a sugestão é escolha do operador e a
+// dose aplicada exige confirmação; se o peso mudar, a dose calculada é desfeita.
 const NENHUM = "__none__";
+
+function PosologiaHint({ draft, numero, pesoBase, dataAplicacao, onChange }) {
+  const [sug, setSug] = useState(null);
+  const kg = pesoBase?.kg;
+  const pronto = Boolean(draft.medicamento_id) && kg > 0 && pesoBase?.estavel !== false;
+  useEffect(() => {
+    let ativo = true;
+    if (!pronto) { setSug(null); return undefined; }
+    getDoseSuggestion({ medicamentoId: draft.medicamento_id, peso: { kg, data: dataAplicacao, origem: pesoBase.origem }, dataAplicacao })
+      .then((r) => { if (ativo) setSug(r); })
+      .catch(() => { if (ativo) setSug(null); });
+    return () => { ativo = false; };
+  }, [pronto, draft.medicamento_id, kg, pesoBase?.origem, dataAplicacao]);
+  // Peso mudou depois de usar a sugestão: a dose calculada sai (o operador recalcula).
+  useEffect(() => {
+    if (draft.posologia_id && String(draft.peso_base_kg) !== String(kg ?? '')) onChange((atual) => ({ ...clearPosologyFromDraft(atual), dose: '' }));
+  }, [draft.posologia_id, draft.peso_base_kg, kg, onChange]);
+  if (!draft.medicamento_id) return null;
+  if (!pronto) {
+    return <tr className="d17d-sanity-table__hint"><td colSpan={7}>{pesoBase?.estavel === false ? 'Dose pela posologia: aguardando peso estável da balança.' : 'Dose pela posologia: informe o peso do animal.'}</td></tr>;
+  }
+  if (!sug) return null;
+  if (!sug.ok) {
+    return <tr className="d17d-sanity-table__hint"><td colSpan={7}>{sug.posologia ? sug.bloqueios[0] : 'Sem posologia aprovada para este produto: dose manual.'}</td></tr>;
+  }
+  const usar = () => onChange((atual) => ({
+    ...atual,
+    dose: formatDoseInput(sug.dose),
+    unidade: sug.unidade || atual.unidade,
+    via_aplicacao: sug.via || atual.via_aplicacao,
+    posologia_id: sug.posologia.id,
+    dose_sugerida: String(sug.dose),
+    peso_base_kg: String(kg),
+    peso_base_data: dataAplicacao,
+    peso_base_origem: pesoBase.origem,
+    dose_confirmada: '',
+  }));
+  return (
+    <tr className="d17d-sanity-table__hint" data-dose-sugerida={sug.dose}>
+      <td colSpan={7}>
+        <span>Dose sugerida pela posologia: <strong>{fmtNum(sug.dose)} {sug.unidade}</strong> ({sug.regra}; peso {fmtInt(kg)} kg {pesoBase.origem === 'BALANCA' ? 'da balança' : 'digitado'}).</span>
+        {sug.avisos.length ? <span> {sug.avisos.join(' ')}</span> : null}
+        {!draft.posologia_id ? (
+          <Button type="button" variant="outline" size="sm" className="ml-2" onClick={usar} aria-label={`Usar dose sugerida na aplicação ${numero}`}>Usar dose sugerida</Button>
+        ) : (
+          <Label className="ml-2 inline-flex items-center gap-1">
+            <Checkbox checked={draft.dose_confirmada === 'true'} onCheckedChange={(checked) => onChange((atual) => ({ ...atual, dose_confirmada: checked === true ? 'true' : '' }))} aria-label={`Confirmo a dose aplicada na aplicação ${numero}`} />
+            <span>Confirmo a dose aplicada</span>
+          </Label>
+        )}
+      </td>
+    </tr>
+  );
+}
 
 export default function SanidadeLancamentoPanel({
   aplicacoes = [],
@@ -39,6 +96,8 @@ export default function SanidadeLancamentoPanel({
   modoEdicao = false,
   aplicacoesRegistradas = [],
   onRecolher,
+  pesoBase = null,
+  dataAplicacao = null,
 }) {
   const semCadastros = catalogoCarregado && !erroCatalogo && programas.length === 0 && medicamentos.length === 0;
   const medicamentoPorId = (id) => medicamentos.find((item) => item.id === id) || null;
@@ -205,6 +264,7 @@ export default function SanidadeLancamentoPanel({
                       {sugestaoTexto && (
                         <tr className="d17d-sanity-table__hint"><td colSpan={7}>Sugestão: {sugestaoTexto}</td></tr>
                       )}
+                      <PosologiaHint draft={draft} numero={numero} pesoBase={pesoBase} dataAplicacao={dataAplicacao} onChange={(alterar) => atualizar(draft.key, alterar)} />
                     </React.Fragment>
                   );
                 })}

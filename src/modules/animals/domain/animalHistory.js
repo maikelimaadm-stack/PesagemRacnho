@@ -14,9 +14,30 @@ export function sameAnimal(left = {}, right = {}) {
   return legacyAnimalKey(left) === legacyAnimalKey(right);
 }
 
+// P11 (missão pesagens-integrada): número + marca que pertence a MAIS de um animal canônico é ambíguo.
+// Pesagem antiga sem animal_id com essa identificação não é ligada a nenhum deles por coincidência
+// (vai para a lista de exceções da verificação de integridade).
+export function ambiguousLegacyKeys(entries = []) {
+  const owners = new Map();
+  for (const entry of entries) {
+    if (!entry?.animal_id) continue;
+    const key = legacyAnimalKey(entry);
+    const set = owners.get(key) || new Set();
+    set.add(String(entry.animal_id));
+    owners.set(key, set);
+  }
+  return new Set([...owners].filter(([, set]) => set.size > 1).map(([key]) => key));
+}
+
 export function getAnimalHistory(entries = [], target) {
   if (!target) return [];
-  return entries.filter((entry) => sameAnimal(entry, target));
+  const ambiguous = ambiguousLegacyKeys(entries);
+  return entries.filter((entry) => {
+    if (!sameAnimal(entry, target)) return false;
+    // Ligação só por número+marca (um dos lados sem animal_id) não vale quando a identificação é ambígua.
+    const byLegacyKeyOnly = Boolean(entry.animal_id) !== Boolean(target.animal_id);
+    return !(byLegacyKeyOnly && ambiguous.has(legacyAnimalKey(entry)));
+  });
 }
 
 export function getRegisteredAnimals(entries = []) {

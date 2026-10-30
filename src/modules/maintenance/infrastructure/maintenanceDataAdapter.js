@@ -8,6 +8,10 @@
 import storage from '../../../storage/storageAdapter.js';
 import { describeVersions } from '../../../versioning/versionInfo.js';
 import { runSaidaDerivedBackfill } from '../../weighing/application/weighingDerivedBackfill.js';
+import { attachmentObjects } from '../../documents/domain/documentRules.js';
+import { getCriticalBlock, setCriticalBlock } from '../../../storage/migrations/migrationState.js';
+import { liberarBloqueioCritico, persistirBloqueioCritico } from '../../../storage/criticalRestoreState.js';
+import { conferirConteudoRestaurado } from '../../../storage/indexedDb/backup/contentIntegrity.js';
 
 function files() {
   return window.pesagemApp?.files || null;
@@ -15,6 +19,15 @@ function files() {
 function getDialogs() {
   return window.pesagemApp?.dialogs || null;
 }
+// F16: anexos dos documentos (pasta de dados do usuário, fora do IndexedDB).
+function attachments() {
+  return window.pesagemApp?.attachments || null;
+}
+/** Objetos de anexo (sha256 + ext) de um backup (todos os documentos com arquivo, inclusive cancelados). */
+function backupAttachmentObjects(backup) {
+  return attachmentObjects(backup?.stores?.documentos || []);
+}
+const anexosResumo = (r) => (r ? { total: r.total, ok: r.ok, faltando: r.faltando || [], corrompidos: r.corrompidos || [], pasta: r.pasta || null } : null);
 function unwrapDialog(result) {
   if (result?.ok === false) {
     const err = new Error(result.error?.message || 'Operação de arquivo falhou');
@@ -41,7 +54,16 @@ async function saveFile(subdir, filename, content) {
 async function persistFullBackup({ reason, automatic = false } = {}) {
   const { backup, counts } = await storage.createFullBackup({ reason, automatic });
   const saved = await saveFile('backups', `backup-completo-${stamp()}.json`, JSON.stringify(backup, null, 2));
+  // F16: pacote = JSON + pasta "<backup>.anexos" com cada anexo conferido pelo SHA-256.
+  const objetos = backupAttachmentObjects(backup);
+  let anexos = { total: 0, ok: 0, faltando: [], corrompidos: [], pasta: null };
+  if (objetos.length) {
+    anexos = attachments()?.snapshot
+      ? anexosResumo(unwrapDialog(await attachments().snapshot({ backupFile: baseName(saved.path), objects: objetos })))
+      : { total: objetos.length, ok: 0, faltando: objetos.map((o) => o.sha256), corrompidos: [], pasta: null };
+  }
   await storage.recordBackupHistory('full-durable', {
+    anexos,
     backupId: backup.manifest?.backupId,
     reason,
     automatic,
@@ -51,26 +73,252 @@ async function persistFullBackup({ reason, automatic = false } = {}) {
     payloadSha256: backup.integrity?.sha256,
     counts,
   });
-  return { backup, counts, ...saved };
+  return { backup, counts, anexos, ...saved };
 }
 
 function safetyEvidenceOf(saved) {
-  return { path: saved.path, size: saved.size, sha256: saved.sha256 };
+  return { path: saved.path, size: saved.size, sha256: saved.sha256, verified: saved.verified === true, verifiedAt: saved.verifiedAt || null };
 }
 
 export async function isMaintenanceAvailable() {
   try { await storage.ensureReady(); return true; } catch { return false; }
 }
 
-// Backup completo do banco (todos os stores Dexie) → JSON em disco.
-export async function createDatabaseBackup() {
-  const saved = await persistFullBackup({ reason: 'manual-ui' });
-  return { ok: true, backupPath: saved.path, counts: saved.counts, size: saved.size, sha256: saved.sha256 };
+// --- Verificação de backup (P21): ler de volta, conferir SHA do arquivo e validar o conteúdo ---
+
+async function readUserFile(subdir, filename) {
+  if (!files()?.readUserFile) throw new Error('Leitura de arquivo indisponível (abra pelo aplicativo desktop).');
+  return unwrapDialog(await files().readUserFile({ subdir, filename }));
 }
-// No modelo Dexie, "backup completo" = mesmo backup de todos os stores.
-export async function createFullDataBackup() {
-  const saved = await persistFullBackup({ reason: 'manual-ui' });
-  return { ok: true, backupPath: saved.path, backupDir: saved.path, files: Object.keys(saved.counts), counts: saved.counts, size: saved.size, sha256: saved.sha256 };
+
+const baseName = (fullPath) => String(fullPath || '').split(/[\\/]/).pop();
+
+/**
+ * Lê o backup de volta do disco e valida: SHA-256 do arquivo (contra o gravado, quando conhecido),
+ * JSON, formato, SHA-256 do conteúdo, contagens e esquema (dryRunRestore). Registra o resultado no
+ * histórico ('verify'): "verificado" só existe com essa leitura de volta — arquivo encontrado não basta.
+ */
+export async function verifyBackupFile({ name, expectedFileSha256 = null, anexosAusentesNaOrigem = [] } = {}) {
+  const startedAt = new Date().toISOString();
+  let read = null;
+  try {
+    read = await readUserFile('backups', name);
+    if (expectedFileSha256 && read.sha256 !== expectedFileSha256) {
+      throw Object.assign(new Error('O arquivo no disco não é o mesmo que foi gravado (SHA-256 diferente).'), { code: 'BACKUP_VERIFY_SHA' });
+    }
+    let payload;
+    try { payload = JSON.parse(read.content); } catch {
+      throw Object.assign(new Error('Arquivo truncado ou corrompido: não é um JSON válido.'), { code: 'BACKUP_VERIFY_JSON' });
+    }
+    const dry = await storage.dryRunRestore(payload);
+    // F16: backup só é COMPLETO com todos os anexos presentes e íntegros na pasta dele.
+    // R01: anexos que JÁ faltavam no app quando o backup de segurança foi feito (exceção explícita da
+    // restauração) não entram na conferência — e o resultado diz que o pacote está incompleto.
+    const ausentes = new Set(anexosAusentesNaOrigem || []);
+    const objetos = backupAttachmentObjects(payload).filter((o) => !ausentes.has(o.sha256));
+    let anexos = { total: 0, ok: 0, faltando: [], corrompidos: [], pasta: null };
+    if (objetos.length) {
+      if (!attachments()?.verifyBackup) throw Object.assign(new Error('Não foi possível conferir os anexos do backup (abra pelo aplicativo desktop).'), { code: 'BACKUP_VERIFY_ANEXOS' });
+      anexos = anexosResumo(unwrapDialog(await attachments().verifyBackup({ backupFile: baseName(read.path), objects: objetos })));
+      if (anexos.faltando.length || anexos.corrompidos.length) {
+        throw Object.assign(new Error(`Backup incompleto: ${anexos.faltando.length} anexo(s) faltando e ${anexos.corrompidos.length} corrompido(s) na pasta ${anexos.pasta}.`), { code: 'BACKUP_VERIFY_ANEXOS' });
+      }
+    }
+    const result = {
+      anexos,
+      incompleto: ausentes.size > 0,
+      anexosAusentesNaOrigem: [...ausentes],
+      ok: true, path: read.path, name: baseName(read.path), size: read.size, fileSha256: read.sha256,
+      payloadSha256: payload?.integrity?.sha256 || null, backupId: payload?.manifest?.backupId || null,
+      createdAt: payload?.manifest?.createdAt || payload?.createdAt || null, reason: payload?.manifest?.reason || null,
+      automatic: Boolean(payload?.manifest?.automatic), dbVersion: dry.sourceDbVersion, counts: dry.counts, verifiedAt: startedAt,
+    };
+    await storage.recordBackupHistory('verify', result);
+    return result;
+  } catch (err) {
+    const failure = { ok: false, path: read?.path || null, name: name || null, size: read?.size ?? null, fileSha256: read?.sha256 || null, error: err.message, code: err.code || null, verifiedAt: startedAt };
+    await storage.recordBackupHistory('verify', failure);
+    return failure;
+  }
+}
+
+/**
+ * Comando ÚNICO de backup (P19): cria o backup completo e o verifica lendo de volta do disco.
+ * Só devolve ok com a verificação aprovada; se a verificação falhar, o erro diz por quê.
+ */
+export async function createBackupNow({ reason = 'manual-ui', automatic = false, aceitarAnexosAusentesNaOrigem = false } = {}) {
+  const saved = await persistFullBackup({ reason, automatic });
+  // Exceção explícita (só a restauração a usa): anexo que JÁ falta no app não tem como ser perdido pela
+  // operação; o backup de segurança é conferido sem ele e marcado incompleto. Corrompido nunca é aceito.
+  const toleraAusentes = aceitarAnexosAusentesNaOrigem && saved.anexos.faltando.length > 0 && saved.anexos.corrompidos.length === 0;
+  if (!toleraAusentes && (saved.anexos.faltando.length || saved.anexos.corrompidos.length)) {
+    await storage.recordBackupHistory('verify', { ok: false, path: saved.path, name: baseName(saved.path), size: saved.size, fileSha256: saved.sha256, error: 'Anexos faltando na origem: backup incompleto.', code: 'BACKUP_ANEXOS_INCOMPLETO', verifiedAt: new Date().toISOString() });
+    throw Object.assign(new Error(`O backup foi gravado, mas NÃO está completo: ${saved.anexos.faltando.length} anexo(s) não encontrado(s) na pasta de anexos e ${saved.anexos.corrompidos.length} corrompido(s). Confira em Documentos.`), { code: 'BACKUP_ANEXOS_INCOMPLETO', backupPath: saved.path, anexos: saved.anexos });
+  }
+  const verification = await verifyBackupFile({ name: baseName(saved.path), expectedFileSha256: saved.sha256, anexosAusentesNaOrigem: toleraAusentes ? saved.anexos.faltando : [] });
+  if (!verification.ok) {
+    throw Object.assign(new Error(`O backup foi gravado, mas a verificação falhou: ${verification.error}`), { code: 'BACKUP_VERIFY_FAILED', backupPath: saved.path });
+  }
+  // R01: o arquivo lido de volta tem de ser o MESMO backup gerado em memória (conteúdo e contagens), não só um
+  // JSON válido — uma gravação trocada/truncada que ainda parseia é recusada aqui.
+  if (verification.payloadSha256 !== saved.backup?.integrity?.sha256) {
+    await storage.recordBackupHistory('verify', { ok: false, path: saved.path, name: baseName(saved.path), error: 'Conteúdo lido de volta difere do backup gerado.', code: 'BACKUP_VERIFY_CONTEUDO', verifiedAt: new Date().toISOString() });
+    throw Object.assign(new Error('O backup foi gravado, mas o conteúdo lido de volta não é o que foi gerado (SHA-256 do conteúdo diferente).'), { code: 'BACKUP_VERIFY_FAILED', backupPath: saved.path });
+  }
+  for (const [store, n] of Object.entries(saved.counts || {})) {
+    if ((verification.counts?.[store] ?? 0) !== n) {
+      throw Object.assign(new Error(`O backup foi gravado, mas a contagem de ${store} lida de volta (${verification.counts?.[store] ?? 0}) difere da gerada (${n}).`), { code: 'BACKUP_VERIFY_FAILED', backupPath: saved.path });
+    }
+  }
+  return { ok: true, backupPath: saved.path, counts: saved.counts, size: saved.size, sha256: saved.sha256, verified: true, verifiedAt: verification.verifiedAt, anexos: saved.anexos, reason, incompleto: toleraAusentes, anexosAusentesNaOrigem: toleraAusentes ? saved.anexos.faltando : [] };
+}
+
+/**
+ * R01: backup de SEGURANÇA antes de operação destrutiva (importar, restaurar, limpar, reset) — o MESMO caminho
+ * verificado do botão (gravação + leitura de volta + SHA-256 do arquivo e do conteúdo + contagens + anexos).
+ * Qualquer falha impede a operação: o erro BACKUP_PRE_OPERACAO_FALHOU sobe antes de qualquer escrita destrutiva.
+ * A evidência entregue ao motor é a do arquivo conferido.
+ */
+export async function persistVerifiedSafetyBackup({ reason, aceitarAnexosAusentesNaOrigem = false }) {
+  try {
+    const r = await createBackupNow({ reason, automatic: true, aceitarAnexosAusentesNaOrigem });
+    return { path: r.backupPath, size: r.size, sha256: r.sha256, verified: true, verifiedAt: r.verifiedAt, reason, anexos: r.anexos, incompleto: r.incompleto, anexosAusentesNaOrigem: r.anexosAusentesNaOrigem };
+  } catch (err) {
+    await storage.recordBackupHistory('safety-failed', { reason, error: err.message, code: err.code || null, causa: err.code === 'BACKUP_ANEXOS_INCOMPLETO' ? 'ANEXOS_AUSENTES_NA_ORIGEM' : null });
+    throw Object.assign(new Error(`Operação cancelada: o backup de segurança não pôde ser verificado (${err.message}). Nada foi alterado.`), { code: 'BACKUP_PRE_OPERACAO_FALHOU', causa: err.code || null, anexosAusentes: err.anexos?.faltando || [], cause: err });
+  }
+}
+
+// Compatibilidade: os dois nomes antigos são o MESMO backup completo (antes dois botões sugeriam
+// formatos diferentes — P19). Ambos passam pelo comando único, com verificação.
+export async function createDatabaseBackup(options = {}) {
+  return createBackupNow({ reason: options.reason || 'manual-ui' });
+}
+export async function createFullDataBackup(options = {}) {
+  const r = await createBackupNow({ reason: options.reason || 'manual-ui' });
+  return { ...r, backupDir: r.backupPath, files: Object.keys(r.counts || {}) };
+}
+
+function parseHistory(row) {
+  let detalhes = {};
+  try { detalhes = JSON.parse(row.detalhes || '{}'); } catch { detalhes = {}; }
+  return { tipo: row.tipo, created_at: row.created_at, ...detalhes };
+}
+
+/**
+ * Situação da proteção (P21): último backup criado, último VERIFICADO (leitura de volta ok) e os
+ * arquivos da pasta com o estado de cada um — verificado, falhou na verificação ou não verificado.
+ */
+/**
+ * Situação do backup local (R03). Separa o que foi VERIFICADO (histórico, com data) do que vale AGORA:
+ *   • disponível agora — o arquivo verificado está na pasta, com o mesmo nome e tamanho e sem modificação
+ *     posterior à verificação;
+ *   • íntegro agora — relido do disco: SHA-256 igual ao verificado e anexos da pasta ".anexos" conferidos.
+ * `lastVerified` só aponta para um backup íntegro agora (é o que a cobertura, o agendador, a cópia externa e a
+ * retenção usam): registro antigo de arquivo apagado, renomeado, truncado ou alterado com o mesmo tamanho não
+ * conta como proteção nem adia o backup periódico. Pasta inacessível = INDISPONIVEL (não "sem backup").
+ */
+const TOLERANCIA_MTIME_MS = 2000;
+const MAX_CANDIDATOS_CONFERIDOS = 3;
+
+async function conferirAgora(verify) {
+  try {
+    const lido = await readUserFile('backups', verify.name || baseName(verify.path));
+    if (verify.fileSha256 && lido.sha256 !== verify.fileSha256) return { ok: false, motivo: 'Conteúdo do arquivo mudou depois da verificação (SHA-256 diferente).' };
+    let payload;
+    try { payload = JSON.parse(lido.content); } catch { return { ok: false, motivo: 'Arquivo não é mais um JSON válido.' }; }
+    if (verify.payloadSha256 && payload?.integrity?.sha256 !== verify.payloadSha256) return { ok: false, motivo: 'Conteúdo do backup difere do verificado.' };
+    const ausentes = new Set(verify.anexosAusentesNaOrigem || []);
+    const objetos = backupAttachmentObjects(payload).filter((o) => !ausentes.has(o.sha256));
+    if (objetos.length) {
+      if (!attachments()?.verifyBackup) return { ok: false, motivo: 'Não foi possível conferir os anexos agora.' };
+      const r = anexosResumo(unwrapDialog(await attachments().verifyBackup({ backupFile: baseName(lido.path), objects: objetos })));
+      if (r.faltando.length || r.corrompidos.length) return { ok: false, motivo: `Anexos do backup: ${r.faltando.length} faltando e ${r.corrompidos.length} corrompido(s) agora.` };
+    }
+    return { ok: true, motivo: null };
+  } catch (err) {
+    return { ok: false, motivo: `Não foi possível reler o arquivo agora (${err.message}).` };
+  }
+}
+
+export async function getBackupStatus({ conferir = true } = {}) {
+  const db = await storage.ensureReady();
+  const history = (await db.table('backupHistory').toArray()).map(parseHistory)
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  const created = history.filter((h) => h.tipo === 'full-durable');
+  const verifies = history.filter((h) => h.tipo === 'verify');
+  // R2-01: verificação de backup PARCIAL (exceção da restauração: anexos que já faltavam no app ficaram fora) é
+  // guardada no histórico, mas não é "backup verificado" nem proteção completa.
+  const parcial = (h) => Boolean(h?.ok && (h.incompleto || (h.anexosAusentesNaOrigem || []).length));
+  const ultimaVerificacao = verifies.find((h) => h.ok && !parcial(h)) || null; // histórico: "Verificado em [data]"
+  const ultimoParcial = verifies.find((h) => parcial(h)) || null;
+  let filesList = [];
+  let unavailable = false;
+  let erroPasta = null;
+  if (!files()?.listUserFiles) {
+    unavailable = true;
+  } else {
+    try { filesList = (await listBackups()).full || []; } catch (err) { unavailable = true; erroPasta = err.message; }
+  }
+  const catalog = filesList.map((file) => {
+    const verify = verifies.find((h) => h.path === file.path) || null; // a verificação mais recente DESTE arquivo
+    const origin = created.find((h) => h.path === file.path);
+    const alterado = Boolean(verify?.ok) && (verify.size !== file.size
+      || (file.modifiedAt && verify.verifiedAt && Date.parse(file.modifiedAt) > Date.parse(verify.verifiedAt) + TOLERANCIA_MTIME_MS));
+    return {
+      ...file,
+      reason: origin?.reason || verify?.reason || null,
+      automatic: origin?.automatic ?? verify?.automatic ?? null,
+      estado: !verify ? 'NAO_VERIFICADO' : !verify.ok ? 'FALHOU' : alterado ? 'ALTERADO' : parcial(verify) ? 'PARCIAL' : 'VERIFICADO',
+      verifiedAt: verify?.verifiedAt || null,
+      erro: verify && !verify.ok ? verify.error : alterado ? 'Arquivo modificado depois da verificação.' : parcial(verify) ? `Backup PARCIAL: ${(verify.anexosAusentesNaOrigem || []).length} anexo(s) já faltavam no app — não é proteção completa.` : null,
+      _verify: verify,
+    };
+  });
+  const ultimoArquivo = ultimaVerificacao ? catalog.find((c) => c.path === ultimaVerificacao.path) : null;
+  // Disponível agora: o último verificado está na pasta, mesmo nome e tamanho, sem modificação posterior.
+  const disponivelAgora = Boolean(ultimoArquivo && ultimoArquivo.estado === 'VERIFICADO');
+  // Íntegro agora: os mais novos VERIFICADOS são relidos até achar um que confere.
+  let lastVerified = null;
+  let conferencia = null;
+  const candidatos = catalog.filter((c) => c.estado === 'VERIFICADO').sort((x, y) => String(y.verifiedAt).localeCompare(String(x.verifiedAt)));
+  // R2-06: a releitura é limitada aos mais novos (custo); se nenhum deles confere e há outros não relidos, o
+  // resultado diz isso — "sem proteção" seria uma certeza que a conferência não tem.
+  const conferidos = candidatos.slice(0, conferir ? MAX_CANDIDATOS_CONFERIDOS : 1);
+  const naoConferidos = candidatos.length - conferidos.length;
+  for (const c of conferidos) {
+    const r = conferir ? await conferirAgora(c._verify) : { ok: true, motivo: null, naoConferido: true };
+    if (r.ok) { lastVerified = c._verify; conferencia = { em: new Date().toISOString(), ok: true, name: c.name, naoConferido: Boolean(r.naoConferido) }; break; }
+    c.estado = 'ALTERADO';
+    c.erro = r.motivo;
+    conferencia = conferencia || { em: new Date().toISOString(), ok: false, name: c.name, motivo: r.motivo };
+  }
+  let protecao;
+  if (lastVerified) protecao = 'VERIFICADO';
+  else if (unavailable && files()?.listUserFiles) protecao = 'INDISPONIVEL';
+  else if (ultimaVerificacao) protecao = 'ALTERADO';
+  else if (ultimoParcial && catalog.some((c) => c.estado === 'PARCIAL')) protecao = 'PARCIAL';
+  else protecao = catalog.length ? 'NAO_VERIFICADO' : 'SEM_BACKUP';
+  let motivo = null;
+  if (protecao === 'INDISPONIVEL') motivo = `Pasta de backups inacessível agora${erroPasta ? ` (${erroPasta})` : ''}.`;
+  else if (protecao === 'ALTERADO') motivo = !ultimoArquivo ? `O backup verificado em ${ultimaVerificacao.verifiedAt} não está mais na pasta (apagado ou renomeado).` : (conferencia?.motivo || ultimoArquivo.erro || 'O backup verificado mudou depois da verificação.');
+  else if (protecao === 'PARCIAL') motivo = 'Só há backup PARCIAL (anexos que já faltavam no app ficaram fora): não é proteção completa. Crie um backup completo.';
+  if (!lastVerified && naoConferidos > 0) motivo = `${motivo || 'Nenhum dos backups mais novos confere agora.'} Outros ${naoConferidos} backup(s) verificado(s) antes não foram relidos agora (limite de ${MAX_CANDIDATOS_CONFERIDOS}): use Verificar neles.`;
+  return {
+    protecao,
+    motivo,
+    lastCreated: created[0] || null,
+    lastVerified,
+    ultimaVerificacao,
+    ultimoParcial,
+    conferenciaLimitada: !lastVerified && naoConferidos > 0 ? { conferidos: conferidos.length, naoConferidos } : null,
+    disponivelAgora,
+    integroAgora: Boolean(lastVerified) && !conferencia?.naoConferido,
+    conferencia,
+    files: catalog.map(({ _verify, ...rest }) => rest),
+    unavailable,
+    erroPasta,
+  };
 }
 
 export async function exportWeighingCsv() {
@@ -111,7 +359,7 @@ export async function dryRunImportWeighingJson(payload) {
   return storage.dryRunImportPesagens(payload);
 }
 export async function applyImportWeighingJson(payload) {
-  const safety = await persistFullBackup({ reason: 'pre-import', automatic: true });
+  const safety = await persistVerifiedSafetyBackup({ reason: 'pre-import' });
   const result = await storage.applyImportPesagens(payload, { safetyEvidence: safetyEvidenceOf(safety) });
   return { ...result, safetyBackup: safetyEvidenceOf(safety) };
 }
@@ -126,13 +374,169 @@ export async function selectBackupFile() {
 export async function dryRunRestoreBackup(backup) {
   return storage.dryRunRestore(backup);
 }
-export async function applyRestoreBackup(backup) {
-  const safety = await persistFullBackup({ reason: 'pre-restore', automatic: true });
-  const result = await storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
-  // E1G (1.4.2): backup de antes da 1.4.2 volta sem o marcador 'derivados-saida-v1' — o GMD das saídas com peso é
-  // recalculado já, sem esperar a próxima abertura (nunca lança; com o marcador, não faz nada).
-  await runSaidaDerivedBackfill();
+const falhaRestauracao = (code, message, extra = {}) => Object.assign(new Error(message), { code, ...extra });
+
+/**
+ * R02 — restauração em fases, com a base intocada até tudo estar conferido:
+ *   1. CONFERIR: anexos do pacote (pasta "<backup>.anexos" do arquivo EXATO selecionado — token `selecao`,
+ *      relido e conferido pelo SHA-256 no processo principal) ou do envelope protegido (`anexosInline`).
+ *      Faltando/corrompido/arquivo trocado → recusa, nada muda.
+ *   2. BACKUP DE SEGURANÇA verificado (R01).
+ *   3. PREPARAR: anexos copiados e conferidos numa pasta de preparo; falha → preparo descartado, nada muda.
+ *   4. BANCO: substituição atômica (Dexie). Falha → preparo descartado.
+ *   5. EFETIVAR anexos (preparo → pasta de anexos). Falha → COMPENSAÇÃO: o banco volta ao backup de segurança.
+ *   6. CONFERIR DE NOVO banco + anexos: `recuperacaoCompleta` só com tudo íntegro.
+ * Exceção explícita (ADMIN): `aceitarAnexosFaltandoNoPacote` restaura sem os anexos AUSENTES do pacote (nunca os
+ * corrompidos) — o resultado sai com recuperacaoCompleta = false e a lista dos que faltam.
+ */
+export async function applyRestoreBackup(backup, { selecao = null, anexosInline = null, aceitarAnexosAusentesNaOrigem = false, aceitarAnexosFaltandoNoPacote = false } = {}) {
+  const objetos = backupAttachmentObjects(backup);
+  const api = attachments();
+  // 1. Conferir.
+  // R2-02: com arquivo selecionado, o arquivo é reconferido (token + SHA-256) MESMO sem anexos, e o conteúdo em
+  // memória tem de ser o do arquivo (SHA-256 do conteúdo do backup lido no processo principal). Sem seleção, só é
+  // aceita a cópia em memória de backup SEM anexos (uso programático; a tela sempre passa a seleção).
+  if (selecao && api?.preflightSelected && !Array.isArray(anexosInline)) {
+    const conf = unwrapDialog(await api.preflightSelected({ selecao, objects: [] }));
+    if (conf?.conteudoSha256 && backup?.integrity?.sha256 && conf.conteudoSha256 !== backup.integrity.sha256) {
+      throw falhaRestauracao('BACKUP_CONTEUDO_DIVERGENTE', 'O conteúdo a restaurar não é o do arquivo selecionado (SHA-256 do conteúdo diferente). Selecione e inspecione de novo. Nada foi alterado.');
+    }
+  }
+  let faltandoNoPacote = [];
+  if (objetos.length) {
+    let pre;
+    if (Array.isArray(anexosInline)) {
+      const presentes = new Set(anexosInline.map((a) => a?.sha256));
+      pre = { total: objetos.length, faltando: objetos.filter((o) => !presentes.has(o.sha256)).map((o) => o.sha256), corrompidos: [] };
+    } else {
+      if (!api?.preflightSelected) throw falhaRestauracao('BACKUP_ANEXOS_PREFLIGHT', 'Não foi possível conferir os anexos do backup (abra pelo aplicativo desktop). Nada foi alterado.');
+      if (!selecao) throw falhaRestauracao('BACKUP_SELECAO_INVALIDA', 'Restauração sem a seleção do arquivo: selecione e inspecione o backup de novo. Nada foi alterado.');
+      pre = anexosResumo(unwrapDialog(await api.preflightSelected({ selecao, objects: objetos })));
+    }
+    if (pre.corrompidos.length || (pre.faltando.length && !aceitarAnexosFaltandoNoPacote)) {
+      throw falhaRestauracao('BACKUP_ANEXOS_PREFLIGHT', `Restauração cancelada antes de alterar qualquer dado: ${pre.faltando.length} anexo(s) faltando e ${pre.corrompidos.length} corrompido(s) no backup${pre.pasta ? ` (pasta ${pre.pasta})` : ''}.`, { faltando: pre.faltando, corrompidos: pre.corrompidos });
+    }
+    faltandoNoPacote = pre.faltando;
+  }
+  // 2. Backup de segurança verificado.
+  const safety = await persistVerifiedSafetyBackup({ reason: 'pre-restore', aceitarAnexosAusentesNaOrigem });
+  // 3. Preparar.
+  const ausentes = new Set(faltandoNoPacote);
+  const aPreparar = objetos.filter((o) => !ausentes.has(o.sha256));
+  let stageId = null;
+  if (aPreparar.length) {
+    const inline = Array.isArray(anexosInline) ? anexosInline.filter((a) => aPreparar.some((o) => o.sha256 === a?.sha256)) : null;
+    try {
+      stageId = unwrapDialog(await api.stage(inline ? { inline } : { selecao, objects: aPreparar })).stageId;
+    } catch (err) {
+      throw falhaRestauracao('BACKUP_ANEXOS_PREPARO', `Restauração cancelada: ${err.message}`, { causa: err.code || null, safetyBackup: safetyEvidenceOf(safety) });
+    }
+  }
+  const descartar = async () => { if (stageId) { try { unwrapDialog(await api.discardStage({ stageId })); } catch { /* pasta de preparo fica para limpeza; banco e anexos intactos */ } } };
+  // A partir daqui a base PODE mudar (R2-02): toda falha — na troca da base, na migração/backfills que ela dispara,
+  // na efetivação dos anexos, nos derivados ou na conferência final — passa pela compensação (volta ao backup de
+  // segurança verificado). Não há transação única entre IndexedDB e disco: os anexos são endereçados pelo conteúdo e
+  // nunca sobrescritos quando íntegros, então o estado antigo deles continua lá; o banco é o que volta.
+  let result;
+  let efetivado = null;
+  let fase = 'banco';
+  try {
+    // 4. Banco (inclui a migração/backfill quando o backup é de esquema anterior).
+    result = await storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+    await faltaInjetada('banco');
+    // 5. Efetivar anexos.
+    fase = 'anexos';
+    if (stageId) {
+      efetivado = anexosResumo(unwrapDialog(await api.commitStage({ stageId, objects: aPreparar })));
+      if (efetivado.faltando.length || efetivado.corrompidos.length) throw falhaRestauracao('ANEXO_EFETIVAR', `${efetivado.faltando.length} faltando e ${efetivado.corrompidos.length} corrompido(s) após mover os anexos.`);
+    }
+    await faltaInjetada('anexos');
+    // E1G (1.4.2): backup de antes da 1.4.2 volta sem o marcador 'derivados-saida-v1' — o GMD das saídas com peso é
+    // recalculado já. Ele não lança: devolve o erro, que aqui é falha da restauração (antes era ignorado).
+    fase = 'derivados';
+    const derivados = await runSaidaDerivedBackfill();
+    if (derivados?.error) throw falhaRestauracao('DERIVADOS_FALHOU', `Recálculo do GMD das saídas falhou: ${derivados.error.message || derivados.error.code}.`);
+    await faltaInjetada('derivados');
+    // 6. Conferir de novo o CONTEÚDO (R3-02 — não só contagens) e os anexos na pasta do app.
+    fase = 'conferencia';
+    const db = await storage.ensureReady();
+    await faltaInjetada('conferencia');
+    const conteudo = await conferirConteudoRestaurado(db, backup?.stores, { migracao: Boolean(result.schemaUpgradeRequired) });
+    if (!conteudo.ok) throw falhaRestauracao('CONFERENCIA_FINAL', `Conteúdo restaurado diferente do backup: ${conteudo.divergencias.slice(0, 3).map((d) => `${d.store}${d.id ? ` ${d.id}` : ''} (${d.motivo})`).join('; ')}.`, { divergencias: conteudo.divergencias });
+    const contagensDivergentes = [];
+    if (objetos.length) {
+      const pos = api?.verify ? anexosResumo(unwrapDialog(await api.verify({ objects: objetos }))) : { total: objetos.length, ok: 0, faltando: objetos.map((o) => o.sha256), corrompidos: [], pasta: null };
+      // Só podem faltar os anexos que o ADMIN aceitou restaurar sem (ausentes no pacote); nenhum corrompido.
+      const inesperados = pos.faltando.filter((sha) => !ausentes.has(sha));
+      if (inesperados.length || pos.corrompidos.length) throw falhaRestauracao('CONFERENCIA_FINAL', `Anexos depois de restaurar: ${inesperados.length} faltando e ${pos.corrompidos.length} corrompido(s).`);
+      result.anexos = { ...pos, pasta: efetivado?.pasta ?? null };
+    }
+    result.contagensDivergentes = contagensDivergentes;
+    result.conferenciaConteudo = { ok: true, ms: conteudo.ms, impressoes: conteudo.impressoes };
+  } catch (err) {
+    await descartar();
+    const compensacao = await compensarRestauracao(safety);
+    if (!compensacao.ok) {
+      // CRÍTICO (R3-01): 1º o bloqueio em memória, 2º o marcador durável (arquivo fora do banco + appSettings), e só
+      // depois os registros de histórico — falha no histórico não tira a proteção nem troca a mensagem.
+      const nomeSeguranca = baseName(safety.path);
+      setCriticalBlock({ message: `restauração falhou (${fase}) e a volta automática também; restaure ${nomeSeguranca}`, fase, backupNome: nomeSeguranca, backupSha256: safety.sha256 });
+      let persistido = { arquivo: false, banco: false, erros: ['não tentado'] };
+      try { persistido = await persistirBloqueioCritico(await storage.ensureReady(), { fase, backupNome: nomeSeguranca, backupSha256: safety.sha256 }); } catch (persistErr) { persistido = { arquivo: false, banco: false, erros: [persistErr.message] }; }
+      setCriticalBlock({ message: `restauração falhou (${fase}) e a volta automática também; restaure ${nomeSeguranca}`, fase, backupNome: nomeSeguranca, backupSha256: safety.sha256, persistido });
+      for (const [tipo, dados] of [['restore-compensated', { fase, error: err.message, code: err.code || null, compensado: false, compensacaoErro: compensacao.error || null, safetyPath: safety.path }], ['restore-critical', { fase, error: err.message, compensacaoErro: compensacao.error, safetyPath: safety.path, marcadorPersistido: persistido }]]) {
+        try { await storage.recordBackupHistory(tipo, dados); } catch { /* histórico indisponível: o bloqueio já está instalado */ }
+      }
+      const aviso = persistido.arquivo ? '' : ' ATENÇÃO: o marcador em arquivo NÃO pôde ser gravado' + (persistido.banco ? ' (ficou só no banco)' : ' nem no banco') + ' — NÃO feche o aplicativo antes de restaurar.';
+      throw falhaRestauracao('BACKUP_RESTAURACAO_CRITICA',
+        `RESTAURAÇÃO NÃO CONCLUÍDA E BASE POSSIVELMENTE INCONSISTENTE: falhou em "${fase}" (${err.message}) e a volta automática também falhou (${compensacao.error}). As gravações foram bloqueadas, inclusive ao reabrir o aplicativo. Restaure em Sistema › Backup e Restauração o backup de segurança ${nomeSeguranca} (verificado, SHA-256 ${safety.sha256}).${aviso}`,
+        { fase, compensado: false, safetyBackup: safetyEvidenceOf(safety), recuperacaoCompleta: false, critico: true, marcadorPersistido: persistido });
+    }
+    try { await storage.recordBackupHistory('restore-compensated', { fase, error: err.message, code: err.code || null, compensado: true, safetyPath: safety.path }); } catch { /* a volta já foi conferida; o histórico é complementar */ }
+    throw falhaRestauracao('BACKUP_RESTAURACAO_REVERTIDA',
+      `A restauração falhou em "${fase}" (${err.message}). O banco foi devolvido ao estado anterior pelo backup de segurança, conferido registro a registro; nada do backup escolhido ficou aplicado.`,
+      { fase, causa: err.code || null, compensado: true, safetyBackup: safetyEvidenceOf(safety), recuperacaoCompleta: false });
+  }
+  // R3-01: restauração conferida (conteúdo e anexos) é o caminho de recuperação — libera o estado crítico, se havia.
+  if (getCriticalBlock() || storage.getCriticalBlock?.()) {
+    await liberarBloqueioCritico(await storage.ensureReady(), { conteudoSha256: backup?.integrity?.sha256 || safety.sha256 });
+    try { await storage.recordBackupHistory('restore-critical-cleared', { conteudoSha256: backup?.integrity?.sha256 || null }); } catch { /* complementar */ }
+    result.estadoCriticoLiberado = true;
+  }
+  result.recuperacaoCompleta = !result.anexos || (result.anexos.ok === result.anexos.total && !result.anexos.faltando.length && !result.anexos.corrompidos.length);
+  result.safetyBackup = safetyEvidenceOf(safety);
   return result;
+}
+
+/**
+ * Compensação (R2-02): devolve o banco ao conteúdo do backup de segurança (verificado; relido e conferido pelo
+ * SHA-256) e confere as contagens. Idempotente: pode rodar mesmo se a base não chegou a mudar.
+ */
+async function compensarRestauracao(safety) {
+  try {
+    await faltaInjetada('compensacao');
+    const lido = await readUserFile('backups', baseName(safety.path));
+    if (lido.sha256 !== safety.sha256) throw new Error('backup de segurança mudou no disco');
+    const conteudo = JSON.parse(lido.content);
+    await storage.applyRestore(conteudo, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+    await faltaInjetada('compensacao-aplicada');
+    // R3-02: a volta só vale com o CONTEÚDO de cada registro igual ao backup de segurança (não só contagens).
+    const conferido = await conferirConteudoRestaurado(await storage.ensureReady(), conteudo.stores, { migracao: false });
+    if (!conferido.ok) throw new Error(`conteúdo não voltou ao backup de segurança: ${conferido.divergencias.slice(0, 3).map((d) => `${d.store}${d.id ? ` ${d.id}` : ''} (${d.motivo})`).join('; ')}`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+/**
+ * Falha injetada SÓ para os gates (R2-02): pontos depois da troca da base que não dá para forçar de verdade num
+ * banco sintético. `faltas.em(fase, contexto)` pode lançar. Em uso normal fica nulo.
+ */
+export const faltasRestauracaoParaTestes = { em: null };
+async function faltaInjetada(fase, contexto = {}) {
+  // Só age com o gate sinalizando explicitamente no processo (nenhuma entrada do usuário liga isto).
+  if (globalThis.__PESAGENS_GATE_FALTAS__ === true && typeof faltasRestauracaoParaTestes.em === 'function') await faltasRestauracaoParaTestes.em(fase, contexto);
 }
 
 // --- Versões, migração, limpeza em dois níveis, diagnóstico ---
@@ -157,21 +561,30 @@ export async function resumeMigration({ onProgress } = {}) {
 }
 
 export async function clearOperationalData() {
-  const safety = await persistFullBackup({ reason: 'pre-clear-operational', automatic: true });
+  const safety = await persistVerifiedSafetyBackup({ reason: 'pre-clear-operational' });
   const result = await storage.clearOperationalData({ safetyEvidence: safetyEvidenceOf(safety) });
   return { ...result, backupPath: safety.path, safetyBackup: safetyEvidenceOf(safety) };
 }
 
 export async function resetAllData({ confirmedByAdmin = false } = {}) {
-  const safety = await persistFullBackup({ reason: 'pre-reset-all', automatic: true });
+  const safety = await persistVerifiedSafetyBackup({ reason: 'pre-reset-all' });
   const result = await storage.resetAllData({ safetyEvidence: safetyEvidenceOf(safety), confirmedByAdmin, files: files() });
   return { ...result, backupPath: safety.path, safetyBackup: safetyEvidenceOf(safety) };
 }
 
 // Relatório resumido por versão: v7 descreve a conversão dos cadastros; v8
-// (ADR-049) só as contagens das stores de sanidade criadas.
+// (ADR-049) só as contagens das stores de sanidade criadas; v9 a natureza dos
+// movimentos e as operações legadas (17-MODELO-DADOS-V9.md).
 function reportSummary(relatorio) {
   if (!relatorio) return null;
+  if (relatorio.operacoesLegadasEntrada !== undefined) {
+    return {
+      storesCriadas: relatorio.storesCriadas || [],
+      movimentosComNatureza: relatorio.movimentosComNatureza, movimentosSemNatureza: relatorio.movimentosSemNatureza,
+      operacoesLegadasEntrada: relatorio.operacoesLegadasEntrada, operacoesLegadasSaida: relatorio.operacoesLegadasSaida,
+      itensLegados: relatorio.itensLegados, pesagensJaConvertidas: relatorio.pesagensJaConvertidas,
+    };
+  }
   if (relatorio.storesCriadas !== undefined) {
     return {
       storesCriadas: relatorio.storesCriadas || [],

@@ -325,7 +325,7 @@ function checkPage(page) {
   assert.match(dialogo, /repesagemDialog\?\.avisoSanidade/, 'avisa quando a pesagem de hoje tem aplicação de sanidade');
   assert.match(page, /<Dialog open=\{Boolean\(repesagemDialog\)\} onOpenChange=\{\(open\) => \{ if \(!open\) setRepesagemDialog\(null\); \}\}>/, 'fechar o diálogo (Esc, X) também não grava');
   // Salvamento: repesagem pelo serviço (transação única); lançamento normal continua no createEntry.
-  assert.match(page, /const savedEntry = repesagemAnterioresIds\s*\? await weighingService\.replaceSameDayEntry\(repesagemAnterioresIds, \{ \.\.\.data, aplicacoes_sanidade: sanidadeValidada\.payload \}\)\s*: await weighingService\.createEntry\(\{ \.\.\.data, aplicacoes_sanidade: sanidadeValidada\.payload \}\);/, 'repesagem confirmada grava pelo replaceSameDayEntry');
+  assert.match(page, /const savedEntry = repesagemAnterioresIds\s*\? await weighingService\.replaceSameDayEntry\(repesagemAnterioresIds, \{ \.\.\.data, aplicacoes_sanidade: sanidadeValidada\.payload \}\)\s*: await weighingService\.createEntry\(\{ \.\.\.data, (?:id: cicloLancamentoRef\.current, )?aplicacoes_sanidade: sanidadeValidada\.payload \}\);/, 'repesagem confirmada grava pelo replaceSameDayEntry');
   // GMD da faixa e da grade pelo formatador compartilhado; mínimo de Configurações.
   assert.match(page, /import \{ GMD_DIAS_MINIMOS_PADRAO, classifyGmd, gmdExibicao, normalizeGmdDiasMinimos \} from "@\/modules\/weighing\/domain\/gmdQuality";/);
   assert.match(page, /getReportSettings\(empresaSelecionadaId\)\s*\.then\(\(settings\) => \{ if \(ativo\) setGmdDiasMinimos\(normalizeGmdDiasMinimos\(settings\?\.gmd_dias_minimos\)\); \}\)/, 'mínimo do GMD vem de Configurações › Relatórios');

@@ -188,7 +188,7 @@ assert.equal(pesar(20, 20).gmdQualidade, NAO_CONFIAVEL, 'sem diasMinimos → 21'
 setActorProvider(null);
 await deleteDbForTests();
 const db = await ensureStorageReady();
-assert.equal(getDbVersion(), 8, 'sem mudança de esquema: Dexie continua na v8');
+assert.equal(getDbVersion(), 9, 'esquema vigente: Dexie v9 (a regra do intervalo não depende do esquema)');
 assert.equal((await appConfig.getReportSettings()).gmd_dias_minimos, 21, 'banco novo (sem chave) → 21');
 const gravar = (value) => db.table('appSettings').put({ key: 'report-settings:local', value });
 // Base da 1.4.x: a chave existe, mas sem o campo novo → 21, divisor mantido.

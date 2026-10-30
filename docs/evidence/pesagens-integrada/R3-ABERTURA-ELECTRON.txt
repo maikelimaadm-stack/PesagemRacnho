@@ -1,0 +1,7 @@
+# R3 — tempo de abertura no Electron real (app empacotado em dist/, perfis temporários isolados, sem dados reais)
+# medida: launch do Electron até o campo Login visível; 5 rodadas por série; 1ª abertura = perfil novo; reabertura = mesmo perfil
+# ordem das séries: R2 (b3f8b61), R3 (a4b84fe), R2, R3. O 13776 ms da 1ª série é a partida fria do sistema.
+{"root":"b3f8b61","rodadas":5,"primeira":[13776,736,701,726,621],"reabertura":[505,398,484,497,463],"medianaPrimeira":726,"medianaReabertura":484}
+{"root":"a4b84fe","rodadas":5,"primeira":[700,648,668,712,562],"reabertura":[432,432,417,398,476],"medianaPrimeira":668,"medianaReabertura":432}
+{"root":"b3f8b61","rodadas":5,"primeira":[682,683,580,596,671],"reabertura":[467,491,461,429,482],"medianaPrimeira":671,"medianaReabertura":467}
+{"root":"a4b84fe","rodadas":5,"primeira":[618,597,653,686,669],"reabertura":[441,480,476,437,467],"medianaPrimeira":653,"medianaReabertura":467}

@@ -23,7 +23,7 @@ assert.equal(parsed.manifest.mode, 'DETALHADO');
 assert.equal(parsed.mode, 'DETALHADO');
 assert.equal(parsed.manifest.appVersion, APP_VERSION);
 assert.equal(parsed.manifest.schemaVersion, DB_SCHEMA_VERSION);
-assert.equal(parsed.manifest.schemaVersion, 8, 'esquema Dexie 8 (sanidade, ADR-049)');
+assert.equal(parsed.manifest.schemaVersion, 9, 'esquema Dexie 9 (17-MODELO-DADOS-V9)');
 assert.deepEqual(parsed.manifest.emittedBy, { id: ADMIN.id, nome: ADMIN.nome, role: 'ADMIN' });
 assert.equal(parsed.manifest.fileName, fileName);
 assert.equal(parsed.manifest.period.from, '2026-08-01');

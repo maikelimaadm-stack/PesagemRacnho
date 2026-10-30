@@ -14,6 +14,10 @@ export const EQUIPMENT_CONFIG_DEFAULTS = Object.freeze({
   stabilityKg: 0.5,
   /** Janela curta: kg inteiro do monitor parado = estável (acompanha a tela da S3). */
   stabilityMs: 500,
+  /** Abaixo disto a plataforma está vazia: libera o próximo animal (portão da captura, P01). */
+  emptyThresholdKg: 10,
+  /** Variação mínima (kg) que conta como troca de animal sem esvaziar a plataforma. */
+  rearmDeltaKg: 30,
   autoFillOnStable: true,
   /** Cor do “prontinho” / ícone da balança (online e pesagem automática). */
   statusAccent: 'green', // green | blue
@@ -28,6 +32,8 @@ export function normalizeEquipmentConfig(raw = {}) {
   const baudRate = BAUD_RATES.includes(Number(raw.baudRate)) ? Number(raw.baudRate) : EQUIPMENT_CONFIG_DEFAULTS.baudRate;
   const stabilityKg = Number(raw.stabilityKg);
   const stabilityMs = Number(raw.stabilityMs);
+  const emptyThresholdKg = Number(raw.emptyThresholdKg);
+  const rearmDeltaKg = Number(raw.rearmDeltaKg);
   const rememberedPort = raw.rememberedPort && typeof raw.rememberedPort === 'object'
     ? {
         usbVendorId: raw.rememberedPort.usbVendorId ?? null,
@@ -50,6 +56,8 @@ export function normalizeEquipmentConfig(raw = {}) {
     baudRate,
     stabilityKg: Number.isFinite(stabilityKg) && stabilityKg > 0 ? stabilityKg : EQUIPMENT_CONFIG_DEFAULTS.stabilityKg,
     stabilityMs: Number.isFinite(stabilityMs) && stabilityMs >= 200 ? Math.round(stabilityMs) : EQUIPMENT_CONFIG_DEFAULTS.stabilityMs,
+    emptyThresholdKg: Number.isFinite(emptyThresholdKg) && emptyThresholdKg > 0 && emptyThresholdKg <= 100 ? emptyThresholdKg : EQUIPMENT_CONFIG_DEFAULTS.emptyThresholdKg,
+    rearmDeltaKg: Number.isFinite(rearmDeltaKg) && rearmDeltaKg >= 5 && rearmDeltaKg <= 500 ? rearmDeltaKg : EQUIPMENT_CONFIG_DEFAULTS.rearmDeltaKg,
     autoFillOnStable: raw.autoFillOnStable === false ? false : true,
     statusAccent,
     rememberedPort,

@@ -11,6 +11,7 @@ import {
   ModeloBase1PageHeader,
 } from '@/components/modelobase1';
 import ConfirmarImportacaoDialog from '@/components/importacao/ConfirmarImportacaoDialog';
+import ImportacaoJsonTecnica from '@/components/importacao/ImportacaoJsonTecnica';
 import ImportSteps from '@/components/importacao/ImportSteps';
 import StepArquivo from '@/components/importacao/StepArquivo';
 import StepColunas from '@/components/importacao/StepColunas';
@@ -514,6 +515,7 @@ export default function Importacao() {
         onOpenChange={setConfirmando}
         onConfirmar={gravar}
       />
+      {pode('maintenance.backup') ? <ImportacaoJsonTecnica /> : null}
     </ModeloBase1PageContainer>
   );
 }

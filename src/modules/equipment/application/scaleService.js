@@ -1,7 +1,15 @@
 // Adaptador configurado + estabilidade → Lançamento.
 // Não derruba a conexão Bluetooth a cada ensureScaleReady (era a causa da queda em segundos).
+//
+// Missão pesagens-integrada (P01–P03): toda leitura sai daqui numerada — `seq` (monotônica
+// na vida do app), `epoch` (época da conexão: muda a cada conexão, queda, troca de aparelho
+// ou desligamento) e `receivedAt`. O portão de captura (domain/captureGate) decide se há
+// leitura estável NOVA para o animal da vez; a tela só salva o peso da balança com ele.
+// Desconectar, cair o link ou trocar de aparelho invalida o último estável (P03) e nenhuma
+// leitura instável vira estável por tempo (P02).
 import { assertAdapterShape, createReading } from '../domain/scaleContract.js';
 import { createStabilityTracker } from '../domain/stabilityTracker.js';
+import { createCaptureGate } from '../domain/captureGate.js';
 import { createSimulatorAdapter } from '../adapters/simulatorAdapter.js';
 import { createS3SerialAdapter } from '../adapters/s3SerialAdapter.js';
 import { createS3BluetoothAdapter } from '../adapters/s3BluetoothAdapter.js';
@@ -17,6 +25,12 @@ let stabilityTracker = null;
 let statusListeners = new Set();
 let readingListeners = new Set();
 let bootPromise = null;
+let readingSequence = 0;
+let connectionEpoch = 0;
+let lastConnected = false;
+let captureGate = createCaptureGate();
+
+const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
 
 function adapterKeyOf(config) {
   if (!config || config.adapter === 'none') return 'none';
@@ -29,7 +43,24 @@ function adapterKeyOf(config) {
   return String(config.adapter);
 }
 
+function isAdapterConnected() {
+  return Boolean(activeAdapter?.status?.()?.connected);
+}
+
+// Nova época: o estável da conexão anterior não vale mais (P03).
+function bumpEpoch() {
+  connectionEpoch += 1;
+  lastStable = null;
+  captureGate.invalidate();
+  stabilityTracker?.reset();
+}
+
 function notifyStatus() {
+  const connected = isAdapterConnected();
+  if (connected !== lastConnected) {
+    lastConnected = connected;
+    bumpEpoch();
+  }
   const snapshot = getStatus();
   for (const cb of statusListeners) {
     try { cb(snapshot); } catch { /* ignore */ }
@@ -37,10 +68,17 @@ function notifyStatus() {
 }
 
 function notifyReading(reading) {
-  lastReading = reading;
-  if (reading?.stable && reading.weightKg != null) lastStable = reading;
+  if (!reading) return;
+  const numbered = Object.freeze({ ...reading, seq: ++readingSequence, epoch: connectionEpoch, receivedAt: nowMs() });
+  lastReading = numbered;
+  if (numbered.stable && numbered.weightKg != null) lastStable = numbered;
+  else if (numbered.weightKg == null || !numbered.stable) {
+    // Instável fora da faixa do estável anterior: o estável deixou de representar o monitor.
+    if (lastStable && (numbered.weightKg == null || Math.abs(Number(numbered.weightKg) - Number(lastStable.weightKg)) > 1)) lastStable = null;
+  }
+  captureGate.observe(numbered);
   for (const cb of readingListeners) {
-    try { cb(reading); } catch { /* ignore */ }
+    try { cb(numbered); } catch { /* ignore */ }
   }
   // Não notifica status a cada tick de peso — evita re-render do shell e travamento na captura.
 }
@@ -77,19 +115,36 @@ async function tearDown() {
   activeAdapterKey = null;
   stabilityTracker?.reset();
   stabilityTracker = null;
+  // Troca/remoção do aparelho: nada da conexão anterior serve para salvar (P03).
+  lastReading = null;
+  lastConnected = false;
+  bumpEpoch();
 }
 
 function wireAdapter(adapter, config) {
   activeAdapter = adapter;
   activeAdapterKey = adapterKeyOf(config);
+  captureGate = createCaptureGate({
+    emptyThresholdKg: config.emptyThresholdKg,
+    rearmDeltaKg: config.rearmDeltaKg,
+  });
   // Estabilidade (stabilityTracker): o S3 só manda o peso quando muda, então o
-  // número parado também vira "estável" pelo timer, sem esperar nova leitura.
+  // número parado também vira "estável" pelo timer, sem esperar nova leitura —
+  // mas só com a balança conectada e na mesma época (silêncio por queda não é estável).
+  // Época em que chegou a última leitura crua: o timer do silêncio só confirma estável se a
+  // conexão ainda é a mesma (troca de época também reseta o tracker e cancela o timer).
+  let lastRawEpoch = null;
   stabilityTracker = createStabilityTracker({
     windowMs: config.stabilityMs,
     toleranceKg: config.stabilityKg,
-    onSettled: (reading) => notifyReading(reading),
+    onSettled: (reading) => {
+      if (!isAdapterConnected() || lastRawEpoch !== connectionEpoch) return;
+      notifyReading(reading);
+    },
   });
   unsubscribeAdapter = activeAdapter.onReading((raw) => {
+    if (!raw) return;
+    lastRawEpoch = connectionEpoch;
     notifyReading(stabilityTracker.track(raw));
   });
   if (typeof activeAdapter.onStatus === 'function') {
@@ -99,19 +154,42 @@ function wireAdapter(adapter, config) {
 
 export function getStatus() {
   const adapterStatus = activeAdapter?.status?.() || { connected: false, label: 'Balança', detail: 'Não configurada' };
+  const connected = Boolean(adapterStatus.connected);
   return {
     adapterId: activeAdapter?.id || 'none',
-    connected: Boolean(adapterStatus.connected),
+    connected,
     label: adapterStatus.label,
     detail: adapterStatus.detail,
+    epoch: connectionEpoch,
     lastWeightKg: lastReading?.weightKg ?? null,
-    lastStableKg: lastStable?.weightKg ?? null,
-    stable: Boolean(lastReading?.stable),
+    lastStableKg: connected ? (lastStable?.weightKg ?? null) : null,
+    stable: connected && Boolean(lastReading?.stable),
+    lastSeq: lastReading?.seq ?? null,
   };
 }
 
+/** Último estável da conexão ATUAL (null desconectado ou depois de troca de época). */
 export function getLastStableReading() {
+  if (!isAdapterConnected() || !lastStable || lastStable.epoch !== connectionEpoch) return null;
   return lastStable;
+}
+
+/**
+ * Pode salvar com o peso da balança? Devolve { ok, reason, message, reading }.
+ * A leitura liberada é estável, da conexão atual, e ainda não usada por outro animal.
+ */
+export function evaluateCapture() {
+  return captureGate.evaluate({ connected: isAdapterConnected(), epoch: connectionEpoch });
+}
+
+/** Marca a leitura como usada — chamar só depois do salvamento ter dado certo. */
+export function consumeCapture(reading) {
+  captureGate.consume(reading);
+}
+
+/** Pesagem automática religada / troca de dia: o portão recomeça (não muda a conexão). */
+export function resetCapture() {
+  captureGate.reset();
 }
 
 export function onScaleReading(cb) {
@@ -195,11 +273,16 @@ export async function connectConfiguredScale({ forcePicker = false } = {}) {
 
 export async function disconnectScale() {
   await tearDown();
-  lastReading = null;
+  // tearDown já invalida leitura e estável (P03: nada fica de uma conexão anterior).
+  lastStable = null;
   notifyStatus();
 }
 
-export async function captureWeightForLaunch() {
+/**
+ * Espera uma leitura estável NOVA (P02): no tempo-limite rejeita — nunca transforma a última
+ * leitura instável em estável.
+ */
+export async function captureWeightForLaunch({ timeoutMs = 5000 } = {}) {
   const config = await getEquipmentConfig();
   if (config.adapter === 'none') {
     throw Object.assign(
@@ -215,25 +298,39 @@ export async function captureWeightForLaunch() {
     await connectConfiguredScale({ forcePicker: needPicker });
   }
 
-  if (lastStable?.weightKg != null) return lastStable;
+  const ready = evaluateCapture();
+  if (ready.ok) return ready.reading;
 
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       off();
-      if (lastReading?.weightKg != null) resolve(createReading({ ...lastReading, stable: true }));
-      else {
-        reject(Object.assign(
-          new Error('Conectou, mas ainda sem peso. Mantenha o S3 ligado; a conexão agora reconecta sozinha se cair.'),
-          { code: 'SCALE_NO_READING' },
-        ));
-      }
-    }, 5000);
-    const off = onScaleReading((reading) => {
-      if (reading?.stable && reading.weightKg != null) {
+      const last = evaluateCapture();
+      reject(Object.assign(
+        new Error(lastReading?.weightKg != null
+          ? `Sem leitura estável nova: ${last.message || 'peso ainda não estabilizou.'}`
+          : 'Conectou, mas ainda sem peso. Mantenha o S3 ligado; a conexão agora reconecta sozinha se cair.'),
+        { code: lastReading?.weightKg != null ? 'SCALE_NOT_STABLE' : 'SCALE_NO_READING', reason: last.reason },
+      ));
+    }, timeoutMs);
+    const off = onScaleReading(() => {
+      const r = evaluateCapture();
+      if (r.ok) {
         clearTimeout(timeout);
         off();
-        resolve(reading);
+        resolve(r.reading);
       }
     });
   });
 }
+
+// Exposto só para testes (estado interno do módulo).
+export const __testing = {
+  createReading,
+  async reset() {
+    await tearDown();
+    readingSequence = 0;
+    captureGate = createCaptureGate();
+    statusListeners = new Set();
+    readingListeners = new Set();
+  },
+};

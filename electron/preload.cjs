@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('pesagemApp', {
   files: {
     writeUserFile: (args) => ipcRenderer.invoke('app:writeUserFile', args),
     listUserFiles: (args) => ipcRenderer.invoke('app:listUserFiles', args),
+    readUserFile: (args) => ipcRenderer.invoke('app:readUserFile', args),
   },
   // Relatórios: o renderer envia o documento/conteúdo e um nome sugerido; o destino é escolhido
   // no diálogo nativo do processo principal (nenhum caminho vem do renderer).
@@ -18,6 +19,34 @@ contextBridge.exposeInMainWorld('pesagemApp', {
     printToPdf: (args) => ipcRenderer.invoke('reports:print-to-pdf', args),
     print: (args) => ipcRenderer.invoke('reports:print', args),
     saveFile: (args) => ipcRenderer.invoke('reports:save-file', args),
+  },
+  // Anexos de documentos (F16): o renderer só envia sha256 + extensão e o nome do backup; nunca caminho.
+  attachments: {
+    selectAndImport: () => ipcRenderer.invoke('attachments:select-and-import'),
+    verify: (args) => ipcRenderer.invoke('attachments:verify', args),
+    open: (args) => ipcRenderer.invoke('attachments:open', args),
+    snapshot: (args) => ipcRenderer.invoke('attachments:snapshot', args),
+    verifyBackup: (args) => ipcRenderer.invoke('attachments:verify-backup', args),
+    read: (args) => ipcRenderer.invoke('attachments:read', args),
+    preflightSelected: (args) => ipcRenderer.invoke('attachments:preflight-selected', args),
+    stage: (args) => ipcRenderer.invoke('attachments:stage', args),
+    commitStage: (args) => ipcRenderer.invoke('attachments:commit-stage', args),
+    discardStage: (args) => ipcRenderer.invoke('attachments:discard-stage', args),
+  },
+  // Backup (F21/F22): destino externo escolhido no diálogo nativo; o renderer só envia o nome do backup.
+  backup: {
+    externalStatus: () => ipcRenderer.invoke('backup:external-status'),
+    selectExternalDir: () => ipcRenderer.invoke('backup:select-external-dir'),
+    clearExternalDir: () => ipcRenderer.invoke('backup:clear-external-dir'),
+    copyExternal: (args) => ipcRenderer.invoke('backup:copy-external', args),
+    verifyExternal: (args) => ipcRenderer.invoke('backup:verify-external', args),
+    deleteBackup: (args) => ipcRenderer.invoke('backup:delete', args),
+  },
+  // R3-01: estado crítico de restauração, gravado pelo processo principal num arquivo de nome fixo.
+  criticalState: {
+    get: () => ipcRenderer.invoke('app:critical-state-get'),
+    set: (args) => ipcRenderer.invoke('app:critical-state-set', args),
+    clear: (args) => ipcRenderer.invoke('app:critical-state-clear', args),
   },
   dialogs: {
     selectImportJson: () => ipcRenderer.invoke('dialog:select-import-json'),

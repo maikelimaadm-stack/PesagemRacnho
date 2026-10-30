@@ -72,8 +72,9 @@ import { listApplications, listMedicamentos, listProgramas } from "@/modules/san
 import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
 import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
 import { formatWeightForField } from "@/modules/equipment/domain/scaleContract";
+import { launchWeightKg, normalizeLaunchWeight } from "@/modules/weighing/domain/weightNormalization";
 import { getEquipmentConfig } from "@/modules/equipment/application/equipmentConfigService";
-import { ensureScaleReady, getLastStableReading, getStatus as getScaleStatus, onScaleReading, onScaleStatus } from "@/modules/equipment/application/scaleService";
+import { consumeCapture, ensureScaleReady, evaluateCapture, getLastStableReading, getStatus as getScaleStatus, onScaleReading, onScaleStatus } from "@/modules/equipment/application/scaleService";
 // Contexto fixo por sequência: o que fica e o que sai entre um animal e o próximo
 // é decidido pelo módulo puro launchContext (matriz STICKY_FIELDS/ANIMAL_FIELDS por modo).
 import {
@@ -191,12 +192,19 @@ export default function LancamentoPesagensIndividuais() {
   const [statusAccentBalanca, setStatusAccentBalanca] = useState('green');
   const pesagemAutoRef = useRef(false);
   const handleSalvarRef = useRef(null);
+  // Trava imediata do salvamento (o estado isSaving só vale no próximo render: Enter duplo passava).
+  const salvandoRef = useRef(false);
+  // P10: falha ao carregar o banco local (null = carregou).
+  const [erroCarregamento, setErroCarregamento] = useState(null);
+  // Id do lançamento em curso: o mesmo envio repetido não cria duas pesagens (o adapter recusa id repetido).
+  const cicloLancamentoRef = useRef(crypto.randomUUID());
   const pesoUiRafRef = useRef(0);
   const pesoUiPendenteRef = useRef(null);
   const pesoUiAplicadoRef = useRef({ text: '', stage: 'idle' });
 
   const estagioPesoDoMonitor = (weightKg, stable) => {
-    if (stable && Number(weightKg) > 0) return 'stable';
+    // Estável, mas já usado no animal anterior: espera o próximo (portão da captura, P01).
+    if (stable && Number(weightKg) > 0) return evaluateCapture().reason === 'AGUARDANDO_PROXIMO_ANIMAL' ? 'waiting' : 'stable';
     if (Number(weightKg) > 0) return 'settling';
     return 'idle';
   };
@@ -890,6 +898,7 @@ export default function LancamentoPesagensIndividuais() {
 
   const loadAllData = async () => {
     setIsLoading(true);
+    setErroCarregamento(null);
     try {
       const [allPesagens, allApartacoes, allLotes, allEmbarques, allDocs] = await Promise.all([
         weighingService.listEntries({ empresaId: empresaSelecionadaId }),
@@ -905,7 +914,10 @@ export default function LancamentoPesagensIndividuais() {
       setEmbarques(allEmbarques);
       setDocumentosEmbarque(allDocs);
     } catch (error) {
-      console.error('Erro ao carregar dados:', error);
+      // P10: sem os dados do banco a tela não sabe quem já está cadastrado nem o que já foi pesado hoje:
+      // mostra o erro e bloqueia o salvar (lista vazia não é "nenhuma pesagem").
+      setErroCarregamento(error?.message || 'Falha ao ler o banco local.');
+      toast.error(error?.message || 'Falha ao ler o banco local.');
     } finally {
       setIsLoading(false);
     }
@@ -1009,8 +1021,7 @@ export default function LancamentoPesagensIndividuais() {
   );
 
   const pesoNumAtual = useMemo(() => {
-    const n = parseBrazilianNumber(peso);
-    return Number.isFinite(n) ? Math.floor(n) : null;
+    return launchWeightKg(peso);
   }, [peso]);
 
   const lotesCandidatosAtalho = useMemo(() => {
@@ -1049,8 +1060,12 @@ export default function LancamentoPesagensIndividuais() {
     const skipSnConfirmation = options?.skipSnConfirmation === true;
     const snProfile = options?.snProfile || null;
     const loteIdOverride = options?.loteId;
-    // Evitar cliques duplos
-    if (isSaving) return;
+    // Evitar cliques duplos (a trava em ref vale já no segundo Enter, antes do novo render)
+    if (isSaving || salvandoRef.current) return;
+    if (erroCarregamento) {
+      toast.error('Os dados do banco local não carregaram; nada foi gravado. Recarregue a tela antes de lançar.');
+      return;
+    }
 
     // Validações com avisos
     if (!parseCivilDate(dataPesagem)) {
@@ -1066,11 +1081,29 @@ export default function LancamentoPesagensIndividuais() {
       numeroInputRef.current?.focus();
       return;
     }
-    const pesoInformadoRaw = parseBrazilianNumber(peso);
-    // Peso no sistema é inteiro (monitor 58,5 → 58).
-    const pesoInformado = Number.isFinite(pesoInformadoRaw) ? Math.floor(pesoInformadoRaw) : pesoInformadoRaw;
     const permiteMovimentoSemPeso = tipoManejo === 'Saída' && ['Morte', 'Doação', 'Transferência'].includes(motivoSaida);
-    if (!permiteMovimentoSemPeso && (!Number.isFinite(pesoInformado) || pesoInformado <= 0)) {
+    // Pesagem automática (P01–P03): o peso salvo é o da leitura ESTÁVEL NOVA liberada pelo portão
+    // da captura (não o texto do campo, que só espelha o monitor). Sem leitura liberada, não salva.
+    let capturaBalanca = null;
+    if (pesagemAutoRef.current && !editingId && !permiteMovimentoSemPeso) {
+      const captura = evaluateCapture();
+      if (!captura.ok) {
+        setAvisoTela(null);
+        toast.error(captura.message);
+        return;
+      }
+      capturaBalanca = captura.reading;
+    }
+    // Peso no sistema é inteiro por truncamento (monitor 58,5 → 58) — decisão de produto P15, regra ÚNICA (R07) para
+    // o peso digitado, a balança e as operações; o bruto vai em balanca_leitura.
+    const pesoNormalizado = normalizeLaunchWeight(capturaBalanca ? Number(capturaBalanca.weightKg) : peso);
+    if (!pesoNormalizado.ok) {
+      toast.error(`⚠️ ${pesoNormalizado.erro}`);
+      if (!pesagemAutoRef.current) pesoInputRef.current?.focus();
+      return;
+    }
+    const pesoInformado = pesoNormalizado.kg;
+    if (!permiteMovimentoSemPeso && pesoInformado === null) {
       toast.error("⚠️ Campo obrigatório: Peso (deve ser maior que zero)");
       if (!pesagemAutoRef.current) pesoInputRef.current?.focus();
       return;
@@ -1104,6 +1137,14 @@ export default function LancamentoPesagensIndividuais() {
     if (!sanidadeValidada.ok) {
       setMostrarSanidade(true);
       toast.error(sanidadeValidada.errors[0]);
+      return;
+    }
+    // F09: a dose calculada pela posologia usou o peso da tela; na pesagem automática o peso gravado é o da
+    // leitura estável liberada pelo portão — se forem diferentes, a dose não vale (recalcular).
+    const pesoGravadoBalanca = capturaBalanca ? pesoInformado : null;
+    if (pesoGravadoBalanca !== null && sanidadeValidada.payload.some((item) => item.posologia_id && Number(item.peso_base_kg) !== pesoGravadoBalanca)) {
+      setMostrarSanidade(true);
+      toast.error('O peso da balança mudou depois da dose sugerida. Confira a dose e confirme de novo.');
       return;
     }
 
@@ -1214,6 +1255,7 @@ export default function LancamentoPesagensIndividuais() {
     }
 
     setIsSaving(true);
+    salvandoRef.current = true;
 
     const pesoNum = Number.isFinite(pesoInformado) ? pesoInformado : null;
 
@@ -1364,7 +1406,16 @@ export default function LancamentoPesagensIndividuais() {
       peso_anterior: receivesWeightGain(tipoManejo) ? pesoAnterior : null,
       dias: receivesWeightGain(tipoManejo) ? dias : null,
       ganho: receivesWeightGain(tipoManejo) && ganho !== null ? ganho : null,
-      gmd: receivesWeightGain(tipoManejo) ? gmd : null
+      gmd: receivesWeightGain(tipoManejo) ? gmd : null,
+      // Origem do peso (P01/P15): BALANCA = leitura estável liberada pelo portão; MANUAL = digitado.
+      peso_origem: pesoNum == null ? null : capturaBalanca ? 'BALANCA' : 'MANUAL',
+      balanca_leitura: capturaBalanca ? {
+        kg_bruto: Number(capturaBalanca.weightKg),
+        seq: capturaBalanca.seq ?? null,
+        epoch: capturaBalanca.epoch ?? null,
+        fonte: capturaBalanca.source || null,
+        lida_em: capturaBalanca.at || null,
+      } : null,
     };
 
     try {
@@ -1373,7 +1424,10 @@ export default function LancamentoPesagensIndividuais() {
         // nada muda e a pesagem de hoje continua valendo (a mensagem do serviço diz isso).
         const savedEntry = repesagemAnterioresIds
           ? await weighingService.replaceSameDayEntry(repesagemAnterioresIds, { ...data, aplicacoes_sanidade: sanidadeValidada.payload })
-          : await weighingService.createEntry({ ...data, aplicacoes_sanidade: sanidadeValidada.payload });
+          : await weighingService.createEntry({ ...data, id: cicloLancamentoRef.current, aplicacoes_sanidade: sanidadeValidada.payload });
+        // Gravado: a leitura da balança fica consumida (o próximo animal precisa de leitura nova) e o ciclo muda.
+        if (capturaBalanca) consumeCapture(capturaBalanca);
+        cicloLancamentoRef.current = crypto.randomUUID();
         const aplicacoesGravadas = Array.isArray(savedEntry?.aplicacoes_sanidade) ? savedEntry.aplicacoes_sanidade.length : 0;
         const salvo = repesagemAnterioresIds ? '✓ Repesado! A pesagem anterior de hoje foi cancelada.' : '✓ Salvo!';
         toast.success(aplicacoesGravadas > 0 ? `${salvo} ${fmtInt(aplicacoesGravadas)} ${aplicacoesGravadas === 1 ? 'aplicação' : 'aplicações'} de sanidade.` : salvo);
@@ -1449,6 +1503,7 @@ export default function LancamentoPesagensIndividuais() {
       toast.error('Erro: ' + error.message);
     } finally {
       setIsSaving(false);
+      salvandoRef.current = false;
     }
   };
   handleSalvarRef.current = handleSalvar;
@@ -1594,6 +1649,13 @@ export default function LancamentoPesagensIndividuais() {
         title="Lançamento de Pesagens"
         description="Registro operacional de movimentação, pesagem e apartação."
       />
+      {erroCarregamento ? (
+        <div role="alert" className="d17d-load-error mb-2 flex flex-wrap items-center gap-2 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-xs text-red-800">
+          <strong>Os dados não carregaram.</strong>
+          <span>{erroCarregamento}</span>
+          <button type="button" className="ios-btn tb-btn ml-auto" onClick={() => loadAllData()}>Tentar de novo</button>
+        </div>
+      ) : null}
       {/* FORMULÁRIO DE LANÇAMENTO */}
       <ModeloBase1ActionBar
         className="d17b-page-actionbar d17d-launch-commandbar"
@@ -1855,8 +1917,10 @@ export default function LancamentoPesagensIndividuais() {
                   pesagemAuto ? 'is-auto' : '',
                   pesoEstagioBalanca === 'settling' ? 'is-settling' : '',
                   pesoEstagioBalanca === 'stable' ? 'is-stable' : '',
+                  pesoEstagioBalanca === 'waiting' ? 'is-waiting' : '',
                   statusAccentBalanca === 'blue' ? 'is-accent-blue' : '',
                 ].filter(Boolean).join(' ')}
+                title={pesagemAuto && pesoEstagioBalanca === 'waiting' ? 'Peso já usado no animal anterior — esvazie a plataforma para o próximo' : undefined}
               >
                 <Input
                   ref={pesoInputRef}
@@ -1877,7 +1941,7 @@ export default function LancamentoPesagensIndividuais() {
                   }}
                   className={[
                     'font-bold',
-                    (pesagemAuto || pesoEstagioBalanca === 'settling' || pesoEstagioBalanca === 'stable')
+                    (pesagemAuto || ['settling', 'stable', 'waiting'].includes(pesoEstagioBalanca))
                       ? ''
                       : 'text-amber-500',
                   ].filter(Boolean).join(' ')}
@@ -2108,7 +2172,13 @@ export default function LancamentoPesagensIndividuais() {
             erroCatalogo={catalogoSanidade.erro}
             modoEdicao={Boolean(editingId)}
             aplicacoesRegistradas={aplicacoesRegistradasEdicao}
-            onRecolher={() => setMostrarSanidade(false)} />
+            onRecolher={() => setMostrarSanidade(false)}
+            pesoBase={{
+              kg: launchWeightKg(peso),
+              origem: pesagemAuto ? 'BALANCA' : 'MANUAL',
+              estavel: !pesagemAuto || pesoEstagioBalanca === 'stable',
+            }}
+            dataAplicacao={dataPesagem} />
           }
 
           {/* Dados de Saída (Venda) */}

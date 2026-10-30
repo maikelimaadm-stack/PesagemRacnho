@@ -7,6 +7,7 @@
 // (weighingDataAdapter.createEntry/bulkDeleteEntries), que inclui as stores de
 // LAUNCH_SANITY_TABLES no seu escopo.
 import storage from '../../../storage/storageAdapter.js';
+import { validateWithdrawalClarification, withdrawalEnd } from '../domain/posology.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
 import { normalizeName } from '../../../storage/indexedDb/normalize.js';
 import { SANITY_APPLICATIONS_STORE } from '../../../storage/indexedDb/schema.js';
@@ -24,7 +25,8 @@ export const MEDICAMENTOS_STORE = 'medicamentos';
 export const APLICACOES_STORE = SANITY_APPLICATIONS_STORE;
 
 // Stores que a transação da pesagem acrescenta quando o lançamento traz aplicações.
-export const LAUNCH_SANITY_TABLES = Object.freeze([APLICACOES_STORE, PROGRAMAS_STORE, MEDICAMENTOS_STORE]);
+export const POSOLOGIAS_STORE = 'posologias';
+export const LAUNCH_SANITY_TABLES = Object.freeze([APLICACOES_STORE, PROGRAMAS_STORE, MEDICAMENTOS_STORE, POSOLOGIAS_STORE]);
 
 const REGISTRY = {
   [PROGRAMAS_STORE]: {
@@ -189,8 +191,14 @@ async function resolveReferences(db, input, empresaId) {
     if (!medicamento || empresaDe(medicamento) !== empresaId) erros.push('Medicamento não encontrado.');
     else if (medicamento.ativo === false) erros.push(`Medicamento "${medicamento.nome}" está inativo.`);
   }
+  let posologia = null;
+  if (input.posologia_id) {
+    posologia = await findRow(db.table(POSOLOGIAS_STORE), input.posologia_id);
+    if (!posologia || posologia.medicamento_id !== input.medicamento_id) erros.push('Posologia não encontrada para este medicamento.');
+    else if (posologia.status !== 'APROVADA') erros.push('A posologia não está aprovada: a dose não pode vir dela.');
+  }
   if (erros.length) throw new SanityError('SANITY_INVALID', erros.join(' '), { erros });
-  return { programa, medicamento };
+  return { programa, medicamento, posologia, carencia: medicamento ? withdrawalEnd(input.data, { posologia, medicamento }) : null };
 }
 
 function applicationSummary(row) {
@@ -211,8 +219,8 @@ export async function prepareApplicationRowsInTransaction(db, items, { animalId,
   const audits = [];
   for (const item of items) {
     const input = { ...item, animal_id: animalId, data };
-    const { programa, medicamento } = await resolveReferences(db, input, empresaId);
-    const row = buildApplicationRecord({ id: crypto.randomUUID(), input, programa, medicamento, empresaId, actor, ts, pesagemId, sessaoId });
+    const { programa, medicamento, posologia, carencia } = await resolveReferences(db, input, empresaId);
+    const row = buildApplicationRecord({ id: crypto.randomUUID(), input, programa, medicamento, posologia, carencia, empresaId, actor, ts, pesagemId, sessaoId });
     rows.push(row);
     audits.push(auditRecord({
       entidade: APLICACOES_STORE, entidade_id: row.id, acao: ACOES.CRIAR_APLICACAO,
@@ -226,7 +234,7 @@ export async function prepareApplicationRowsInTransaction(db, items, { animalId,
 export async function insertApplication(input, { empresaId = DEFAULT_EMPRESA_ID } = {}) {
   storage.assertWritable('Registro de aplicação de sanidade');
   const db = await storage.ensureReady();
-  const tables = [APLICACOES_STORE, PROGRAMAS_STORE, MEDICAMENTOS_STORE, 'animais', 'pesagens', 'sessoesPesagem', 'auditoria'].map((name) => db.table(name));
+  const tables = [APLICACOES_STORE, PROGRAMAS_STORE, MEDICAMENTOS_STORE, POSOLOGIAS_STORE, 'animais', 'pesagens', 'sessoesPesagem', 'auditoria'].map((name) => db.table(name));
   return db.transaction('rw', tables, async () => {
     const animal = await findRow(db.table('animais'), input.animal_id);
     if (!animal) throw invalid('Animal não encontrado.');
@@ -267,6 +275,42 @@ export async function cancelApplication(id, { motivo = null } = {}) {
       entidade: APLICACOES_STORE, entidade_id: existing.id, acao: ACOES.CANCELAR_APLICACAO,
       resumo: `Cancelou ${applicationSummary(existing)}.`, campos_alterados: Object.keys(changes).filter((key) => key !== 'updated_at'),
       antes: publicRow(existing), motivo, origem: 'manual', created_at: ts,
+    }));
+    return publicRow({ ...existing, ...changes });
+  });
+}
+
+/**
+ * R2-03: esclarece a carência de uma aplicação que ficou DESCONHECIDA (medicamento sem carência na época): grava o
+ * prazo, a fonte e o responsável, recalcula o fim da carência pela data da aplicação e audita (antes/depois). Só
+ * para aplicação ativa com carência desconhecida; carência já conhecida não é reescrita.
+ */
+export async function clarifyWithdrawal(id, input) {
+  // R3-03: a persistência valida de novo — nenhum chamador interno grava prazo não informado como zero.
+  const { carencia_carne_dias, fonte, responsavel, zero_confirmado: zeroConfirmado = false } = validateWithdrawalClarification(input);
+  storage.assertWritable('Esclarecimento de carência');
+  const db = await storage.ensureReady();
+  const table = db.table(APLICACOES_STORE);
+  return db.transaction('rw', table, db.table('auditoria'), async () => {
+    const existing = await findRow(table, id);
+    if (!existing) throw notFound('Aplicação de sanidade', id);
+    if (existing.cancelled_at || existing.deleted_at) throw Object.assign(new Error('Aplicação cancelada: não há carência a esclarecer.'), { code: 'ESCLARECIMENTO_INVALIDO' });
+    if (existing.carencia_carne_ate || !existing.medicamento_id) throw Object.assign(new Error('Esta aplicação não tem carência desconhecida.'), { code: 'ESCLARECIMENTO_INVALIDO' });
+    const ts = nowIso();
+    const actor = getActor();
+    const fim = withdrawalEnd(existing.data, { posologia: { carencia_carne_dias } });
+    const changes = {
+      carencia_carne_ate: fim.carencia_carne_ate,
+      carencia_conhecida: true,
+      carencia_esclarecimento: { carencia_carne_dias, fonte, responsavel, ...(zeroConfirmado ? { zero_confirmado: true } : {}), em: ts, por: actor?.usuario_nome_snapshot ?? null },
+      updated_at: ts,
+    };
+    await table.update(existing.localId, changes);
+    await db.table('auditoria').add(auditRecord({
+      entidade: APLICACOES_STORE, entidade_id: existing.id, acao: ACOES.ESCLARECER_CARENCIA,
+      resumo: `Carência esclarecida: ${carencia_carne_dias} dia(s) (${fonte}) por ${responsavel} — ${applicationSummary(existing)}.`,
+      campos_alterados: ['carencia_carne_ate', 'carencia_conhecida', 'carencia_esclarecimento'],
+      antes: publicRow(existing), motivo: fonte, origem: 'manual', created_at: ts,
     }));
     return publicRow({ ...existing, ...changes });
   });

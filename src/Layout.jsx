@@ -1,7 +1,8 @@
-import { BarChart3, CalendarCheck, Contact, Database, Dna, Handshake, Layers, ListChecks, MapPin, PlusCircle, Settings, Skull, Syringe, Tag, Upload, Users } from "lucide-react";
+import { ArchiveRestore, ArrowLeftRight, BarChart3, Scale, TrendingUp, CalendarCheck, ClipboardList, Contact, Database, Dna, Handshake, Layers, ListChecks, LogIn, LogOut, MapPin, PlusCircle, ScanBarcode, Settings, SlidersHorizontal, Skull, Syringe, Tag, Upload, Users } from "lucide-react";
 import { ModeloBase1AppShell } from "@/components/modelobase1";
 import RequirePermission from "@/components/auth/RequirePermission";
 import { useAuth } from "@/components/auth/useAuth";
+import PeriodicBackupScheduler from "@/components/backup/PeriodicBackupScheduler";
 
 // Menu do Programa 2.0 (docs/arquitetura-produto/10-MODELO-PRODUTO-2.0.md §3).
 // Grupos: operacao · rebanho · comercial (Fase 3) · cadastros · sistema.
@@ -78,6 +79,48 @@ const NAV_ITEMS = [
     group: "rebanho",
     permission: "animal.read",
   },
+  // Operações do rebanho (Fase B, F01–F03) e inventário (F17): leitura com weighing.read; lançar,
+  // confirmar e cancelar decididos por ação dentro da tela e de novo no operationsService.
+  {
+    id: "pec-entradas",
+    title: "Entradas",
+    longTitle: "Entradas",
+    url: "Entradas",
+    Icon: LogIn,
+    group: "rebanho",
+    mobile: false,
+    permission: "weighing.read",
+  },
+  {
+    id: "pec-saidas",
+    title: "Saídas",
+    longTitle: "Saídas",
+    url: "Saidas",
+    Icon: LogOut,
+    group: "rebanho",
+    mobile: false,
+    permission: "weighing.read",
+  },
+  {
+    id: "pec-movimentacoes",
+    title: "Movimentações",
+    longTitle: "Movimentações",
+    url: "Movimentacoes",
+    Icon: ArrowLeftRight,
+    group: "rebanho",
+    mobile: false,
+    permission: "weighing.read",
+  },
+  {
+    id: "pec-inventario",
+    title: "Inventário",
+    longTitle: "Inventário",
+    url: "Inventario",
+    Icon: ClipboardList,
+    group: "rebanho",
+    mobile: false,
+    permission: "weighing.read",
+  },
   {
     id: "pec-relatorios",
     title: "Relatórios",
@@ -87,10 +130,21 @@ const NAV_ITEMS = [
     group: "relatorios",
     permission: "reports.read",
   },
+  // F11–F14, F18: painel do gestor (desempenho, metas, projeção, seca), exportação CSV/Excel/PDF.
+  {
+    id: "pec-desempenho",
+    title: "Desempenho",
+    longTitle: "Desempenho",
+    url: "Desempenho",
+    Icon: TrendingUp,
+    group: "relatorios",
+    mobile: false,
+    permission: "reports.read",
+  },
   {
     id: "pec-marcas",
-    title: "Marcas",
-    longTitle: "Marcas",
+    title: "Marcas a Fogo",
+    longTitle: "Marcas a Fogo",
     url: "Marcas",
     Icon: Tag,
     group: "cadastros",
@@ -103,6 +157,17 @@ const NAV_ITEMS = [
     longTitle: "Raças",
     url: "Racas",
     Icon: Dna,
+    group: "cadastros",
+    mobile: false,
+    permission: "registry.read",
+  },
+  // F06: estoque de brincos/RFID/SISBOV (livro movimentosIdentificadores); aplicar no animal é na Ficha.
+  {
+    id: "pec-identificadores",
+    title: "Identificadores",
+    longTitle: "Identificadores",
+    url: "Identificadores",
+    Icon: ScanBarcode,
     group: "cadastros",
     mobile: false,
     permission: "registry.read",
@@ -169,10 +234,43 @@ const NAV_ITEMS = [
     mobile: false,
     permission: "settings.operational",
   },
+  // F25: regras de negócio (idade/era/categorias nesta versão), cada seção salva isolada.
+  {
+    id: "pec-parametrizacao",
+    title: "Parametrização",
+    longTitle: "Parametrização",
+    url: "Parametrizacao",
+    Icon: SlidersHorizontal,
+    group: "sistema",
+    mobile: false,
+    permission: "settings.operational",
+  },
+  // F19: página própria de Backup e Restauração (separada da Manutenção avançada — P20/F24).
+  {
+    id: "pec-backup",
+    title: "Backup",
+    longTitle: "Backup e Restauração",
+    url: "BackupRestauracao",
+    Icon: ArchiveRestore,
+    group: "sistema",
+    mobile: false,
+    permission: "maintenance.backup",
+  },
+  // F26: Balança e Equipamentos (S3, conexão, estabilidade, simulador) fora das Configurações gerais.
+  {
+    id: "pec-equipamentos",
+    title: "Equipamentos",
+    longTitle: "Balança e Equipamentos",
+    url: "Equipamentos",
+    Icon: Scale,
+    group: "sistema",
+    mobile: false,
+    permission: "settings.operational",
+  },
   {
     id: "pec-manutencao",
     title: "Manutenção",
-    longTitle: "Backup e Manutenção",
+    longTitle: "Manutenção avançada",
     url: "ManutencaoSistema",
     Icon: Database,
     group: "sistema",
@@ -186,6 +284,7 @@ export default function Layout({ children, currentPageName }) {
   const current = NAV_ITEMS.find((item) => item.url === currentPageName);
   return (
     <ModeloBase1AppShell navItems={visibleItems} navGroups={NAV_GROUPS}>
+      <PeriodicBackupScheduler ativo={Boolean(auth?.user)} />
       <RequirePermission permission={current?.permission}>{children}</RequirePermission>
     </ModeloBase1AppShell>
   );

@@ -101,7 +101,7 @@ assert.deepEqual(PROPRIEDADES.unicidade, ['nome_normalizado'], 'NEGATIVO: docume
 for (const def of REGISTRY_DEFINITIONS.filter((item) => item !== PROPRIEDADES)) {
   assert.ok(!def.campos.some((campo) => campo.secao === 'cabecalho' || campo.tipo === 'imagem'), `NEGATIVO: ${def.store} não ganha seção de cabeçalho nem imagem`);
 }
-assert.equal(DB_VERSION, 8, 'esquema Dexie continua na v8');
+assert.equal(DB_VERSION, 9, 'esquema Dexie na v9 (missão pesagens-integrada, 17-MODELO-DADOS-V9)');
 assert.equal(STORES.propriedades, '++localId, &id, empresa_id, nome_normalizado, tipo, parceiro_id, ativo, created_at, updated_at, deleted_at', 'NEGATIVO: nenhum campo novo indexado em propriedades');
 const grupos = groupFields(PROPRIEDADES);
 assert.deepEqual(grupos.header.map((campo) => campo.id), HEADER_IDS, 'cartão "Cabeçalho dos relatórios" na ordem da definição');

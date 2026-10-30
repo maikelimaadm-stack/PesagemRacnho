@@ -1,0 +1,17 @@
+# R3-02 — custo da conferência de conteúdo no Electron real (massa sintética 12.000 animais × 3 eventos)
+# comando: xvfb-run -a node scripts/bench-import-electron.mjs 12000 3   (perfil temporário isolado)
+# 1ª medição (serialização recursiva + impressão dupla): conferirConteudoRestaurado 17709 ms, heap 1135 MB
+# medição final (JSON nativo com chaves ordenadas, impressão por identidade, uma conta quando idêntico):
+[perf] readImportFile: 103 ms (heap 36 MB)
+[perf] analyzeImport (base vazia): 855 ms (heap 88 MB)
+[perf] applyImport (200 animais por lote): 72969 ms (heap 80 MB)
+[perf] analyzeImport (reimportação, 100% JÁ EXISTE): 2113 ms (heap 167 MB)
+[perf] applyImport (reimportação, sem gravar): 2032 ms (heap 287 MB)
+[perf] analyzeImport (Manejos retroativos, 10%): 1386 ms (heap 339 MB)
+[perf] applyImport (Manejos retroativos, 10%): 7426 ms (heap 85 MB)
+[perf] retrato das stores (equivale ao backup lido): 1940 ms (heap 170 MB)
+[perf] conferirConteudoRestaurado (R3-02): 8064 ms (heap 584 MB)
+[perf] conferência por store: pesagens=37200/2606ms{"serializaBackup":538,"leitura":695,"serializaBanco":642,"compara":66,"impressao":665} animais=12000/483ms{"serializaBackup":146,"leitura":185,"serializaBanco":82,"compara":14,"impressao":57} animalIdentificadores=12000/298ms{"serializaBackup":60,"leitura":122,"serializaBanco":61,"compara":18,"impressao":38} movimentosAnimais=12000/259ms{"serializaBackup":47,"leitura":102,"serializaBanco":65,"compara":11,"impressao":36} sessoesPesagem=290/8ms{"serializaBackup":1,"leitura":4,"serializaBanco":2,"compara":0,"impressao":1} auditoria=37212/4383ms{"serializaBackup":719,"leitura":920,"serializaBanco":741,"compara":59,"impressao":1944} importacoes=2/2ms{"serializaBackup":0,"leitura":1,"serializaBanco":0,"compara":0,"impressao":0} marcas=4/1ms{"serializaBackup":0,"leitura":1,"serializaBanco":0,"compara":0,"impressao":0} racas=1/1ms{"serializaBackup":0,"leitura":1,"serializaBanco":0,"compara":0,"impressao":0} categoriasAnimal=5/1ms{"serializaBackup":0,"leitura":1,"serializaBanco":0,"compara":0,"impressao":0}
+  "motor": "Electron 44.9.3 / Chromium 152.0.7977.167 (IndexedDB real)",
+  "total_ms": 97520,
+OK bench-import-electron

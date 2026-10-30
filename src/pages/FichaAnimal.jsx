@@ -6,6 +6,7 @@ import { loadOperationalCatalog } from '@/modules/operations/application/operati
 import { calculateCarcassTrade } from '@/modules/weighing/domain/commercialCalculations';
 import { useAuth } from '@/components/auth/useAuth';
 import SanidadeAnimalCard from '@/components/sanidade/SanidadeAnimalCard';
+import AnimalProfileCard from '@/components/rebanho/AnimalProfileCard';
 import { VIA_LABELS, listApplications } from '@/modules/sanity/application/sanityService';
 import { buildAnimalWeightCurve, curveGmdText, curveLegend, curvePointTip } from '@/modules/animals/domain/animalWeightCurve';
 import { getReportSettings } from '@/modules/settings/application/appConfigService';
@@ -68,7 +69,24 @@ function buildProfiles(catalog) {
       lot: latest.nome_lote || '—',
       apartacao: latest.nome_apartacao || '—',
     };
-  }).sort((a, b) => String(a.number).localeCompare(String(b.number), 'pt-BR', { numeric: true }));
+  }).concat(
+    // v9: animal que entrou por operação e ainda não foi pesado (PENDENTE_PESAGEM) também tem ficha.
+    catalog.animais
+      .filter((animal) => !animal.deleted_at && !groups.has(animal.id))
+      .map((animal) => ({
+        key: animal.id,
+        entries: [],
+        animalId: animal.id,
+        number: animal.numero_animal || 'Sem identificação',
+        brand: animal.marca || 'Sem marca',
+        sex: animal.sexo || '—',
+        race: animal.raca || '—',
+        era: animal.era || '—',
+        status: animal.situacao || 'ATIVO',
+        lot: '—',
+        apartacao: '—',
+      })),
+  ).sort((a, b) => String(a.number).localeCompare(String(b.number), 'pt-BR', { numeric: true }));
 }
 
 export default function FichaAnimal() {
@@ -102,6 +120,10 @@ export default function FichaAnimal() {
   }, []);
 
   const profiles = useMemo(() => buildProfiles(catalog), [catalog]);
+  // Depois de corrigir nascimento/identificador na ficha: recarrega sem a tela de carregamento.
+  const refreshSilently = async () => {
+    try { setCatalog(await loadOperationalCatalog()); } catch { /* a ficha continua com os dados anteriores */ }
+  };
   const selected = profiles.find((profile) => profile.key === selectedKey) || profiles[0] || null;
   // M1: ?animal=<id> (Manutenção › Controle › "Pesagens para conferir" › Ver ficha do animal) abre direto esse animal;
   // sem o parâmetro (ou animal não encontrado), o primeiro da lista, como antes.
@@ -212,6 +234,8 @@ export default function FichaAnimal() {
       </div>
 
       <section className="op-card"><header className="op-card__header"><h2>Histórico de pesagens</h2><span>{ni.format(historyRows.length)} registros</span></header><div className="op-table-scroll"><table className="op-table" style={{ minWidth: 820 }}><thead><tr><th>Data</th><th>Tipo</th><th className="is-number">Peso</th><th className="is-number">Dias</th><th className="is-number">Ganho</th><th className="is-number">GMD</th><th>Lote</th><th>Apartação</th><th>Observação</th></tr></thead><tbody>{historyRows.map((row, index) => { const gain = hasNumber(row.ganho) ? Number(row.ganho) : null; const gmd = hasNumber(row.gmd) ? Number(row.gmd) : null; const shownGmd = historyGmd[index]; return <tr key={row.id}><td>{dateBr(row.data_pesagem)}</td><td><span className={`op-type ${row.tipo_manejo === 'Cadastro' ? 'op-type--cadastro' : row.tipo_manejo === 'Saída' ? 'op-type--saida' : ''}`}>{row.tipo_manejo || 'Manejo'}</span></td><td className="is-number"><strong>{hasNumber(row.peso) ? nf.format(Number(row.peso)) : '—'}</strong></td><td className="is-number">{hasNumber(row.dias) ? ni.format(Number(row.dias)) : '—'}</td><td className={`is-number ${gain > 0 ? 'is-positive' : gain < 0 ? 'is-negative' : ''}`}>{gain !== null ? `${gain > 0 ? '+' : ''}${nf.format(gain)}` : '—'}</td><td className={`is-number ${shownGmd.cinza ? '' : gmd > 0 ? 'is-positive' : gmd < 0 ? 'is-negative' : ''}`} style={shownGmd.cinza ? GMD_GRAY_STYLE : undefined} title={shownGmd.cinza ? `GMD não entra na média: ${shownGmd.aviso}` : undefined} data-gmd={shownGmd.cinza ? 'NAO_CONFIAVEL' : undefined}>{shownGmd.texto}</td><td>{row.nome_lote || '—'}</td><td>{row.nome_apartacao || '—'}</td><td>{row.observacao || '—'}</td></tr>; })}</tbody></table></div></section>
+
+      <AnimalProfileCard animal={catalog.animais.find((animal) => animal.id === selected.animalId) || null} canEdit={pode('weighing.edit')} canWrite={pode('weighing.write')} onChanged={refreshSilently} />
 
       {canReadSanity ? <SanidadeAnimalCard applications={sanity.rows} loading={sanity.loading} error={sanity.error} viaLabels={VIA_LABELS} /> : null}
       <p className="op-report-foot">Série deste animal neste aparelho. Peso ausente aparece como —. Ganho total = último peso com balança − primeiro peso com balança. GMD médio = ganho total ÷ dias entre essas datas. GMD em cinza não entra na média quando o intervalo é menor que o mínimo de Configurações › Relatórios.{pode('commercial.values') ? ' 1 @ = 15 kg de carcaça, só quando a pesagem tem rendimento.' : ''}</p>

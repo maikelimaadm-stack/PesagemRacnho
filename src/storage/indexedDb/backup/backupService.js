@@ -50,9 +50,14 @@ export async function recordBackupHistory(tipo, detalhes) {
 export async function createFullBackupFromDb(db, { reason = 'manual', automatic = false, dbVersion = getDbVersion(), storeNames = null } = {}) {
   const names = storeNames || db.tables.map((table) => table.name);
   const stores = {};
-  for (const name of names) {
-    stores[name] = await db.table(name).toArray();
-  }
+  // F20: todas as stores lidas na MESMA transação de leitura — snapshot coerente mesmo com pesagens sendo
+  // gravadas ao mesmo tempo (o backup periódico roda com o app em uso). Gravações esperam a leitura terminar.
+  const tables = names.filter((name) => db.tables.some((table) => table.name === name)).map((name) => db.table(name));
+  await db.transaction('r', tables, async () => {
+    for (const name of names) {
+      stores[name] = db.tables.some((table) => table.name === name) ? await db.table(name).toArray() : [];
+    }
+  });
   const counts = Object.fromEntries(names.map((n) => [n, stores[n].length]));
   const formatVersion = dbVersion <= 6 ? 2 : BACKUP_FORMAT_VERSION;
   const createdAt = new Date().toISOString();
@@ -125,6 +130,12 @@ export async function exportPesagensJson() {
 
 async function readBackup(payload, { allowLegacy = true } = {}) {
   const b = typeof payload === 'string' ? JSON.parse(payload) : payload;
+  // P24: exportação de pesagens não é backup — dizer isso em vez de "formato não reconhecido".
+  if (b && b.type === 'weighing-entries-export') {
+    const err = new Error('Este arquivo é uma EXPORTAÇÃO DE PESAGENS, não um backup completo: ele não traz animais, cadastros, usuários nem configurações. Para restaurar, escolha um arquivo backup-completo-….json.');
+    err.code = 'DEXIE_BACKUP_007';
+    throw err;
+  }
   if (!b || b.format !== BACKUP_FORMAT || !b.stores) {
     const err = new Error('Backup inválido (formato não reconhecido)');
     err.code = 'DEXIE_BACKUP_001';

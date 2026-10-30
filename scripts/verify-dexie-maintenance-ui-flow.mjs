@@ -13,7 +13,10 @@ const read = (rel) => readFileSync(join(root, rel), 'utf8');
 const ui = read('src/pages/ManutencaoSistema.jsx');
 assert(/from ["']@\/modules\/maintenance\/application\/maintenanceService["']/.test(ui),
   'ManutencaoSistema importa maintenanceService');
-assert(/maintenanceService\.createDatabaseBackup/.test(ui) && /maintenanceService\.getDatabaseStats/.test(ui),
+// F19/F24: o backup saiu da Manutenção avançada para a página Backup e Restauração (mesmo comando único).
+const backupPage = read('src/pages/BackupRestauracao.jsx');
+const backupCenter = read('src/modules/backup/application/backupCenterService.js');
+assert(/maintenanceAdapter\.createBackupNow/.test(backupCenter) && /center\.createBackupNow\(/.test(backupPage) && /maintenanceService\.getDatabaseStats/.test(ui),
   'UI chama maintenanceService (backup/stats)');
 assert(!/maintenance:backup:sqlite/.test(ui) && !/window\.pesagemApp\?\.maintenance/.test(ui),
   'UI NÃO chama IPC de manutenção SQLite diretamente');

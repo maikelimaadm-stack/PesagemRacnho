@@ -18,6 +18,7 @@ import {
   STORES_V6,
   STORES_V7,
   STORES_V8,
+  STORES_V9,
 } from './schema.js';
 
 let _db = null;
@@ -68,6 +69,9 @@ export function getDb() {
   // v8 aditiva: só cria as stores de sanidade (vazias). Sem upgrade(): nenhum dado
   // existente é tocado; o estado técnico migration:v8 é registrado pelo backfill.
   db.version(8).stores(STORES_V8);
+  // v9 aditiva (17-MODELO-DADOS-V9): stores novas e índices novos; nenhum dado reescrito aqui —
+  // a natureza dos movimentos e as operações legadas vêm do v9Backfill (resumível, com backup).
+  db.version(9).stores(STORES_V9);
   _db = db;
   return db;
 }

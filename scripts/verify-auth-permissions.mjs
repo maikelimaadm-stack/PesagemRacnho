@@ -254,8 +254,11 @@ function listFiles(dir) {
 // cartões do JSX. Assim um filtro removido ou uma busca que pule `sections` muda o resultado.
 // A rota digitada passa pelo RequirePermission do Layout (permissão do item) E pelo da página.
 const SETTINGS_EXPECTED = {
-  ADMIN: { menu: true, opens: true, sections: ['geral', 'curral', 'comercial', 'seguranca', 'relatorios', 'dados'] },
-  GESTOR: { menu: true, opens: true, sections: ['relatorios'] },
+  // F25/F26 (missão pesagens-integrada): Configurações gerais = Geral + Segurança (+ Dados); Curral, Comercial e
+  // Relatórios são editados na Parametrização (mesmas chaves, cada seção com a própria permissão — o GESTOR segue
+  // editando Relatórios lá: verificado em checkParametrizacao).
+  ADMIN: { menu: true, opens: true, sections: ['geral', 'seguranca', 'dados'] },
+  GESTOR: { menu: true, opens: true, sections: [] },
   OPERADOR: { menu: false, opens: false, sections: [] },
   CONSULTA: { menu: false, opens: false, sections: [] },
 };
@@ -277,7 +280,7 @@ function pageDecisions(page) {
   // SECTIONS só chega à tela pelo filtro de permissão: declaração, ALL_FIELDS (rótulos) e o filtro.
   assert.equal(page.match(/\bSECTIONS\b/g).length, 3, 'SECTIONS usado só na declaração, em ALL_FIELDS e no filtro por can()');
   assert.match(page, /const renderSection = \(id\) => \{\n\s*const section = sectionById\(id\);\n\s*if \(!section\) return null;/, 'renderSection não desenha seção fora de sectionById');
-  assert.equal(page.match(/<FormCard\b/g).length, 2, 'cartões só via renderSection e o cartão Dados');
+  assert.equal(page.match(/<FormCard\b/g).length, 3, 'cartões só via renderSection, o cartão Dados e o atalho para Parametrização/Equipamentos');
   // Linhas de cartões do JSX: condição, seções desenhadas e o cartão Dados.
   const rows = [...page.matchAll(/\{(hasSection\([^)]*\)|canSeeData) \? \(\s*<div className="emp-form-cards-row">([\s\S]*?)<\/div>\s*\) : null\}/g)]
     .map((m) => ({ condition: m[1], ids: [...m[2].matchAll(/renderSection\('(\w+)'\)/g)].map((r) => r[1]), data: /<FormCard title="Dados"/.test(m[2]) }));
@@ -322,10 +325,18 @@ function checkSources(s) {
   assert.match(s.users, /<TableHead>Papel<\/TableHead>/, 'coluna Papel');
   assert.match(s.settings, /<RequirePermission permission="settings\.operational">/, 'Configurações exige settings.operational');
   assert.match(s.settings, /permission: 'settings\.auth'/, 'seção Segurança marcada com settings.auth');
+  // F25: Curral e Comercial (editados na Parametrização) continuam só com settings.manage.
+  assert.match(s.settings, /id: 'curral',\s*title: 'Curral',\s*permission: 'settings\.manage'/, 'seção Curral só com settings.manage');
+  assert.match(s.settings, /id: 'comercial',\s*title: 'Comercial',\s*permission: 'settings\.manage'/, 'seção Comercial só com settings.manage');
   assert.match(s.settings, /title: 'Relatórios',\s*permission: 'settings\.reports'/, 'seção Relatórios marcada com settings.reports (E1C)');
   assert.match(s.settings, /SECTIONS\.filter\(\(section\) => auth\?\.can\?\.\(section\.permission\)\)/, 'seções filtradas por can()');
   assert.match(s.layout, /id: "pec-configuracoes",[^}]*?permission: "settings\.operational"/, 'menu Configurações com a mesma permissão da página (ADMIN e GESTOR)');
   assert.deepEqual(settingsAccess(s), SETTINGS_EXPECTED, 'Configurações por papel: menu, rota e seções');
+  // Parametrização: as três seções movidas, cada uma com a permissão do seu grupo (GESTOR = Relatórios).
+  const parametrizacao = readFileSync(new URL('../src/pages/Parametrizacao.jsx', import.meta.url), 'utf8');
+  assert.match(parametrizacao, /can\('settings\.manage'\) \? <ConfigSection id="curral" \/> : null/, 'Parametrização: Pesagens e alertas só com settings.manage');
+  assert.match(parametrizacao, /can\('settings\.reports'\) \? <ConfigSection id="relatorios" \/> : null/, 'Parametrização: GMD e indicadores com settings.reports (ADMIN e GESTOR)');
+  assert.match(parametrizacao, /can\('settings\.manage'\) \? <ConfigSection id="comercial" \/> : null/, 'Parametrização: Comercial e saídas só com settings.manage');
   assert.match(s.guard, /auth\?\.can\?\.\(permission\)/, 'RequirePermission decide por can');
   assert.match(s.gate, /can: \(action\) => can\(user\?\.role, action\)/, 'AuthGate expõe can(action) pelo papel');
   for (const [file, source] of Object.entries(s.ui)) {
@@ -362,9 +373,9 @@ for (const [name, bad] of [
   // uma muda o que um papel vê na tela real (conferido por render SSR na revisão).
   ['sectionById sem o filtro (GESTOR vê Geral/Curral/Comercial/Segurança)', mutated('settings', 'const sectionById = (id) => sections.find(', 'const sectionById = (id) => SECTIONS.find(')],
   ['renderSection cai em SECTIONS', mutated('settings', 'const section = sectionById(id);', 'const section = sectionById(id) || SECTIONS.find((item) => item.id === id);')],
-  ['campos de todas as seções no GESTOR', mutated('settings', 'const fields = useMemo(() => sections.flatMap(', 'const fields = useMemo(() => SECTIONS.flatMap(')],
+  ['campos de todas as seções no GESTOR', mutated('settings', 'const fields = useMemo(() => sections.filter(', 'const fields = useMemo(() => SECTIONS.filter(')],
   ['linhas vazias para o GESTOR (hasSection sempre verdadeiro)', mutated('settings', 'const hasSection = (...ids) => ids.some((id) => sectionById(id));', 'const hasSection = () => true;')],
-  ['cartão fixo fora das seções', mutated('settings', "{renderSection('relatorios')}", "{renderSection('relatorios')}<FormCard title=\"Geral\" />")],
+  ['cartão fixo fora das seções', mutated('settings', "{renderSection('seguranca')}", "{renderSection('seguranca')}<FormCard title=\"Geral\" />")],
   ['menu sem filtro de permissão (OPERADOR/CONSULTA veem Configurações)', mutated('layout', 'const visibleItems = NAV_ITEMS.filter((item) => !item.permission || auth?.can(item.permission));', 'const visibleItems = NAV_ITEMS;')],
   ['shell recebe NAV_ITEMS sem filtro', mutated('layout', '<ModeloBase1AppShell navItems={visibleItems}', '<ModeloBase1AppShell navItems={NAV_ITEMS}')],
   ['rota sem a guarda do Layout', mutated('layout', '<RequirePermission permission={current?.permission}>{children}</RequirePermission>', '{children}')],

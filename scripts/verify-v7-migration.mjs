@@ -162,7 +162,7 @@ const summary = { casos: [] };
   assert.equal(isWriteBlocked(), false);
   const progressV7 = progress.filter((p) => p.versao === 7);
   assert.ok(progressV7.length > 0 && progressV7.every((p) => V7_STEPS.includes(p.passo)), 'onProgress recebe passos B1..B12 da v7');
-  assert.ok(progress.every((p) => p.versao === 7 || p.versao === DB_VERSION), 'progresso só da cadeia v7 → vigente');
+  assert.ok(progress.every((p) => p.versao >= 7 && p.versao <= DB_VERSION), 'progresso só da cadeia v7 → vigente');
 
   // Backup pré-migração: nome (versão alvo), subdir, formato da versão de origem, validado por tamanho e SHA-256.
   const backupFile = files.written.find((f) => f.subdir === 'backups');
@@ -341,12 +341,13 @@ const summary = { casos: [] };
     completed = result.completed;
     if (!completed) {
       assert.equal(result.state.status, MIGRATION_STATUS.EM_ANDAMENTO);
-      assert.match(result.state.last_checkpoint, /^(B\d+:(localId=\d+|done)|S\d+:done)$/, 'checkpoint da v7 (B*) ou da v8 (S*)');
+      assert.match(result.state.last_checkpoint, /^(B\d+:(localId=\d+|done)|S\d+:done)$/, 'checkpoint da v7 (B*) ou da v8/v9 (S*)');
       if (/localId=/.test(result.state.last_checkpoint)) interruptedMidCursor += 1;
       checkpoints.push(result.state.last_checkpoint);
       // Simula fechar e reabrir o app: o checkpoint precisa vir do banco.
       resetDbForTests();
-      const versaoDoPasso = result.state.last_checkpoint.startsWith('S') ? 8 : 7;
+      // A versão do passo vem do próprio estado (v7 = B*, v8 e v9 = S*).
+      const versaoDoPasso = result.state.versao ?? (result.state.last_checkpoint.startsWith('S') ? 8 : 7);
       const reopened = await readMigrationState(await ensureStorageReady(), versaoDoPasso);
       assert.equal(reopened.last_checkpoint, result.state.last_checkpoint, 'checkpoint persistido no banco');
     }

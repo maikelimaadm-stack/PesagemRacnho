@@ -4,19 +4,20 @@
 // sanityService.listApplications; pesquisa e pílulas refinam só o que já foi carregado.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Ban, FileSpreadsheet, ListFilter, Plus, RefreshCw, Upload } from 'lucide-react';
+import { Ban, FileSpreadsheet, ListFilter, Plus, RefreshCw, ShieldQuestion, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { createPageUrl } from '@/utils';
 import MakDateControl from '@/components/mak/MakDateControl';
 import MakTableSelectCheck from '@/components/mak/MakTableSelectCheck';
 import MgSpeedDialMenu from '@/components/mak/MgSpeedDialMenu';
 import { Columns3Cog } from '@/components/mak/mgIcons';
-import { cancelApplication, listApplications, registerApplication } from '@/modules/sanity/application/sanityService';
+import { cancelApplication, clarifyWithdrawal, listApplications, registerApplication } from '@/modules/sanity/application/sanityService';
 import { TEMPLATE_KINDS, buildImportTemplateCsv } from '@/modules/import/domain/spreadsheetTemplate';
 import { downloadCsvFile } from '@/modules/weighing/export/csvDownload';
 import AnimalSearchField from './AnimalSearchField.jsx';
 import AplicacaoFormDialog from './AplicacaoFormDialog.jsx';
 import CancelarAplicacaoDialog from './CancelarAplicacaoDialog.jsx';
+import EsclarecerCarenciaDialog from './EsclarecerCarenciaDialog.jsx';
 import SanidadeDataTable, { SanidadeColumnConfig } from './SanidadeDataTable.jsx';
 import { SanidadeSelect } from './SanidadeFormFields.jsx';
 import {
@@ -53,6 +54,7 @@ export default function AplicacoesPanel({
   const [moreOpen, setMoreOpen] = useState(false);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
+  const [clarifyTarget, setClarifyTarget] = useState(null);
   const requestRef = useRef(0);
   const navigate = useNavigate();
 
@@ -70,6 +72,8 @@ export default function AplicacoesPanel({
   const table = useSanidadeTable({ rows, columns: APLICACAO_COLUMNS, ctx, prefsKey: 'sanidade-colunas:aplicacoes' });
   const selectedApplication = table.selectedRows.length === 1 ? table.selectedRows[0] : null;
   const canCancelSelected = canCancel && Boolean(selectedApplication) && !isApplicationCancelled(selectedApplication);
+  // R2-03: só aplicação ativa de medicamento com carência desconhecida.
+  const canClarifySelected = canCancel && Boolean(selectedApplication) && !isApplicationCancelled(selectedApplication) && Boolean(selectedApplication.medicamento_id) && !selectedApplication.carencia_carne_ate;
   const filtersActive = hasActiveAplicacaoFilters(filters);
 
   const load = useCallback(async () => {
@@ -132,6 +136,22 @@ export default function AplicacoesPanel({
     }
   };
 
+  const confirmClarify = async (input) => {
+    if (!canCancel || !clarifyTarget || busy) return;
+    setBusy(true);
+    try {
+      await clarifyWithdrawal(clarifyTarget.id, input);
+      toast.success('Carência registrada para esta aplicação (com fonte e responsável).');
+      setClarifyTarget(null);
+      table.setSelected([]);
+      await load();
+    } catch (error) {
+      toast.error(describeSanityError(error, 'Não foi possível registrar a carência.'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const emptyText = queryError
     || (filtersActive
       ? 'Nenhuma aplicação encontrada para os filtros escolhidos.'
@@ -155,6 +175,11 @@ export default function AplicacoesPanel({
             <div className={`mg-action-slot${canCancelSelected ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!canCancelSelected}>
               <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost tb-btn-danger" onClick={() => setCancelTarget(selectedApplication)} title="Cancelar a aplicação selecionada" aria-label="Cancelar a aplicação selecionada" tabIndex={canCancelSelected ? 0 : -1} disabled={busy || !canCancelSelected}>
                 <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              </button>
+            </div>
+            <div className={`mg-action-slot${canClarifySelected ? ' is-visible' : ''}`} style={{ '--slot-width': '25px' }} aria-hidden={!canClarifySelected}>
+              <button type="button" className="ios-btn tb-btn tb-btn-icon tb-btn-ghost" onClick={() => setClarifyTarget(selectedApplication)} title="Esclarecer a carência desconhecida desta aplicação" aria-label="Esclarecer a carência desconhecida desta aplicação" tabIndex={canClarifySelected ? 0 : -1} disabled={busy || !canClarifySelected}>
+                <ShieldQuestion className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               </button>
             </div>
           </div>
@@ -244,6 +269,13 @@ export default function AplicacoesPanel({
         busy={busy}
         onOpenChange={(open) => { if (!open) setCancelTarget(null); }}
         onConfirm={confirmCancel}
+      />
+      <EsclarecerCarenciaDialog
+        application={canCancel ? clarifyTarget : null}
+        animal={clarifyTarget ? applicationAnimal(clarifyTarget, animalIndex.byId) : null}
+        busy={busy}
+        onOpenChange={(open) => { if (!open) setClarifyTarget(null); }}
+        onConfirm={confirmClarify}
       />
     </>
   );

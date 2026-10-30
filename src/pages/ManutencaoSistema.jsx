@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import * as maintenanceService from "@/modules/maintenance/application/maintenanceService";
@@ -25,8 +25,12 @@ import { createPageUrl } from "@/utils";
 // relatórios de conferência que saíram do catálogo de Relatórios, abertos na mesma tela de relatório.
 // "Sistema" são os próprios cartões da grade da página (sem painel envolvente): a aba não aponta
 // aria-controls para um id que não existe.
+// F24/P20: Manutenção avançada = integridade, diagnóstico, migração (Sistema), limpeza e reset (Dados — perigoso,
+// em aba própria, longe do backup) e relatórios de conferência (Controle). Backup e restauração têm página
+// própria (Sistema › Backup e Restauração); importação e exportação ficam nas telas de origem.
 const MANUTENCAO_ABAS = [
   { id: "sistema", label: "Sistema", panelId: null },
+  { id: "dados", label: "Dados (limpeza e reset)" },
   { id: "controle", label: "Controle" },
 ];
 
@@ -53,6 +57,7 @@ function migrationTone(status) {
 }
 
 function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
+  const navigate = useNavigate();
   // Ações destrutivas seguem a matriz (maintenance.restore/clear/reset/migrate = ADMIN);
   // o serviço recusa de novo — esconder aqui só evita oferecer o que será negado.
   const auth = useAuth();
@@ -61,16 +66,14 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
   const [lastCheckAt, setLastCheckAt] = useState("");
   const [stats, setStats] = useState(null);
   const [busy, setBusy] = useState("");
+  // R08: andamento e cancelamento do "Reconciliar derivados" (para entre blocos; o que foi feito fica consistente).
+  const [reconcileProgress, setReconcileProgress] = useState(null);
+  const reconcileSignal = useRef(null);
   const [diagText, setDiagText] = useState("");
-  const [importDry, setImportDry] = useState(null);
-  const [importPayload, setImportPayload] = useState(null);
-  const [importFileName, setImportFileName] = useState("");
-  const [restoreDry, setRestoreDry] = useState(null);
-  const [restorePath, setRestorePath] = useState("");
-  const [restoreFileName, setRestoreFileName] = useState("");
   const [diag, setDiag] = useState(null);
   const [backups, setBackups] = useState([]);
-  const [confirmation, setConfirmation] = useState(null);
+  // P21: situação da proteção (último backup VERIFICADO × arquivos encontrados).
+  const [backupStatus, setBackupStatus] = useState(null);
   const [versions, setVersions] = useState(null);
   const [migration, setMigration] = useState(null);
   const [migrationDry, setMigrationDry] = useState(null);
@@ -89,11 +92,12 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
       const [s, integrity, backupList, migrationStatus] = await Promise.all([
         maintenanceService.getDatabaseStats(),
         maintenanceService.runIntegrityCheck().catch((err) => ({ ok: false, error: err.message })),
-        maintenanceService.listBackups().catch(() => ({ full: [] })),
+        maintenanceService.getBackupStatus().catch(() => maintenanceService.listBackups().then((r) => ({ files: r?.full || [], protecao: null })).catch(() => ({ files: [], protecao: null }))),
         maintenanceService.getMigrationStatus().catch(() => null),
       ]);
       setStats(s);
-      setBackups(backupList?.full || []);
+      setBackups(backupList?.files || []);
+      setBackupStatus(backupList || null);
       setMigration(migrationStatus);
       const ok = integrity?.ok !== false && integrity?.result === "ok";
       setStatusLabel(ok ? "OK" : "Erro");
@@ -149,38 +153,6 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
     }
   };
 
-  const onBackupDatabase = () =>
-    run(
-      "bak-db",
-      () => maintenanceService.createDatabaseBackup({ reason: "manual-ui" }),
-      "Backup criado com sucesso.",
-      "Não foi possível criar o backup."
-    );
-
-  const onBackupFull = () =>
-    run(
-      "bak-full",
-      () => maintenanceService.createFullDataBackup({ reason: "manual-ui" }),
-      "Backup completo criado com sucesso.",
-      "Não foi possível criar o backup completo."
-    );
-
-  const onExportCsv = () =>
-    run(
-      "exp-csv",
-      () => maintenanceService.exportWeighingCsv({}),
-      "Exportação CSV concluída.",
-      "Não foi possível exportar CSV."
-    );
-
-  const onExportJson = () =>
-    run(
-      "exp-json",
-      () => maintenanceService.exportWeighingJson({}),
-      "Exportação JSON concluída.",
-      "Não foi possível exportar JSON."
-    );
-
   const onIntegrity = () =>
     run(
       "integrity",
@@ -193,6 +165,30 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
       "Foi encontrado um problema. Faça backup e envie o relatório técnico."
     );
 
+  const onReconcile = () =>
+    run(
+      "reconcile",
+      async () => {
+        reconcileSignal.current = { aborted: false };
+        setReconcileProgress({ feitos: 0, total: null });
+        try {
+          const r = await maintenanceService.reconcileDerivations({ onProgress: setReconcileProgress, signal: reconcileSignal.current });
+          const integ = await maintenanceService.runIntegrityCheck();
+          if (r.cancelado) {
+            setDiagText(`Reconciliação interrompida: ${fmtInt(r.feitos)} de ${fmtInt(r.animais)} animais feitos (consistentes). Rode de novo para terminar.`);
+          } else {
+            setDiagText(integ?.ok ? `Derivados reconciliados (${fmtInt(r.animais)} animais). Banco íntegro.` : `Derivados reconciliados; restam ${fmtInt(integ?.issues?.length || 0)} problema(s).`);
+          }
+          return r;
+        } finally {
+          reconcileSignal.current = null;
+          setReconcileProgress(null);
+        }
+      },
+      "Lotes, movimentos e GMD reconciliados (backup criado antes).",
+      "Não foi possível reconciliar."
+    );
+
   const onQuick = () =>
     run(
       "quick",
@@ -200,89 +196,6 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
       "Verificação rápida OK.",
       "Verificação rápida encontrou problema."
     );
-
-  const onSelectImport = async () => {
-    setBusy("imp-select");
-    try {
-      const selected = await maintenanceService.selectImportJsonFile();
-      if (selected?.canceled) return;
-      const dry = await maintenanceService.dryRunImportWeighingJson(selected.payload);
-      setImportPayload(selected.payload);
-      setImportFileName(selected.fileName || "arquivo.json");
-      setImportDry(dry);
-      toast.success("Análise concluída (dry-run).");
-    } catch (err) {
-      toast.error("Não foi possível analisar o arquivo.", { description: err.message });
-      setImportDry(null);
-      setImportPayload(null);
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const onApplyImport = async () => {
-    if (!importPayload || !importDry) return;
-    setConfirmation('import');
-  };
-
-  const applyImportConfirmed = async () => {
-    setConfirmation(null);
-    await run(
-      "imp-apply",
-      async () => {
-        const result = await maintenanceService.applyImportWeighingJson(importPayload, {
-          skipDuplicates: true,
-        });
-        setImportDry(null);
-        setImportPayload(null);
-        setImportFileName("");
-        return result;
-      },
-      "Importação concluída.",
-      "Não foi possível importar os dados."
-    );
-  };
-
-  const onSelectRestore = async () => {
-    setBusy("res-select");
-    try {
-      const selected = await maintenanceService.selectBackupFile();
-      if (selected?.canceled) return;
-      const dry = await maintenanceService.dryRunRestoreBackup(selected.payload);
-      setRestorePath(selected.payload);
-      setRestoreFileName(selected.fileName || "backup.json");
-      setRestoreDry(dry);
-      if (dry?.restorable) toast.success("Backup válido (dry-run).");
-      else toast.error("Backup inválido ou não restaurável.");
-    } catch (err) {
-      toast.error("Não foi possível analisar o backup.", { description: err.message });
-      setRestoreDry(null);
-      setRestorePath("");
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const onApplyRestore = async () => {
-    if (!restorePath || !restoreDry?.restorable) return;
-    setConfirmation('restore');
-  };
-
-  const applyRestoreConfirmed = async () => {
-    setConfirmation(null);
-    await run(
-      "res-apply",
-      async () => {
-        const result = await maintenanceService.applyRestoreBackup(restorePath);
-        setRestoreDry(null);
-        setRestorePath("");
-        setRestoreFileName("");
-        return result;
-      },
-      "Restauração concluída.",
-      "Não foi possível restaurar o backup."
-    );
-  };
 
   const onMigrationDryRun = () =>
     run(
@@ -386,8 +299,8 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
     >
       <ModeloBase1PageHeader
         visuallyHidden
-        title="Backup e Manutenção"
-        description="Proteja seus dados: backup, exportação, restauração, migração e verificação do banco."
+        title="Manutenção avançada"
+        description="Integridade, diagnóstico, migração, limpeza e reset. Backup e restauração ficam em Sistema › Backup e Restauração."
       />
       <ModeloBase1ActionBar
         className="mb1-operational-actionbar"
@@ -403,6 +316,7 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
       {aba === "controle" ? (
         <MaintenanceControlReports actor={actor} onOpen={onOpenReport} />
       ) : (<>
+      {aba === "sistema" && (<>
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
           <CardTitle className="text-xs font-semibold uppercase tracking-wide">Status do banco</CardTitle>
@@ -494,7 +408,17 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
           {relatorio && (
             <div className="border border-slate-200 rounded-md p-3 bg-slate-50 text-xs text-slate-600 space-y-1">
               <p className="font-semibold text-slate-700">Relatório da migração</p>
-              {relatorio.storesCriadas !== undefined ? (
+              {relatorio.operacoesLegadasEntrada !== undefined ? (
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                <li className="col-span-2">Stores criadas: {(relatorio.storesCriadas || []).join(", ") || "—"}</li>
+                <li>Movimentos classificados: {fmtInt(relatorio.movimentosComNatureza || 0)}</li>
+                <li>Movimentos sem classificação: {fmtInt(relatorio.movimentosSemNatureza || 0)}</li>
+                <li>Entradas legadas (operações): {fmtInt(relatorio.operacoesLegadasEntrada || 0)}</li>
+                <li>Saídas legadas (operações): {fmtInt(relatorio.operacoesLegadasSaida || 0)}</li>
+                <li>Itens legados: {fmtInt(relatorio.itensLegados || 0)}</li>
+                <li>Pesagens já convertidas: {fmtInt(relatorio.pesagensJaConvertidas || 0)}</li>
+              </ul>
+              ) : relatorio.storesCriadas !== undefined ? (
               <ul className="grid grid-cols-2 gap-x-4 gap-y-0.5">
                 <li className="col-span-2">Stores criadas: {(relatorio.storesCriadas || []).join(", ") || "—"}</li>
                 <li>Programas de sanidade: {fmtInt(relatorio.programasSanidade || 0)}</li>
@@ -557,118 +481,24 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
 
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Backup</CardTitle>
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Backup, restauração, importação e exportação</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={onBackupDatabase} disabled={!!busy}>
-            {busy === "bak-db" ? "Criando…" : "Criar backup do banco"}
-          </Button>
-          <Button type="button" className="emp-toolbar-btn px-4" onClick={onBackupFull} disabled={!!busy}>
-            {busy === "bak-full" ? "Criando…" : "Criar backup completo"}
-          </Button>
-          <p className="w-full text-xs text-slate-500">
-            Inclui todos os stores, manifesto, versão, contagens e SHA-256. A gravação usa arquivo temporário e valida o conteúdo antes de concluir.
+        <CardContent className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <p className="w-full" data-backup-protecao={backupStatus?.protecao || "desconhecida"}>
+            {backupStatus?.lastVerified ? <>Último backup verificado: {fmtDateTimeBR(backupStatus.lastVerified.verifiedAt)}.</> : <>Nenhum backup verificado ainda.</>}{" "}
+            Backup e restauração têm página própria; a importação fica em Operação › Importação e a exportação de pesagens na Relação de Pesagens.
           </p>
-          <div className="w-full border border-slate-200 rounded-md overflow-hidden">
-            <div className="px-3 py-2 text-xs font-semibold bg-slate-50">Backups físicos encontrados</div>
-            {backups.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-slate-500">Nenhum backup neste computador. Use Criar backup do banco para guardar uma cópia.</p>
-            ) : backups.slice(0, 10).map((backup) => (
-              <div key={backup.path} className="px-3 py-2 border-t border-slate-100 text-xs flex flex-wrap justify-between gap-2">
-                <span className="font-medium break-all">{backup.name}</span>
-                <span>{fmtInt(backup.size)} bytes · {fmtDateTimeBR(backup.modifiedAt)}</span>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="emp-content-card">
-        <CardHeader className="emp-form-section-panel--corp">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Exportação</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <Button type="button" className="emp-toolbar-btn px-4" onClick={onExportCsv} disabled={!!busy}>
-            Exportar pesagens em CSV
+          <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={() => navigate(createPageUrl("BackupRestauracao"))}>
+            Abrir Backup e Restauração
           </Button>
-          <Button type="button" className="emp-toolbar-btn px-4" onClick={onExportJson} disabled={!!busy}>
-            Exportar pesagens em JSON
+          <Button type="button" className="emp-toolbar-btn px-4" onClick={() => navigate(createPageUrl("Importacao"))}>
+            Abrir Importação
           </Button>
         </CardContent>
       </Card>
 
-      <Card className="emp-content-card">
-        <CardHeader className="emp-form-section-panel--corp">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Importação</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button type="button" className="emp-toolbar-btn px-4" onClick={onSelectImport} disabled={!!busy}>
-            Selecionar JSON e analisar
-          </Button>
-          {importDry && (
-            <div className="text-sm text-slate-700 space-y-1 border border-slate-200 rounded-md p-3 bg-slate-50">
-              <p className="font-medium">Arquivo: {importFileName}</p>
-              <p>Registros: {(importDry.totalRecords ?? importDry.total) != null ? fmtInt(importDry.totalRecords ?? importDry.total) : "—"}</p>
-              <p>Válidos: {(importDry.validRecords ?? importDry.valid) != null ? fmtInt(importDry.validRecords ?? importDry.valid) : "—"}</p>
-              <p>Inválidos: {(importDry.invalidRecords ?? importDry.invalid) != null ? fmtInt(importDry.invalidRecords ?? importDry.invalid) : "—"}</p>
-              <p>Duplicados: {importDry.duplicates != null ? fmtInt(importDry.duplicates) : "—"}</p>
-              <p>Conflitos: {fmtInt(importDry.conflicts ?? 0)}</p>
-              <p className="text-xs text-slate-500">
-                Antes da importação, o sistema criará um backup automático.
-              </p>
-              <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={onApplyImport} disabled={!!busy || !importPayload}>
-                Importar dados
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {allowed("maintenance.restore") && (
-      <Card className="emp-content-card">
-        <CardHeader className="emp-form-section-panel--corp">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Restauração</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button type="button" className="emp-toolbar-btn px-4" onClick={onSelectRestore} disabled={!!busy}>
-            Selecionar backup (.json)
-          </Button>
-          {restoreDry && (
-            <div className="text-sm text-slate-700 space-y-1 border border-slate-200 rounded-md p-3 bg-slate-50">
-              <p className="font-medium">Arquivo: {restoreFileName}</p>
-              <p>Backup válido: {restoreDry.restorable ? "sim" : "não"}</p>
-              <p>Integridade: {restoreDry.integrity || "—"}</p>
-              <p>Formato: {restoreDry.formatVersion ?? "—"} · Banco de origem: {restoreDry.sourceDbVersion ?? "—"}</p>
-              {restoreDry.schemaUpgradeRequired && (
-                <p className="text-amber-700">Backup de esquema anterior: será convertido automaticamente após a restauração.</p>
-              )}
-              {(restoreDry.ignoredStores || []).length > 0 && (
-                <p className="text-xs text-slate-500">Stores ignoradas (removidas do esquema): {restoreDry.ignoredStores.join(", ")}</p>
-              )}
-              {(restoreDry.newStores || []).length > 0 && (
-                <p className="text-xs text-slate-500">Stores novas (nascem vazias): {restoreDry.newStores.join(", ")}</p>
-              )}
-              <p>
-                Data:{" "}
-                {restoreDry.manifest?.createdAt || restoreDry.createdAt
-                  ? fmtDateTimeBR(restoreDry.manifest?.createdAt || restoreDry.createdAt)
-                  : "não informada no manifesto"}
-              </p>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={onApplyRestore}
-                disabled={!!busy || !restoreDry.restorable}
-              >
-                Restaurar backup
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      )}
-
-      {(allowed("maintenance.clear") || allowed("maintenance.reset")) && (
+      </>)}
+      {aba === "dados" && (allowed("maintenance.clear") || allowed("maintenance.reset")) && (
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
           <CardTitle className="text-xs font-semibold uppercase tracking-wide">Limpeza de dados</CardTitle>
@@ -728,6 +558,7 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
       </Card>
       )}
 
+      {aba === "sistema" && (
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
           <CardTitle className="text-xs font-semibold uppercase tracking-wide">Diagnóstico</CardTitle>
@@ -737,6 +568,16 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
             <Button type="button" className="emp-toolbar-btn px-3" onClick={onIntegrity} disabled={!!busy}>
               Verificar integridade
             </Button>
+            {allowed("maintenance.migrate") && (
+              <Button type="button" className="emp-toolbar-btn px-3" onClick={onReconcile} disabled={!!busy} title="Recompõe lotes, movimentos e GMD a partir das pesagens (cria backup antes)">
+                {busy === "reconcile" ? (reconcileProgress?.total ? `Reconciliando… ${fmtInt(reconcileProgress.feitos)} de ${fmtInt(reconcileProgress.total)}` : "Reconciliando…") : "Reconciliar derivados"}
+              </Button>
+            )}
+            {busy === "reconcile" && (
+              <Button type="button" className="emp-toolbar-btn px-3" onClick={() => { if (reconcileSignal.current) reconcileSignal.current.aborted = true; }} title="Para ao fim do bloco atual; o que já foi feito fica gravado e consistente">
+                Cancelar
+              </Button>
+            )}
             <Button type="button" className="emp-toolbar-btn px-3" onClick={onQuick} disabled={!!busy}>
               Verificação rápida
             </Button>
@@ -759,19 +600,8 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
           )}
         </CardContent>
       </Card>
+      )}
       </>)}
-      <ConfirmActionDialog
-        open={Boolean(confirmation)}
-        onOpenChange={(nextOpen) => { if (!nextOpen) setConfirmation(null); }}
-        title={confirmation === 'restore' ? 'Restaurar backup' : 'Importar dados'}
-        description={confirmation === 'restore'
-          ? 'O banco atual será substituído somente depois que um backup físico de segurança for criado e validado. Backups de esquema anterior são convertidos automaticamente. Deseja continuar?'
-          : 'Antes da importação, o sistema criará e validará um backup físico automático. Deseja continuar?'}
-        confirmLabel={confirmation === 'restore' ? 'Restaurar' : 'Importar'}
-        destructive={confirmation === 'restore'}
-        busy={Boolean(busy)}
-        onConfirm={confirmation === 'restore' ? applyRestoreConfirmed : applyImportConfirmed}
-      />
     </ModeloBase1PageContainer>
   );
 }
@@ -784,7 +614,7 @@ export default function ManutencaoSistema() {
   const actor = useReportActor();
   const auth = useAuth();
   const query = new URLSearchParams(location.search);
-  const aba = query.get("aba") === "controle" ? "controle" : "sistema";
+  const aba = ["controle", "dados"].includes(query.get("aba")) ? query.get("aba") : "sistema";
   const base = createPageUrl("ManutencaoSistema");
   const report = aba === "controle" && query.get("r") ? resolveReportId(query.get("r")) : null;
   const reportOpen = Boolean(report?.definition && actor);
@@ -815,7 +645,7 @@ export default function ManutencaoSistema() {
         <ManutencaoSistemaPainel
           aba={aba}
           actor={actor}
-          onAba={(id) => navigate(id === "controle" ? `${base}?aba=controle` : base)}
+          onAba={(id) => navigate(id === "sistema" ? base : `${base}?aba=${id}`)}
           onOpenReport={(id) => navigate(`${base}?aba=controle&r=${encodeURIComponent(id)}`)}
         />
       </div>

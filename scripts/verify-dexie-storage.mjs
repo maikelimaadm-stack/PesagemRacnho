@@ -9,14 +9,24 @@ function assert(c, m) { if (!c) { console.error('FAIL:', m); process.exit(1); } 
 const imp = (rel) => import(pathToFileURL(join(root, rel)).href);
 
 const { ensureStorageReady, deleteDbForTests } = await imp('src/storage/indexedDb/db.js');
-const { DB_NAME, DB_VERSION, STORE_NAMES, STORES_V5, STORES_V6, STORES_V7, STORES_V8, SANITY_STORES, SESSAO_STATUS, LOTE_SITUACOES } = await imp('src/storage/indexedDb/schema.js');
+const { DB_NAME, DB_VERSION, STORE_NAMES, STORES_V5, STORES_V6, STORES_V7, STORES_V8, STORES_V9, V9_STORES, SANITY_STORES, SESSAO_STATUS, LOTE_SITUACOES } = await imp('src/storage/indexedDb/schema.js');
 const LEGACY_V5_SANITY_STORES = ['configuracoesSanidade', 'itensSanidade', 'sanidadesAnimal'];
 
 // Esquema v8 (ADR-049): aditivo sobre a v7, com nomes de sanidade diferentes dos da v5.
-assert(DB_VERSION === 8, `DB_VERSION vigente é 8 (${DB_VERSION})`);
+assert(DB_VERSION === 9, `DB_VERSION vigente é 9 (${DB_VERSION})`);
 const addedV8 = Object.keys(STORES_V8).filter((name) => !(name in STORES_V7));
 assert(JSON.stringify(addedV8) === JSON.stringify(['programasSanidade', 'medicamentos', 'aplicacoesSanidade']) && JSON.stringify(SANITY_STORES) === JSON.stringify(addedV8), `v8 acrescenta exatamente as três stores de sanidade (${addedV8.join(', ')})`);
 assert(Object.keys(STORES_V7).every((name) => STORES_V8[name] === STORES_V7[name]), 'v8 não altera índices das stores da v7 (STORES_V7 intacta)');
+// v9 (17-MODELO-DADOS-V9): aditiva — acrescenta as stores novas e SÓ acrescenta índices em animais e
+// movimentosAnimais (cada índice da v8 continua presente).
+const addedV9 = Object.keys(STORES_V9).filter((name) => !(name in STORES_V8));
+assert(JSON.stringify([...addedV9].sort()) === JSON.stringify([...V9_STORES].sort()), `v9 acrescenta exatamente as stores declaradas (${addedV9.join(', ')})`);
+const indicesDe = (spec) => spec.split(',').map((part) => part.trim());
+for (const name of Object.keys(STORES_V8)) {
+  if (STORES_V9[name] === STORES_V8[name]) continue;
+  assert(['animais', 'movimentosAnimais'].includes(name), `v9 só mexe nos índices de animais e movimentosAnimais (mexeu em ${name})`);
+  assert(indicesDe(STORES_V8[name]).every((idx) => indicesDe(STORES_V9[name]).includes(idx)), `v9 não remove índice de ${name}`);
+}
 assert(!Object.keys(STORES_V7).some((name) => SANITY_STORES.includes(name)), 'STORES_V7 não foi editada no lugar');
 assert(LEGACY_V5_SANITY_STORES.every((name) => !(name in STORES_V8)), 'nomes das stores de sanidade da v5 não são reutilizados');
 assert(STORES_V8.aplicacoesSanidade.includes('[animal_id+data]') && STORES_V8.aplicacoesSanidade.includes('&id'), 'aplicacoesSanidade indexa [animal_id+data] e id único');
@@ -100,7 +110,8 @@ await v7Only.table('pesagens').add({ id: 'p-v7', data_pesagem: '2026-09-01', pes
 const beforeV8 = JSON.stringify(await v7Only.table('pesagens').toArray());
 v7Only.close();
 const v8Db = await ensureStorageReady();
-assert(v8Db.verno === 8, `v7 aberto na v8 (verno=${v8Db.verno})`);
+assert(v8Db.verno === DB_VERSION, `v7 aberto na versão vigente (verno=${v8Db.verno})`);
+for (const name of V9_STORES) assert(await v8Db.table(name).count() === 0, `store v9 vazia após o upgrade estrutural: ${name}`);
 const v8Tables = v8Db.tables.map((t) => t.name);
 for (const name of addedV8) {
   assert(v8Tables.includes(name), `store v8 criada no upgrade v7 → v8: ${name}`);

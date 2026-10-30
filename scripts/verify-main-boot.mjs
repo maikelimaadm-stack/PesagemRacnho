@@ -96,6 +96,9 @@ try {
     'app:getDiagnosticInfo',
     'app:writeUserFile',
     'app:openDataFolder',
+    'app:critical-state-get',
+    'app:critical-state-set',
+    'app:critical-state-clear',
     'dialog:select-import-json',
   ];
   for (const ch of required) {

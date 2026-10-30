@@ -190,6 +190,9 @@ const hasField = (object, field) => Boolean(object) && Object.prototype.hasOwnPr
 
 let draftSequence = 0;
 const DRAFT_FIELDS = ['programa_sanidade_id', 'medicamento_id', 'dose', 'unidade', 'via_aplicacao', 'observacao'];
+// F09: dose pela posologia aprovada — campos do ANIMAL atual (peso usado, sugestão, confirmação). Nunca seguem
+// para o próximo animal nem para o sessionStorage do contexto: o próximo tem outro peso.
+const POSOLOGY_FIELDS = ['posologia_id', 'dose_sugerida', 'peso_base_kg', 'peso_base_data', 'peso_base_origem', 'dose_confirmada'];
 
 /** Rascunho de aplicação (valores de formulário em texto; `key` só identifica a linha na tela). */
 export function newSanityDraft(template = {}) {
@@ -197,7 +200,15 @@ export function newSanityDraft(template = {}) {
   const source = template && typeof template === 'object' ? template : {};
   const draft = { key: text(source.key) || `sanidade-${draftSequence}` };
   for (const field of DRAFT_FIELDS) draft[field] = text(source[field]);
+  for (const field of POSOLOGY_FIELDS) if (source[field] !== undefined && source[field] !== null && source[field] !== '') draft[field] = text(source[field]);
   return draft;
+}
+
+/** Remove a dose calculada (posologia, sugestão, peso e confirmação) — volta a ser dose manual. */
+export function clearPosologyFromDraft(draft) {
+  const next = { ...draft };
+  for (const field of POSOLOGY_FIELDS) delete next[field];
+  return next;
 }
 
 const draftHasProduct = (draft) => Boolean(text(draft?.programa_sanidade_id) || text(draft?.medicamento_id));
@@ -206,7 +217,12 @@ const draftIsEmpty = (draft) => DRAFT_FIELDS.every((field) => !text(draft?.[fiel
 /** Configuração que segue para o próximo animal: programa, medicamento, dose, unidade e via; observação nunca. */
 export function sanityDraftsAfterSave(drafts, sequencia) {
   if (sequencia !== true || !Array.isArray(drafts)) return [];
-  return drafts.filter(draftHasProduct).map((draft) => ({ ...newSanityDraft(draft), observacao: '' }));
+  return drafts.filter(draftHasProduct).map((draft) => {
+    const next = { ...clearPosologyFromDraft(newSanityDraft(draft)), observacao: '' };
+    // Dose calculada pelo peso do animal anterior não segue: o próximo recalcula.
+    if (draft.posologia_id) next.dose = '';
+    return next;
+  });
 }
 
 /** Dose sugerida no formato do campo (vírgula decimal) ou '' quando não há número. */
@@ -220,7 +236,7 @@ export function formatDoseInput(value) {
  * `suggestedDose` do sanityService), unidade e via. Sem cálculo de dose por peso.
  */
 export function applyMedicamentoToDraft(draft, medicamento, dosePadrao = null) {
-  const next = { ...newSanityDraft(draft), medicamento_id: text(medicamento?.id) };
+  const next = { ...clearPosologyFromDraft(newSanityDraft(draft)), medicamento_id: text(medicamento?.id) };
   if (!medicamento) return next;
   next.dose = formatDoseInput(dosePadrao);
   if (medicamento.unidade_padrao) next.unidade = text(medicamento.unidade_padrao);
@@ -252,6 +268,9 @@ export function buildSanityPayload(drafts, { programaIds = null, medicamentoIds 
     const doseTexto = text(draft.dose).trim();
     const dose = doseTexto ? parseBrazilianNumber(doseTexto) : null;
     if (doseTexto && !(Number.isFinite(dose) && dose > 0)) errors.push(`${rotulo}: a dose deve ser um número maior que zero.`);
+    const posologiaId = text(draft.posologia_id).trim();
+    if (posologiaId && text(draft.dose_confirmada) !== 'true') errors.push(`${rotulo}: confirme a dose aplicada (calculada pela posologia).`);
+    if (posologiaId && !(Number.isFinite(dose) && dose > 0)) errors.push(`${rotulo}: informe a dose aplicada.`);
     payload.push({
       programa_sanidade_id: programaId || null,
       medicamento_id: medicamentoId || null,
@@ -259,6 +278,14 @@ export function buildSanityPayload(drafts, { programaIds = null, medicamentoIds 
       unidade: text(draft.unidade).trim() || null,
       via_aplicacao: text(draft.via_aplicacao).trim() || null,
       observacao: text(draft.observacao).trim() || null,
+      ...(posologiaId ? {
+        posologia_id: posologiaId,
+        dose_sugerida: parseBrazilianNumber(text(draft.dose_sugerida)),
+        dose_confirmada: true,
+        peso_base_kg: parseBrazilianNumber(text(draft.peso_base_kg)),
+        peso_base_data: text(draft.peso_base_data) || null,
+        peso_base_origem: text(draft.peso_base_origem) || null,
+      } : {}),
     });
   });
   return { ok: errors.length === 0, errors, payload: errors.length ? [] : payload };
@@ -269,7 +296,7 @@ export function buildSanityPayload(drafts, { programaIds = null, medicamentoIds 
 
 function coerce(field, value) {
   if (BOOLEAN_FIELDS.has(field)) return value === true;
-  if (field === 'sanidadeAplicacoes') return Array.isArray(value) ? value.map((draft) => newSanityDraft(draft)) : [];
+  if (field === 'sanidadeAplicacoes') return Array.isArray(value) ? value.map((draft) => clearPosologyFromDraft(newSanityDraft(draft))) : [];
   return text(value);
 }
 

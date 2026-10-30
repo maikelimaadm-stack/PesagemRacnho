@@ -4,6 +4,10 @@ const fs = require('fs');
 const crypto = require('crypto');
 const { registerDialogIpc } = require('./ipc/dialogIpc.cjs');
 const { registerReportIpc } = require('./ipc/reportIpc.cjs');
+const { registerAttachmentIpc } = require('./ipc/attachmentIpc.cjs');
+const { registerBackupIpc } = require('./ipc/backupIpc.cjs');
+const { registerCriticalStateIpc } = require('./ipc/criticalState.cjs');
+const { wrapIpcHandler } = require('./ipcErrors.cjs');
 const { registerEquipmentSessionHandlers, registerEquipmentIpc, attachBluetoothHandlerToContents } = require('./ipc/equipmentIpc.cjs');
 const appLogger = require('./logging/appLogger.cjs');
 const appRuntime = require('./appRuntime.cjs');
@@ -194,7 +198,28 @@ app.whenReady().then(() => {
     return { ok: true, files: result };
   });
 
+  // Leitura de volta de um arquivo do app (verificação de backup — P21): mesma contenção da gravação
+  // (só dentro da pasta de dados do usuário, sem caminho vindo do renderer). Devolve conteúdo + SHA-256.
+  const MAX_READ_BYTES = 1024 * 1024 * 1024;
+  ipcMain.handle('app:readUserFile', (_e, { subdir, filename } = {}) => {
+    const { full } = containedUserFile(subdir, filename);
+    if (!fs.existsSync(full) || !fs.statSync(full).isFile()) {
+      throw Object.assign(new Error('Arquivo não encontrado'), { code: 'PATH_001' });
+    }
+    const size = fs.statSync(full).size;
+    if (size > MAX_READ_BYTES) throw Object.assign(new Error('Arquivo grande demais para verificar'), { code: 'PATH_002' });
+    const bytes = fs.readFileSync(full);
+    const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+    return { ok: true, path: full, size: bytes.length, sha256, content: bytes.toString('utf8') };
+  });
+
   registerDialogIpc(ipcMain, () => dataDir);
+  // Anexos de documentos (F16): pasta de dados do usuário, seleção pelo diálogo nativo.
+  registerAttachmentIpc(ipcMain, () => dataDir);
+  // Backup: cópia externa verificada e retenção (F21/F22).
+  registerBackupIpc(ipcMain, () => dataDir);
+  // R3-01: marcador durável de restauração crítica (sobrevive a fechar e reabrir o app).
+  registerCriticalStateIpc(ipcMain, () => dataDir, wrapIpcHandler);
   // Emissão de relatórios (PDF, impressão, salvar arquivo) — destino sempre escolhido no diálogo nativo.
   registerReportIpc(ipcMain);
 
