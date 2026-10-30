@@ -51,10 +51,10 @@ restaurável no app v9. Gate: `npm run migration:v9:verify` (no `test:quick`/`te
 | F01 | Entradas (Compra, Transferência recebida, Nascimento, Ajuste) | `modules/livestock` (operationRules, operationsDataAdapter, operationsService), tela Rebanho › Entradas | `scripts/verify-livestock-operations.mjs` (`npm run livestock:operations:verify`), `operationRules.test.js`, E2E passo 9 | entrada sem peso = PENDENTE_PESAGEM (sem 0 kg); Cadastro posterior adota a entrada; identificação em uso recusada sem gravar; nascimento com mãe | PASS |
 | F02 | Saídas (Venda, Abate, Transferência enviada, Morte, Doação, Ajuste) | idem, tela Rebanho › Saídas | `livestock:operations:verify` | Venda/Abate exigem peso; Morte sem peso = nulo; operação atômica; ajuste com justificativa; cancelamento reabre o animal. Carência no abate: F10 | PASS (carência → F10) |
 | F03 | Movimentações / livro de movimentos | idem + `weighingMovements` (`lotEvents`), tela Rebanho › Movimentações | `livestock:operations:verify` | movimentação sem pesagem; pesagem seguinte no lote novo não duplica; reconciliação idempotente; mudança de propriedade; ADR-058 | PASS |
-| F04 | Nascimento/idade com precisão conhecida | — | — | — | PENDENTE |
-| F05 | Idade × era × categoria produtiva × dentição | — | — | — | PENDENTE |
-| F06 | Identificadores / estoque de brincos | — | — | — | PENDENTE |
-| F07 | "Marcas a Fogo" (rótulo) | — | — | — | PENDENTE |
+| F04 | Nascimento/idade com precisão conhecida | `domain/ageModel.js` (ageAt, validateBirthInput), `animalProfileService`, Ficha › Identidade | `scripts/verify-animal-profile.mjs` (`npm run animal:profile:verify`), `ageModel.test.js`, E2E passo 10 | data exata/mês estimado (faixa)/idade declarada/desconhecida; idade muda com o calendário sem pesagem; correção auditada | PASS |
+| F05 | Separar idade, era, categoria produtiva e dentição | `ageModel` (eraAt, categoriaProdutiva, validateDentition), `age-policy:local`, Sistema › Parametrização | `animal:profile:verify`, `ageModel.test.js` | era por idade parametrizável; era legada (peso) intacta; categoria informada × sugerida (política desligada por padrão); dentição observada | PASS |
+| F06 | Identificadores / estoque de brincos | `domain/identifierStock.js`, `animalProfileDataAdapter`, Cadastros › Identificadores, Ficha (aplicar/trocar) | `animal:profile:verify`, `identifierStock.test.js`, E2E passo 10 | livro imutável; recebimento atômico; aplicação única (concorrente); oficial não reaproveitado; troca conserva animal; conferência física; backup | PASS |
+| F07 | Cadastro “Marcas a fogo” | rótulos (menu, página, campo) em `registryDefinitions`/`Marcas.jsx`/`Layout.jsx` | `registry:ui:verify`, E2E (campo "Marca a fogo") | store/chaves/importação/colunas de relatório inalterados (compatibilidade) | PASS |
 | F08 | Medicamentos com posologia estruturada | — | — | — | PENDENTE |
 | F09 | Painel de dose sugerida | — | — | — | PENDENTE |
 | F10 | Carência operacional | — | — | — | PENDENTE |
@@ -62,7 +62,7 @@ restaurável no app v9. Gate: `npm run migration:v9:verify` (no `test:quick`/`te
 | F12 | Calendário de águas/seca | — | — | — | PENDENTE |
 | F13 | Metas e cenários | — | — | — | PENDENTE |
 | F14 | Planejado × realizado | — | — | — | PENDENTE |
-| F15 | Rastreabilidade interna | — | — | — | PENDENTE |
+| F15 | Rastreabilidade interna completa | `domain/traceability.js`, Ficha › Dossiê CSV/JSON | `animal:profile:verify` | origem/documentos/propriedades/lotes/sanidade+carência/dentição/destino; desconhecidos listados; aviso de não-certificação | PASS |
 | F16 | Documentos/anexos offline | — | — | — | PENDENTE |
 | F17 | Conciliação de inventário | `domain/inventory.js`, tela Rebanho › Inventário (CSV) | `inventory.test.js`, `livestock:operations:verify`, E2E passo 9 | saldo pela data do evento; lote/propriedade com internas separadas; conferência por animal; cancelado não conta | PASS (categoria na data → F05) |
 | F18 | Painel do gestor | — | — | — | PENDENTE |

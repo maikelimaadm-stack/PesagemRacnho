@@ -103,7 +103,7 @@ try {
   // 2. Cadastro mestre: uma marca para o animal novo.
   await irPara(win, 'Marcas');
   await win.locator('.aux-new-button').first().click();
-  await win.getByLabel('Marca', { exact: true }).fill('E2E');
+  await win.getByLabel('Marca a fogo', { exact: true }).fill('E2E');
   await win.getByLabel('Abreviação').fill('E2E');
   await win.getByTitle('Salvar (Enter)').click();
   await win.locator('table tbody tr').filter({ hasText: 'E2E' }).first().waitFor();
@@ -171,7 +171,7 @@ try {
   // (a Relação já tinha carregado as marcas antes; não pode ficar com a lista velha).
   await irPara(win, 'Marcas');
   await win.locator('.aux-new-button').first().click();
-  await win.getByLabel('Marca', { exact: true }).fill('NOVA');
+  await win.getByLabel('Marca a fogo', { exact: true }).fill('NOVA');
   await win.getByLabel('Abreviação').fill('NOV');
   await win.getByTitle('Salvar (Enter)').click();
   await win.locator('table tbody tr').filter({ hasText: 'NOVA' }).first().waitFor();
@@ -256,7 +256,36 @@ try {
   await compras.first().waitFor({ timeout: 15000 });
   assert.equal((await compras.first().locator('td').innerText()).trim(), '2', 'inventário conta as 2 compras');
 
-  // 10. Relatórios abre sem erro.
+  // 10. Identificadores (F06) e Ficha do Animal (F04/F15): recebe 3 brincos; no 8002 (comprado sem peso, pendente)
+  // informa o nascimento por mês estimado e aplica um brinco — o saldo cai para 2 disponíveis.
+  await irPara(win, 'Identificadores');
+  await win.getByLabel('Prefixo').fill('E');
+  await win.getByLabel('Número inicial').fill('1');
+  await win.getByLabel('Número final').fill('3');
+  await win.getByRole('button', { name: 'Receber' }).click();
+  await win.getByText('Identificadores recebidos.').first().waitFor();
+  await irPara(win, 'FichaAnimal');
+  await win.getByLabel('Buscar animal').fill('8002');
+  await win.locator('.op-search-result').filter({ hasText: '8002' }).first().click();
+  const ficha = win.getByRole('region', { name: 'Identidade, idade e rastreabilidade' });
+  await ficha.waitFor();
+  await ficha.getByRole('button', { name: 'Corrigir nascimento/idade' }).click();
+  await ficha.getByLabel('Precisão do nascimento').selectOption('MES');
+  await ficha.getByLabel('Mês e ano de nascimento').fill('2025-03');
+  await ficha.getByLabel('Fonte do nascimento').selectOption('DECLARACAO_VENDEDOR');
+  await ficha.getByRole('button', { name: 'Salvar' }).click();
+  await win.getByText('Nascimento corrigido (auditado).').first().waitFor();
+  await ficha.getByText(/mês estimado/).first().waitFor();
+  await ficha.getByLabel('Código do identificador').fill('E1');
+  await ficha.getByRole('button', { name: 'Aplicar' }).click();
+  await win.getByText('Identificador aplicado.').first().waitFor();
+  await ficha.getByText('Brinco visual: E1').first().waitFor();
+  await irPara(win, 'Identificadores');
+  const disponiveis = win.locator('.rb-summary__item').filter({ hasText: 'Disponível' }).locator('strong');
+  await win.locator('.rb-table tbody tr').filter({ hasText: 'E1' }).filter({ hasText: 'Aplicado' }).first().waitFor();
+  assert.equal((await disponiveis.innerText()).trim(), '2', 'aplicar o brinco tira exatamente um do saldo');
+
+  // 11. Relatórios abre sem erro.
   await irPara(win, 'Relatorios');
   await win.getByText('Relatório de Pesagens Individuais').first().waitFor();
 

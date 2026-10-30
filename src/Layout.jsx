@@ -1,4 +1,4 @@
-import { ArrowLeftRight, BarChart3, CalendarCheck, ClipboardList, Contact, Database, Dna, Handshake, Layers, ListChecks, LogIn, LogOut, MapPin, PlusCircle, Settings, Skull, Syringe, Tag, Upload, Users } from "lucide-react";
+import { ArrowLeftRight, BarChart3, CalendarCheck, ClipboardList, Contact, Database, Dna, Handshake, Layers, ListChecks, LogIn, LogOut, MapPin, PlusCircle, ScanBarcode, Settings, SlidersHorizontal, Skull, Syringe, Tag, Upload, Users } from "lucide-react";
 import { ModeloBase1AppShell } from "@/components/modelobase1";
 import RequirePermission from "@/components/auth/RequirePermission";
 import { useAuth } from "@/components/auth/useAuth";
@@ -131,8 +131,8 @@ const NAV_ITEMS = [
   },
   {
     id: "pec-marcas",
-    title: "Marcas",
-    longTitle: "Marcas",
+    title: "Marcas a Fogo",
+    longTitle: "Marcas a Fogo",
     url: "Marcas",
     Icon: Tag,
     group: "cadastros",
@@ -145,6 +145,17 @@ const NAV_ITEMS = [
     longTitle: "Raças",
     url: "Racas",
     Icon: Dna,
+    group: "cadastros",
+    mobile: false,
+    permission: "registry.read",
+  },
+  // F06: estoque de brincos/RFID/SISBOV (livro movimentosIdentificadores); aplicar no animal é na Ficha.
+  {
+    id: "pec-identificadores",
+    title: "Identificadores",
+    longTitle: "Identificadores",
+    url: "Identificadores",
+    Icon: ScanBarcode,
     group: "cadastros",
     mobile: false,
     permission: "registry.read",
@@ -210,6 +221,17 @@ const NAV_ITEMS = [
     group: "sistema",
     mobile: false,
     permission: "settings.operational",
+  },
+  // F25: regras de negócio (idade/era/categorias nesta versão), cada seção salva isolada.
+  {
+    id: "pec-parametrizacao",
+    title: "Parametrização",
+    longTitle: "Parametrização",
+    url: "Parametrizacao",
+    Icon: SlidersHorizontal,
+    group: "sistema",
+    mobile: false,
+    permission: "settings.manage",
   },
   {
     id: "pec-manutencao",

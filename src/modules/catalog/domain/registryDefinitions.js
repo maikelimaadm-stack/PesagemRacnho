@@ -171,11 +171,13 @@ export const MARCAS = definicao({
   store: 'marcas',
   singular: 'marca',
   plural: 'marcas',
-  rotulo: 'Marcas',
-  descricao: 'Marcas a ferro que compõem a identidade visual dos animais.',
+  // F07: "Marcas a Fogo" (marca a ferro no animal) — só o rótulo muda; store, chaves e importação continuam
+  // como antes. Não confundir com marca/propriedade empresarial nem com tipo de identificador (brinco, RFID).
+  rotulo: 'Marcas a Fogo',
+  descricao: 'Marcas a fogo (ferro quente) que compõem a identidade visual dos animais. Brinco, RFID e SISBOV ficam em Identificadores.',
   temPadrao: true,
   campos: [
-    NOME('Marca'),
+    NOME('Marca a fogo'),
     campo('abreviacao', 'Abreviação', { compacto: true, ajuda: 'Até 6 caracteres; aparece nas grades.' }),
     campo('proprietario_parceiro_id', 'Proprietário', { tipo: 'select', opcoes: [], referencia: { store: 'parceiros', papel: 'PROPRIETARIO' } }),
     campo('propriedade_id', 'Propriedade', { tipo: 'select', opcoes: [], referencia: { store: 'propriedades' } }),
@@ -184,7 +186,7 @@ export const MARCAS = definicao({
     ATIVO,
   ],
   colunas: [
-    { id: 'nome', label: 'Marca' },
+    { id: 'nome', label: 'Marca a fogo' },
     { id: 'abreviacao', label: 'Abreviação' },
     { id: 'proprietario_parceiro_id', label: 'Proprietário', referencia: { store: 'parceiros' } },
     { id: 'padrao', label: 'Padrão', render: renderSimNao },

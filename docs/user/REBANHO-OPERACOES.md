@@ -96,3 +96,54 @@ em **Calcular**. A conta é:
 - **Conferência:** o saldo é comparado com o cadastro dos animais. As **divergências** aparecem por animal,
   com o motivo. **Nada é corrigido automaticamente**: corrija na operação ou na pesagem de origem.
 - **CSV** exporta o resumo, a lista de animais do saldo final e as divergências.
+
+## Idade, era, dentição e rastreabilidade (Ficha do Animal)
+
+Abra o animal em **Rebanho › Animal**. O quadro **Identidade, idade e rastreabilidade** mostra cada dado com
+sua **fonte** e sua **certeza**.
+
+- **Nascimento.** Use **Corrigir nascimento/idade** e escolha uma das formas:
+  - **Data exata**;
+  - **Mês e ano estimados**: a idade aparece como faixa, por exemplo "11 a 12 meses";
+  - **Idade declarada** em uma data, por exemplo "18 meses em 10/01/2026";
+  - **Desconhecida**.
+
+  Informe sempre a fonte (documento da compra, declaração do vendedor…). A correção fica registrada na
+  auditoria.
+- **Idade.** É calculada para o dia de hoje e muda sozinha com o calendário, sem precisar pesar o animal.
+  Quando o nascimento é desconhecido, aparece "Idade desconhecida": nenhuma data é inventada.
+- **Era.** É a faixa de **idade**, configurável em **Sistema › Parametrização**. A classe por **peso** dos
+  lançamentos antigos continua guardada como histórico e aparece separada.
+- **Categoria produtiva** (garrote, novilha, matriz…). Você grava na ficha. Se a Parametrização ligar a
+  sugestão, o sistema sugere uma pela idade e pelo sexo; a categoria gravada sempre prevalece.
+- **Dentição.** Registre o que foi **observado** (0, 2, 4, 6 ou 8 dentes) e a data. A dentição nunca é deduzida
+  da idade.
+- **Identificadores.** Aplique um brinco, RFID ou SISBOV ao animal ou faça a **troca** (perdido, danificado
+  ou retirado). O animal continua o mesmo, e o código antigo fica no histórico.
+- **Dossiê.** Os botões **Dossiê CSV** e **JSON** exportam origem, documentos, propriedades, lotes, sanidade
+  com carência, dentição, destino e a lista do que **não foi informado**. O dossiê é interno: **não é
+  certificado** SISBOV, EUDR nem documento oficial.
+
+## Identificadores (estoque de brincos)
+
+Abra **Cadastros › Identificadores**.
+
+- **Receber:** escolha o tipo e informe uma faixa (prefixo, início e fim) ou uma lista de códigos.
+  - Se algum código já estiver no estoque, o recebimento inteiro é cancelado.
+  - "SN" não é código de estoque.
+  - O SISBOV tem 15 dígitos.
+- **Situação de cada código:**
+  - Disponível, Reservado ou Aplicado;
+  - Perdido, Danificado, Devolvido ou Bloqueado.
+
+  O saldo é contado pelo histórico de cada código.
+- **Aplicar no animal:** é feito na Ficha do Animal, e o saldo muda uma única vez. Um código **SISBOV ou RFID**
+  que já foi aplicado nunca volta ao estoque.
+- **Conferência física:** cole os códigos contados no almoxarifado. A tela mostra o que **falta** e o que
+  **sobra**. Nada é ajustado sozinho.
+
+## Marcas a Fogo
+
+O cadastro **Marcas** passou a se chamar **Marcas a Fogo**, que é a marca a ferro no animal. Os dados e as
+planilhas de importação continuam iguais, e a coluna **Marca** dos modelos continua aceita. Brinco, RFID e
+SISBOV ficam em **Identificadores**.

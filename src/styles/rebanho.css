@@ -80,3 +80,11 @@
   .rb-control--compact { max-width: none; flex: 1 1 140px; }
   .rb-inline { flex-direction: column; align-items: stretch; }
 }
+.rb-profile .rb-subsection { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--mb1-border, #e7eaee); display: flex; flex-direction: column; gap: 6px; }
+.rb-inline--wrap { flex-wrap: wrap; }
+.rb-inline--wrap .rb-control--compact { flex: 0 1 170px; }
+.rb-summary { display: flex; flex-wrap: wrap; gap: 6px; }
+.rb-summary__item { display: inline-flex; flex-direction: column; min-width: 92px; padding: 6px 10px; border: 1px solid var(--mb1-border, #e7eaee); border-radius: 8px; background: var(--mb1-bg-card, #fff); }
+.rb-summary__item strong { font-size: 16px; color: var(--mb1-text-1, #111827); }
+.rb-summary__item span { font-size: 11px; color: var(--mb1-text-2, #6b7280); }
+.rb-textarea { width: 100%; min-height: 70px; padding: 6px 8px; border: 1px solid var(--mb1-border, #e7eaee); border-radius: 6px; background: var(--mb1-bg-field, #f1f3f4); color: var(--mb1-text-1, #111827); font: inherit; font-size: 12px; }

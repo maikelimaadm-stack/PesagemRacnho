@@ -198,3 +198,49 @@ essa identificação pertence a **um** animal.
 - Retorno de um animal que já saiu do rebanho não é aceito na Entrada.
 - A categoria no filtro do inventário é a **atual** do animal; a era e a categoria na data entram com F05.
 - Pasto não tem cadastro próprio; a movimentação é por lote e propriedade.
+
+## ADR-059 — Idade com precisão, era por idade, dentição, livro de identificadores e dossiê (F04–F07, F15)
+
+**Decisão.**
+- **Nascimento.** O animal guarda:
+  - `nascimento_data`;
+  - `nascimento_precisao` (DIA, MES, IDADE_DECLARADA ou DESCONHECIDA);
+  - `nascimento_fonte`;
+  - `idade_declarada_meses` e `idade_referencia_data`.
+- **Idade.** É calculada na hora para a data pedida (`ageAt`), em meses completos por aniversário. O fim de mês
+  conta como aniversário de quem nasceu num dia que aquele mês não tem.
+  - **Mês estimado** dá uma faixa (mínimo e máximo).
+  - **Idade declarada** soma os meses desde a data de referência.
+  - **Sem dado**, a idade é desconhecida.
+  - A idade nunca é gravada como fato e nunca vem do peso.
+- **Era.** É o rótulo da faixa de idade, vindo da política `age-policy:local`. Essa é uma chave nova e aditiva:
+  não duplica as cinco chaves existentes. O campo `era` legado (classe por peso) não muda.
+- **Categoria produtiva.** A informada no animal prevalece. A sugestão por sexo e faixa só existe com a
+  política ligada, e vem desligada por padrão.
+- **Dentição.** Fica em `avaliacoesDenticao` (0, 2, 4, 6 ou 8 dentes, `origem OBSERVADA`), com cancelamento
+  auditado.
+- **Identificadores (F06).** Usam o livro imutável `movimentosIdentificadores`: a situação de um código é a da
+  última ação válida (`identifierStock.TRANSICOES`).
+  - **Recebimento:** por faixa, atômico.
+  - **Aplicação:** grava um movimento e um `animalIdentificadores` na mesma transação. Aplicações
+    concorrentes são serializadas.
+  - **SISBOV e RFID:** um ativo por animal; um código já aplicado nunca volta a ficar disponível.
+  - **Troca:** fecha o identificador antigo com motivo e mantém o `animal_id`.
+  - **Conferência física:** só compara; não ajusta nada.
+- **Marcas a Fogo (F07).** Só os rótulos da tela, do menu e do campo do cadastro mudam. A store `marcas`, as
+  chaves, as colunas dos relatórios e os cabeçalhos de importação não mudam, por compatibilidade.
+- **Dossiê (F15).** É montado de forma pura (`traceability.buildDossier`). A carência é a data da aplicação
+  mais os dias do medicamento ou do snapshot da posologia; sem esse dado, ela é desconhecida, nunca zero. O
+  que não é sabido vai para a lista de desconhecidos. O dossiê traz o aviso explícito de que não é
+  certificação.
+- **Permissões.** Valem as ações existentes, checadas no serviço:
+  - `animal.read` para ler;
+  - `weighing.write` para dentição e aplicação;
+  - `weighing.edit` para corrigir;
+  - `registry.write` para receber, devolver, bloquear e liberar;
+  - `settings.manage` para a política.
+
+**Limites.**
+- A identificação **principal** (número visual da pesagem) continua sendo corrigida pela edição do Cadastro. O
+  estoque controla os brincos e códigos adicionais.
+- A propriedade de nascimento e a geolocalização da origem ficam como "não informado" até haver dado real.
