@@ -100,7 +100,28 @@ Capturas (dados sintéticos, sem usuário real) em `telas/`:
 
 ## Gates
 
-GATES_INTEGRACAO
+| Comando | Resultado | Tempo |
+|---|---|---|
+| `npm ci` | OK | 11s |
+| `npm run lint` | OK | 13s |
+| `npm run test:unit` | OK | 12s |
+| `npm run build` | OK | 11s |
+| `xvfb-run -a npm run test:quick` | OK | 109s |
+| `xvfb-run -a npm run test:full` | OK | 145s |
+| `xvfb-run -a npm run e2e:electron:verify` | OK | 27s |
+| `xvfb-run -a npm run e2e:launch-integration:verify` | OK | 60s |
+| `npm run launch:operations:verify` | OK | 0s |
+| `npm run storage:all:verify` | OK | 23s |
+| `npm run migration:v9:verify` | OK | 0s |
+| `npm run backup:recovery:verify` | OK | 0s |
+| `npm run restore:critical-restart:verify` | OK | 2s |
+| `npm run restore:content-integrity:verify` | OK | 1s |
+| `npm run weighing:integrity:verify` | OK | 1s |
+| `npm run livestock:operations:verify` | OK | 0s |
+| `npm run sanity:posology:verify` | OK | 1s |
+| `npm run cross:surface:verify` | OK | 0s |
+
+Rodados em sequência, depois de um `npm ci` limpo, no código de `9a4aae1` (o commit seguinte só regera uma captura e acrescenta esta tabela). O `test:full` não carrega o benchmark de 16 min. CI da PR (Testes, com o E2E da integração, e Gerar instalador) verde em `9a4aae1`; o HEAD final está na descrição da PR.
 
 ## Limites reais
 
