@@ -125,7 +125,25 @@ Detalhes do T10, no Electron real:
 
 ## Gates
 
-GATES_CANCEL_R1
+| Comando | Resultado | Tempo |
+|---|---|---|
+| `npm ci` | OK | 20s |
+| `npm run lint` | OK | 12s |
+| `npm run test:unit` | OK | 12s |
+| `npm run build` | OK | 12s |
+| `xvfb-run -a npm run test:quick` | OK | 111s |
+| `xvfb-run -a npm run test:full` | OK | 166s |
+| `xvfb-run -a npm run e2e:electron:verify` | OK | 27s |
+| `xvfb-run -a npm run e2e:launch-integration:verify` | OK | 62s |
+| `npm run launch:cancel-safety:verify` | OK | 1s |
+| `npm run launch:operations:verify` | OK | 1s |
+| `npm run livestock:operations:verify` | OK | 0s |
+| `npm run weighing:integrity:verify` | OK | 1s |
+| `npm run sanity:posology:verify` | OK | 0s |
+| `npm run weighing:repesagem:verify` | OK | 1s |
+| `npm run animal:orphan-cleanup:verify` | OK | 0s |
+
+Rodados em sequência, depois de `npm ci` limpo, no código de `a5dbe0d` (os commits seguintes só trazem documentação e capturas regeneradas pelo E2E). O `test:full` não carrega o benchmark pesado. CI do HEAD final na descrição da PR #5.
 
 ## Risco residual
 
