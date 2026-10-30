@@ -81,7 +81,8 @@ export default function Inventario() {
       ...result.animais_no_saldo_final.map((a) => [a.numero_animal || '(sem identificação)', a.marca || '', a.sexo || '', a.raca || '']),
       [],
       ...(result.limitacoes?.length ? [['Limitações'], ...result.limitacoes.map((l) => [l]), []] : []),
-      ...(result.conferencia.indeterminados?.length ? [['Local indeterminado'], ...result.conferencia.indeterminados.map((d) => [d.numero_animal]), []] : []),
+      ...(result.conferencia.indeterminados_no_fim?.length ? [['Local indeterminado na data final'], ...result.conferencia.indeterminados_no_fim.map((d) => [d.numero_animal]), []] : []),
+      ...(result.conferencia.incerteza_historica?.length ? [['Incerteza histórica (local conhecido no fim)'], ...result.conferencia.incerteza_historica.map((d) => [d.numero_animal]), []] : []),
       ['Divergências'],
       ['Número', 'Motivo'],
       ...result.conferencia.divergencias.map((d) => [d.numero_animal, d.motivo]),
@@ -137,12 +138,21 @@ export default function Inventario() {
               {result.dimensao ? <p className="rb-note">Por {result.dimensao === 'lote_id' ? 'lote' : 'propriedade'} na data de cada movimento: transferências internas aparecem separadas e não contam como compra ou venda.</p> : null}
               {result.limitacoes?.length ? <ul className="rb-alerts rb-alerts--warn" aria-label="Limitações do cálculo">{result.limitacoes.map((l) => <li key={l}>{l}</li>)}</ul> : null}
             </section>
-            {result.conferencia.indeterminados?.length ? (
-              <section className="rb-card" aria-label="Local indeterminado">
-                <h3 className="rb-subtitle">Local indeterminado ({fmtInt(result.conferencia.indeterminados.length)})</h3>
-                <p className="rb-note">Sem propriedade registrada na entrada nem movimentação interna: não dá para afirmar onde estavam no período, então não entram no saldo desta propriedade.</p>
+            {result.conferencia.indeterminados_no_fim?.length ? (
+              <section className="rb-card" aria-label="Local indeterminado na data final">
+                <h3 className="rb-subtitle">Local indeterminado em {fmtDate(result.periodo.to)} ({fmtInt(result.conferencia.indeterminados_no_fim.length)})</h3>
+                <p className="rb-note">Sem propriedade registrada até a data final: não entram no saldo de nenhuma propriedade. A soma das propriedades mais esta lista dá o rebanho total.</p>
                 <table className="rb-table"><thead><tr><th>Animal</th></tr></thead>
-                  <tbody>{result.conferencia.indeterminados.slice(0, 500).map((d) => <tr key={d.animal_id}><td>{d.numero_animal}</td></tr>)}</tbody>
+                  <tbody>{result.conferencia.indeterminados_no_fim.slice(0, 500).map((d) => <tr key={d.animal_id}><td>{d.numero_animal}</td></tr>)}</tbody>
+                </table>
+              </section>
+            ) : null}
+            {result.conferencia.incerteza_historica?.length ? (
+              <section className="rb-card" aria-label="Incerteza histórica">
+                <h3 className="rb-subtitle">Incerteza histórica ({fmtInt(result.conferencia.incerteza_historica.length)})</h3>
+                <p className="rb-note">Passaram parte do período sem propriedade registrada. No fim do período o local é conhecido e já está no saldo. É só um alerta, não uma divergência.</p>
+                <table className="rb-table"><thead><tr><th>Animal</th></tr></thead>
+                  <tbody>{result.conferencia.incerteza_historica.slice(0, 500).map((d) => <tr key={d.animal_id}><td>{d.numero_animal}</td></tr>)}</tbody>
                 </table>
               </section>
             ) : null}

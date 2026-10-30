@@ -123,4 +123,54 @@ describe('inventory', () => {
       expect(inv.limitacoes.some((l) => /categoria ATUAL/.test(l))).toBe(true);
     });
   });
+
+  describe('R2-04: indeterminado no período ≠ indeterminado na data final', () => {
+    // K: entra em 10/01 SEM destino e vai para P2 em 05/02 (movimentação sem origem registrada).
+    // L: entra em 10/01 SEM destino e nunca recebe local.
+    // M: entra em P1 com destino; sai (venda) em 20/03.
+    const fontesR2 = () => ({
+      animais: [
+        { id: 'K', numero_animal: 'K', propriedade_id: 'P2' },
+        { id: 'L', numero_animal: 'L', propriedade_id: 'P1' },
+        { id: 'M', numero_animal: 'M', propriedade_id: 'P1' },
+      ],
+      movimentos: [
+        mov('ek', 'K', 'ENTRADA', '2026-01-10', 'Entrada'),
+        mov('ik', 'K', 'INTERNA', '2026-02-05', 'Mudança de propriedade', { propriedade_destino_id: 'P2' }),
+        mov('el', 'L', 'ENTRADA', '2026-01-10', 'Entrada'),
+        mov('em', 'M', 'ENTRADA', '2026-01-10', 'Compra', { propriedade_destino_id: 'P1' }),
+        mov('sm', 'M', 'SAIDA', '2026-03-20', 'Venda'),
+      ],
+      operacoes: [], animalLotes: [], cadastros: [], propriedadesIds: ['P1', 'P2'],
+    });
+    const noFim = (inv) => (inv.conferencia.indeterminados_no_fim ?? inv.conferencia.indeterminados).map((a) => a.animal_id).sort();
+    const inv = (from, to, propriedade_id) => computeInventory(fontesR2(), { from, to, filtros: propriedade_id ? { propriedade_id } : {} });
+
+    it('fim de março: K está em P2 (saldo 1) e não é indeterminado no fim; L continua indeterminado', () => {
+      const p2 = inv('2026-01-01', '2026-03-31', 'P2');
+      expect(p2.saldo_final).toBe(1);
+      expect(noFim(p2)).toEqual(['L']);
+      // Incerteza histórica de K (janeiro) aparece em coluna separada, não como divergência do saldo.
+      expect((p2.conferencia.incerteza_historica || []).map((a) => a.animal_id).sort()).toEqual(['K']);
+    });
+
+    it('janeiro: K e L indeterminados no fim do período', () => {
+      expect(noFim(inv('2026-01-01', '2026-01-31', 'P2'))).toEqual(['K', 'L']);
+    });
+
+    it('conciliação sem contar duas vezes: P1 + P2 + indeterminados no fim = rebanho total, em várias datas', () => {
+      for (const [from, to] of [['2026-01-01', '2026-01-31'], ['2026-01-01', '2026-03-31'], ['2026-02-01', '2026-02-28'], ['2026-03-01', '2026-03-31']]) {
+        const total = inv(from, to).saldo_final;
+        const p1 = inv(from, to, 'P1');
+        const p2 = inv(from, to, 'P2');
+        expect(p1.saldo_final + p2.saldo_final + noFim(p2).length).toBe(total);
+      }
+    });
+
+    it('saída posterior e consulta em data anterior não usam a propriedade atual', () => {
+      expect(inv('2026-02-01', '2026-02-28', 'P1').saldo_final).toBe(1); // M ainda estava em P1
+      expect(inv('2026-03-01', '2026-03-31', 'P1').saldo_final).toBe(0); // M saiu
+      expect(inv('2026-02-01', '2026-02-28', 'P1').animais_no_saldo_final.map((a) => a.id)).toEqual(['M']); // L (atual P1) não entra
+    });
+  });
 });

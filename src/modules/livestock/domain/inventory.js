@@ -137,7 +137,11 @@ export function computeInventory(fontes, { from, to, filtros = {} } = {}) {
   const divergencias = [];
   const presentesNoFim = [];
   let presentesPeloCadastro = 0;
-  const indeterminados = [];
+  // R2-04: duas listas diferentes. `indeterminadosNoFim`: sem local conhecido EXATAMENTE na data final — é a
+  // categoria da conciliação (P1 + P2 + … + indeterminados no fim = rebanho). `incertezaHistorica`: passou parte do
+  // período sem local, mas tem local conhecido no fim — só alerta, não é divergência do saldo.
+  const indeterminadosNoFim = [];
+  const incertezaHistorica = [];
 
   for (const animal of animais) {
     if (!atributo(animal)) continue;
@@ -170,9 +174,9 @@ export function computeInventory(fontes, { from, to, filtros = {} } = {}) {
     }
 
     const todas = locationStays(dimensao, animal, ledger, animalLotes, { propriedadeUnica });
-    if (todas.some((s) => s.valor === LOCAL_INDETERMINADO && s.inicio <= to && (!s.fim || s.fim > from))) {
-      indeterminados.push({ animal_id: animal.id, numero_animal: animal.numero_animal || '(sem identificação)' });
-    }
+    const ref = { animal_id: animal.id, numero_animal: animal.numero_animal || '(sem identificação)' };
+    if (stayAt(todas, LOCAL_INDETERMINADO, to)) indeterminadosNoFim.push(ref);
+    else if (todas.some((s) => s.valor === LOCAL_INDETERMINADO && s.inicio <= to && (!s.fim || s.fim > from))) incertezaHistorica.push(ref);
     const stays = todas.filter((s) => s.valor === local);
     if (!stays.length) continue;
     if (stayAt(stays, local, antes)) saldoInicial += 1;
@@ -194,7 +198,8 @@ export function computeInventory(fontes, { from, to, filtros = {} } = {}) {
   // R06: o que o inventário NÃO consegue afirmar fica visível no resultado.
   const limitacoes = [];
   if (filtros.categoria_id) limitacoes.push('Filtro de categoria usa a categoria ATUAL de cada animal, não a da data; a era na data está no painel de Desempenho.');
-  if (indeterminados.length) limitacoes.push(`${indeterminados.length} animal(is) sem propriedade registrada em parte do período (local INDETERMINADO): não entram no saldo desta propriedade. Registre a propriedade de destino na entrada ou uma movimentação interna.`);
+  if (indeterminadosNoFim.length) limitacoes.push(`${indeterminadosNoFim.length} animal(is) sem propriedade conhecida na data final (local INDETERMINADO): não entram no saldo de nenhuma propriedade. Registre a propriedade de destino na entrada ou uma movimentação interna.`);
+  if (incertezaHistorica.length) limitacoes.push(`${incertezaHistorica.length} animal(is) passaram parte do período sem propriedade registrada (incerteza histórica); no fim do período o local é conhecido e já está no saldo.`);
   const totalEntradas = Object.values(entradas).reduce((a, b) => a + b, 0);
   const totalSaidas = Object.values(saidas).reduce((a, b) => a + b, 0);
   const saldoFinal = saldoInicial + totalEntradas - totalSaidas + internas.recebidas - internas.enviadas;
@@ -213,9 +218,12 @@ export function computeInventory(fontes, { from, to, filtros = {} } = {}) {
     conferencia: {
       presentes_no_livro: presentesNoFim.length,
       presentes_pelo_cadastro: presentesPeloCadastro,
-      fecha: saldoFinal === presentesNoFim.length && !divergencias.length && presentesNoFim.length === presentesPeloCadastro && !indeterminados.length,
+      fecha: saldoFinal === presentesNoFim.length && !divergencias.length && presentesNoFim.length === presentesPeloCadastro && !indeterminadosNoFim.length,
       divergencias,
-      indeterminados,
+      indeterminados_no_fim: indeterminadosNoFim,
+      incerteza_historica: incertezaHistorica,
+      // Compatibilidade (R1): `indeterminados` = os do fim (categoria da conciliação).
+      indeterminados: indeterminadosNoFim,
     },
     limitacoes,
     animais_no_saldo_final: presentesNoFim.map((animal) => ({ id: animal.id, numero_animal: animal.numero_animal || null, marca: animal.marca || null, sexo: animal.sexo || null, raca: animal.raca || null })),
