@@ -21,6 +21,7 @@ Este arquivo diz onde a missão está e como continuar sem refazer nada.
 | B4 | F16 | feito | B4 |
 | B5 | F19–F26; fecha P14, P20, P22, P23 e P26 | feito | B5 |
 | Final | versão 1.6.0 (sem tag), docs, rollback, desempenho | feito | final-hardening |
+| R1 | auditoria corretiva R01–R09 (`AUDITORIA-CORRETIVA-R1.md`) | feito; R04 Windows bloqueado (homologação) | `fix(R1-R0x)`, `perf(R1-R08)`, `test(R1-R09)` |
 
 A situação item a item (os 52, com evidência) está em `MATRIZ-52-ITENS.md`.
 
@@ -31,6 +32,9 @@ A situação item a item (os 52, com evidência) está em `MATRIZ-52-ITENS.md`.
   foi feita e **não deve ser declarada**.
 - **P18 — proteção da branch main.** É uma configuração administrativa do GitHub, proibida pelo prompt da
   missão. A recomendação está em `RECOMENDACAO-P18.md`.
+- **R04 — volta para a 1.5.x no Windows:** os dados estão verificados (`npm run rollback:v8:verify`). Os passos
+  de instalador e de `PESAGENS_USER_DATA_DIR` no Windows real estão **BLOQUEADOS PARA HOMOLOGAÇÃO WINDOWS**. O
+  roteiro está em `MIGRACAO-ROLLBACK.md`.
 - **Merge, tag e release:** somente pelo proprietário.
 
 ## Como verificar
@@ -55,6 +59,19 @@ Gates novos da missão (todos dentro de `test:quick` e `test:full`):
 | `analytics:forecast:verify` | desempenho, metas e projeção (B3) |
 | `documents:backup:verify` | documentos e anexos no backup (B4) |
 | `backup:center:verify` | central de backup (B5) |
+| `safety:backup:verify` | R01: backup de segurança verificado; falha não altera nada |
+| `restore:preflight:verify` | R02: anexos conferidos antes da troca da base; seleção vinculada; compensação |
+| `backup:availability:verify` | R03: verificado × disponível × íntegro agora × cópia externa válida |
+| `reconcile:derivations:verify` | R08: reconciliar idempotente e cancelável |
+| `cross:surface:verify` | R09: regressões entre telas |
+
+Verificações pesadas, fora do `test:quick`:
+
+| Script | O que mede |
+|---|---|
+| `rollback:v8:verify` | R04, com o código real da 1.5.6 |
+| `perf:reconcile:electron` (com `xvfb-run -a` no Linux) | R08, no Electron real |
+| `perf:reconcile:node` | R08, no fake-indexeddb |
 
 O E2E (`scripts/verify-electron-e2e.mjs`) percorre, no Electron real:
 
