@@ -7,6 +7,7 @@ import { deleteDbForTests } from '../../src/storage/indexedDb/db.js';
 import storage from '../../src/storage/storageAdapter.js';
 import { brandService, breedService, categoryService } from '../../src/modules/catalog/application/registryServices.js';
 import { ROW_STATUS, analyzeImport, applyImport, readImportFile } from '../../src/modules/import/application/importService.js';
+import { conferirConteudoRestaurado } from '../../src/storage/indexedDb/backup/contentIntegrity.js';
 
 const agora = () => (globalThis.performance ? globalThis.performance.now() : Date.now());
 function check(cond, msg = 'conferência falhou') { if (!cond) throw new Error(`import-bench: ${msg}`); }
@@ -84,6 +85,16 @@ export async function runImportBench(ANIMALS = 12000, EVENTS_PER_ANIMAL = 3, { l
   igual(retroResult.manejosCriados, retroLines.length);
   igual(retroResult.seriesRecalculadas, retroLines.length, 'só as séries afetadas');
 
+  // R3-02: custo da conferência de conteúdo pós-restauração na mesma massa (o "backup" é o retrato das stores).
+  const retrato = await time('retrato das stores (equivale ao backup lido)', async () => {
+    const stores = {};
+    for (const table of db.tables) stores[table.name] = await table.toArray();
+    return stores;
+  });
+  const conferencia = await time('conferirConteudoRestaurado (R3-02)', () => conferirConteudoRestaurado(db, retrato));
+  check(conferencia.ok, `conferência de conteúdo divergiu: ${JSON.stringify(conferencia.divergencias.slice(0, 3))}`);
+  log(`[perf] conferência por store: ${Object.entries(conferencia.impressoes).filter(([, v]) => v.registros).map(([k, v]) => `${k}=${v.registros}/${v.ms}ms${JSON.stringify(v.etapas)}`).join(' ')}`);
+  igual(conferencia.impressoes.pesagens.conferidos, ANIMALS * EVENTS_PER_ANIMAL + retroLines.length, 'pesagens conferidas');
 
   await deleteDbForTests();
   return {

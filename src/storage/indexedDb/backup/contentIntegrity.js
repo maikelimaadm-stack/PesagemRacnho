@@ -25,12 +25,12 @@ const TOLERANCIA_MIGRACAO = {
 const ACRESCIMO_PERMITIDO_NA_MIGRACAO = new Set(['auditoria']);
 const MAX_DIVERGENCIAS = 20;
 
+// Serialização nativa (rápida) com as chaves de cada objeto em ordem; propriedades `undefined` somem como no JSON.
+const ordenaChaves = (_k, v) => (v && typeof v === 'object' && !Array.isArray(v)
+  ? Object.keys(v).sort().reduce((acc, k) => { acc[k] = v[k]; return acc; }, Object.create(null))
+  : v);
 function canonico(valor) {
-  if (Array.isArray(valor)) return `[${valor.map(canonico).join(',')}]`;
-  if (valor && typeof valor === 'object') {
-    return `{${Object.keys(valor).filter((k) => valor[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canonico(valor[k])}`).join(',')}}`;
-  }
-  return JSON.stringify(valor ?? null);
+  return JSON.stringify(valor ?? null, ordenaChaves) ?? 'null';
 }
 
 function preparar(store, row, { migracao }) {
@@ -47,6 +47,7 @@ function preparar(store, row, { migracao }) {
   return copia;
 }
 
+const agora = () => (globalThis.performance ? globalThis.performance.now() : Date.now());
 const identidade = (row) => (row?.id != null ? `id:${row.id}` : row?.key != null ? `key:${row.key}` : null);
 
 async function sha256Hex(texto) {
@@ -60,28 +61,31 @@ async function sha256Hex(texto) {
  * Devolve { ok, divergencias: [{ store, id, motivo }], impressoes: { store: { esperado, banco, registros } }, ms }.
  */
 export async function conferirConteudoRestaurado(db, backupStores, { migracao = false } = {}) {
-  const inicio = globalThis.performance ? globalThis.performance.now() : Date.now();
+  const inicio = agora();
   const divergencias = [];
   const impressoes = {};
   const nomesBanco = new Set(db.tables.map((t) => t.name));
   for (const [store, linhasBackup] of Object.entries(backupStores || {})) {
     if (STORES_IGNORADAS.has(store) || !Array.isArray(linhasBackup) || !nomesBanco.has(store)) continue;
+    const inicioStore = agora();
     const filtra = store === 'appSettings' ? (r) => !CHAVES_TECNICAS.some((re) => re.test(String(r?.key))) : () => true;
-    const esperado = linhasBackup.filter(filtra).map((r) => preparar(store, r, { migracao }));
-    const banco = (await db.table(store).toArray()).filter(filtra).map((r) => preparar(store, r, { migracao }));
+    // Cada registro é preparado e serializado UMA vez; comparação e impressão digital usam a mesma forma canônica.
+    const serializa = (r) => { const p = preparar(store, r, { migracao }); return { id: identidade(p), c: canonico(p) }; };
+    const esperado = linhasBackup.filter(filtra).map(serializa);
+    const t1 = agora();
+    const lidos = await db.table(store).toArray();
+    const t2 = agora();
+    const banco = lidos.filter(filtra).map(serializa);
+    const t3 = agora();
     const porId = new Map();
     const semId = new Map();
-    for (const r of banco) {
-      const id = identidade(r);
-      const c = canonico(r);
+    for (const { id, c } of banco) {
       if (id) porId.set(id, c);
       else semId.set(c, (semId.get(c) || 0) + 1);
     }
     let encontrados = 0;
-    for (const r of esperado) {
+    for (const { id, c } of esperado) {
       if (divergencias.length >= MAX_DIVERGENCIAS) break;
-      const id = identidade(r);
-      const c = canonico(r);
       if (id) {
         if (!porId.has(id)) divergencias.push({ store, id, motivo: 'registro do backup ausente no banco' });
         else if (porId.get(id) !== c) divergencias.push({ store, id, motivo: 'conteúdo diferente do backup' });
@@ -93,13 +97,21 @@ export async function conferirConteudoRestaurado(db, backupStores, { migracao = 
         divergencias.push({ store, id: null, motivo: 'registro do backup ausente no banco' });
       }
     }
+    porId.clear();
+    semId.clear();
     const acrescimoOk = migracao && ACRESCIMO_PERMITIDO_NA_MIGRACAO.has(store);
     if (!acrescimoOk && banco.length > esperado.length && divergencias.length < MAX_DIVERGENCIAS) {
       divergencias.push({ store, id: null, motivo: `${banco.length - esperado.length} registro(s) a mais no banco` });
     }
-    const ordena = (lista) => lista.map(canonico).sort().join('\n');
-    impressoes[store] = { registros: esperado.length, esperado: await sha256Hex(ordena(esperado)), banco: await sha256Hex(ordena(banco)), conferidos: encontrados };
+    // Impressão: canônicos ordenados pela identidade (curta) — ou pelo próprio canônico, sem identidade. Se a store
+    // conferiu inteira (mesmos registros, mesmo conteúdo), banco e backup são o mesmo multiconjunto: uma conta só.
+    const chave = (x) => x.id ?? `~${x.c}`;
+    const impressao = (lista) => sha256Hex(lista.slice().sort((a, b) => (chave(a) < chave(b) ? -1 : chave(a) > chave(b) ? 1 : 0)).map((x) => x.c).join('\n'));
+    const t4 = agora();
+    const hashEsperado = await impressao(esperado);
+    const identicos = encontrados === esperado.length && banco.length === esperado.length;
+    impressoes[store] = { registros: esperado.length, esperado: hashEsperado, banco: identicos ? hashEsperado : await impressao(banco), conferidos: encontrados, ms: Math.round(agora() - inicioStore),
+      etapas: { serializaBackup: Math.round(t1 - inicioStore), leitura: Math.round(t2 - t1), serializaBanco: Math.round(t3 - t2), compara: Math.round(t4 - t3), impressao: Math.round(agora() - t4) } };
   }
-  const fim = globalThis.performance ? globalThis.performance.now() : Date.now();
-  return { ok: divergencias.length === 0, divergencias, impressoes, ms: Math.round(fim - inicio) };
+  return { ok: divergencias.length === 0, divergencias, impressoes, ms: Math.round(agora() - inicio) };
 }
