@@ -288,22 +288,114 @@ export async function selectBackupFile() {
 export async function dryRunRestoreBackup(backup) {
   return storage.dryRunRestore(backup);
 }
-export async function applyRestoreBackup(backup, { anexosInline = false, aceitarAnexosAusentesNaOrigem = false } = {}) {
+const falhaRestauracao = (code, message, extra = {}) => Object.assign(new Error(message), { code, ...extra });
+
+/**
+ * R02 — restauração em fases, com a base intocada até tudo estar conferido:
+ *   1. CONFERIR: anexos do pacote (pasta "<backup>.anexos" do arquivo EXATO selecionado — token `selecao`,
+ *      relido e conferido pelo SHA-256 no processo principal) ou do envelope protegido (`anexosInline`).
+ *      Faltando/corrompido/arquivo trocado → recusa, nada muda.
+ *   2. BACKUP DE SEGURANÇA verificado (R01).
+ *   3. PREPARAR: anexos copiados e conferidos numa pasta de preparo; falha → preparo descartado, nada muda.
+ *   4. BANCO: substituição atômica (Dexie). Falha → preparo descartado.
+ *   5. EFETIVAR anexos (preparo → pasta de anexos). Falha → COMPENSAÇÃO: o banco volta ao backup de segurança.
+ *   6. CONFERIR DE NOVO banco + anexos: `recuperacaoCompleta` só com tudo íntegro.
+ * Exceção explícita (ADMIN): `aceitarAnexosFaltandoNoPacote` restaura sem os anexos AUSENTES do pacote (nunca os
+ * corrompidos) — o resultado sai com recuperacaoCompleta = false e a lista dos que faltam.
+ */
+export async function applyRestoreBackup(backup, { selecao = null, anexosInline = null, aceitarAnexosAusentesNaOrigem = false, aceitarAnexosFaltandoNoPacote = false } = {}) {
+  const objetos = backupAttachmentObjects(backup);
+  const api = attachments();
+  // 1. Conferir.
+  let faltandoNoPacote = [];
+  if (objetos.length) {
+    let pre;
+    if (Array.isArray(anexosInline)) {
+      const presentes = new Set(anexosInline.map((a) => a?.sha256));
+      pre = { total: objetos.length, faltando: objetos.filter((o) => !presentes.has(o.sha256)).map((o) => o.sha256), corrompidos: [] };
+    } else {
+      if (!api?.preflightSelected) throw falhaRestauracao('BACKUP_ANEXOS_PREFLIGHT', 'Não foi possível conferir os anexos do backup (abra pelo aplicativo desktop). Nada foi alterado.');
+      if (!selecao) throw falhaRestauracao('BACKUP_SELECAO_INVALIDA', 'Restauração sem a seleção do arquivo: selecione e inspecione o backup de novo. Nada foi alterado.');
+      pre = anexosResumo(unwrapDialog(await api.preflightSelected({ selecao, objects: objetos })));
+    }
+    if (pre.corrompidos.length || (pre.faltando.length && !aceitarAnexosFaltandoNoPacote)) {
+      throw falhaRestauracao('BACKUP_ANEXOS_PREFLIGHT', `Restauração cancelada antes de alterar qualquer dado: ${pre.faltando.length} anexo(s) faltando e ${pre.corrompidos.length} corrompido(s) no backup${pre.pasta ? ` (pasta ${pre.pasta})` : ''}.`, { faltando: pre.faltando, corrompidos: pre.corrompidos });
+    }
+    faltandoNoPacote = pre.faltando;
+  }
+  // 2. Backup de segurança verificado.
   const safety = await persistVerifiedSafetyBackup({ reason: 'pre-restore', aceitarAnexosAusentesNaOrigem });
-  const result = await storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+  // 3. Preparar.
+  const ausentes = new Set(faltandoNoPacote);
+  const aPreparar = objetos.filter((o) => !ausentes.has(o.sha256));
+  let stageId = null;
+  if (aPreparar.length) {
+    const inline = Array.isArray(anexosInline) ? anexosInline.filter((a) => aPreparar.some((o) => o.sha256 === a?.sha256)) : null;
+    try {
+      stageId = unwrapDialog(await api.stage(inline ? { inline } : { selecao, objects: aPreparar })).stageId;
+    } catch (err) {
+      throw falhaRestauracao('BACKUP_ANEXOS_PREPARO', `Restauração cancelada: ${err.message}`, { causa: err.code || null, safetyBackup: safetyEvidenceOf(safety) });
+    }
+  }
+  const descartar = async () => { if (stageId) { try { unwrapDialog(await api.discardStage({ stageId })); } catch { /* pasta de preparo fica para limpeza; banco e anexos intactos */ } } };
+  // 4. Banco.
+  let result;
+  try {
+    result = await storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+  } catch (err) {
+    await descartar();
+    throw err;
+  }
+  // 5. Efetivar anexos; se falhar, compensar o banco com o backup de segurança.
+  let efetivado = null;
+  if (stageId) {
+    try {
+      efetivado = anexosResumo(unwrapDialog(await api.commitStage({ stageId, objects: aPreparar })));
+      if (efetivado.faltando.length || efetivado.corrompidos.length) throw falhaRestauracao('ANEXO_EFETIVAR', `${efetivado.faltando.length} faltando e ${efetivado.corrompidos.length} corrompido(s) após mover os anexos.`);
+    } catch (err) {
+      const compensacao = await compensarRestauracao(safety);
+      await storage.recordBackupHistory('restore-compensated', { error: err.message, code: err.code || null, compensado: compensacao.ok, safetyPath: safety.path });
+      throw falhaRestauracao(compensacao.ok ? 'BACKUP_RESTAURACAO_REVERTIDA' : 'BACKUP_RESTAURACAO_INCOMPLETA',
+        compensacao.ok
+          ? `Os anexos não puderam ser gravados (${err.message}). O banco foi devolvido ao estado anterior pelo backup de segurança; nada do backup escolhido ficou aplicado.`
+          : `Os anexos não puderam ser gravados (${err.message}) e a volta automática também falhou (${compensacao.error}). Restaure manualmente o backup de segurança ${baseName(safety.path)}.`,
+        { compensado: compensacao.ok, safetyBackup: safetyEvidenceOf(safety), recuperacaoCompleta: false });
+    }
+  }
   // E1G (1.4.2): backup de antes da 1.4.2 volta sem o marcador 'derivados-saida-v1' — o GMD das saídas com peso é
   // recalculado já, sem esperar a próxima abertura (nunca lança; com o marcador, não faz nada).
   await runSaidaDerivedBackfill();
-  // F16: anexos do backup voltam da pasta "<backup>.anexos" ao lado do arquivo escolhido, conferidos pelo hash.
-  // Anexo faltando ou corrompido é erro VISÍVEL no resultado (o banco já restaurado aponta para ele).
-  // Backup protegido traz os anexos dentro do envelope (gravados por quem chama): não há pasta .anexos.
-  const objetos = anexosInline ? [] : backupAttachmentObjects(backup);
-  if (objetos.length) {
-    result.anexos = attachments()?.restore
-      ? anexosResumo(unwrapDialog(await attachments().restore({ origem: 'selecionado', objects: objetos })))
-      : { total: objetos.length, ok: 0, faltando: objetos.map((o) => o.sha256), corrompidos: [], pasta: null };
+  // 6. Conferir de novo: contagens do banco e anexos na pasta do app.
+  // (Histórico de backup e configurações técnicas recebem registros da própria restauração; backup de esquema
+  // anterior passa pela migração, que cria derivados — nesses casos vale a contagem conferida na transação.)
+  const db = await storage.ensureReady();
+  const esperado = result.schemaUpgradeRequired ? {} : (await storage.dryRunRestore(backup)).counts || {};
+  const contagensDivergentes = [];
+  for (const [store, n] of Object.entries(esperado)) {
+    if (store === 'backupHistory' || store === 'appSettings' || !db.tables.some((t) => t.name === store)) continue;
+    const atual = await db.table(store).count();
+    if (atual !== n) contagensDivergentes.push({ store, esperado: n, atual });
   }
+  if (objetos.length) {
+    const pos = api?.verify ? anexosResumo(unwrapDialog(await api.verify({ objects: objetos }))) : { total: objetos.length, ok: 0, faltando: objetos.map((o) => o.sha256), corrompidos: [], pasta: null };
+    result.anexos = { ...pos, pasta: efetivado?.pasta ?? null };
+  }
+  result.contagensDivergentes = contagensDivergentes;
+  result.recuperacaoCompleta = contagensDivergentes.length === 0 && (!result.anexos || (result.anexos.ok === result.anexos.total && !result.anexos.faltando.length && !result.anexos.corrompidos.length));
+  result.safetyBackup = safetyEvidenceOf(safety);
   return result;
+}
+
+/** Compensação pós-commit: devolve o banco ao conteúdo do backup de segurança (já verificado). */
+async function compensarRestauracao(safety) {
+  try {
+    const lido = await readUserFile('backups', baseName(safety.path));
+    if (lido.sha256 !== safety.sha256) throw new Error('backup de segurança mudou no disco');
+    await storage.applyRestore(JSON.parse(lido.content), { safetyEvidence: safetyEvidenceOf(safety), files: files() });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
 }
 
 // --- Versões, migração, limpeza em dois níveis, diagnóstico ---

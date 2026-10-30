@@ -6,11 +6,13 @@
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
+const { AppError } = require('../ipcErrors.cjs');
 
-class BackupStoreError extends Error {
-  constructor(code, message) {
-    super(message);
-    this.code = code;
+// Erro de domínio: estende AppError para o código e a mensagem chegarem ao renderer (não "Erro interno").
+class BackupStoreError extends AppError {
+  constructor(code, message, details = {}) {
+    super(code, message, details);
+    this.name = 'BackupStoreError';
   }
 }
 

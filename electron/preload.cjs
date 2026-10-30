@@ -27,9 +27,11 @@ contextBridge.exposeInMainWorld('pesagemApp', {
     open: (args) => ipcRenderer.invoke('attachments:open', args),
     snapshot: (args) => ipcRenderer.invoke('attachments:snapshot', args),
     verifyBackup: (args) => ipcRenderer.invoke('attachments:verify-backup', args),
-    restore: (args) => ipcRenderer.invoke('attachments:restore', args),
     read: (args) => ipcRenderer.invoke('attachments:read', args),
-    write: (args) => ipcRenderer.invoke('attachments:write', args),
+    preflightSelected: (args) => ipcRenderer.invoke('attachments:preflight-selected', args),
+    stage: (args) => ipcRenderer.invoke('attachments:stage', args),
+    commitStage: (args) => ipcRenderer.invoke('attachments:commit-stage', args),
+    discardStage: (args) => ipcRenderer.invoke('attachments:discard-stage', args),
   },
   // Backup (F21/F22): destino externo escolhido no diálogo nativo; o renderer só envia o nome do backup.
   backup: {

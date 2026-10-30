@@ -1,15 +1,16 @@
 // IPC dos anexos (F16). Seleção pelo diálogo nativo (o caminho nunca vem do renderer); o renderer só envia
-// sha256 + extensão (validados) e o NOME do backup (basename). A restauração usa a pasta de anexos ao lado do
-// backup escolhido no diálogo de restauração (lembrada aqui no processo principal) ou a pasta de backups do app.
-const path = require('path');
+// sha256 + extensão (validados), o NOME do backup (basename) e, na restauração, o TOKEN da seleção (R02): a pasta
+// "<backup>.anexos" é a do arquivo exato que foi inspecionado, conferido de novo pelo SHA-256 antes de cada uso.
 const { dialog, shell, BrowserWindow } = require('electron');
 const { wrapIpcHandler } = require('../ipcErrors.cjs');
 const { createAttachmentStore, EXTENSOES } = require('./attachmentStore.cjs');
+const { createSelectionRegistry } = require('./backupSelection.cjs');
 
-let lastSelectedBackup = null; // { dir, fileName } — definido pelo diálogo de restauração
+const selecoes = createSelectionRegistry();
 
-function rememberSelectedBackup(filePath) {
-  lastSelectedBackup = filePath ? { dir: path.dirname(filePath), fileName: path.basename(filePath) } : null;
+/** Chamado pelo diálogo de seleção com os bytes lidos; devolve o token que vincula a restauração ao arquivo. */
+function rememberSelectedBackup(filePath, bytes) {
+  return selecoes.remember(filePath, bytes);
 }
 
 const objectsOf = (list) => (Array.isArray(list) ? list : []).slice(0, 100000).map((o) => ({ sha256: o?.sha256, ext: o?.ext }));
@@ -34,16 +35,20 @@ function registerAttachmentIpc(ipcMain, getDataDir) {
     return { ok: !erro, error: erro || null };
   }));
   ipcMain.handle('attachments:read', wrapIpcHandler(async (_e, { sha256, ext } = {}) => store().readObject(sha256, ext)));
-  ipcMain.handle('attachments:write', wrapIpcHandler(async (_e, { sha256, ext, base64 } = {}) => store().writeObject(sha256, ext, base64)));
   ipcMain.handle('attachments:snapshot', wrapIpcHandler(async (_e, { backupFile, objects } = {}) => store().snapshot(backupFile, objectsOf(objects))));
   ipcMain.handle('attachments:verify-backup', wrapIpcHandler(async (_e, { backupFile, objects } = {}) => store().verifyBackup(backupFile, objectsOf(objects))));
-  ipcMain.handle('attachments:restore', wrapIpcHandler(async (_e, { origem, backupFile, objects } = {}) => {
-    if (origem === 'selecionado') {
-      if (!lastSelectedBackup) return { total: 0, ok: 0, faltando: objectsOf(objects).map((o) => o.sha256), corrompidos: [], pasta: null };
-      return store().restore(lastSelectedBackup.fileName, objectsOf(objects), lastSelectedBackup.dir);
-    }
-    return store().restore(backupFile, objectsOf(objects));
+  // R02 — restauração em fases: conferir (nada muda) → preparar (pasta de preparo) → [banco] → efetivar | descartar.
+  ipcMain.handle('attachments:preflight-selected', wrapIpcHandler(async (_e, { selecao, objects } = {}) => {
+    const sel = selecoes.resolve(selecao);
+    return { arquivo: { fileName: sel.fileName, sha256: sel.sha256, size: sel.size }, ...store().verifyBackup(sel.fileName, objectsOf(objects), sel.dir) };
   }));
+  ipcMain.handle('attachments:stage', wrapIpcHandler(async (_e, { selecao, objects, inline } = {}) => {
+    if (Array.isArray(inline)) return store().stageInline(inline.slice(0, 100000).map((a) => ({ sha256: a?.sha256, ext: a?.ext, base64: a?.base64 })));
+    const sel = selecoes.resolve(selecao);
+    return store().stageFromBackup(sel.fileName, objectsOf(objects), sel.dir);
+  }));
+  ipcMain.handle('attachments:commit-stage', wrapIpcHandler(async (_e, { stageId, objects } = {}) => store().commitStage(stageId, objectsOf(objects))));
+  ipcMain.handle('attachments:discard-stage', wrapIpcHandler(async (_e, { stageId } = {}) => store().discardStage(stageId)));
 }
 
 module.exports = { registerAttachmentIpc, rememberSelectedBackup };

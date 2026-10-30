@@ -102,7 +102,14 @@ export async function applyRestoreBackup(backupPath, options = {}) {
   requireMaintenanceAction('Restauração', 'maintenance.restore');
   // R01: `aceitarAnexosAusentesNaOrigem` é a única exceção ao backup de segurança completo — para recuperar
   // anexos que JÁ sumiram do app; o pré-backup é verificado sem eles e marcado incompleto.
-  return adapter.applyRestoreBackup(backupPath, { aceitarAnexosAusentesNaOrigem: options.aceitarAnexosAusentesNaOrigem === true });
+  // R02: `selecao` é o token do arquivo escolhido no diálogo; `aceitarAnexosFaltandoNoPacote` é a exceção
+  // explícita para restaurar sem anexos AUSENTES do pacote (o resultado fica com recuperacaoCompleta = false).
+  return adapter.applyRestoreBackup(backupPath, {
+    selecao: options.selecao || null,
+    anexosInline: Array.isArray(options.anexosInline) ? options.anexosInline : null,
+    aceitarAnexosAusentesNaOrigem: options.aceitarAnexosAusentesNaOrigem === true,
+    aceitarAnexosFaltandoNoPacote: options.aceitarAnexosFaltandoNoPacote === true,
+  });
 }
 
 export async function runIntegrityCheck() {

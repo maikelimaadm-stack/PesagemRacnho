@@ -10,7 +10,6 @@
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -19,19 +18,17 @@ import storage from '../src/storage/storageAdapter.js';
 import * as maintenance from '../src/modules/maintenance/application/maintenanceService.js';
 import * as docs from '../src/modules/documents/application/documentsService.js';
 import * as ops from '../src/modules/livestock/application/operationsService.js';
+import { createGateAttachmentBridge } from './lib/gateAttachmentBridge.mjs';
 
-const require = createRequire(import.meta.url);
-const { createAttachmentStore } = require('../electron/ipc/attachmentStore.cjs');
 const root = mkdtempSync(join(tmpdir(), 'pesagens-anexos-'));
 const dataDir = join(root, 'dados');
 const fora = join(root, 'fora');
 mkdirSync(fora, { recursive: true });
-const store = createAttachmentStore(dataDir);
+let proximoArquivo = null; // simula o arquivo escolhido no diálogo de anexo
+const ponte = createGateAttachmentBridge(dataDir, { importar: () => proximoArquivo });
+const { store } = ponte;
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const dirOf = (subdir) => { const d = join(dataDir, String(subdir || '')); mkdirSync(d, { recursive: true }); return d; };
-let selecionado = null; // simula o diálogo nativo de restauração (o processo principal lembra o arquivo)
-let proximoArquivo = null; // simula o arquivo escolhido no diálogo de anexo
-const wrap = (fn) => async (args) => { try { return { ok: true, data: await fn(args) }; } catch (err) { return { ok: false, error: { code: err.code, message: err.message } }; } };
 
 globalThis.window = globalThis.window || {};
 window.pesagemApp = {
@@ -52,13 +49,7 @@ window.pesagemApp = {
       return { ok: true, path: full, size: bytes.length, sha256: sha(bytes), content: bytes.toString('utf8') };
     },
   },
-  attachments: {
-    selectAndImport: wrap(async () => (proximoArquivo ? store.importFromPath(proximoArquivo) : { canceled: true })),
-    verify: wrap(async ({ objects }) => store.verify(objects)),
-    snapshot: wrap(async ({ backupFile, objects }) => store.snapshot(backupFile, objects)),
-    verifyBackup: wrap(async ({ backupFile, objects }) => store.verifyBackup(backupFile, objects)),
-    restore: wrap(async ({ origem, backupFile, objects }) => (origem === 'selecionado' ? store.restore(selecionado.fileName, objects, selecionado.dir) : store.restore(backupFile, objects))),
-  },
+  attachments: ponte.attachments,
 };
 
 const resumo = [];
@@ -141,9 +132,10 @@ try {
   await deleteDbForTests();
   rmSync(join(dataDir, 'anexos'), { recursive: true, force: true });
   await storage.ensureReady();
-  selecionado = { dir: join(dataDir, 'backups'), fileName: nomeBackup };
-  const restaurado = await maintenance.applyRestoreBackup(backupJson);
+  const sel = ponte.selecionar(join(dataDir, 'backups', nomeBackup));
+  const restaurado = await maintenance.applyRestoreBackup(backupJson, { selecao: sel.selecao });
   assert.deepEqual([restaurado.anexos.total, restaurado.anexos.ok, restaurado.anexos.faltando.length], [2, 2, 0]);
+  assert.equal(restaurado.recuperacaoCompleta, true, 'recuperação completa conferida depois');
   const db2 = await storage.ensureReady();
   const documentosDepois = (await db2.table('documentos').toArray()).map(({ localId: _l, ...r }) => r);
   assert.deepEqual(documentosDepois, documentosAntes, 'documentos e vínculos iguais');
@@ -154,12 +146,15 @@ try {
   const soJson = join(fora, nomeBackup);
   writeFileSync(soJson, JSON.stringify(backupJson));
   rmSync(join(dataDir, 'anexos'), { recursive: true, force: true });
-  selecionado = { dir: fora, fileName: nomeBackup };
-  // R01: com anexos já sumidos do app, o backup de segurança não fica completo → restauração recusada…
-  await assert.rejects(maintenance.applyRestoreBackup(backupJson), (err) => err.code === 'BACKUP_PRE_OPERACAO_FALHOU' && err.causa === 'BACKUP_ANEXOS_INCOMPLETO');
-  // …a menos que o ADMIN aceite explicitamente que esses anexos (que já faltam) fiquem fora do pré-backup.
-  const semAnexos = await maintenance.applyRestoreBackup(backupJson, { aceitarAnexosAusentesNaOrigem: true });
+  const selFora = ponte.selecionar(soJson);
+  // R02: pacote sem a pasta de anexos → recusado ANTES de qualquer escrita…
+  await assert.rejects(maintenance.applyRestoreBackup(backupJson, { selecao: selFora.selecao }), (err) => err.code === 'BACKUP_ANEXOS_PREFLIGHT' && err.faltando.length === 2);
+  // R01: …e, aceitando restaurar sem eles, com anexos já sumidos do app o backup de segurança não fica completo…
+  await assert.rejects(maintenance.applyRestoreBackup(backupJson, { selecao: selFora.selecao, aceitarAnexosFaltandoNoPacote: true }), (err) => err.code === 'BACKUP_PRE_OPERACAO_FALHOU' && err.causa === 'BACKUP_ANEXOS_INCOMPLETO');
+  // …a menos que o ADMIN aceite explicitamente as duas exceções: a recuperação sai marcada como incompleta.
+  const semAnexos = await maintenance.applyRestoreBackup(backupJson, { selecao: selFora.selecao, aceitarAnexosFaltandoNoPacote: true, aceitarAnexosAusentesNaOrigem: true });
   assert.equal(semAnexos.anexos.faltando.length, 2, 'anexo faltante é erro visível');
+  assert.equal(semAnexos.recuperacaoCompleta, false, 'sem os anexos a recuperação não é completa');
 
   // Backup sem documentos com anexo (como os anteriores à v9): restaura sem passo de anexos.
   await (await storage.ensureReady()).table('documentos').clear();

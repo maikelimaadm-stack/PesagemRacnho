@@ -42,6 +42,9 @@ function RestauracaoGuiada({ onDone }) {
   const [confirmacao, setConfirmacao] = useState('');
   const [resultado, setResultado] = useState(null);
   const [busy, setBusy] = useState(false);
+  // R01/R02: exceções explícitas, oferecidas só depois de a restauração ter sido recusada pelo motivo exato.
+  const [recusa, setRecusa] = useState(null); // { code, causa, message }
+  const [aceites, setAceites] = useState({ ausentesNaOrigem: false, faltandoNoPacote: false });
 
   const selecionar = async () => {
     try {
@@ -50,23 +53,33 @@ function RestauracaoGuiada({ onDone }) {
       setArquivo(sel);
       setInsp(null);
       setSenha('');
-      const r = await center.inspectBackup(sel.payload);
+      const r = await center.inspectBackup(sel.payload, { selecao: sel.selecao });
       setInsp(r.precisaSenha ? null : r);
       setPasso(2);
       if (r.precisaSenha) toast.message('Backup protegido: informe a senha para inspecionar.');
     } catch (error) { toast.error(describeError(error, 'Não foi possível ler o arquivo.')); }
   };
   const abrirProtegido = async () => {
-    try { setInsp(await center.inspectBackup(arquivo.payload, { senha })); } catch (error) { toast.error(describeError(error)); }
+    try { setInsp(await center.inspectBackup(arquivo.payload, { senha, selecao: arquivo.selecao })); } catch (error) { toast.error(describeError(error)); }
   };
   const restaurar = async () => {
     setBusy(true);
     try {
-      const r = await center.restoreGuided(insp, { confirmacao, onLogout: () => setTimeout(() => logout(), 4000) });
+      const r = await center.restoreGuided(insp, {
+        confirmacao,
+        onLogout: () => setTimeout(() => logout(), 4000),
+        aceitarAnexosAusentesNaOrigem: aceites.ausentesNaOrigem,
+        aceitarAnexosFaltandoNoPacote: aceites.faltandoNoPacote,
+      });
       setResultado(r);
+      setRecusa(null);
       setPasso(4);
       onDone?.();
-    } catch (error) { toast.error(describeError(error, 'Não foi possível restaurar.')); } finally { setBusy(false); }
+    } catch (error) {
+      setRecusa({ code: error?.code || null, causa: error?.causa || null, message: describeError(error, 'Não foi possível restaurar.'), faltando: error?.faltando || [], corrompidos: error?.corrompidos || [] });
+      toast.error(describeError(error, 'Não foi possível restaurar.'));
+      onDone?.();
+    } finally { setBusy(false); }
   };
 
   return (
@@ -114,9 +127,20 @@ function RestauracaoGuiada({ onDone }) {
         <div>
           <ul className="rb-alerts rb-alerts--warn">
             <li>TODOS os dados atuais serão substituídos pelos do backup — inclusive usuários, senhas e configurações.</li>
-            <li>Antes, o aplicativo grava e verifica um backup da situação de hoje (pré-restauração).</li>
+            <li>Antes de alterar qualquer dado, o aplicativo confere os anexos do backup escolhido e grava e verifica um backup da situação de hoje (pré-restauração). Se algo falhar, nada é alterado.</li>
             {insp.usuarios ? <li>Depois de restaurar, entre de novo com um usuário do backup.</li> : null}
           </ul>
+          {recusa ? (
+            <div className="rb-alerts rb-alerts--warn" role="alert">
+              <p>{recusa.message}</p>
+              {recusa.code === 'BACKUP_PRE_OPERACAO_FALHOU' && recusa.causa === 'BACKUP_ANEXOS_INCOMPLETO' ? (
+                <label className="rb-check"><input type="checkbox" checked={aceites.ausentesNaOrigem} onChange={(e) => setAceites((a) => ({ ...a, ausentesNaOrigem: e.target.checked }))} /> Anexos que JÁ faltam neste computador ficam fora do backup de segurança (ele será marcado incompleto).</label>
+              ) : null}
+              {recusa.code === 'BACKUP_ANEXOS_PREFLIGHT' && recusa.faltando.length && !recusa.corrompidos.length ? (
+                <label className="rb-check"><input type="checkbox" checked={aceites.faltandoNoPacote} onChange={(e) => setAceites((a) => ({ ...a, faltandoNoPacote: e.target.checked }))} /> Restaurar mesmo sem {recusa.faltando.length} anexo(s) que faltam no backup (a recuperação NÃO será completa).</label>
+              ) : null}
+            </div>
+          ) : null}
           <div className="rb-inline">
             <input className="rb-control rb-control--compact" value={confirmacao} onChange={(e) => setConfirmacao(e.target.value)} placeholder={`Digite ${center.CONFIRMACAO_RESTAURAR}`} aria-label="Confirmação da restauração" />
             <button type="button" className="rb-btn" onClick={() => setPasso(2)}>Voltar</button>
@@ -126,10 +150,12 @@ function RestauracaoGuiada({ onDone }) {
       ) : null}
       {passo === 4 && resultado ? (
         <div>
-          <p className={`rb-note ${resultado.integridade.ok ? 'rb-note--ok' : 'rb-note--warn'}`}>{resultado.integridade.ok ? 'Restauração concluída. Integridade do banco: OK.' : `Restauração concluída com ${resultado.integridade.issues.length} pendência(s) de integridade — veja Manutenção avançada.`}</p>
-          {resultado.anexos ? <p className={`rb-note ${resultado.anexos.faltando?.length || resultado.anexos.corrompidos?.length ? 'rb-note--warn' : ''}`}>Anexos: {resultado.anexos.ok} de {resultado.anexos.total} restaurados{resultado.anexos.faltando?.length ? `; ${resultado.anexos.faltando.length} faltando (pasta .anexos ausente)` : ''}{resultado.anexos.corrompidos?.length ? `; ${resultado.anexos.corrompidos.length} corrompido(s)` : ''}.</p> : null}
+          <p className={`rb-note ${resultado.recuperacaoCompleta ? 'rb-note--ok' : 'rb-note--warn'}`} data-recuperacao={resultado.recuperacaoCompleta ? 'completa' : 'incompleta'}>{resultado.recuperacaoCompleta ? 'Recuperação completa: banco e anexos conferidos depois da restauração.' : 'Recuperação INCOMPLETA: veja abaixo o que não voltou.'}</p>
+          {resultado.contagensDivergentes?.length ? <p className="rb-note rb-note--warn">Contagens diferentes do backup: {resultado.contagensDivergentes.map((c) => `${c.store} (${c.atual} de ${c.esperado})`).join(', ')}.</p> : null}
+          <p className={`rb-note ${resultado.integridade.ok ? 'rb-note--ok' : 'rb-note--warn'}`}>{resultado.integridade.ok ? 'Integridade do banco: OK.' : `Integridade do banco: ${resultado.integridade.issues.length} pendência(s) — veja Manutenção avançada.`}</p>
+          {resultado.anexos ? <p className={`rb-note ${resultado.anexos.faltando?.length || resultado.anexos.corrompidos?.length ? 'rb-note--warn' : ''}`}>Anexos: {resultado.anexos.ok} de {resultado.anexos.total} conferidos na pasta do aplicativo{resultado.anexos.faltando?.length ? `; ${resultado.anexos.faltando.length} faltando` : ''}{resultado.anexos.corrompidos?.length ? `; ${resultado.anexos.corrompidos.length} corrompido(s)` : ''}.</p> : null}
           {resultado.sessaoEncerrada ? <p className="rb-note rb-note--warn">O backup trouxe os usuários dele: a sessão será encerrada; entre de novo.</p> : null}
-          <button type="button" className="rb-btn" onClick={() => { setPasso(1); setArquivo(null); setInsp(null); setResultado(null); setConfirmacao(''); }}>Concluir</button>
+          <button type="button" className="rb-btn" onClick={() => { setPasso(1); setArquivo(null); setInsp(null); setResultado(null); setConfirmacao(''); setRecusa(null); setAceites({ ausentesNaOrigem: false, faltandoNoPacote: false }); }}>Concluir</button>
         </div>
       ) : null}
     </section>

@@ -232,7 +232,7 @@ export async function exportProtectedBackup(senha) {
 // ---------------------------------------------------------------------------
 
 /** Passo "Inspecionar": o que há no arquivo, sem gravar nada. Envelope protegido pede a senha antes. */
-export async function inspectBackup(payload, { senha = null } = {}) {
+export async function inspectBackup(payload, { senha = null, selecao = null } = {}) {
   requirePermission('maintenance.restore');
   let conteudo = payload;
   let anexosInline = null;
@@ -248,6 +248,7 @@ export async function inspectBackup(payload, { senha = null } = {}) {
   const docsComAnexo = attachmentObjects(conteudo?.stores?.documentos || []);
   return {
     protegido: Boolean(anexosInline),
+    selecao,
     backup: conteudo,
     anexosInline,
     dry,
@@ -260,22 +261,22 @@ export async function inspectBackup(payload, { senha = null } = {}) {
 }
 
 /**
- * Passos "Confirmar → Restaurar → Integridade": exige digitar RESTAURAR; a restauração faz o pré-backup
- * obrigatório (maintenance) e é atômica no banco; anexos voltam (pasta .anexos ou envelope protegido);
- * integridade é conferida depois; se o backup trouxe usuários, a sessão atual é encerrada (login de novo).
+ * Passos "Confirmar → Restaurar → Integridade": exige digitar RESTAURAR. A restauração (maintenance, R02) confere
+ * os anexos do arquivo inspecionado (token da seleção) ou do envelope protegido ANTES de tocar no banco, faz o
+ * backup de segurança verificado, prepara os anexos, troca o banco de forma atômica, efetiva os anexos (com
+ * volta automática se falhar) e confere tudo de novo — `recuperacaoCompleta` diz se voltou 100%. Se o backup
+ * trouxe usuários, a sessão atual é encerrada (login de novo).
  */
-export async function restoreGuided(inspecao, { confirmacao, onLogout } = {}) {
+export async function restoreGuided(inspecao, { confirmacao, onLogout, aceitarAnexosAusentesNaOrigem = false, aceitarAnexosFaltandoNoPacote = false } = {}) {
   requirePermission('maintenance.restore');
   if (confirmacao !== CONFIRMACAO_RESTAURAR) throw new Error(`Para restaurar, digite ${CONFIRMACAO_RESTAURAR}.`);
   if (!inspecao?.backup || !inspecao?.dry?.restorable) throw new Error('Backup não restaurável.');
-  const result = await maintenanceAdapter.applyRestoreBackup(inspecao.backup, { anexosInline: Boolean(inspecao.anexosInline) });
-  if (inspecao.anexosInline?.length) {
-    const r = { total: inspecao.anexosInline.length, ok: 0, faltando: [], corrompidos: [] };
-    for (const a of inspecao.anexosInline) {
-      try { unwrap(await app().attachments.write(a)); r.ok += 1; } catch { r.corrompidos.push(a.sha256); }
-    }
-    result.anexos = r;
-  }
+  const result = await maintenanceAdapter.applyRestoreBackup(inspecao.backup, {
+    selecao: inspecao.selecao || null,
+    anexosInline: inspecao.anexosInline ? inspecao.anexosInline : null,
+    aceitarAnexosAusentesNaOrigem: aceitarAnexosAusentesNaOrigem === true,
+    aceitarAnexosFaltandoNoPacote: aceitarAnexosFaltandoNoPacote === true,
+  });
   const integridade = await storage.logicalIntegrity();
   if (inspecao.usuarios > 0 && typeof onLogout === 'function') onLogout();
   return { ...result, integridade: { ok: integridade.ok, issues: integridade.issues || [] }, sessaoEncerrada: inspecao.usuarios > 0 };

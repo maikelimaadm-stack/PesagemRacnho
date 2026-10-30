@@ -8,7 +8,6 @@
 import 'fake-indexeddb/auto';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { createRequire } from 'node:module';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -17,19 +16,16 @@ import storage from '../src/storage/storageAdapter.js';
 import * as maintenance from '../src/modules/maintenance/application/maintenanceService.js';
 import * as docs from '../src/modules/documents/application/documentsService.js';
 import * as ops from '../src/modules/livestock/application/operationsService.js';
+import { createGateAttachmentBridge } from './lib/gateAttachmentBridge.mjs';
 
-const require = createRequire(import.meta.url);
-const { createAttachmentStore } = require('../electron/ipc/attachmentStore.cjs');
 const root = mkdtempSync(join(tmpdir(), 'pesagens-seguranca-'));
 const dataDir = join(root, 'dados');
-const astore = createAttachmentStore(dataDir);
+const ponte = createGateAttachmentBridge(dataDir, { importar: () => join(root, 'gta.pdf') });
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const dirOf = (subdir) => { const d = join(dataDir, String(subdir || '')); mkdirSync(d, { recursive: true }); return d; };
-const wrap = (fn) => async (args) => { try { return { ok: true, data: await fn(args) }; } catch (err) { return { ok: false, error: { code: err.code, message: err.message } }; } };
 let falha = null; // modo de falha injetada
 let backupBomAnterior = null; // conteúdo de um backup válido mais antigo (para "conteúdo trocado")
 let seq = 0;
-let selecionado = null;
 
 globalThis.window = globalThis.window || {};
 window.pesagemApp = {
@@ -57,14 +53,8 @@ window.pesagemApp = {
       return { ok: true, path: full, size: bytes.length, sha256: sha(bytes), content: bytes.toString('utf8') };
     },
   },
-  attachments: {
-    selectAndImport: wrap(async () => astore.importFromPath(join(root, 'gta.pdf'))),
-    verify: wrap(async ({ objects }) => astore.verify(objects)),
-    snapshot: wrap(async ({ backupFile, objects }) => astore.snapshot(backupFile, objects)),
-    verifyBackup: wrap(async ({ backupFile, objects }) => astore.verifyBackup(backupFile, objects)),
-    // origem 'selecionado': o main usa o arquivo escolhido no diálogo (aqui, `selecionado`).
-    restore: wrap(async ({ origem, backupFile, objects }) => astore.restore(origem === 'selecionado' ? selecionado : backupFile, objects)),
-  },
+  attachments: ponte.attachments,
+
 };
 
 // Hash de todo o banco operacional (fora o histórico de backup, que REGISTRA a tentativa) + pasta de anexos.
@@ -105,7 +95,7 @@ try {
 
   const operacoes = {
     importar: () => maintenance.applyImportWeighingJson(exportacao, { skipDuplicates: true }),
-    restaurar: () => { selecionado = bom.backupPath.split(/[\\/]/).pop(); return maintenance.applyRestoreBackup(backupParaRestaurar); },
+    restaurar: () => maintenance.applyRestoreBackup(backupParaRestaurar, { selecao: ponte.selecionar(bom.backupPath).selecao }),
     limpar: () => maintenance.clearOperationalData({ confirmationText: maintenance.CLEAR_CONFIRMATION_TEXT }),
     reset: () => maintenance.resetAllData({ confirmationText: maintenance.RESET_CONFIRMATION_TEXT }),
   };
@@ -137,8 +127,7 @@ try {
   assert.equal(seguranca.manifest.reason, 'pre-clear-operational');
   const dry = await storage.dryRunRestore(seguranca);
   for (const [t, n] of Object.entries(contagensAntes)) assert.equal(dry.counts[t], n, `backup de segurança tem ${t}`);
-  selecionado = limpo.safetyBackup.path.split(/[\\/]/).pop();
-  await maintenance.applyRestoreBackup(seguranca);
+  await maintenance.applyRestoreBackup(seguranca, { selecao: ponte.selecionar(limpo.safetyBackup.path).selecao });
   for (const [t, n] of Object.entries(contagensAntes)) assert.equal(await (await storage.ensureReady()).table(t).count(), n, `restaurado: ${t}`);
   resumo.push('R01 sucesso: evidência verificada, backup de segurança restaurável com as contagens de antes');
 

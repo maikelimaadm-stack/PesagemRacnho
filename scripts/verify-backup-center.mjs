@@ -23,16 +23,16 @@ import * as center from '../src/modules/backup/application/backupCenterService.j
 import * as docs from '../src/modules/documents/application/documentsService.js';
 import * as ops from '../src/modules/livestock/application/operationsService.js';
 import { planRetention } from '../src/modules/backup/domain/backupPolicy.js';
+import { createGateAttachmentBridge } from './lib/gateAttachmentBridge.mjs';
 
 const require = createRequire(import.meta.url);
 const { createBackupStore } = require('../electron/ipc/backupStore.cjs');
-const { createAttachmentStore } = require('../electron/ipc/attachmentStore.cjs');
 const root = mkdtempSync(join(tmpdir(), 'pesagens-central-'));
 const dataDir = join(root, 'dados');
 const externo = join(root, 'pendrive');
 mkdirSync(externo, { recursive: true });
 const bstore = createBackupStore(dataDir);
-const astore = createAttachmentStore(dataDir);
+const ponte = createGateAttachmentBridge(dataDir, { importar: () => join(root, 'gta.pdf') });
 const sha = (b) => createHash('sha256').update(b).digest('hex');
 const dirOf = (subdir) => { const d = join(dataDir, String(subdir || '')); mkdirSync(d, { recursive: true }); return d; };
 const wrap = (fn) => async (args) => { try { return { ok: true, data: await fn(args) }; } catch (err) { return { ok: false, error: { code: err.code, message: err.message } }; } };
@@ -61,15 +61,8 @@ window.pesagemApp = {
       return { ok: true, path: full, size: bytes.length, sha256: sha(bytes), content: bytes.toString('utf8') };
     },
   },
-  attachments: {
-    selectAndImport: wrap(async () => astore.importFromPath(join(root, 'gta.pdf'))),
-    verify: wrap(async ({ objects }) => astore.verify(objects)),
-    snapshot: wrap(async ({ backupFile, objects }) => astore.snapshot(backupFile, objects)),
-    verifyBackup: wrap(async ({ backupFile, objects }) => astore.verifyBackup(backupFile, objects)),
-    restore: wrap(async ({ backupFile, objects }) => astore.restore(backupFile, objects)),
-    read: wrap(async ({ sha256: s, ext }) => astore.readObject(s, ext)),
-    write: wrap(async ({ sha256: s, ext, base64 }) => astore.writeObject(s, ext, base64)),
-  },
+  attachments: ponte.attachments,
+
   backup: {
     externalStatus: wrap(async () => bstore.status()),
     copyExternal: wrap(async ({ backupFile }) => bstore.copyToExternal(backupFile)),
