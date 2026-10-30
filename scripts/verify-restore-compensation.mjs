@@ -56,8 +56,10 @@ window.pesagemApp = {
     },
   },
   attachments: ponte.attachments,
+  criticalState: ponte.criticalState,
 };
 setActorProvider(() => ({ id: 'u1', nome: 'Admin', role: 'ADMIN' }));
+globalThis.__PESAGENS_GATE_FALTAS__ = true; // liga as falhas injetadas só neste processo de gate
 
 async function fotografia() {
   const db = await storage.ensureReady();

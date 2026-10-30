@@ -102,6 +102,8 @@ export async function getOverview() {
     cobertura: coverage({ status, externo, copiaExterna }),
     protegidos,
     erroProtegidos,
+    // R3-01: estado crítico de restauração (persistente entre aberturas) com o backup de segurança a restaurar.
+    estadoCritico: storage.getCriticalBlock ? storage.getCriticalBlock() : null,
   };
 }
 

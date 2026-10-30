@@ -9,7 +9,9 @@ import storage from '../../../storage/storageAdapter.js';
 import { describeVersions } from '../../../versioning/versionInfo.js';
 import { runSaidaDerivedBackfill } from '../../weighing/application/weighingDerivedBackfill.js';
 import { attachmentObjects } from '../../documents/domain/documentRules.js';
-import { setWriteBlocked } from '../../../storage/migrations/migrationState.js';
+import { getCriticalBlock, setCriticalBlock } from '../../../storage/migrations/migrationState.js';
+import { liberarBloqueioCritico, persistirBloqueioCritico } from '../../../storage/criticalRestoreState.js';
+import { conferirConteudoRestaurado } from '../../../storage/indexedDb/backup/contentIntegrity.js';
 
 function files() {
   return window.pesagemApp?.files || null;
@@ -455,20 +457,13 @@ export async function applyRestoreBackup(backup, { selecao = null, anexosInline 
     const derivados = await runSaidaDerivedBackfill();
     if (derivados?.error) throw falhaRestauracao('DERIVADOS_FALHOU', `Recálculo do GMD das saídas falhou: ${derivados.error.message || derivados.error.code}.`);
     await faltaInjetada('derivados');
-    // 6. Conferir de novo: contagens do banco e anexos na pasta do app.
-    // (Histórico de backup e configurações técnicas recebem registros da própria restauração; backup de esquema
-    // anterior passa pela migração, que cria derivados — nesses casos vale a contagem conferida na transação.)
+    // 6. Conferir de novo o CONTEÚDO (R3-02 — não só contagens) e os anexos na pasta do app.
     fase = 'conferencia';
     const db = await storage.ensureReady();
-    const esperado = result.schemaUpgradeRequired ? {} : (await storage.dryRunRestore(backup)).counts || {};
+    await faltaInjetada('conferencia');
+    const conteudo = await conferirConteudoRestaurado(db, backup?.stores, { migracao: Boolean(result.schemaUpgradeRequired) });
+    if (!conteudo.ok) throw falhaRestauracao('CONFERENCIA_FINAL', `Conteúdo restaurado diferente do backup: ${conteudo.divergencias.slice(0, 3).map((d) => `${d.store}${d.id ? ` ${d.id}` : ''} (${d.motivo})`).join('; ')}.`, { divergencias: conteudo.divergencias });
     const contagensDivergentes = [];
-    for (const [store, n] of Object.entries(esperado)) {
-      if (store === 'backupHistory' || store === 'appSettings' || !db.tables.some((t) => t.name === store)) continue;
-      const atual = await db.table(store).count();
-      if (atual !== n) contagensDivergentes.push({ store, esperado: n, atual });
-    }
-    await faltaInjetada('conferencia', { contagensDivergentes });
-    if (contagensDivergentes.length) throw falhaRestauracao('CONFERENCIA_FINAL', `Contagens diferentes do backup depois de restaurar: ${contagensDivergentes.map((c) => `${c.store} ${c.atual}/${c.esperado}`).join(', ')}.`);
     if (objetos.length) {
       const pos = api?.verify ? anexosResumo(unwrapDialog(await api.verify({ objects: objetos }))) : { total: objetos.length, ok: 0, faltando: objetos.map((o) => o.sha256), corrompidos: [], pasta: null };
       // Só podem faltar os anexos que o ADMIN aceitou restaurar sem (ausentes no pacote); nenhum corrompido.
@@ -477,21 +472,36 @@ export async function applyRestoreBackup(backup, { selecao = null, anexosInline 
       result.anexos = { ...pos, pasta: efetivado?.pasta ?? null };
     }
     result.contagensDivergentes = contagensDivergentes;
+    result.conferenciaConteudo = { ok: true, ms: conteudo.ms, impressoes: conteudo.impressoes };
   } catch (err) {
     await descartar();
     const compensacao = await compensarRestauracao(safety);
-    await storage.recordBackupHistory('restore-compensated', { fase, error: err.message, code: err.code || null, compensado: compensacao.ok, compensacaoErro: compensacao.error || null, safetyPath: safety.path });
     if (!compensacao.ok) {
-      // CRÍTICO: base possivelmente inconsistente. Escrita bloqueada nesta sessão até restaurar um backup íntegro.
-      setWriteBlocked({ code: 'RESTAURACAO_CRITICA', message: `restauração falhou (${fase}) e a volta automática também falhou; restaure ${baseName(safety.path)}` });
-      await storage.recordBackupHistory('restore-critical', { fase, error: err.message, compensacaoErro: compensacao.error, safetyPath: safety.path });
+      // CRÍTICO (R3-01): 1º o bloqueio em memória, 2º o marcador durável (arquivo fora do banco + appSettings), e só
+      // depois os registros de histórico — falha no histórico não tira a proteção nem troca a mensagem.
+      const nomeSeguranca = baseName(safety.path);
+      setCriticalBlock({ message: `restauração falhou (${fase}) e a volta automática também; restaure ${nomeSeguranca}`, fase, backupNome: nomeSeguranca, backupSha256: safety.sha256 });
+      let persistido = { arquivo: false, banco: false, erros: ['não tentado'] };
+      try { persistido = await persistirBloqueioCritico(await storage.ensureReady(), { fase, backupNome: nomeSeguranca, backupSha256: safety.sha256 }); } catch (persistErr) { persistido = { arquivo: false, banco: false, erros: [persistErr.message] }; }
+      setCriticalBlock({ message: `restauração falhou (${fase}) e a volta automática também; restaure ${nomeSeguranca}`, fase, backupNome: nomeSeguranca, backupSha256: safety.sha256, persistido });
+      for (const [tipo, dados] of [['restore-compensated', { fase, error: err.message, code: err.code || null, compensado: false, compensacaoErro: compensacao.error || null, safetyPath: safety.path }], ['restore-critical', { fase, error: err.message, compensacaoErro: compensacao.error, safetyPath: safety.path, marcadorPersistido: persistido }]]) {
+        try { await storage.recordBackupHistory(tipo, dados); } catch { /* histórico indisponível: o bloqueio já está instalado */ }
+      }
+      const aviso = persistido.arquivo ? '' : ' ATENÇÃO: o marcador em arquivo NÃO pôde ser gravado' + (persistido.banco ? ' (ficou só no banco)' : ' nem no banco') + ' — NÃO feche o aplicativo antes de restaurar.';
       throw falhaRestauracao('BACKUP_RESTAURACAO_CRITICA',
-        `RESTAURAÇÃO NÃO CONCLUÍDA E BASE POSSIVELMENTE INCONSISTENTE: falhou em "${fase}" (${err.message}) e a volta automática também falhou (${compensacao.error}). As gravações foram bloqueadas. Restaure em Sistema › Backup e Restauração o backup de segurança ${baseName(safety.path)} (verificado, SHA-256 ${safety.sha256}).`,
-        { fase, compensado: false, safetyBackup: safetyEvidenceOf(safety), recuperacaoCompleta: false, critico: true });
+        `RESTAURAÇÃO NÃO CONCLUÍDA E BASE POSSIVELMENTE INCONSISTENTE: falhou em "${fase}" (${err.message}) e a volta automática também falhou (${compensacao.error}). As gravações foram bloqueadas, inclusive ao reabrir o aplicativo. Restaure em Sistema › Backup e Restauração o backup de segurança ${nomeSeguranca} (verificado, SHA-256 ${safety.sha256}).${aviso}`,
+        { fase, compensado: false, safetyBackup: safetyEvidenceOf(safety), recuperacaoCompleta: false, critico: true, marcadorPersistido: persistido });
     }
+    try { await storage.recordBackupHistory('restore-compensated', { fase, error: err.message, code: err.code || null, compensado: true, safetyPath: safety.path }); } catch { /* a volta já foi conferida; o histórico é complementar */ }
     throw falhaRestauracao('BACKUP_RESTAURACAO_REVERTIDA',
-      `A restauração falhou em "${fase}" (${err.message}). O banco foi devolvido ao estado anterior pelo backup de segurança, conferido pelas contagens; nada do backup escolhido ficou aplicado.`,
+      `A restauração falhou em "${fase}" (${err.message}). O banco foi devolvido ao estado anterior pelo backup de segurança, conferido registro a registro; nada do backup escolhido ficou aplicado.`,
       { fase, causa: err.code || null, compensado: true, safetyBackup: safetyEvidenceOf(safety), recuperacaoCompleta: false });
+  }
+  // R3-01: restauração conferida (conteúdo e anexos) é o caminho de recuperação — libera o estado crítico, se havia.
+  if (getCriticalBlock() || storage.getCriticalBlock?.()) {
+    await liberarBloqueioCritico(await storage.ensureReady(), { conteudoSha256: backup?.integrity?.sha256 || safety.sha256 });
+    try { await storage.recordBackupHistory('restore-critical-cleared', { conteudoSha256: backup?.integrity?.sha256 || null }); } catch { /* complementar */ }
+    result.estadoCriticoLiberado = true;
   }
   result.recuperacaoCompleta = !result.anexos || (result.anexos.ok === result.anexos.total && !result.anexos.faltando.length && !result.anexos.corrompidos.length);
   result.safetyBackup = safetyEvidenceOf(safety);
@@ -509,12 +519,10 @@ async function compensarRestauracao(safety) {
     if (lido.sha256 !== safety.sha256) throw new Error('backup de segurança mudou no disco');
     const conteudo = JSON.parse(lido.content);
     await storage.applyRestore(conteudo, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
-    const esperado = (await storage.dryRunRestore(conteudo)).counts || {};
-    const db = await storage.ensureReady();
-    for (const [store, n] of Object.entries(esperado)) {
-      if (store === 'backupHistory' || store === 'appSettings' || !db.tables.some((t) => t.name === store)) continue;
-      if (await db.table(store).count() !== n) throw new Error(`contagem de ${store} não voltou ao backup de segurança`);
-    }
+    await faltaInjetada('compensacao-aplicada');
+    // R3-02: a volta só vale com o CONTEÚDO de cada registro igual ao backup de segurança (não só contagens).
+    const conferido = await conferirConteudoRestaurado(await storage.ensureReady(), conteudo.stores, { migracao: false });
+    if (!conferido.ok) throw new Error(`conteúdo não voltou ao backup de segurança: ${conferido.divergencias.slice(0, 3).map((d) => `${d.store}${d.id ? ` ${d.id}` : ''} (${d.motivo})`).join('; ')}`);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message };
@@ -527,7 +535,8 @@ async function compensarRestauracao(safety) {
  */
 export const faltasRestauracaoParaTestes = { em: null };
 async function faltaInjetada(fase, contexto = {}) {
-  if (typeof faltasRestauracaoParaTestes.em === 'function') await faltasRestauracaoParaTestes.em(fase, contexto);
+  // Só age com o gate sinalizando explicitamente no processo (nenhuma entrada do usuário liga isto).
+  if (globalThis.__PESAGENS_GATE_FALTAS__ === true && typeof faltasRestauracaoParaTestes.em === 'function') await faltasRestauracaoParaTestes.em(fase, contexto);
 }
 
 // --- Versões, migração, limpeza em dois níveis, diagnóstico ---

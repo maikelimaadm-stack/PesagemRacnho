@@ -42,6 +42,12 @@ contextBridge.exposeInMainWorld('pesagemApp', {
     verifyExternal: (args) => ipcRenderer.invoke('backup:verify-external', args),
     deleteBackup: (args) => ipcRenderer.invoke('backup:delete', args),
   },
+  // R3-01: estado crítico de restauração, gravado pelo processo principal num arquivo de nome fixo.
+  criticalState: {
+    get: () => ipcRenderer.invoke('app:critical-state-get'),
+    set: (args) => ipcRenderer.invoke('app:critical-state-set', args),
+    clear: (args) => ipcRenderer.invoke('app:critical-state-clear', args),
+  },
   dialogs: {
     selectImportJson: () => ipcRenderer.invoke('dialog:select-import-json'),
     selectExportDirectory: () => ipcRenderer.invoke('dialog:select-export-directory'),

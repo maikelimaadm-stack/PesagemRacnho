@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs';
 const require = createRequire(import.meta.url);
 const { createAttachmentStore } = require('../../electron/ipc/attachmentStore.cjs');
 const { createSelectionRegistry } = require('../../electron/ipc/backupSelection.cjs');
+const { createCriticalStateStore } = require('../../electron/ipc/criticalState.cjs');
 
 const wrap = (fn) => async (args) => {
   try { return { ok: true, data: await fn(args || {}) }; } catch (err) { return { ok: false, error: { code: err.code, message: err.message, details: err.details || {} } }; }
@@ -18,7 +19,7 @@ const falhaGravacao = () => Object.assign(new Error('EIO: falha de gravação do
 export function createGateAttachmentBridge(dataDir, { importar = null } = {}) {
   const store = createAttachmentStore(dataDir);
   const selecoes = createSelectionRegistry();
-  const falhas = { preparo: false, efetivar: false };
+  const falhas = { preparo: false, efetivar: false, marcador: false };
 
   /** Simula o diálogo nativo: lê o arquivo escolhido e devolve o mesmo formato do processo principal. */
   function selecionar(filePath) {
@@ -47,5 +48,12 @@ export function createGateAttachmentBridge(dataDir, { importar = null } = {}) {
     discardStage: wrap(async ({ stageId }) => store.discardStage(stageId)),
   };
 
-  return { store, attachments, selecionar, falhas };
+  // R3-01: o mesmo armazenamento do marcador crítico do processo principal (arquivo de nome fixo em dataDir).
+  const critico = createCriticalStateStore(dataDir);
+  const criticalState = {
+    get: wrap(async () => critico.get()),
+    set: wrap(async (input) => { if (falhas.marcador) throw Object.assign(new Error('ENOSPC: disco cheio (simulado)'), { code: 'ENOSPC' }); return critico.set(input); }),
+    clear: wrap(async (input) => critico.clear(input)),
+  };
+  return { store, attachments, selecionar, falhas, criticalState, critico };
 }

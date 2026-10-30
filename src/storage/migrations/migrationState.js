@@ -113,13 +113,31 @@ export async function writeMigrationState(db, version, patch) {
 export const WRITE_BLOCK_EXEMPT_STORES = Object.freeze(['usuarios', 'auditoria']);
 
 let writeBlock = null;
+// R3-01: bloqueio CRÍTICO de restauração em espaço próprio. A migração (`setWriteBlocked`/`clearWriteBlock`) e a
+// restauração comum nunca o desfazem; só `clearCriticalBlock` — chamado depois de uma restauração conferida — e um
+// novo processo só o perde se o marcador durável (fora do banco) também não existir.
+let criticalBlock = null;
 
 export function isWriteBlocked() {
-  return writeBlock !== null;
+  return writeBlock !== null || criticalBlock !== null;
 }
 
 export function getWriteBlock() {
+  if (criticalBlock) return { ...criticalBlock };
   return writeBlock ? { ...writeBlock } : null;
+}
+
+export function setCriticalBlock({ message = 'restauração falhou e a volta automática também', fase = null, backupNome = null, backupSha256 = null, persistido = null } = {}) {
+  criticalBlock = { code: 'RESTAURACAO_CRITICA', message, fase, backupNome, backupSha256, persistido, since: new Date().toISOString() };
+  return { ...criticalBlock };
+}
+
+export function getCriticalBlock() {
+  return criticalBlock ? { ...criticalBlock } : null;
+}
+
+export function clearCriticalBlock() {
+  criticalBlock = null;
 }
 
 export function setWriteBlocked({ code = 'MIGRATION_BLOCKED', message = 'Migração pendente ou com falha.', version = null } = {}) {
@@ -127,6 +145,7 @@ export function setWriteBlocked({ code = 'MIGRATION_BLOCKED', message = 'Migraç
   return getWriteBlock();
 }
 
+/** Libera só o bloqueio de MIGRAÇÃO; o crítico de restauração (R3-01) não é afetado. */
 export function clearWriteBlock() {
   writeBlock = null;
 }
@@ -142,12 +161,12 @@ export function isWriteBlockExempt(storeName) {
  * isentas (usuarios, auditoria) nunca lançam.
  */
 export function assertWritable(operation = 'Gravação', options = {}) {
-  if (!writeBlock) return;
+  if (!writeBlock && !criticalBlock) return;
   const store = typeof options === 'string' ? options : options?.store;
   if (store && isWriteBlockExempt(store)) return;
-  // R2-02: bloqueio por restauração que falhou sem conseguir voltar — a orientação é restaurar, não migrar.
-  if (writeBlock.code === 'RESTAURACAO_CRITICA') {
-    throw new MigrationError('RESTAURACAO_CRITICA', `${operation} bloqueada: a última restauração falhou e a volta automática também (${writeBlock.message}). Abra Sistema › Backup e Restauração e restaure o backup de segurança indicado.`, { reason: writeBlock.code });
+  // R2-02/R3-01: restauração que falhou sem conseguir voltar — a orientação é restaurar, não migrar.
+  if (criticalBlock) {
+    throw new MigrationError('RESTAURACAO_CRITICA', `${operation} bloqueada: a última restauração falhou e a volta automática também (${criticalBlock.message}). Abra Sistema › Backup e Restauração e restaure o backup de segurança${criticalBlock.backupNome ? ` ${criticalBlock.backupNome}` : ' indicado'}.`, { reason: criticalBlock.code });
   }
   throw new MigrationError(
     'MIGRATION_BLOCKED',

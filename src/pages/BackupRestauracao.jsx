@@ -37,8 +37,15 @@ function Cobertura({ ov }) {
   }[local] || 'Nenhum backup ainda.';
   const textoCopia = { OK: `Cópia externa conferida agora (${ov?.copiaExterna?.destino || ov?.externo?.destino || ''})`, PENDENTE: ov?.copiaExterna?.motivo ? `Cópia externa pendente: ${ov.copiaExterna.motivo}` : 'Cópia externa pendente: copie o último backup para o destino', INDISPONIVEL: 'Destino externo desconectado: cópia não conferida', NAO_CONFIGURADA: 'Sem destino externo: o backup está só neste computador' }[copia] || '—';
   const maisNovoAlterado = st.lastVerified && st.ultimaVerificacao && st.lastVerified.path !== st.ultimaVerificacao.path;
+  const critico = ov?.estadoCritico;
   return (
     <>
+      {critico ? (
+        <div className="rb-alerts rb-alerts--error" role="alert" data-estado-critico="RESTAURACAO_CRITICA">
+          <p><strong>Estado CRÍTICO: a última restauração falhou e a volta automática também. As gravações estão bloqueadas, inclusive ao reabrir o aplicativo.</strong></p>
+          <p>Para sair dele, restaure abaixo, em Restaurar backup, o backup de segurança {critico.backupNome ? <code>{critico.backupNome}</code> : 'indicado'}{critico.backupSha256 ? <> (SHA-256 <code>{critico.backupSha256.slice(0, 16)}…</code>)</> : null} ou outro backup verificado. Só uma restauração conferida libera. Não use reset nem limpeza.</p>
+        </div>
+      ) : null}
       <div className="rb-summary" aria-label="Situação da proteção">
         <div className="rb-summary__item" data-protecao={local}><strong>{titulo}</strong><span>{textoLocal}</span></div>
         <div className="rb-summary__item" data-copia={copia}><strong>{copia === 'OK' ? 'Cópia OK' : copia === 'NAO_CONFIGURADA' ? 'Só local' : 'Pendente'}</strong><span>{textoCopia}</span></div>

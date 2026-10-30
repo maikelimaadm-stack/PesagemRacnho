@@ -6,6 +6,8 @@ const { registerDialogIpc } = require('./ipc/dialogIpc.cjs');
 const { registerReportIpc } = require('./ipc/reportIpc.cjs');
 const { registerAttachmentIpc } = require('./ipc/attachmentIpc.cjs');
 const { registerBackupIpc } = require('./ipc/backupIpc.cjs');
+const { registerCriticalStateIpc } = require('./ipc/criticalState.cjs');
+const { wrapIpcHandler } = require('./ipcErrors.cjs');
 const { registerEquipmentSessionHandlers, registerEquipmentIpc, attachBluetoothHandlerToContents } = require('./ipc/equipmentIpc.cjs');
 const appLogger = require('./logging/appLogger.cjs');
 const appRuntime = require('./appRuntime.cjs');
@@ -216,6 +218,8 @@ app.whenReady().then(() => {
   registerAttachmentIpc(ipcMain, () => dataDir);
   // Backup: cópia externa verificada e retenção (F21/F22).
   registerBackupIpc(ipcMain, () => dataDir);
+  // R3-01: marcador durável de restauração crítica (sobrevive a fechar e reabrir o app).
+  registerCriticalStateIpc(ipcMain, () => dataDir, wrapIpcHandler);
   // Emissão de relatórios (PDF, impressão, salvar arquivo) — destino sempre escolhido no diálogo nativo.
   registerReportIpc(ipcMain);
 

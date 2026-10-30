@@ -8,11 +8,24 @@ import * as repos from './indexedDb/repositories/index.js';
 import * as backup from './indexedDb/backup/backupService.js';
 import { logicalIntegrity, databaseStats } from './indexedDb/health/health.js';
 import * as migration from './migrations/migrationCoordinator.js';
-import { assertWritable, clearWriteBlock, getWriteBlock, isWriteBlockExempt, isWriteBlocked } from './migrations/migrationState.js';
+import { assertWritable, clearWriteBlock, getCriticalBlock, getWriteBlock, isWriteBlockExempt, isWriteBlocked } from './migrations/migrationState.js';
+import { carregarBloqueioCritico } from './criticalRestoreState.js';
+
+// R3-01: na primeira abertura do banco neste processo, o marcador durável de restauração crítica (se houver)
+// reinstala o bloqueio ANTES de qualquer gravação — fechar e reabrir o app não o apaga.
+let marcadorCriticoConferido = false;
+async function ensureReady() {
+  const db = await ensureStorageReady();
+  if (!marcadorCriticoConferido) {
+    marcadorCriticoConferido = true;
+    await carregarBloqueioCritico(db);
+  }
+  return db;
+}
 
 export const storage = {
   // ciclo de vida
-  ensureReady: ensureStorageReady,
+  ensureReady,
   getDbVersion,
   getDb,
 
@@ -20,6 +33,7 @@ export const storage = {
   // `auditoria` são isentas (isWriteBlockExempt) para o login funcionar sob bloqueio.
   isWriteBlocked,
   getWriteBlock,
+  getCriticalBlock,
   assertWritable,
   isWriteBlockExempt,
   clearWriteBlock,
