@@ -20,7 +20,7 @@ import {
 } from '../domain/sanityRules.js';
 import * as adapter from '../infrastructure/sanityDataAdapter.js';
 import * as posologyAdapter from '../infrastructure/posologyDataAdapter.js';
-import { PosologyError, computeDose, validatePosologyInput, validateWithdrawalClarification, withdrawalStatus } from '../domain/posology.js';
+import { PosologyError, computeDose, posologySituation, validatePosologyInput, validateWithdrawalClarification, withdrawalStatus } from '../domain/posology.js';
 
 export {
   MOTIVO_PESAGEM_CANCELADA,
@@ -41,6 +41,7 @@ export {
   FONTE_LABELS as POSOLOGIA_FONTE_LABELS,
   MODOS as POSOLOGIA_MODOS,
   POSOLOGIA_STATUS,
+  POSOLOGIA_SITUACAO_LABELS,
   POSOLOGIA_STATUS_LABELS,
   PosologyError,
   computeDose,
@@ -193,7 +194,10 @@ export async function suspendPosology(id, { motivo } = {}) {
 export async function getDoseSuggestion({ medicamentoId, peso, dataAplicacao } = {}) {
   requireSanityPermission('weighing.read');
   const posologia = await posologyAdapter.activePosology(medicamentoId, dataAplicacao);
-  return { posologia, ...computeDose(posologia, peso, { dataAplicacao }) };
+  // Sem regra vigente: diz POR QUÊ (sem posologia, rascunho, suspensa, fora da vigência) — nunca sugere dose.
+  const situacao = posologySituation(posologia ? [posologia] : await posologyAdapter.listPosologies({ medicamentoId }), dataAplicacao);
+  const calculo = computeDose(posologia, peso, { dataAplicacao });
+  return { posologia, situacao: situacao.situacao, situacaoLabel: situacao.label, ...calculo, bloqueios: posologia ? calculo.bloqueios : [situacao.motivo] };
 }
 
 /** Carência dos animais numa data: { [animal_id]: { emCarencia, ate, abertas, desconhecidas } }. */

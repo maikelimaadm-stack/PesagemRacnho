@@ -188,6 +188,64 @@ export function computeDose(posologia, peso = {}, { dataAplicacao, pesoMaxDias =
   return { ok: true, dose, unidade: posologia.unidade, via: posologia.via_aplicacao, regra: describeRule(posologia), peso_kg: kg, bloqueios, avisos };
 }
 
+/**
+ * Situação da regra de dose de um medicamento na data (para explicar ao operador por que há ou não dose sugerida):
+ * APROVADA (vigente) | FORA_VIGENCIA (aprovada, mas não na data) | SUSPENSA | RASCUNHO | SEM_POSOLOGIA.
+ */
+export const POSOLOGIA_SITUACAO_LABELS = Object.freeze({
+  APROVADA: 'Aprovada',
+  FORA_VIGENCIA: 'Fora da vigência',
+  SUSPENSA: 'Suspensa',
+  RASCUNHO: 'Rascunho',
+  SEM_POSOLOGIA: 'Sem posologia',
+});
+const POSOLOGIA_SITUACAO_MOTIVOS = Object.freeze({
+  APROVADA: '',
+  FORA_VIGENCIA: 'A posologia aprovada não vale na data da aplicação: sem dose sugerida.',
+  SUSPENSA: 'A posologia deste produto está suspensa: sem dose sugerida.',
+  RASCUNHO: 'A posologia deste produto ainda é rascunho (não aprovada): sem dose sugerida.',
+  SEM_POSOLOGIA: 'Produto sem posologia cadastrada: sem dose sugerida.',
+});
+export function posologySituation(posologias = [], data = null) {
+  const ativas = (posologias || []).filter((p) => p && !p.deleted_at);
+  const vigente = ativas.find((p) => p.status === POSOLOGIA_STATUS.APROVADA
+    && (!data || ((!p.vigencia_inicio || p.vigencia_inicio <= data) && (!p.vigencia_fim || p.vigencia_fim >= data))));
+  let situacao = 'SEM_POSOLOGIA';
+  if (vigente) situacao = 'APROVADA';
+  else if (ativas.some((p) => p.status === POSOLOGIA_STATUS.APROVADA)) situacao = 'FORA_VIGENCIA';
+  else if (ativas.some((p) => p.status === POSOLOGIA_STATUS.SUSPENSA)) situacao = 'SUSPENSA';
+  else if (ativas.some((p) => p.status === POSOLOGIA_STATUS.RASCUNHO)) situacao = 'RASCUNHO';
+  return { situacao, label: POSOLOGIA_SITUACAO_LABELS[situacao], motivo: POSOLOGIA_SITUACAO_MOTIVOS[situacao], posologia: vigente || null };
+}
+
+/**
+ * Conferência no SERVIÇO da dose vinda da posologia numa aplicação (Lançamento): a regra precisa estar aprovada e
+ * vigente na data, a dose sugerida gravada precisa ser a que a regra dá para o peso-base, o peso-base precisa ser
+ * o peso gravado na pesagem (mesma leitura) e a dose aplicada confirmada. Devolve a lista de erros (vazia = ok).
+ */
+export function checkPosologyApplication({ posologia, item = {}, data, pesoPesagemKg = null }) {
+  const erros = [];
+  if (!posologia) return ['Posologia não encontrada.'];
+  if (posologia.status !== POSOLOGIA_STATUS.APROVADA) erros.push('A posologia não está aprovada: a dose não pode vir dela.');
+  if (data && ((posologia.vigencia_inicio && data < posologia.vigencia_inicio) || (posologia.vigencia_fim && data > posologia.vigencia_fim))) {
+    erros.push('A posologia não está vigente na data da aplicação.');
+  }
+  if (item.dose_confirmada !== true) erros.push('Confirme a dose aplicada.');
+  const kg = num(item.peso_base_kg);
+  if (!(kg > 0)) erros.push('Dose pela posologia sem o peso usado no cálculo.');
+  else {
+    if (pesoPesagemKg !== null && pesoPesagemKg !== undefined && ['BALANCA', 'MANUAL'].includes(String(item.peso_base_origem || '').toUpperCase()) && Number(pesoPesagemKg) !== kg) {
+      erros.push('O peso usado na dose sugerida não é o peso gravado: confira a dose e confirme de novo.');
+    }
+    const calculo = computeDose(posologia, { kg, data: item.peso_base_data || data, origem: item.peso_base_origem }, { dataAplicacao: data });
+    if (!calculo.ok) erros.push(calculo.bloqueios[0]);
+    else if (num(item.dose_sugerida) === null || Math.abs(calculo.dose - num(item.dose_sugerida)) > 1e-9) {
+      erros.push('A dose sugerida não confere com a posologia aprovada: recalcule a dose.');
+    }
+  }
+  return erros;
+}
+
 const addDays = (iso, days) => {
   const [y, m, d] = iso.split('-').map(Number);
   const date = new Date(Date.UTC(y, m - 1, d));

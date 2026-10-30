@@ -7,6 +7,7 @@ import { getCurrentActor, hasActorProvider } from '../../../storage/indexedDb/au
 import { authorize, forbiddenError } from '../../auth/domain/permissionService.js';
 import { computeInventory } from '../domain/inventory.js';
 import {
+  MOTIVO_SAIDA_POR_SUBTIPO as MOTIVO_SAIDA_POR_SUBTIPO_LOCAL,
   OperationError,
   checkConference,
   summarizeOperation,
@@ -16,6 +17,7 @@ import {
 } from '../domain/operationRules.js';
 import * as adapter from '../infrastructure/operationsDataAdapter.js';
 import { validateRelease } from '../../sanity/domain/posology.js';
+import { prepareLaunchEntry } from '../../weighing/application/weighingService.js';
 
 export {
   ITEM_STATUS,
@@ -34,6 +36,8 @@ export {
   summarizeOperation,
 } from '../domain/operationRules.js';
 export { CLASSES_ENTRADA, CLASSES_SAIDA, CLASSE_LABELS } from '../domain/inventory.js';
+
+const OPERACAO_TIPOS_LANCAMENTO = Object.freeze({ ENTRADA: 'ENTRADA', SAIDA: 'SAIDA' });
 
 function requirePermission(action) {
   const actor = getCurrentActor();
@@ -98,6 +102,61 @@ export async function confirmOperation(id, { aceitarAvisos = false } = {}) {
 export async function registerWithdrawalRelease(id, input = {}) {
   const actor = requirePermission('registry.write');
   return adapter.registerWithdrawalRelease(id, { ...validateRelease(input), registrado_por: actor?.nome || null });
+}
+
+/**
+ * Entrada ou Saída de UM animal feita no Lançamento de Pesagens. Mesmas regras das telas Rebanho › Entradas/Saídas
+ * (validateHeader/validateItem, conferência, carência) e o payload da tela passa pelas regras do createEntry
+ * (permissão, valores comerciais, aplicações de sanidade). Grava operação, item, animal, movimento, pesagem e
+ * aplicações numa só transação; `id` (ciclo do Lançamento) torna a chamada idempotente.
+ * input: { id, tipo, subtipo, data, gta_numero, nf_numero, observacao, item: {...}, pesagem: payload da tela,
+ *          aceitarAvisos }
+ */
+export async function registerLaunchOperation(input = {}) {
+  const actor = requirePermission('weighing.write');
+  const header = validateHeader(input);
+  if (![OPERACAO_TIPOS_LANCAMENTO.ENTRADA, OPERACAO_TIPOS_LANCAMENTO.SAIDA].includes(header.tipo)) {
+    throw new OperationError('OPERACAO_INVALIDA', 'O Lançamento registra Entradas e Saídas.');
+  }
+  const raw = input.item || {};
+  const item = { ...validateItem(header, raw, { posicao: 1 }), causa_morte_id: header.subtipo === 'MORTE' ? trimOrNull(raw.causa_morte_id) : null };
+  // Entrada sem peso não gera pesagem; a Saída sempre gera (com ou sem peso, como em Rebanho › Saídas).
+  const semPesagem = header.tipo === OPERACAO_TIPOS_LANCAMENTO.ENTRADA && item.peso_kg === null;
+  // Tipo, motivo, data e peso da pesagem são os da operação (uma só verdade para a tela, o livro e a pesagem).
+  const pesagem = {
+    ...(input.pesagem || {}),
+    tipo_manejo: header.tipo === OPERACAO_TIPOS_LANCAMENTO.ENTRADA ? 'Cadastro' : 'Saída',
+    motivo_saida: header.tipo === OPERACAO_TIPOS_LANCAMENTO.SAIDA ? MOTIVO_SAIDA_POR_SUBTIPO_LOCAL[header.subtipo] : null,
+    data_pesagem: header.data,
+    peso: item.peso_kg,
+  };
+  const { uiPayload, aplicacoesSanidade, valoresPermitidos } = prepareLaunchEntry(pesagem, { semPesagem });
+  if (!valoresPermitidos) {
+    item.valor = null;
+    header.valor_total = null;
+    header.frete = null;
+  }
+  return adapter.registerLaunchOperation({
+    id: trimOrNull(input.id),
+    header,
+    item,
+    launch: { ui: uiPayload, aplicacoesSanidade, entryId: trimOrNull(input.id) },
+    aceitarAvisos: input.aceitarAvisos === true,
+    operador: actor?.nome || actor?.login || null,
+    empresaId: input.empresa_id || adapter.DEFAULT_EMPRESA_ID,
+  });
+}
+
+/** Animal que entrou sem peso com este número/marca (a Entrada no Lançamento vira a 1ª pesagem dele). */
+export async function findPendingEntryAnimal({ numero, marcaId = null } = {}) {
+  requirePermission('weighing.read');
+  return adapter.findPendingEntryAnimal({ numero, marcaId });
+}
+
+/** Operação de origem de uma pesagem (para editar/excluir no Lançamento sem descasar o livro). */
+export async function findOperationOfEntry(pesagemId) {
+  requirePermission('weighing.read');
+  return adapter.findOperationOfEntry(pesagemId);
 }
 
 /** Cancela operação confirmada com motivo obrigatório (fato cancelado, nunca apagado). */

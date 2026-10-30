@@ -114,14 +114,14 @@ try {
   // lançamento do mesmo animal na mesma data.
   await irPara(win, 'LancamentoPesagensIndividuais');
   await win.getByText('Tipo de Movimentação').waitFor();
-  await escolherTipo(win, 'Cadastro (Novo Animal)');
+  await escolherTipo(win, 'Entrada (novo animal)');
   await escolherData(win, 'mes-passado');
   await win.getByRole('combobox', { name: 'Marca do animal' }).click();
   await win.getByRole('option', { name: /E2E/ }).first().click();
   await lancar(win, '7001', '320');
   await linhasDoNumero(win, '7001').first().waitFor();
 
-  await escolherTipo(win, 'Manejo (Pesagem Periódica)');
+  await escolherTipo(win, 'Manejo / Pesagem');
   await escolherData(win, 'hoje');
   await lancar(win, '7001', '350');
   await linhasDoNumero(win, '7001').first().waitFor();
@@ -136,7 +136,7 @@ try {
   assert.equal(await contarLinhas(win, '7001', 1), 1, 'repesagem substitui a pesagem do dia (uma linha, 360 kg)');
 
   // Peso fora da faixa (> 1500 kg): pede justificativa antes de gravar.
-  await escolherTipo(win, 'Cadastro (Novo Animal)');
+  await escolherTipo(win, 'Entrada (novo animal)');
   await escolherData(win, 'hoje');
   await win.getByRole('combobox', { name: 'Marca do animal' }).click();
   await win.getByRole('option', { name: /E2E/ }).first().click();
@@ -149,11 +149,12 @@ try {
   await confirmarPeso.click();
   await linhasDoNumero(win, '7002').first().waitFor();
 
-  // Desfazer o último lançamento: confirma e exclui só ele.
+  // Desfazer o último lançamento: a Entrada do 7002 é uma operação (Compra) — desfazer cancela a operação, com motivo.
   await win.getByRole('button', { name: 'Desfazer' }).click();
-  const excluir = win.getByRole('dialog').filter({ hasText: 'Confirmar exclusão' });
-  await excluir.getByText('Somente este lançamento de 7002').waitFor();
-  await excluir.getByRole('button', { name: 'Excluir' }).click();
+  const excluir = win.getByRole('dialog').filter({ hasText: 'Cancelar operação' });
+  await excluir.getByText(/Este lançamento de 7002 .* é a Entrada registrada como operação/).waitFor();
+  await excluir.getByLabel('Motivo do cancelamento').fill('lançado por engano');
+  await excluir.getByRole('button', { name: 'Cancelar operação' }).click();
   assert.equal(await contarLinhas(win, '7002', 0), 0, 'Desfazer exclui o lançamento do 7002');
 
   // 4. Relação de Pesagens lista as duas pesagens.
@@ -200,7 +201,7 @@ try {
   assert.equal(await win.getByPlaceholder('Ex: 320').inputValue(), '328', 'peso estável do monitor no campo');
 
   // P01: o peso estável salva UM animal; o próximo, sem a balança mudar, é recusado.
-  await escolherTipo(win, 'Cadastro (Novo Animal)');
+  await escolherTipo(win, 'Entrada (novo animal)');
   await win.getByRole('combobox', { name: 'Marca do animal' }).click();
   await win.getByRole('option', { name: /E2E/ }).first().click();
   const salvarAuto = async (numero) => {
@@ -269,7 +270,9 @@ try {
   await irPara(win, 'Inventario');
   const compras = win.locator('.rb-table--balance tr').filter({ hasText: '+ Compras' });
   await compras.first().waitFor({ timeout: 15000 });
-  assert.equal((await compras.first().locator('td').innerText()).trim(), '2', 'inventário conta as 2 compras');
+  // 3 = as 2 compras desta tela + a Entrada (Compra) do 7003 feita hoje no Lançamento: a Entrada do Lançamento é
+  // uma operação do livro, conciliada no inventário como as demais.
+  assert.equal((await compras.first().locator('td').innerText()).trim(), '3', 'inventário conta as compras da tela Entradas e a do Lançamento');
 
   // 10. Identificadores (F06) e Ficha do Animal (F04/F15): recebe 3 brincos; no 8002 (comprado sem peso, pendente)
   // informa o nascimento por mês estimado e aplica um brinco — o saldo cai para 2 disponíveis.

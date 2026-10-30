@@ -44,6 +44,36 @@ No menu, abra **Rebanho** e escolha uma das telas:
 A confirmação grava **tudo ou nada**. Se um animal tiver problema (por exemplo, já ter saído do rebanho),
 nenhum animal da operação é gravado, e a mensagem diz qual animal causou o problema.
 
+## Entrada e Saída direto no Lançamento de Pesagens
+
+Para um animal de cada vez, não precisa sair da tela de pesagem.
+
+1. No **Lançamento**, escolha **Entrada (novo animal)** e o **Motivo da Entrada**, ou **Saída** e o **Motivo da
+   Saída**.
+2. Preencha como de costume: animal, marca, peso, dados da compra ou da venda, documentação de embarque.
+3. Clique em **Salvar**.
+
+O Salvar confirma a operação no livro, pelo **mesmo** caminho desta tela. A operação, o animal, a pesagem (quando há
+peso), o movimento e as aplicações de sanidade são gravados juntos: ou tudo ou nada. Salvar duas vezes, ou dar Enter
+duplo, não duplica nada.
+
+- **Sem pesar:**
+  - na Entrada, marque **Sem peso**. O animal fica pendente de pesagem, e a próxima Entrada com o mesmo número e
+    marca é a primeira pesagem dele (mesmo animal, nenhuma entrada nova);
+  - Morte, Doação, Transferência enviada e Ajuste de saída aceitam Saída sem peso.
+- **Avisos e bloqueios:**
+  - um aviso da conferência (por exemplo, carência aberta numa venda) abre **Confira antes de confirmar**. Nada é
+    gravado até você clicar em **Confirmar mesmo assim**;
+  - bloqueios (por exemplo, abate com carência) recusam a Saída. A liberação técnica é feita aqui em
+    **Rebanho › Saídas**.
+- **Corrigir:**
+  - o peso de uma Entrada ou Saída feita no Lançamento se corrige com **Editar**;
+  - para mudar o tipo, o motivo, a data ou o animal, use **Excluir** (ou **Desfazer**): o Lançamento cancela a
+    operação com o motivo que você informar, e então você lança de novo.
+- **Ajustes** exigem justificativa: escreva no campo **Observação**.
+
+Operações com vários animais, entradas e saídas em lote sem pesagem e Movimentações continuam nesta tela.
+
 ## Entradas
 
 - **Animal sem peso** fica **pendente de pesagem**. O sistema não inventa peso, nem 0 kg.

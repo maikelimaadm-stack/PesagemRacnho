@@ -12,6 +12,7 @@ import { TimelineError, validateAnimalTimeline } from '../domain/animalTimeline.
 import { deriveLotStays, deriveWeighingMovements, movementKey, stayKey } from '../domain/weighingMovements.js';
 import { naturezaDoTipo } from '../../livestock/domain/movementNature.js';
 import { withdrawalExitPolicy, withdrawalStatus } from '../../sanity/domain/posology.js';
+import Dexie from 'dexie';
 import { WeighingError } from '../domain/weighingErrors.js';
 import storage from '../../../storage/storageAdapter.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
@@ -525,7 +526,7 @@ export async function createEntry(payload, { aplicacoesSanidade = [], carenciaCo
 
   const tableNames = ['pesagens', 'auditoria', 'sessoesPesagem', 'animalLotes', 'categoriasAnimal'];
   if (animalId) tableNames.push('animais', 'movimentosAnimais');
-  if (isRegistration) tableNames.push('animalIdentificadores', 'marcas', 'racas', 'propriedades');
+  if (isRegistration) tableNames.push('animalIdentificadores', 'marcas', 'racas', 'propriedades', 'operacaoItens');
   const sanityItems = Array.isArray(aplicacoesSanidade) ? aplicacoesSanidade : [];
   if (sanityItems.length) tableNames.push(...LAUNCH_SANITY_TABLES);
   const tables = [...new Set(tableNames)].map((name) => db.table(name));
@@ -547,18 +548,28 @@ export async function createEntry(payload, { aplicacoesSanidade = [], carenciaCo
     if (await db.table('pesagens').where('id').equals(entryId).first()) throw new Error(`Pesagem duplicada (${entryId})`);
     // v9: Cadastro de um animal que entrou por operação SEM peso (PENDENTE_PESAGEM, mesmo número e marca, sem
     // pesagens) é a primeira pesagem DELE — não um segundo animal. O movimento de entrada é adotado depois.
-    if (isRegistration && !animalInformado) {
+    // O Lançamento manda um animal_id NOVO no Cadastro; se ele ainda não existe, a busca do pendente vale igual.
+    const animalInformadoExiste = animalInformado ? Boolean(await db.table('animais').where('id').equals(animalInformado).first()) : false;
+    if (isRegistration && !animalInformadoExiste) {
       const pendente = await findPendingAnimal(db, ui);
       if (pendente) {
         animalId = pendente.id;
         entry.animal_id = animalId;
+        // Vínculo com a operação de origem: a pesagem leva o operacao_id e o item da entrada passa a apontar
+        // para ela (a entrada continua uma só — o movimento da operação é adotado pela reconciliação).
+        if (pendente.operacao_entrada_id) {
+          entry.legacy_payload = { ...(entry.legacy_payload || {}), operacao_id: pendente.operacao_entrada_id };
+          const itemOrigem = (await db.table('operacaoItens').where('[operacao_id+animal_id]').equals([pendente.operacao_entrada_id, animalId]).toArray())
+            .find((row) => !row.deleted_at && row.status !== 'CANCELADO' && !row.pesagem_id);
+          if (itemOrigem) await db.table('operacaoItens').update(itemOrigem.localId, { pesagem_id: entryId, updated_at: ts });
+        }
       }
     }
     // Linha do tempo (P05/P07) dentro da transação: série inteira, sem duplicar Manejo no dia.
     await assertAnimalTimeline(db, animalId, { upsert: [entry] });
     // Referências das aplicações resolvidas antes de gravar a pesagem: erro aborta tudo.
     const sanity = await prepareApplicationRowsInTransaction(db, sanityItems, {
-      animalId, data: payload.data_pesagem, sessaoId: sessionId, pesagemId: entryId, empresaId: ui.empresa_id || EMPRESA_ID, ts, origem: 'lancamento',
+      animalId, data: payload.data_pesagem, sessaoId: sessionId, pesagemId: entryId, pesoPesagemKg: entry.peso_kg ?? null, empresaId: ui.empresa_id || EMPRESA_ID, ts, origem: 'lancamento',
     });
     const existingForCategory = !isRegistration && animalId ? await db.table('animais').where('id').equals(animalId).first() : null;
     await stampAutomaticCategory(db, entry, isRegistration
@@ -644,7 +655,7 @@ export async function updateEntry(id, payload) {
   storage.assertWritable('Edição de pesagem');
   const db = await storage.ensureReady();
   const ts = new Date().toISOString();
-  const tables = ['pesagens', 'animais', 'animalLotes', 'auditoria', 'marcas', 'racas', 'categoriasAnimal', 'movimentosAnimais', 'animalIdentificadores'].map((name) => db.table(name));
+  const tables = ['pesagens', 'animais', 'animalLotes', 'auditoria', 'marcas', 'racas', 'categoriasAnimal', 'movimentosAnimais', 'animalIdentificadores', 'operacaoItens'].map((name) => db.table(name));
   let updated = null;
   await db.transaction('rw', tables, async () => {
     const rows = await db.table('pesagens').where('id').equals(id).toArray();
@@ -652,6 +663,25 @@ export async function updateEntry(id, payload) {
     if (!existing) return;
     updated = { ...existing, ...payload, id, updated_by_user_id: actorUserId(), updated_at: ts };
     const ui = typeof updated.legacy_payload === 'object' ? updated.legacy_payload : {};
+    // Pesagem que é o efeito de uma operação de Entrada/Saída (item.pesagem_id): peso, lote, observação e demais
+    // dados se corrigem aqui e o item acompanha; tipo, motivo, data e animal definem a operação — mudar exige
+    // cancelar a operação (com motivo) e lançar de novo, senão o livro e a pesagem se descasam.
+    const vinculo = (await db.table('operacaoItens').where('pesagem_id').equals(String(id)).toArray())
+      .find((row) => !row.deleted_at && row.status !== 'CANCELADO') || null;
+    if (vinculo) {
+      const antes = typeof existing.legacy_payload === 'object' ? existing.legacy_payload : {};
+      const mudouOperacao = ['tipo_manejo', 'motivo_saida'].some((campo) => (antes[campo] ?? null) !== (ui[campo] ?? antes[campo] ?? null))
+        || String(existing.data_pesagem || '') !== String(updated.data_pesagem || '')
+        || (existing.animal_id || null) !== (updated.animal_id || null);
+      if (mudouOperacao) {
+        throw new WeighingError('OPERACAO_VINCULADA', 'Esta pesagem é a Entrada/Saída de uma operação. Peso, lote e observação podem ser corrigidos aqui; para mudar tipo, motivo, data ou animal, exclua o lançamento (a operação é cancelada com motivo) e lance de novo.');
+      }
+      await db.table('operacaoItens').update(vinculo.localId, {
+        peso_kg: updated.peso_kg ?? null,
+        peso_origem: updated.peso_kg == null ? null : (ui.peso_origem === 'BALANCA' ? 'BALANCA' : 'MANUAL'),
+        updated_at: ts,
+      });
+    }
     // Série inteira (P05): mover o Cadastro para depois dos Manejos ou a Saída para antes deles é recusado.
     await assertAnimalTimeline(db, updated.animal_id, { upsert: [updated] });
     const trocouAnimal = existing.animal_id && existing.animal_id !== updated.animal_id;
@@ -713,7 +743,7 @@ export async function deleteEntry(id, { motivo } = {}) {
 // createEntry e bulkDeleteEntries abrem transações com subconjuntos destas tabelas, que o Dexie aninha nesta.
 const REWEIGH_TABLES = Object.freeze([
   'pesagens', 'auditoria', 'sessoesPesagem', 'animalLotes', 'categoriasAnimal', 'animais', 'movimentosAnimais',
-  'animalIdentificadores', 'marcas', 'racas', 'propriedades', 'operacaoItens', ...LAUNCH_SANITY_TABLES,
+  'animalIdentificadores', 'marcas', 'racas', 'propriedades', 'operacaoItens', 'operacoes', ...LAUNCH_SANITY_TABLES,
 ]);
 
 export async function replaceEntries(previousIds, payload, { motivo, aplicacoesSanidade = [] } = {}) {
@@ -1169,16 +1199,49 @@ const cancellationReason = (motivo) => (typeof motivo === 'string' && motivo.tri
 // Cancelar a pesagem cancela, na mesma transação, as aplicações de sanidade
 // vinculadas por pesagem_id (cancelled_at + motivo "pesagem cancelada"; ADR-049).
 // M1: `motivo` opcional vai para a auditoria (ex.: "repesagem"); sem ele, o texto de sempre.
-export async function bulkDeleteEntries(ids, { motivo } = {}) {
+/**
+ * Pesagem que é o EFEITO de uma operação confirmada (operacaoItens.pesagem_id) não se exclui sozinha: o livro, o
+ * inventário e o histórico ficariam dizendo "confirmada" sem o fato. Roda DENTRO da transação de exclusão, antes de
+ * qualquer gravação; lista mista = tudo ou nada. Única exceção: o cancelamento canônico da própria operação
+ * (operationsDataAdapter.cancelOperation), que passa o id da operação em `cancelamentoOperacaoId`, dentro da
+ * transação dele, depois de marcar o item como CANCELADO. Operações LEGADO (geradas das pesagens antigas) seguem
+ * corrigidas pela Relação de Pesagens, como antes.
+ */
+async function assertNoConfirmedOperationLinks(db, ids, cancelamentoOperacaoId) {
+  const alvo = [...new Set((ids || []).filter(Boolean).map(String))];
+  if (!alvo.length) return;
+  const itens = (await db.table('operacaoItens').where('pesagem_id').anyOf(alvo).toArray()).filter((row) => !row.deleted_at);
+  for (const item of itens) {
+    const operacao = (await db.table('operacoes').where('id').equals(String(item.operacao_id)).toArray()).find((row) => !row.deleted_at) || null;
+    if (!operacao || operacao.status !== 'CONFIRMADA' || operacao.origem === 'LEGADO') continue;
+    const cancelamentoDaPropria = cancelamentoOperacaoId
+      && String(cancelamentoOperacaoId) === String(operacao.id)
+      && item.status === 'CANCELADO';
+    if (cancelamentoDaPropria) continue;
+    throw new WeighingError(
+      'PESAGEM_VINCULADA_OPERACAO',
+      'Esta pesagem é a Entrada/Saída de uma operação confirmada e não pode ser excluída sozinha. Nada foi apagado. '
+        + 'Cancele a operação (com motivo) — no Lançamento, pelo Excluir/Desfazer; com vários animais, em Rebanho › Entradas/Saídas.',
+      { pesagem_id: item.pesagem_id, operacao_id: operacao.id },
+    );
+  }
+}
+
+export async function bulkDeleteEntries(ids, { motivo, cancelamentoOperacaoId = null } = {}) {
   const reason = cancellationReason(motivo);
   storage.assertWritable('Exclusão de pesagens');
   const db = await storage.ensureReady();
+  // A exceção do cancelamento canônico só vale dentro da transação que já cancelou o item (cancelOperation).
+  if (cancelamentoOperacaoId && !Dexie.currentTransaction) {
+    throw new WeighingError('PESAGEM_VINCULADA_OPERACAO', 'Cancelamento de operação fora da transação da operação: nada foi apagado.');
+  }
   const ts = new Date().toISOString();
   let removed = 0;
   const affectedAnimals = new Set();
   const removedIds = [];
-  // operacaoItens (v9) entra no escopo: removeOrphanAnimal confere se o animal veio de operação.
-  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalIdentificadores'), db.table('animalLotes'), db.table('movimentosAnimais'), db.table('auditoria'), db.table('categoriasAnimal'), db.table(APLICACOES_STORE), db.table('operacaoItens'), async () => {
+  // operacaoItens/operacoes (v9) entram no escopo: vínculo com operação confirmada e removeOrphanAnimal.
+  await db.transaction('rw', db.table('pesagens'), db.table('animais'), db.table('animalIdentificadores'), db.table('animalLotes'), db.table('movimentosAnimais'), db.table('auditoria'), db.table('categoriasAnimal'), db.table(APLICACOES_STORE), db.table('operacaoItens'), db.table('operacoes'), async () => {
+    await assertNoConfirmedOperationLinks(db, ids, cancelamentoOperacaoId);
     for (const id of ids) {
       const rows = await db.table('pesagens').where('id').equals(id).toArray();
       const existing = [...rows].reverse().find((row) => !row.deleted_at);

@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { SanidadeField, SanidadeSelect, SanidadeTextArea, SanidadeTextInput } from './SanidadeFormFields.jsx';
+import '@/styles/sanidade.css';
 import { emptyMedicamentoForm, medicamentoFormFromRecord, medicamentoInputFromForm, validateMedicamentoForm } from './sanidadeModel.js';
 
 export default function MedicamentoFormDialog({ open, record, readOnly, busy, unidades, vias, viaLabels, empresaId, onOpenChange, onSubmit }) {
@@ -53,7 +54,7 @@ export default function MedicamentoFormDialog({ open, record, readOnly, busy, un
           <SanidadeField id="medicamento-via" label="Via de aplicação">
             <SanidadeSelect id="medicamento-via" value={form.via_aplicacao} onChange={setField('via_aplicacao')} disabled={readOnly} noneLabel="Nenhuma" options={vias.map((via) => ({ value: via, label: viaLabels[via] ?? via }))} />
           </SanidadeField>
-          <SanidadeField id="medicamento-carencia" label="Carência (dias)" hint="Informativa; não bloqueia vendas nem abates.">
+          <SanidadeField id="medicamento-carencia" label="Carência (dias)" hint="Vazio = carência desconhecida (não é zero). Carência aberta ou desconhecida bloqueia o abate até liberação técnica.">
             <SanidadeTextInput id="medicamento-carencia" value={form.carencia_dias} onChange={setField('carencia_dias')} disabled={readOnly} inputMode="numeric" maxLength={4} />
           </SanidadeField>
           <SanidadeField id="medicamento-observacao" label="Observação" wide>

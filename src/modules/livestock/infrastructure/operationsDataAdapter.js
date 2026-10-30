@@ -282,7 +282,7 @@ async function nomeDe(db, store, id, campo = 'nome') {
   return row ? row[campo] || null : null;
 }
 
-async function confirmarEntrada({ db, operacao, ts, operador }, item, posicao) {
+async function confirmarEntrada({ db, operacao, ts, operador, launch = null }, item, posicao) {
   const dados = item.dados || {};
   const lote = dados.lote_id || operacao.lote_destino_id || null;
   if (lote && !(await byId(db, 'loteApartacoes', lote))) fail('OPERACAO_INVALIDA', `Animal ${posicao}: lote de destino não encontrado.`);
@@ -336,18 +336,29 @@ async function confirmarEntrada({ db, operacao, ts, operador }, item, posicao) {
   };
   await db.table('movimentosAnimais').add(movimento);
   let pesagemId = null;
+  if (!item.peso_kg && launch?.aplicacoesSanidade?.length) {
+    fail('SANIDADE_SEM_PESAGEM', `${rotuloAnimal(animal, posicao)}: aplicação de sanidade no Lançamento é gravada com a pesagem. Informe o peso ou registre a aplicação avulsa em Sanidade.`);
+  }
   if (item.peso_kg) {
-    // Cadastro com o peso medido/informado: adota o movimento acima (sem segunda entrada).
+    // Cadastro com o peso medido/informado: adota o movimento acima (sem segunda entrada). No Lançamento, o
+    // payload da tela (lote/apartação, categoria, leitura da balança, documentação…) entra junto; os campos de
+    // identidade, data, peso e vínculo vêm sempre da operação.
     const ui = {
+      ...(launch?.ui || {}),
       tipo_manejo: 'Cadastro', data_pesagem: operacao.data, peso: item.peso_kg, animal_id: animal.id,
       numero_animal: animal.numero_animal, marca: animal.marca, marca_id: animal.marca_id, sexo: animal.sexo,
       raca: animal.raca, raca_id: animal.raca_id, lote_id: lote, nome_lote: lote ? await nomeDe(db, 'loteApartacoes', lote, 'nome_lote') : null,
-      operacao_id: operacao.id, peso_origem: item.peso_origem === 'BALANCA' ? 'BALANCA' : 'MANUAL', origem: 'operacao', operador,
+      operacao_id: operacao.id, peso_origem: item.peso_origem === 'BALANCA' ? 'BALANCA' : 'MANUAL',
+      origem: launch ? 'lancamento' : 'operacao', operador: launch?.ui?.operador || operador,
       origem_animal: SUBTIPO_LABELS[operacao.subtipo], valor_pago_cabeca: item.valor ?? null,
-      documentacao: [operacao.gta_numero && `GTA ${operacao.gta_numero}`, operacao.nf_numero && `NF ${operacao.nf_numero}`].filter(Boolean).join(' · ') || null,
+      documentacao: launch?.ui?.documentacao
+        || [operacao.gta_numero && `GTA ${operacao.gta_numero}`, operacao.nf_numero && `NF ${operacao.nf_numero}`].filter(Boolean).join(' · ') || null,
       observacao: item.observacao || null,
     };
-    const created = await weighingAdapter.createEntry(uiToStorageRecord(ui));
+    const created = await weighingAdapter.createEntry(
+      uiToStorageRecord(ui, launch?.entryId ? { id: launch.entryId } : {}),
+      { aplicacoesSanidade: launch?.aplicacoesSanidade || [] },
+    );
     pesagemId = created.id;
   } else {
     // Sem pesagem: lote (permanência) e estado do animal a partir do movimento.
@@ -356,28 +367,36 @@ async function confirmarEntrada({ db, operacao, ts, operador }, item, posicao) {
   await db.table('operacaoItens').update(item.localId, { animal_id: animal.id, pesagem_id: pesagemId, status: ITEM_STATUS.CONFIRMADO, updated_at: ts });
 }
 
-async function confirmarSaida({ db, operacao, ts, operador, parceiro }, item, posicao) {
+async function confirmarSaida({ db, operacao, ts, operador, parceiro, launch = null }, item, posicao) {
   const animal = await byId(db, 'animais', item.animal_id);
   const rotulo = rotuloAnimal(animal, posicao);
   await assertNoRebanhoNaData(db, animal, operacao.data, rotulo);
   const motivo = MOTIVO_SAIDA_POR_SUBTIPO[operacao.subtipo];
+  // Saída não registra sanidade (regra clínica: não se aplica em quem está saindo); o Lançamento não envia.
+  if (launch?.aplicacoesSanidade?.length) fail('SANIDADE_NA_SAIDA', `${rotulo}: a Saída não registra aplicação de sanidade.`);
   const ui = {
+    ...(launch?.ui || {}),
     tipo_manejo: 'Saída', motivo_saida: motivo, data_pesagem: operacao.data, animal_id: animal.id,
     numero_animal: animal.numero_animal, marca: animal.marca, marca_id: animal.marca_id, sexo: animal.sexo, raca: animal.raca, raca_id: animal.raca_id,
-    operacao_id: operacao.id, origem: 'operacao', operador,
+    operacao_id: operacao.id, origem: launch ? 'lancamento' : 'operacao', operador: launch?.ui?.operador || operador,
     observacao: item.observacao || (operacao.subtipo === 'AJUSTE_SAIDA' ? operacao.observacao : null),
-    documentacao: [operacao.gta_numero && `GTA ${operacao.gta_numero}`, operacao.nf_numero && `NF ${operacao.nf_numero}`].filter(Boolean).join(' · ') || null,
+    documentacao: launch?.ui?.documentacao
+      || [operacao.gta_numero && `GTA ${operacao.gta_numero}`, operacao.nf_numero && `NF ${operacao.nf_numero}`].filter(Boolean).join(' · ') || null,
   };
   if (item.peso_kg) {
     ui.peso = item.peso_kg;
     ui.peso_origem = item.peso_origem === 'BALANCA' ? 'BALANCA' : 'MANUAL';
+  } else {
+    ui.peso = null;
+    ui.peso_origem = null;
+    ui.balanca_leitura = null;
   }
   if (operacao.subtipo === 'VENDA') {
-    ui.comprador = parceiro?.nome || null;
+    ui.comprador = parceiro?.nome || launch?.ui?.comprador || null;
     if (item.valor !== null && item.valor !== undefined) ui.valor_venda_total = item.valor;
   }
   if (operacao.subtipo === 'ABATE') {
-    ui.frigorifico = parceiro?.nome || null;
+    ui.frigorifico = parceiro?.nome || launch?.ui?.frigorifico || null;
     if (item.valor !== null && item.valor !== undefined) ui.valor_total_abate = item.valor;
   }
   if (operacao.subtipo === 'MORTE' && item.causa_morte_id) {
@@ -386,7 +405,7 @@ async function confirmarSaida({ db, operacao, ts, operador, parceiro }, item, po
   }
   let created;
   try {
-    created = await weighingAdapter.createEntry(uiToStorageRecord(ui), { carenciaConferida: true });
+    created = await weighingAdapter.createEntry(uiToStorageRecord(ui, launch?.entryId ? { id: launch.entryId } : {}), { carenciaConferida: true });
   } catch (err) {
     fail(err.code || 'OPERACAO_SAIDA', `${rotulo}: ${err.message}`);
   }
@@ -424,6 +443,97 @@ async function confirmarMovimentacao({ db, operacao, ts }, item, posicao) {
 }
 
 // ---------------------------------------------------------------------------
+// Lançamento de Pesagens (tela de curral): um animal = uma operação confirmada
+// ---------------------------------------------------------------------------
+
+/**
+ * Entrada ou Saída de UM animal feita no Lançamento: cria a operação (origem LANCAMENTO) e o item e confirma na
+ * MESMA transação, pelo mesmo caminho das telas Rebanho › Entradas/Saídas (confirmarEntrada/confirmarSaida): animal,
+ * movimento único, pesagem (quando há peso) com o payload completo da tela, aplicações de sanidade, lote e auditoria.
+ * Qualquer falha desfaz tudo — não sobra rascunho. Idempotente pelo `id` (o ciclo do Lançamento): Enter duplo ou
+ * nova tentativa depois de gravado devolvem a mesma operação, sem segundo efeito.
+ */
+export async function registerLaunchOperation({ id, header, item, launch = null, aceitarAvisos = false, operador = null, empresaId = DEFAULT_EMPRESA_ID }) {
+  if (!id) fail('OPERACAO_INVALIDA', 'Lançamento sem identificador.');
+  const db = await readyDb('Lançamento com operação');
+  const ts = new Date().toISOString();
+  let repetida = false;
+  let avisos = [];
+  await db.transaction('rw', db.tables, async () => {
+    const existente = (await db.table('operacoes').where('id').equals(String(id)).toArray())[0] || null;
+    if (existente) {
+      if (!existente.deleted_at && existente.origem === 'LANCAMENTO' && existente.status === OPERACAO_STATUS.CONFIRMADA) { repetida = true; return; }
+      fail('OPERACAO_DUPLICADA', 'Este lançamento já foi processado; confira a lista do dia antes de salvar de novo.');
+    }
+    await db.table('operacoes').add({
+      id: String(id), empresa_id: empresaId, ...header, status: OPERACAO_STATUS.RASCUNHO, origem: 'LANCAMENTO',
+      documento_situacao: header.gta_numero || header.nf_numero ? 'INFORMADO' : 'SEM_DOCUMENTO',
+      created_at: ts, updated_at: ts, deleted_at: null,
+    });
+    await db.table('operacaoItens').add({
+      id: crypto.randomUUID(), operacao_id: String(id), animal_id: item.animal_id || null, status: ITEM_STATUS.RASCUNHO,
+      dados: item.animal_id ? { lote_id: item.lote_id ?? null } : {
+        numero_animal: item.numero_animal, marca_id: item.marca_id, sexo: item.sexo, raca_id: item.raca_id,
+        mae_animal_id: item.mae_animal_id, lote_id: item.lote_id,
+      },
+      peso_kg: item.peso_kg ?? null, peso_origem: item.peso_origem ?? null, valor: item.valor ?? null,
+      causa_morte_id: item.causa_morte_id ?? null, observacao: item.observacao ?? null,
+      pesagem_id: null, origem_pesagem_id: null, created_at: ts, updated_at: ts, deleted_at: null,
+    });
+    const operacao = await byId(db, 'operacoes', id);
+    const itens = await itensDa(db, operacao.id);
+    const conferencia = checkConference(operacao, itens);
+    if (operacao.tipo === OPERACAO_TIPOS.SAIDA) await checkWithdrawals(db, operacao, itens, conferencia);
+    if (!conferencia.ok) fail('OPERACAO_CONFERENCIA', conferencia.bloqueios[0], { conferencia });
+    if (conferencia.avisos.length && !aceitarAvisos) fail('OPERACAO_AVISOS', 'Confira os avisos antes de confirmar.', { conferencia });
+    avisos = conferencia.avisos;
+    const ctx = { db, operacao, ts, operador, parceiro: await byId(db, 'parceiros', operacao.parceiro_id), launch };
+    if (operacao.tipo === OPERACAO_TIPOS.ENTRADA) await confirmarEntrada(ctx, itens[0], 1);
+    else if (operacao.tipo === OPERACAO_TIPOS.SAIDA) await confirmarSaida(ctx, itens[0], 1);
+    else fail('OPERACAO_INVALIDA', 'O Lançamento registra Entradas e Saídas; movimentações são feitas em Rebanho › Movimentações.');
+    await db.table('operacoes').update(operacao.localId, { status: OPERACAO_STATUS.CONFIRMADA, confirmada_em: ts, updated_at: ts });
+    await db.table('auditoria').add(auditRow({
+      entidade: 'operacoes', entidade_id: operacao.id, acao: 'CONFIRMAR',
+      resumo: `${SUBTIPO_LABELS[operacao.subtipo]} em ${operacao.data}: 1 animal (Lançamento de Pesagens)`,
+      created_at: ts,
+    }));
+  });
+  return { ...(await getOperation(id)), repetida, avisos };
+}
+
+/**
+ * Animal que entrou por operação SEM peso (PENDENTE_PESAGEM, sem pesagens) com este número e marca: a "Entrada"
+ * digitada no Lançamento para ele é a PRIMEIRA PESAGEM dele (mesmo animal, nenhuma entrada nova).
+ */
+export async function findPendingEntryAnimal({ numero, marcaId = null }) {
+  const chave = normalized(numero);
+  if (!chave) return null;
+  const db = await readyDb();
+  const candidatos = (await db.table('animais').where('identificacao_normalizada').equals(chave).toArray())
+    .filter((row) => active(row) && row.situacao === 'ATIVO' && row.situacao_cadastro === 'PENDENTE_PESAGEM' && (row.marca_id || null) === (marcaId || null));
+  for (const animal of candidatos) {
+    const pesagens = (await db.table('pesagens').where('animal_id').equals(animal.id).toArray()).filter(active);
+    if (pesagens.length) continue;
+    const operacao = animal.operacao_entrada_id ? await byId(db, 'operacoes', animal.operacao_entrada_id) : null;
+    return { animal: strip(animal), operacao: operacao ? strip(operacao) : null };
+  }
+  return null;
+}
+
+/** Operação (não legada) a que uma pesagem pertence, com o item; null se a pesagem não veio de operação. */
+export async function findOperationOfEntry(pesagemId) {
+  if (!pesagemId) return null;
+  const db = await readyDb();
+  const item = (await db.table('operacaoItens').where('pesagem_id').equals(String(pesagemId)).toArray())
+    .find((row) => active(row) && row.status !== ITEM_STATUS.CANCELADO);
+  if (!item) return null;
+  const operacao = await byId(db, 'operacoes', item.operacao_id);
+  if (!operacao || operacao.origem === 'LEGADO') return null;
+  const quantidade = (await itensDa(db, operacao.id)).filter((row) => row.status !== ITEM_STATUS.CANCELADO).length;
+  return { operacao: strip(operacao), item: strip(item), quantidade };
+}
+
+// ---------------------------------------------------------------------------
 // Cancelamento (fato não se apaga: deleted_at + auditoria + motivo)
 // ---------------------------------------------------------------------------
 
@@ -451,7 +561,8 @@ export async function cancelOperation(id, { motivo }) {
       }
       await db.table('operacaoItens').update(item.localId, { status: ITEM_STATUS.CANCELADO, updated_at: ts });
       if (item.pesagem_id) {
-        await weighingAdapter.bulkDeleteEntries([item.pesagem_id], { motivo: `Cancelamento da operação: ${motivo}` });
+        // Exceção canônica da guarda de pesagem vinculada: mesma transação, item já CANCELADO, operação desta chamada.
+        await weighingAdapter.bulkDeleteEntries([item.pesagem_id], { motivo: `Cancelamento da operação: ${motivo}`, cancelamentoOperacaoId: operacao.id });
       }
       for (const movimento of (await movimentosDo(db, item.animal_id)).filter((row) => row.operacao_id === operacao.id && row.origem === 'operacao')) {
         await db.table('movimentosAnimais').update(movimento.localId, { deleted_at: ts, updated_at: ts });

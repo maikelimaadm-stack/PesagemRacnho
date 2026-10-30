@@ -39,7 +39,9 @@ const textToFaixas = (text) => String(text || '').split(/\n+/).map((l) => l.trim
   return m ? { peso_min: m[1], peso_max: m[2], dose: m[3] } : { peso_min: null, peso_max: null, dose: null };
 });
 
-export default function PosologiasPanel({ medicamentos = [], canWrite }) {
+// `medicamentoId` (opcional): mostra só as posologias desse produto e a nova já nasce nele (uso no Lançamento).
+// `onChanged`: chamado depois de salvar, aprovar ou suspender (o Lançamento recalcula a dose sugerida).
+export default function PosologiasPanel({ medicamentos = [], canWrite, medicamentoId = null, onChanged }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(null);
@@ -51,8 +53,8 @@ export default function PosologiasPanel({ medicamentos = [], canWrite }) {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    try { setRows(await listPosologies()); } catch (error) { toast.error(describeError(error)); } finally { setLoading(false); }
-  }, []);
+    try { setRows(await listPosologies(medicamentoId ? { medicamentoId } : {})); } catch (error) { toast.error(describeError(error)); } finally { setLoading(false); }
+  }, [medicamentoId]);
   useEffect(() => { refresh(); }, [refresh]);
 
   const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
@@ -66,6 +68,7 @@ export default function PosologiasPanel({ medicamentos = [], canWrite }) {
       toast.success('Rascunho da posologia salvo.');
       setForm(null);
       await refresh();
+      onChanged?.();
     } catch (error) {
       setErros(error?.erros?.length ? error.erros : [describeError(error)]);
     } finally {
@@ -81,6 +84,7 @@ export default function PosologiasPanel({ medicamentos = [], canWrite }) {
       toast.success(acao.tipo === 'aprovar' ? 'Posologia aprovada.' : 'Posologia suspensa.');
       setAcao(null);
       await refresh();
+      onChanged?.();
     } catch (error) {
       toast.error(describeError(error));
     } finally {
@@ -93,7 +97,7 @@ export default function PosologiasPanel({ medicamentos = [], canWrite }) {
       <div className="rb-toolbar">
         <button type="button" className="rb-btn" onClick={refresh} disabled={loading}><RefreshCw size={14} aria-hidden="true" /> Atualizar</button>
         <span className="rb-toolbar__spacer" />
-        {canWrite ? <button type="button" className="rb-btn rb-btn--primary" onClick={() => setForm(vazio(medicamentos[0]?.id || ''))} disabled={!medicamentos.length}><Plus size={14} aria-hidden="true" /> Nova posologia</button> : null}
+        {canWrite ? <button type="button" className="rb-btn rb-btn--primary" onClick={() => setForm(vazio(medicamentoId || medicamentos[0]?.id || ''))} disabled={!medicamentos.length}><Plus size={14} aria-hidden="true" /> Nova posologia</button> : null}
       </div>
       <p className="rb-note">Dose sugerida só sai de posologia <strong>aprovada</strong>, completa e vigente, com o peso do animal; o operador confirma a dose aplicada. Carência vazia = desconhecida (diferente de zero). A dose padrão em texto do medicamento continua apenas como referência.</p>
 
@@ -123,6 +127,7 @@ export default function PosologiasPanel({ medicamentos = [], canWrite }) {
           <label className="rb-field"><span className="rb-field__label is-required">Fonte</span><select className="rb-control" value={form.fonte} onChange={set('fonte')} aria-label="Fonte da posologia"><option value="">—</option>{POSOLOGIA_FONTES.map((f) => <option key={f} value={f}>{POSOLOGIA_FONTE_LABELS[f]}</option>)}</select></label>
           <label className="rb-field"><span className="rb-field__label">Referência da fonte</span><input className="rb-control" value={form.fonte_referencia} onChange={set('fonte_referencia')} aria-label="Referência da fonte" /></label>
           <label className="rb-field"><span className="rb-field__label is-required">Vigência a partir de</span><MakDateControl value={form.vigencia_inicio} onChange={set('vigencia_inicio')} ariaLabel="Início da vigência" /></label>
+          <label className="rb-field"><span className="rb-field__label">Vigência até</span><MakDateControl value={form.vigencia_fim} onChange={set('vigencia_fim')} ariaLabel="Fim da vigência" /></label>
           {erros.length ? <ul className="rb-alerts rb-alerts--error rb-field--wide">{erros.map((e) => <li key={e}>{e}</li>)}</ul> : null}
           <div className="rb-inline rb-field--wide">
             <button type="button" className="rb-btn rb-btn--primary" onClick={salvar} disabled={busy}><Save size={14} aria-hidden="true" /> Salvar rascunho</button>

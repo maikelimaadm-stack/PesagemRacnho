@@ -29,10 +29,23 @@ Cadastre uma vez e escolha no lançamento: **Marcas**, **Raças**, **Categorias*
 ## Como lançar uma pesagem
 
 1. No menu, abra **Lançamento**.
-2. Informe o número do animal e a marca (a padrão já vem escolhida), o peso e o que mais for pedido.
-3. Salve o lançamento.
+2. Em **Tipo de Movimentação**, escolha:
+   - **Entrada (novo animal)**: escolha também o **Motivo da Entrada** (Compra, Transferência recebida, Nascimento
+     ou Ajuste de entrada);
+   - **Manejo / Pesagem**: a pesagem de rotina;
+   - **Saída**: escolha também o **Motivo da Saída** (Venda, Abate, Transferência enviada, Morte, Doação ou Ajuste
+     de saída).
+3. Informe o número do animal e a marca (a padrão já vem escolhida), o peso e o que mais for pedido.
+4. Salve o lançamento.
 
-Animal novo é cadastrado ali mesmo (cadastro rápido), com raça e categoria escolhidas da lista.
+Entrada e Saída salvas aqui entram no livro do rebanho como uma operação, igual às feitas em
+**Rebanho › Entradas/Saídas**, e contam no inventário. A mensagem confirma a operação, por exemplo: "Entrada
+confirmada: animal 101 · Compra · com pesagem". Para lançar uma Entrada sem pesar, marque **Sem peso**: o animal
+fica pendente de pesagem, e a próxima Entrada com o mesmo número e marca é a primeira pesagem dele. Detalhes em
+`REBANHO-OPERACOES.md`.
+
+O painel **Sanidade** do lançamento permite cadastrar medicamentos e posologias sem sair da tela (veja
+`SANIDADE.md`).
 
 **Repesar no mesmo dia (1.5.0).** Se o animal já foi pesado hoje (Manejo), o programa pergunta **"Esse animal já
 foi pesado hoje. Repesar?"**. **Repesar (substitui)** cancela a pesagem de hoje com o motivo "repesagem" (fica

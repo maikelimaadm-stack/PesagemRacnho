@@ -165,7 +165,7 @@ assert.match(page, /\{podeRegistrarSanidade && modeSupportsSanity\(tipoManejo\) 
 assert.equal((page.match(/<SanidadeLancamentoPanel/g) || []).length, 1, 'um único painel na tela');
 assert.match(page, /listProgramas\(\{ empresaId: empresaSelecionadaId \}\)/, 'programas ativos');
 assert.match(page, /listMedicamentos\(\{ empresaId: empresaSelecionadaId \}\)/, 'medicamentos ativos');
-assert.match(page, /if \(!podeRegistrarSanidade\) return undefined;/, 'sem weighing.write nem carrega os cadastros');
+assert.match(page, /if \(!podeRegistrarSanidade\) return;\s*carregarCatalogoSanidade\(\);/, 'sem weighing.write nem carrega os cadastros');
 assert.match(page, /weighingService\.createEntry\(\{ \.\.\.data, (?:id: cicloLancamentoRef\.current, )?aplicacoes_sanidade: sanidadeValidada\.payload \}\)/, 'createEntry recebe aplicacoes_sanidade');
 assert.match(page, /const sanidadeNoLancamento = !editingId && podeRegistrarSanidade && modeSupportsSanity\(tipoManejo\);/, 'edição e Saída não enviam aplicações');
 assert.match(page, /buildSanityPayload\(sanidadeAplicacoes,/, 'payload montado pelo módulo puro');
@@ -178,7 +178,7 @@ assert.match(page, /sanidadeSequencia,\n\s*\}\);/, 'stateAfterSave recebe a marc
 
 assert.match(panel, /from "@\/modules\/sanity\/application\/sanityService";/, 'painel usa enumerações e suggestedDose do sanityService');
 for (const nome of ['suggestedDose', 'VIA_LABELS', 'VIAS_APLICACAO', 'UNIDADES_DOSE', 'PROGRAMA_TIPO_LABELS']) assert.match(panel, new RegExp(`\\b${nome}\\b`), `painel usa ${nome}`);
-for (const texto of ['Sanidade', 'Adicionar aplicação', 'Programa/Procedimento', 'Medicamento/Produto', '>Dose<', '>Unidade<', '>Via<', '>Observação<', 'Aplicar esta configuração aos próximos animais', 'Sugestão: {sugestaoTexto}', 'tela Sanidade', 'somente leitura']) {
+for (const texto of ['Sanidade', 'Adicionar aplicação', 'Programa/Procedimento', 'Medicamento/Produto', '>Dose aplicada<', '>Unidade<', '>Via<', '>Observação<', 'Aplicar esta configuração aos próximos animais', 'Referência do cadastro (texto, não calcula pelo peso): {sugestaoTexto}', 'tela Sanidade', 'somente leitura', 'Novo medicamento', 'Configurar posologia', 'Consultar posologia', 'Usar dose sugerida']) {
   assert.ok(panel.includes(texto), `painel exibe "${texto}"`);
 }
 assert.match(panel, /applyMedicamentoToDraft\(atual, medicamento, medicamento \? suggestedDose\(medicamento\) : null\)/, 'escolher medicamento pré-preenche pela dose padrão numérica');

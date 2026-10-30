@@ -72,14 +72,26 @@ export async function detectStorageStatus() {
 // sessão e pesagem vêm da própria pesagem). Qualquer aplicação inválida: nada é gravado.
 // Payload novo do Lançamento: sem valores comerciais para quem não tem commercial.write, validado, e as aplicações de
 // sanidade (payload.aplicacoes_sanidade) validadas antes de qualquer leitura.
-function prepareNewEntry(actor, rawPayload) {
+function prepareNewEntry(actor, rawPayload, { semPesagem = false } = {}) {
   const { aplicacoes_sanidade: rawApplications, ...payloadWithoutSanity } = rawPayload || {};
   const uiPayload = withoutCommercialInput(actor, payloadWithoutSanity);
-  validateUiPayload(uiPayload);
+  // Entrada sem peso (operação): não vira pesagem, então não passa pela validação de pesagem.
+  if (!semPesagem) validateUiPayload(uiPayload);
   const aplicacoesSanidade = validateLaunchApplications(rawApplications, {
     data: parseCivilDate(uiPayload.data_pesagem || uiPayload.dataPesagem || uiPayload.data),
   });
   return { uiPayload, aplicacoesSanidade };
+}
+
+/**
+ * Payload do Lançamento preparado para uma operação de Entrada/Saída (operationsService.registerLaunchOperation):
+ * mesma permissão, mesmo corte de valores comerciais e mesma validação das aplicações de sanidade do createEntry.
+ * Devolve também se o ator pode gravar valores (o item da operação segue a mesma regra).
+ */
+export function prepareLaunchEntry(rawPayload, { semPesagem = false } = {}) {
+  const actor = requireWeighingPermission('weighing.write');
+  const prepared = prepareNewEntry(actor, rawPayload, { semPesagem });
+  return { ...prepared, valoresPermitidos: !actor || can(actor.role, 'commercial.write') };
 }
 
 // Registro de armazenamento com os derivados contra a pesagem anterior (data estritamente menor: a pesagem do mesmo
