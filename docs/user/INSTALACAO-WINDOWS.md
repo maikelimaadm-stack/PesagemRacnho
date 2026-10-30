@@ -42,7 +42,7 @@ e pode ser corretamente bloqueado por uma política corporativa do Windows.
 3. Execute o **Setup 1.6.0** por cima da instalação atual.
 4. Abra o programa e faça o login. A barra superior mostra **v1.6.0**.
 
-A 1.6.0 **atualiza o banco da versão 8 para a 9**. Na primeira abertura, o programa grava e confere um **backup pré-migração** (pasta `backups`, arquivo `pre-migration-v9-…json`) e depois migra. Os dados existentes não são reescritos. Para voltar à 1.5.x, restaure esse backup na versão antiga: veja `docs/evidence/pesagens-integrada/MIGRACAO-ROLLBACK.md`.
+A 1.6.0 **atualiza o banco da versão 8 para a 9**. Na primeira abertura, o programa grava e confere um **backup pré-migração** (pasta `backups`, arquivo `pre-migration-v9-…json`) e depois migra. Os dados existentes não são reescritos. Para voltar à 1.5.x, restaure esse backup na versão antiga **num perfil separado** — nunca abra a 1.5.x sobre a pasta de dados da 1.6.0 nem apague essa pasta. O passo a passo está em `docs/evidence/pesagens-integrada/MIGRACAO-ROLLBACK.md`.
 
 Na primeira abertura da 1.4.2 ou mais nova (vindo da 1.4.0/1.4.1), o programa recalcula **uma vez** o GMD das vendas e abates que têm peso
 (só os campos calculados: data e peso anterior, dias, ganho e GMD). Nenhuma pesagem é apagada ou mudada

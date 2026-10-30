@@ -179,7 +179,8 @@
     "equipment:contract:verify": "node scripts/verify-equipment-contract.mjs",
     "safety:backup:verify": "node scripts/verify-safety-backup.mjs",
     "restore:preflight:verify": "node scripts/verify-restore-preflight.mjs",
-    "backup:availability:verify": "node scripts/verify-backup-availability.mjs"
+    "backup:availability:verify": "node scripts/verify-backup-availability.mjs",
+    "rollback:v8:verify": "node scripts/verify-rollback-v8.mjs"
   },
   "dependencies": {
     "@hello-pangea/dnd": "^17.0.0",
