@@ -310,13 +310,13 @@ O uso diário e a abertura do app não pagam esse custo. A abertura ganhou só u
 
 | Comando | Resultado | Tempo |
 |---|---|---|
-| `npm ci` | OK | 11s |
-| `npm run lint` | OK | 11s |
-| `npm run test:unit` | OK | 9s |
-| `npm run build` | OK | 11s |
-| `xvfb-run -a npm run test:quick` | OK | 108s |
-| `xvfb-run -a npm run test:full` | OK | 144s |
-| `xvfb-run -a npm run e2e:electron:verify` | OK | 25s |
+| `npm ci` | OK | 16s |
+| `npm run lint` | OK | 16s |
+| `npm run test:unit` | OK | 10s |
+| `npm run build` | OK | 12s |
+| `xvfb-run -a npm run test:quick` | OK | 115s |
+| `xvfb-run -a npm run test:full` | OK | 149s |
+| `xvfb-run -a npm run e2e:electron:verify` | OK | 27s |
 | `npm run storage:all:verify` | OK | 22s |
 | `npm run migration:v9:verify` | OK | 1s |
 | `npm run backup:recovery:verify` | OK | 0s |
@@ -324,17 +324,18 @@ O uso diário e a abertura do app não pagam esse custo. A abertura ganhou só u
 | `npm run safety:backup:verify` | OK | 1s |
 | `npm run restore:preflight:verify` | OK | 1s |
 | `npm run backup:availability:verify` | OK | 0s |
-| `npm run backup:partial:verify` | OK | 0s |
-| `npm run restore:compensation:verify` | OK | 1s |
+| `npm run backup:partial:verify` | OK | 1s |
+| `npm run restore:compensation:verify` | OK | 0s |
 | `npm run livestock:operations:verify` | OK | 1s |
 | `npm run sanity:posology:verify` | OK | 0s |
 | `npm run cross:surface:verify` | OK | 1s |
-| `npm run restore:critical-restart:verify` | OK | 1s |
+| `npm run restore:critical-restart:verify` | OK | 2s |
 | `npm run restore:content-integrity:verify` | OK | 1s |
 
-Rodados no código de `7ea8880`, com `npm ci` limpo, em sequência. O commit seguinte (`3c9d960`) só mexe em docs
-e acrescenta os três canais ao `main:boot:verify`, que foi rodado de novo e passou. O benchmark de 36k continua fora
-do `test:full`. O CI (Testes e Gerar instalador) do HEAD final está na descrição da PR #4.
+Rodados no código de `a806ddf` (2ª passada), com `npm ci` limpo, em sequência. A rodada anterior, em `7ea8880`,
+também teve 21 de 21 OK. O commit seguinte só acrescenta esta tabela. O E2E inclui o passo 14 (estado crítico ao
+reabrir). O benchmark de 36k continua fora do `test:full`. O CI (Testes e Gerar instalador) do HEAD final está na
+descrição da PR #4.
 
 ## Regressões conferidas
 

@@ -66,13 +66,13 @@ Cada checkpoint roda o gate do que mudou e, antes de cada push: `npm run lint`, 
 
 | Comando | Resultado | Tempo |
 |---|---|---|
-| `npm ci` | OK | 11s |
-| `npm run lint` | OK | 11s |
-| `npm run test:unit` | OK | 9s |
-| `npm run build` | OK | 11s |
-| `xvfb-run -a npm run test:quick` | OK | 108s |
-| `xvfb-run -a npm run test:full` | OK | 144s |
-| `xvfb-run -a npm run e2e:electron:verify` | OK | 25s |
+| `npm ci` | OK | 16s |
+| `npm run lint` | OK | 16s |
+| `npm run test:unit` | OK | 10s |
+| `npm run build` | OK | 12s |
+| `xvfb-run -a npm run test:quick` | OK | 115s |
+| `xvfb-run -a npm run test:full` | OK | 149s |
+| `xvfb-run -a npm run e2e:electron:verify` | OK | 27s |
 | `npm run storage:all:verify` | OK | 22s |
 | `npm run migration:v9:verify` | OK | 1s |
 | `npm run backup:recovery:verify` | OK | 0s |
@@ -80,12 +80,12 @@ Cada checkpoint roda o gate do que mudou e, antes de cada push: `npm run lint`, 
 | `npm run safety:backup:verify` | OK | 1s |
 | `npm run restore:preflight:verify` | OK | 1s |
 | `npm run backup:availability:verify` | OK | 0s |
-| `npm run backup:partial:verify` | OK | 0s |
-| `npm run restore:compensation:verify` | OK | 1s |
+| `npm run backup:partial:verify` | OK | 1s |
+| `npm run restore:compensation:verify` | OK | 0s |
 | `npm run livestock:operations:verify` | OK | 1s |
 | `npm run sanity:posology:verify` | OK | 0s |
 | `npm run cross:surface:verify` | OK | 1s |
-| `npm run restore:critical-restart:verify` | OK | 1s |
+| `npm run restore:critical-restart:verify` | OK | 2s |
 | `npm run restore:content-integrity:verify` | OK | 1s |
 
 - Gates novos: `restore:critical-restart:verify` (R3-01) e `restore:content-integrity:verify` (R3-02).
