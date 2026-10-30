@@ -248,8 +248,27 @@ Gera um arquivo `.pbk` **cifrado** (AES-GCM 256) com o banco e os anexos.
    vale para a migração do backup antigo, a gravação dos anexos, o recálculo do GMD e a conferência final.
 
    Se nem a volta automática funcionar, a tela diz **"Restauração NÃO concluída — base possivelmente
-   inconsistente"** e as gravações ficam bloqueadas. Nesse caso, restaure o backup de segurança indicado, pelo nome
-   e pelo SHA-256. Isso desbloqueia.
+   inconsistente"** e as gravações ficam bloqueadas. Veja **Estado crítico** logo abaixo.
+
+   A conferência final compara o **conteúdo** de cada registro com o backup: peso, identificação, documento,
+   movimento. Ter a mesma quantidade não basta. Com muitos dados ela leva alguns segundos. Num teste com 36 mil
+   pesagens, no aplicativo desktop, levou cerca de 8 segundos.
+#### Estado crítico (gravações bloqueadas)
+
+Quando a restauração e a volta automática falham, a página mostra uma faixa vermelha **"Estado CRÍTICO"** com
+o nome do backup de segurança a restaurar.
+
+- O bloqueio **continua depois de fechar e abrir o aplicativo**. Ele fica anotado num arquivo da pasta de dados,
+  fora do banco, e uma cópia fica no próprio banco. Reiniciar o computador também não o libera.
+- Enquanto isso, ainda dá para entrar no sistema e consultar os dados. Gravar não dá.
+- **Para sair do estado crítico:** em **Backup e Restauração**, restaure o backup de segurança indicado, pelo nome
+  e pelo SHA-256. Também serve outro backup íntegro e conferido. Só uma restauração **conferida** (conteúdo e
+  anexos) libera as gravações.
+- **Não** use o reset nem a limpeza de dados para sair do estado crítico. Eles apagam dados e não resolvem a
+  causa.
+- Se a tela avisar que o marcador **não pôde ser gravado** (por exemplo, disco cheio), **não feche o aplicativo**:
+  restaure já o backup indicado.
+
 4. **Resultado:** a página confere tudo de novo e diz **Recuperação completa** ou **Recuperação INCOMPLETA**, com o
    que não voltou. Ela mostra as contagens, os anexos e a integridade do banco.
 

@@ -23,6 +23,7 @@ Este arquivo diz onde a missão está e como continuar sem refazer nada.
 | Final | versão 1.6.0 (sem tag), docs, rollback, desempenho | feito | final-hardening |
 | R1 | auditoria corretiva R01–R09 (`AUDITORIA-CORRETIVA-R1.md`) | feito; R04 Windows bloqueado (homologação) | `fix(R1-R0x)`, `perf(R1-R08)`, `test(R1-R09)` |
 | R2 | auditoria corretiva R2-01 a R2-06 (`AUDITORIA-CORRETIVA-R2.md`) | feito; `test:full` termina (36k medido à parte) | `fix(R2-0x)`, `test(R2-05/R2-06)` |
+| R3 | auditoria corretiva R3-01 a R3-03 (`AUDITORIA-CORRETIVA-R3.md`) | feito | `fix(R3-03)`, `fix(R3-01/R3-02)`, `perf(R3-02)` |
 
 A situação item a item (os 52, com evidência) está em `MATRIZ-52-ITENS.md`.
 
@@ -70,6 +71,8 @@ Gates novos da missão (todos dentro de `test:quick` e `test:full`):
 | `cross:surface:verify` | R09/R2-06: regressões entre telas e importação na v9 |
 | `backup:partial:verify` | R2-01: backup parcial nunca é proteção completa |
 | `restore:compensation:verify` | R2-02: compensação depois da troca da base; estado crítico |
+| `restore:critical-restart:verify` | R3-01: estado crítico persistente; sobrevive a reabrir o app; só restauração conferida libera |
+| `restore:content-integrity:verify` | R3-02: conteúdo conferido registro a registro (contagem igual não basta); v8→v9 por contrato |
 
 O `test:full` usa `import:contract:verify` (600 × 3), que confere a correção da importação em massa pequena.
 
@@ -80,7 +83,7 @@ Verificações pesadas, fora do `test:quick`:
 | `rollback:v8:verify` | R04, com o código real da 1.5.6 |
 | `perf:reconcile:electron` (com `xvfb-run -a` no Linux) | R08, no Electron real |
 | `perf:reconcile:node` | R08, no fake-indexeddb |
-| `perf:import:electron` (com `xvfb-run -a`) | R2-05: 36.000 linhas no IndexedDB real; levou cerca de 85 s |
+| `perf:import:electron` (com `xvfb-run -a`) | R2-05: 36.000 linhas no IndexedDB real; levou cerca de 85 s. R3-02: mede também a conferência de conteúdo (cerca de 8 s) |
 | `perf:import:node` (o mesmo que `import:performance:verify`) | R2-05: 36.000 linhas no fake-indexeddb; cresce ~N² |
 
 O E2E (`scripts/verify-electron-e2e.mjs`) percorre, no Electron real:
@@ -124,5 +127,10 @@ Cada limite também está documentado no ADR correspondente.
   movimentação interna fica com local INDETERMINADO e aparece listado. Ele não entra no saldo de nenhuma propriedade,
   a não ser que só exista uma propriedade cadastrada.
 - O backup protegido aceita até 200 MB de anexos; acima disso, use o pacote comum (ADR-063).
+- R3-01: o estado crítico tem duas cópias: um arquivo na pasta de dados e uma chave em `appSettings`. Se o arquivo
+  não puder ser gravado, a tela pede para não fechar o app. A cópia no banco reinstala o bloqueio ao reabrir, desde
+  que o banco ainda seja legível. Fora do aplicativo desktop (navegador), só existe a cópia no banco.
+- R3-02: a conferência de conteúdo pós-restauração custa cerca de 8 s com 36 mil pesagens no Electron real
+  (`R3-BENCH-CONFERENCIA-ELECTRON.txt`).
 - A abertura do Lançamento com 36 mil pesagens já estava acima do orçamento antes da missão (aprox. 1,7 s;
   `BASELINE-E-GATES.md`).

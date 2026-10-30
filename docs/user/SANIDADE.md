@@ -196,7 +196,14 @@ posologia ou, sem posologia, da carência do medicamento.
   dias aparecem como alerta recente. A pendência só se resolve de dois jeitos:
   - **Esclarecer a carência:** em **Sanidade › Aplicações**, selecione a aplicação e use **Esclarecer carência**.
     Informe os dias, a fonte (bula, receituário ou laudo) e o responsável técnico. O fim da carência é contado a
-    partir da data da aplicação, e o registro fica na auditoria;
+    partir da data da aplicação, e o registro fica na auditoria.
+    Os dias precisam ser um número inteiro, de 0 a 9999. São recusados:
+    - campo vazio ou só com espaços;
+    - texto, decimal ou número negativo;
+    - números com separador, como `1.000` ou `1,5`.
+
+    Nada disso vira zero. **Zero dias** só é aceito com a caixa **"Confirmo que a fonte indica carência de 0 dia"**
+    marcada, e essa confirmação fica registrada;
   - **Liberação técnica documentada** na operação de abate, como abaixo.
 
   Enquanto estiver pendente:
