@@ -484,12 +484,13 @@ export async function cancelOperation(id, { motivo }) {
 
 export async function loadInventorySources() {
   const db = await readyDb();
-  const [animais, movimentos, operacoes, animalLotes, pesagens] = await Promise.all([
+  const [animais, movimentos, operacoes, animalLotes, pesagens, propriedades] = await Promise.all([
     db.table('animais').toArray(),
     db.table('movimentosAnimais').toArray(),
     db.table('operacoes').toArray(),
     db.table('animalLotes').toArray(),
     db.table('pesagens').toArray(),
+    db.table('propriedades').toArray(),
   ]);
   return {
     animais: animais.filter(active).map(strip),
@@ -499,5 +500,7 @@ export async function loadInventorySources() {
     // Só o necessário para conferir animal sem movimento de entrada (dado antigo).
     cadastros: pesagens.filter((row) => active(row) && (row.legacy_payload?.tipo_manejo ?? row.tipo_pesagem) === 'Cadastro')
       .map((row) => ({ id: row.id, animal_id: row.animal_id, data_pesagem: row.data_pesagem })),
+    // R06: todas as propriedades já cadastradas (inclusive excluídas) — com uma só, o local nunca é indeterminado.
+    propriedadesIds: [...new Set(propriedades.map((p) => p.id))],
   };
 }

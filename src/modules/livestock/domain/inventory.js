@@ -63,18 +63,25 @@ function classify(movimento, natureza, operacoesPorId) {
 const zeros = (lista) => Object.fromEntries(lista.map((classe) => [classe, 0]));
 const within = (date, from, to) => date >= from && date <= to;
 
-/** Presença numa dimensão de local (lote ou propriedade) como intervalos [inicio, fim). */
-function locationStays(dimensao, animal, ledger, animalLotes) {
+/** Local desconhecido na data (R06): o animal NÃO entra no saldo de nenhuma propriedade nesse intervalo. */
+export const LOCAL_INDETERMINADO = 'INDETERMINADO';
+
+/**
+ * Presença numa dimensão de local (lote ou propriedade) como intervalos [inicio, fim).
+ * R06: a propriedade é a DA DATA, pelo livro — destino da entrada, depois as movimentações internas. Sem destino
+ * na entrada, vale a origem da 1ª movimentação; sem nenhum registro, o local é INDETERMINADO (antes caía na
+ * propriedade ATUAL do animal, que pode ter mudado depois). Única exceção: se só existiu uma propriedade no
+ * cadastro (`propriedadeUnica`), não há outra possível.
+ */
+function locationStays(dimensao, animal, ledger, animalLotes, { propriedadeUnica = null } = {}) {
   if (dimensao === 'lote_id') {
     return animalLotes.filter((row) => row.animal_id === animal.id)
       .map((row) => ({ valor: row.lote_id, inicio: row.inicio, fim: row.fim || null }));
   }
-  // Propriedade: começa na entrada (propriedade de destino, ou a origem da 1ª mudança, ou a atual do animal),
-  // muda nas movimentações internas de propriedade e fecha na saída.
   const entrada = ledger.find((ev) => ev.natureza === 'ENTRADA');
   if (!entrada) return [];
   const mudancas = ledger.filter((ev) => ev.natureza === 'INTERNA' && ev.mov.propriedade_destino_id);
-  let atual = entrada.mov.propriedade_destino_id || mudancas[0]?.mov.propriedade_origem_id || animal.propriedade_id || null;
+  let atual = entrada.mov.propriedade_destino_id || mudancas[0]?.mov.propriedade_origem_id || propriedadeUnica || LOCAL_INDETERMINADO;
   const stays = [];
   let aberta = { valor: atual, inicio: entrada.data, fim: null };
   stays.push(aberta);
@@ -94,12 +101,14 @@ function locationStays(dimensao, animal, ledger, animalLotes) {
 const stayAt = (stays, valor, date) => stays.some((s) => s.valor === valor && s.inicio <= date && (!s.fim || s.fim > date));
 
 /**
- * @param {{ animais, movimentos, operacoes, animalLotes, cadastros }} fontes (só registros ativos)
+ * @param {{ animais, movimentos, operacoes, animalLotes, cadastros, propriedadesIds? }} fontes (só registros ativos;
+ *   `propriedadesIds`: todas as propriedades já cadastradas, inclusive inativas/excluídas)
  * @param {{ from: string, to: string, filtros?: { sexo?, raca_id?, categoria_id?, marca_id?, lote_id?, propriedade_id? } }} opcoes
  */
 export function computeInventory(fontes, { from, to, filtros = {} } = {}) {
   if (!from || !to || from > to) throw new Error('Período inválido: informe início e fim (início ≤ fim).');
-  const { animais = [], movimentos = [], operacoes = [], animalLotes = [], cadastros = [] } = fontes;
+  const { animais = [], movimentos = [], operacoes = [], animalLotes = [], cadastros = [], propriedadesIds = null } = fontes;
+  const propriedadeUnica = Array.isArray(propriedadesIds) && propriedadesIds.length === 1 ? propriedadesIds[0] : null;
   const operacoesPorId = new Map(operacoes.map((op) => [op.id, op]));
   const movimentosPorAnimal = new Map();
   for (const mov of movimentos) {
@@ -128,6 +137,7 @@ export function computeInventory(fontes, { from, to, filtros = {} } = {}) {
   const divergencias = [];
   const presentesNoFim = [];
   let presentesPeloCadastro = 0;
+  const indeterminados = [];
 
   for (const animal of animais) {
     if (!atributo(animal)) continue;
@@ -159,7 +169,11 @@ export function computeInventory(fontes, { from, to, filtros = {} } = {}) {
       continue;
     }
 
-    const stays = locationStays(dimensao, animal, ledger, animalLotes).filter((s) => s.valor === local);
+    const todas = locationStays(dimensao, animal, ledger, animalLotes, { propriedadeUnica });
+    if (todas.some((s) => s.valor === LOCAL_INDETERMINADO && s.inicio <= to && (!s.fim || s.fim > from))) {
+      indeterminados.push({ animal_id: animal.id, numero_animal: animal.numero_animal || '(sem identificação)' });
+    }
+    const stays = todas.filter((s) => s.valor === local);
     if (!stays.length) continue;
     if (stayAt(stays, local, antes)) saldoInicial += 1;
     for (const stay of stays) {
@@ -177,6 +191,10 @@ export function computeInventory(fontes, { from, to, filtros = {} } = {}) {
     if (stayAt(stays, local, to)) { presentesNoFim.push(animal); presentesPeloCadastro += 1; }
   }
 
+  // R06: o que o inventário NÃO consegue afirmar fica visível no resultado.
+  const limitacoes = [];
+  if (filtros.categoria_id) limitacoes.push('Filtro de categoria usa a categoria ATUAL de cada animal, não a da data; a era na data está no painel de Desempenho.');
+  if (indeterminados.length) limitacoes.push(`${indeterminados.length} animal(is) sem propriedade registrada em parte do período (local INDETERMINADO): não entram no saldo desta propriedade. Registre a propriedade de destino na entrada ou uma movimentação interna.`);
   const totalEntradas = Object.values(entradas).reduce((a, b) => a + b, 0);
   const totalSaidas = Object.values(saidas).reduce((a, b) => a + b, 0);
   const saldoFinal = saldoInicial + totalEntradas - totalSaidas + internas.recebidas - internas.enviadas;
@@ -195,9 +213,11 @@ export function computeInventory(fontes, { from, to, filtros = {} } = {}) {
     conferencia: {
       presentes_no_livro: presentesNoFim.length,
       presentes_pelo_cadastro: presentesPeloCadastro,
-      fecha: saldoFinal === presentesNoFim.length && !divergencias.length && presentesNoFim.length === presentesPeloCadastro,
+      fecha: saldoFinal === presentesNoFim.length && !divergencias.length && presentesNoFim.length === presentesPeloCadastro && !indeterminados.length,
       divergencias,
+      indeterminados,
     },
+    limitacoes,
     animais_no_saldo_final: presentesNoFim.map((animal) => ({ id: animal.id, numero_animal: animal.numero_animal || null, marca: animal.marca || null, sexo: animal.sexo || null, raca: animal.raca || null })),
   };
 }

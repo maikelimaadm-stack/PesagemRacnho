@@ -80,6 +80,8 @@ export default function Inventario() {
       ['Número', 'Marca', 'Sexo', 'Raça'],
       ...result.animais_no_saldo_final.map((a) => [a.numero_animal || '(sem identificação)', a.marca || '', a.sexo || '', a.raca || '']),
       [],
+      ...(result.limitacoes?.length ? [['Limitações'], ...result.limitacoes.map((l) => [l]), []] : []),
+      ...(result.conferencia.indeterminados?.length ? [['Local indeterminado'], ...result.conferencia.indeterminados.map((d) => [d.numero_animal]), []] : []),
       ['Divergências'],
       ['Número', 'Motivo'],
       ...result.conferencia.divergencias.map((d) => [d.numero_animal, d.motivo]),
@@ -105,7 +107,7 @@ export default function Inventario() {
         <select className="rb-control rb-control--compact" value={filtros.sexo} onChange={setF('sexo')} aria-label="Sexo"><option value="">Ambos os sexos</option><option value="M">Machos</option><option value="F">Fêmeas</option></select>
         <select className="rb-control rb-control--compact" value={filtros.raca_id} onChange={setF('raca_id')} aria-label="Raça"><option value="">Todas as raças</option>{opts(catalog.racas)}</select>
         <select className="rb-control rb-control--compact" value={filtros.marca_id} onChange={setF('marca_id')} aria-label="Marca a fogo"><option value="">Todas as marcas</option>{opts(catalog.marcas)}</select>
-        {categorias.length ? <select className="rb-control rb-control--compact" value={filtros.categoria_id} onChange={setF('categoria_id')} aria-label="Categoria"><option value="">Todas as categorias</option>{categorias.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select> : null}
+        {categorias.length ? <select className="rb-control rb-control--compact" value={filtros.categoria_id} onChange={setF('categoria_id')} aria-label="Categoria" title="Categoria ATUAL do animal (não a da data)"><option value="">Todas as categorias (atual)</option>{categorias.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}</select> : null}
         <button type="button" className="rb-btn rb-btn--primary" onClick={calcular} disabled={loading}><RefreshCw size={14} aria-hidden="true" /> Calcular</button>
         <button type="button" className="rb-btn" onClick={exportar} disabled={!result}><Download size={14} aria-hidden="true" /> CSV</button>
       </div>
@@ -132,8 +134,18 @@ export default function Inventario() {
                   ? `Conferido: ${fmtInt(result.conferencia.presentes_no_livro)} animal(is) no saldo final, igual ao cadastro na data.`
                   : `Não fecha: livro ${fmtInt(result.conferencia.presentes_no_livro)} × cadastro ${fmtInt(result.conferencia.presentes_pelo_cadastro)}. Veja as divergências abaixo; corrija pela operação ou pesagem de origem (nada é ajustado em silêncio).`}
               </p>
-              {result.dimensao ? <p className="rb-note">Por {result.dimensao === 'lote_id' ? 'lote' : 'propriedade'}: transferências internas aparecem separadas e não contam como compra ou venda.</p> : null}
+              {result.dimensao ? <p className="rb-note">Por {result.dimensao === 'lote_id' ? 'lote' : 'propriedade'} na data de cada movimento: transferências internas aparecem separadas e não contam como compra ou venda.</p> : null}
+              {result.limitacoes?.length ? <ul className="rb-alerts rb-alerts--warn" aria-label="Limitações do cálculo">{result.limitacoes.map((l) => <li key={l}>{l}</li>)}</ul> : null}
             </section>
+            {result.conferencia.indeterminados?.length ? (
+              <section className="rb-card" aria-label="Local indeterminado">
+                <h3 className="rb-subtitle">Local indeterminado ({fmtInt(result.conferencia.indeterminados.length)})</h3>
+                <p className="rb-note">Sem propriedade registrada na entrada nem movimentação interna: não dá para afirmar onde estavam no período, então não entram no saldo desta propriedade.</p>
+                <table className="rb-table"><thead><tr><th>Animal</th></tr></thead>
+                  <tbody>{result.conferencia.indeterminados.slice(0, 500).map((d) => <tr key={d.animal_id}><td>{d.numero_animal}</td></tr>)}</tbody>
+                </table>
+              </section>
+            ) : null}
             {result.conferencia.divergencias.length ? (
               <section className="rb-card" aria-label="Divergências">
                 <h3 className="rb-subtitle">Divergências ({fmtInt(result.conferencia.divergencias.length)})</h3>

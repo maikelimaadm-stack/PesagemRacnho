@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeInventory, previousDay } from './inventory.js';
+import { LOCAL_INDETERMINADO, computeInventory, previousDay } from './inventory.js';
 
 const mov = (id, animal, natureza, data, tipo, extra = {}) => ({ id, animal_id: animal, natureza, data_evento: data, tipo, created_at: `${data}T00:00:00Z`, ...extra });
 const fontes = (extra = {}) => ({
@@ -61,5 +61,66 @@ describe('inventory', () => {
 
   it('período inválido é recusado', () => {
     expect(() => computeInventory(fontes(), { from: '2026-03-01', to: '2026-02-01' })).toThrow(/Período/);
+  });
+
+  describe('R06: propriedade na data, não a atual', () => {
+    // X: entrou em P1 (destino registrado), foi para P2 em 05/03 — hoje está em P2.
+    // Y: entrada antiga SEM destino e sem movimentação; hoje o cadastro diz P2 (pode ter sido editado depois).
+    // Z: entrada sem destino, mas movimentação P1 → P2 em 10/03 (a origem diz onde estava antes).
+    const fontesProp = (extra = {}) => ({
+      animais: [
+        { id: 'X', numero_animal: 'X', propriedade_id: 'P2' },
+        { id: 'Y', numero_animal: 'Y', propriedade_id: 'P2' },
+        { id: 'Z', numero_animal: 'Z', propriedade_id: 'P2' },
+      ],
+      movimentos: [
+        mov('ex', 'X', 'ENTRADA', '2026-01-10', 'Compra', { propriedade_destino_id: 'P1' }),
+        mov('ix', 'X', 'INTERNA', '2026-03-05', 'Mudança de propriedade', { propriedade_origem_id: 'P1', propriedade_destino_id: 'P2' }),
+        mov('ey', 'Y', 'ENTRADA', '2026-01-10', 'Entrada'),
+        mov('ez', 'Z', 'ENTRADA', '2026-01-10', 'Entrada'),
+        mov('iz', 'Z', 'INTERNA', '2026-03-10', 'Mudança de propriedade', { propriedade_origem_id: 'P1', propriedade_destino_id: 'P2' }),
+      ],
+      operacoes: [],
+      animalLotes: [],
+      cadastros: [],
+      propriedadesIds: ['P1', 'P2'],
+      ...extra,
+    });
+    const em = (from, to, propriedade_id, extra) => computeInventory(fontesProp(extra), { from, to, filtros: { propriedade_id } });
+
+    it('fevereiro: X e Z estavam em P1; Y é INDETERMINADO (não vai para P2 pelo cadastro atual)', () => {
+      const p1 = em('2026-02-01', '2026-02-28', 'P1');
+      const p2 = em('2026-02-01', '2026-02-28', 'P2');
+      expect(p1.animais_no_saldo_final.map((a) => a.id).sort()).toEqual(['X', 'Z']);
+      expect(p2.saldo_final).toBe(0);
+      expect(p2.conferencia.indeterminados.map((a) => a.animal_id)).toEqual(['Y']);
+      expect(p2.limitacoes.some((l) => /INDETERMINADO/.test(l))).toBe(true);
+      expect(p2.conferencia.fecha).toBe(false);
+    });
+
+    it('março: transferências internas aparecem enviadas/recebidas na data', () => {
+      const p1 = em('2026-03-01', '2026-03-31', 'P1');
+      const p2 = em('2026-03-01', '2026-03-31', 'P2');
+      expect([p1.saldo_inicial, p1.internas.enviadas, p1.saldo_final]).toEqual([2, 2, 0]);
+      expect([p2.saldo_inicial, p2.internas.recebidas, p2.saldo_final]).toEqual([0, 2, 2]);
+    });
+
+    it('conciliação: soma das propriedades + indeterminados = rebanho na data', () => {
+      const total = computeInventory(fontesProp(), { from: '2026-02-01', to: '2026-02-28' }).saldo_final;
+      const p1 = em('2026-02-01', '2026-02-28', 'P1');
+      const p2 = em('2026-02-01', '2026-02-28', 'P2');
+      expect(p1.saldo_final + p2.saldo_final + p2.conferencia.indeterminados.length).toBe(total);
+    });
+
+    it('com uma única propriedade já cadastrada, o local não é indeterminado', () => {
+      const unica = computeInventory(fontesProp({ animais: [{ id: 'Y', numero_animal: 'Y', propriedade_id: 'P1' }], movimentos: [mov('ey', 'Y', 'ENTRADA', '2026-01-10', 'Entrada')], propriedadesIds: ['P1'] }), { from: '2026-02-01', to: '2026-02-28', filtros: { propriedade_id: 'P1' } });
+      expect([unica.saldo_final, unica.conferencia.indeterminados.length]).toEqual([1, 0]);
+      expect(LOCAL_INDETERMINADO).toBe('INDETERMINADO');
+    });
+
+    it('filtro de categoria declara que usa a categoria atual', () => {
+      const inv = computeInventory(fontes(), { from: '2026-02-01', to: '2026-02-28', filtros: { categoria_id: 'C1' } });
+      expect(inv.limitacoes.some((l) => /categoria ATUAL/.test(l))).toBe(true);
+    });
   });
 });

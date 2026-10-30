@@ -91,8 +91,11 @@ Cada limite também está documentado no ADR correspondente.
 - Retorno de animal que já saiu não é aceito na Entrada (ADR-058).
 - A identificação principal (número visual) continua sendo corrigida pela edição do Cadastro. O estoque controla
   brincos e códigos adicionais (ADR-059).
-- O filtro de categoria do inventário usa a categoria atual (ADR-058). A era na data está no painel de
-  Desempenho.
+- O filtro de categoria do inventário usa a categoria atual (ADR-058). A tela e o CSV avisam isso. A era na data está
+  no painel de Desempenho.
+- R06: no inventário, a propriedade é a da data, pelo livro. Um animal sem propriedade registrada na entrada e sem
+  movimentação interna fica com local INDETERMINADO e aparece listado. Ele não entra no saldo de nenhuma propriedade,
+  a não ser que só exista uma propriedade cadastrada.
 - O backup protegido aceita até 200 MB de anexos; acima disso, use o pacote comum (ADR-063).
 - A abertura do Lançamento com 36 mil pesagens já estava acima do orçamento antes da missão (aprox. 1,7 s;
   `BASELINE-E-GATES.md`).

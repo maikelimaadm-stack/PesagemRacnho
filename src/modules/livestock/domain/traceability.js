@@ -74,8 +74,12 @@ export function buildDossier(src, { hoje, policy } = {}) {
   const carenciaAberta = sanidade.filter((s) => !s.cancelada && s.carencia_carne_ate && s.carencia_carne_ate > hoje).map((s) => s.carencia_carne_ate).sort().at(-1) || null;
 
   const propriedadesHist = [];
-  if (entrada) propriedadesHist.push({ propriedade: nome(nomes.propriedades, entrada.propriedade_destino_id || animal.propriedade_id), desde: entrada.data_evento, ate: null, origem: 'entrada' });
-  for (const mov of movimentos.filter((m) => m.natureza === 'INTERNA' && m.propriedade_destino_id).sort((a, b) => String(a.data_evento).localeCompare(String(b.data_evento)))) {
+  // R06: propriedade da entrada pelo livro (destino; senão a origem da 1ª movimentação). Sem registro, o dossiê diz
+  // "Indeterminado" — a propriedade ATUAL do animal não é usada como se fosse a da entrada.
+  const internas = movimentos.filter((m) => m.natureza === 'INTERNA' && m.propriedade_destino_id).sort((a, b) => String(a.data_evento).localeCompare(String(b.data_evento)));
+  const propriedadeEntrada = entrada?.propriedade_destino_id || internas[0]?.propriedade_origem_id || null;
+  if (entrada) propriedadesHist.push({ propriedade: propriedadeEntrada ? nome(nomes.propriedades, propriedadeEntrada) : 'Indeterminado (sem registro na entrada)', desde: entrada.data_evento, ate: null, origem: 'entrada' });
+  for (const mov of internas) {
     if (propriedadesHist.length) propriedadesHist.at(-1).ate = mov.data_evento;
     propriedadesHist.push({ propriedade: nome(nomes.propriedades, mov.propriedade_destino_id), desde: mov.data_evento, ate: null, origem: 'movimentação' });
   }
