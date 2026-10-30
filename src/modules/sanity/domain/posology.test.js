@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JANELA_CARENCIA_DESCONHECIDA_DIAS, computeDose, missingForApproval, releaseCoversUnknown, validatePosologyInput, withdrawalCase, withdrawalEnd, withdrawalStatus } from './posology.js';
+import { JANELA_CARENCIA_DESCONHECIDA_DIAS, computeDose, missingForApproval, releaseCoversUnknown, validatePosologyInput, validateWithdrawalClarification, withdrawalCase, withdrawalEnd, withdrawalExitPolicy, withdrawalStatus } from './posology.js';
 
 const aprovada = (extra = {}) => ({
   ...validatePosologyInput({ medicamento_id: 'M', modo: 'PROPORCIONAL', unidade: 'ml', dose_por_unidade: 1, kg_por_unidade: 50, principio_ativo: 'P', apresentacao: 'A', indicacao: 'I', via_aplicacao: 'SC', carencia_carne_dias: 30, fonte: 'BULA', vigencia_inicio: '2026-01-01', ...extra }),
@@ -48,17 +48,48 @@ describe('posology', () => {
     expect(withdrawalCase({ data: '2026-06-11', carencia_carne_ate: '2026-07-01', medicamento_id: 'M' }, d)).toBe('POSTERIOR');
   });
 
-  it('R05: janela da carência desconhecida é 180 dias (antes 120)', () => {
+  it('R2-03: carência desconhecida não expira por decurso de tempo (180 dias só prioriza o alerta)', () => {
     expect(JANELA_CARENCIA_DESCONHECIDA_DIAS).toBe(180);
     const app = (data) => ({ id: data, data, carencia_carne_ate: null, carencia_conhecida: false, medicamento_id: 'X' });
-    expect(withdrawalStatus([app('2026-01-01')], '2026-05-31').desconhecidas).toHaveLength(1); // 150 dias: fora da janela antiga
-    expect(withdrawalStatus([app('2025-12-01')], '2026-05-31').desconhecidas).toHaveLength(0); // 181 dias
+    const dia = '2026-12-31';
+    const antes = (n) => { const d = new Date(Date.UTC(2026, 11, 31)); d.setUTCDate(d.getUTCDate() - n); return d.toISOString().slice(0, 10); };
+    for (const n of [0, 35, 150, 180, 181, 365, 1000]) {
+      const st = withdrawalStatus([app(antes(n))], dia);
+      expect(st.desconhecidas).toHaveLength(1);
+      expect(st.desconhecidas[0].recente).toBe(n <= 180);
+      expect(withdrawalExitPolicy({ status: st, subtipo: 'ABATE' }).bloqueios).toHaveLength(1);
+    }
+    // Registro antigo sem o campo carencia_conhecida também segue pendente.
+    expect(withdrawalStatus([{ id: 'v', data: '2020-01-01', medicamento_id: 'X' }], dia).desconhecidas).toHaveLength(1);
+    // Esclarecida (prazo registrado) deixa de ser desconhecida: aberta ou encerrada pela data.
+    expect(withdrawalCase({ data: '2020-01-01', carencia_carne_ate: '2020-02-05', medicamento_id: 'X', carencia_esclarecimento: { fonte: 'bula' } }, dia)).toBe('ENCERRADA');
   });
 
-  it('R05: liberação só cobre carência desconhecida se for documentada', () => {
-    expect(releaseCoversUnknown(null)).toBe(false);
-    expect(releaseCoversUnknown({ responsavel: 'Dr. X CRMV 1', motivo: 'Laudo de resíduo negativo' })).toBe(false);
-    expect(releaseCoversUnknown({ responsavel: 'Dr. X CRMV 1', motivo: 'Laudo de resíduo negativo', evidencia: 'Laudo 12/2026' })).toBe(true);
+  it('R2-03: política única de saída — abate bloqueia, venda/transferência avisam', () => {
+    const st = withdrawalStatus([
+      { id: 'a', data: '2026-06-01', carencia_carne_ate: '2026-07-01', medicamento_id: 'M' },
+      { id: 'b', data: '2026-05-01', carencia_carne_ate: null, carencia_conhecida: false, medicamento_id: 'X' },
+    ], '2026-06-10');
+    expect(withdrawalExitPolicy({ status: st, subtipo: 'ABATE' }).bloqueios).toHaveLength(2);
+    for (const subtipo of ['VENDA', 'TRANSFERENCIA_ENVIADA', 'DOACAO']) {
+      const p = withdrawalExitPolicy({ status: st, subtipo });
+      expect([p.bloqueios.length, p.avisos.length]).toEqual([0, 2]);
+    }
+    const valida = { responsavel: 'Dr. X CRMV 1', motivo: 'Laudo de resíduo negativo', evidencia: 'Laudo 12/2026', data: '2026-06-09' };
+    expect(withdrawalExitPolicy({ status: st, subtipo: 'ABATE', liberacao: valida }).bloqueios).toHaveLength(0);
+    // Liberação datada ANTES do tratamento não o cobre.
+    expect(withdrawalExitPolicy({ status: st, subtipo: 'ABATE', liberacao: { ...valida, data: '2026-04-30' } }).bloqueios.length).toBeGreaterThan(0);
+    // Sem evidência não cobre a desconhecida.
+    expect(withdrawalExitPolicy({ status: st, subtipo: 'ABATE', liberacao: { ...valida, evidencia: '' } }).bloqueios.some((b) => /desconhecida/.test(b))).toBe(true);
+    // Zero e encerrada não prendem.
+    const livre = withdrawalStatus([{ id: 'z', data: '2026-06-01', carencia_carne_ate: '2026-06-01', medicamento_id: 'M' }, { id: 'e', data: '2026-01-01', carencia_carne_ate: '2026-02-01', medicamento_id: 'M' }], '2026-06-10');
+    expect(withdrawalExitPolicy({ status: livre, subtipo: 'ABATE' }).bloqueios).toHaveLength(0);
+  });
+
+  it('R2-03: esclarecimento exige prazo, fonte e responsável', () => {
+    expect(() => validateWithdrawalClarification({ carencia_carne_dias: 35, fonte: 'bula', responsavel: '' })).toThrow();
+    expect(() => validateWithdrawalClarification({ carencia_carne_dias: -1, fonte: 'Bula do produto', responsavel: 'Dr. X' })).toThrow();
+    expect(validateWithdrawalClarification({ carencia_carne_dias: 35, fonte: 'Bula do produto', responsavel: 'Dr. X CRMV 1' }).carencia_carne_dias).toBe(35);
   });
 
   it('o que falta para aprovar', () => {

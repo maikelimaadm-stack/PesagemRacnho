@@ -11,7 +11,7 @@ import { filterLegacyPayload, storageRecordToViewModel } from '../domain/weighin
 import { TimelineError, validateAnimalTimeline } from '../domain/animalTimeline.js';
 import { deriveLotStays, deriveWeighingMovements, movementKey, stayKey } from '../domain/weighingMovements.js';
 import { naturezaDoTipo } from '../../livestock/domain/movementNature.js';
-import { withdrawalStatus } from '../../sanity/domain/posology.js';
+import { withdrawalExitPolicy, withdrawalStatus } from '../../sanity/domain/posology.js';
 import { WeighingError } from '../domain/weighingErrors.js';
 import storage from '../../../storage/storageAdapter.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
@@ -498,12 +498,10 @@ export async function isStorageAvailable() {
 async function assertAbateSemCarencia(db, animalId, data, numero) {
   const aplicacoes = (await db.table('aplicacoesSanidade').where('animal_id').equals(animalId).toArray()).filter((a) => !a.deleted_at && !a.cancelled_at);
   const status = withdrawalStatus(aplicacoes, data);
-  const rotulo = numero ? `Animal ${numero}` : 'Animal';
-  if (status.emCarencia) {
-    throw new WeighingError('CARENCIA_ABATE', `${rotulo} em carência de carne até ${status.ate}: abate só pela operação de Saída (Rebanho › Saídas) com liberação técnica registrada.`, { ate: status.ate });
-  }
-  if (status.desconhecidas.length) {
-    throw new WeighingError('CARENCIA_ABATE', `${rotulo}: aplicação de medicamento sem carência cadastrada nos últimos ${status.janelaDesconhecida} dias — carência desconhecida. Abate só pela operação de Saída (Rebanho › Saídas) com liberação técnica documentada.`, { desconhecidas: status.desconhecidas.map((a) => a.id) });
+  // R2-03: mesma política da operação de Saída; aqui não há liberação técnica — ela é registrada em Rebanho › Saídas.
+  const { bloqueios } = withdrawalExitPolicy({ status, subtipo: 'ABATE', liberacao: null, rotulo: numero ? `Animal ${numero}` : 'Animal' });
+  if (bloqueios.length) {
+    throw new WeighingError('CARENCIA_ABATE', `${bloqueios[0]} Faça o abate pela operação de Saída (Rebanho › Saídas), onde a liberação é registrada.`, { ate: status.ate, desconhecidas: status.desconhecidas.map((a) => a.id) });
   }
 }
 

@@ -20,7 +20,7 @@ import {
 } from '../domain/sanityRules.js';
 import * as adapter from '../infrastructure/sanityDataAdapter.js';
 import * as posologyAdapter from '../infrastructure/posologyDataAdapter.js';
-import { PosologyError, computeDose, validatePosologyInput, withdrawalStatus } from '../domain/posology.js';
+import { PosologyError, computeDose, validatePosologyInput, validateWithdrawalClarification, withdrawalStatus } from '../domain/posology.js';
 
 export {
   MOTIVO_PESAGEM_CANCELADA,
@@ -131,6 +131,15 @@ export async function registerApplication(input = {}) {
 export async function cancelApplication(id, { motivo } = {}) {
   requireSanityPermission('weighing.edit');
   return adapter.cancelApplication(requireId(id, 'Aplicação de sanidade'), { motivo: trimOrNull(motivo) });
+}
+
+/**
+ * R2-03: esclarece a carência DESCONHECIDA de uma aplicação com prazo, fonte (bula/receituário/laudo) e responsável
+ * técnico — é o caminho para regularizar tratamentos antigos sem liberar por decurso de tempo. Auditado.
+ */
+export async function clarifyWithdrawal(id, input = {}) {
+  requireSanityPermission('weighing.edit');
+  return adapter.clarifyWithdrawal(requireId(id, 'Aplicação de sanidade'), validateWithdrawalClarification(input));
 }
 
 /** Filtros por animal, período (from/to AAAA-MM-DD), programa e medicamento; canceladas só com includeCancelled. */

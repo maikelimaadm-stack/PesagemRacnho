@@ -281,6 +281,40 @@ export async function cancelApplication(id, { motivo = null } = {}) {
 }
 
 /**
+ * R2-03: esclarece a carência de uma aplicação que ficou DESCONHECIDA (medicamento sem carência na época): grava o
+ * prazo, a fonte e o responsável, recalcula o fim da carência pela data da aplicação e audita (antes/depois). Só
+ * para aplicação ativa com carência desconhecida; carência já conhecida não é reescrita.
+ */
+export async function clarifyWithdrawal(id, { carencia_carne_dias, fonte, responsavel }) {
+  storage.assertWritable('Esclarecimento de carência');
+  const db = await storage.ensureReady();
+  const table = db.table(APLICACOES_STORE);
+  return db.transaction('rw', table, db.table('auditoria'), async () => {
+    const existing = await findRow(table, id);
+    if (!existing) throw notFound('Aplicação de sanidade', id);
+    if (existing.cancelled_at || existing.deleted_at) throw Object.assign(new Error('Aplicação cancelada: não há carência a esclarecer.'), { code: 'ESCLARECIMENTO_INVALIDO' });
+    if (existing.carencia_carne_ate || !existing.medicamento_id) throw Object.assign(new Error('Esta aplicação não tem carência desconhecida.'), { code: 'ESCLARECIMENTO_INVALIDO' });
+    const ts = nowIso();
+    const actor = getActor();
+    const fim = withdrawalEnd(existing.data, { posologia: { carencia_carne_dias } });
+    const changes = {
+      carencia_carne_ate: fim.carencia_carne_ate,
+      carencia_conhecida: true,
+      carencia_esclarecimento: { carencia_carne_dias, fonte, responsavel, em: ts, por: actor?.usuario_nome_snapshot ?? null },
+      updated_at: ts,
+    };
+    await table.update(existing.localId, changes);
+    await db.table('auditoria').add(auditRecord({
+      entidade: APLICACOES_STORE, entidade_id: existing.id, acao: ACOES.ESCLARECER_CARENCIA,
+      resumo: `Carência esclarecida: ${carencia_carne_dias} dia(s) (${fonte}) por ${responsavel} — ${applicationSummary(existing)}.`,
+      campos_alterados: ['carencia_carne_ate', 'carencia_conhecida', 'carencia_esclarecimento'],
+      antes: publicRow(existing), motivo: fonte, origem: 'manual', created_at: ts,
+    }));
+    return publicRow({ ...existing, ...changes });
+  });
+}
+
+/**
  * Cancelar/excluir pesagem cancela as aplicações vinculadas (pesagem_id) na MESMA
  * transação da pesagem. Devolve a quantidade cancelada.
  */

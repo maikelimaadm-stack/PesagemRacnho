@@ -212,17 +212,18 @@ export function withdrawalEnd(dataAplicacao, { posologia = null, medicamento = n
 }
 
 /**
- * Janela em que uma aplicação de carência DESCONHECIDA ainda pesa sobre abate/venda (R05). Era 120 dias; há
- * produtos de longa ação para bovinos com carência de carne acima de 120 dias, então a janela passou a 180 dias
- * (margem sobre os mais longos de uso comum). Fora da janela a aplicação continua listada no dossiê do animal.
+ * Janela de PRIORIDADE do alerta de carência desconhecida (R2-03). Não é critério de liberação: uma aplicação com
+ * carência desconhecida continua pendente com qualquer idade (181 dias ou 5 anos) até ser ESCLARECIDA com fonte
+ * registrada (`carencia_esclarecimento`) ou coberta por liberação técnica documentada. A janela só marca o alerta
+ * como recente (`recente: true`). Antes (R1) a aplicação simplesmente saía da conta depois de 180 dias.
  */
 export const JANELA_CARENCIA_DESCONHECIDA_DIAS = 180;
 
 /**
- * Situação de UMA aplicação na data (R05): ZERO (carência de 0 dia), ABERTA (fim > data), ENCERRADA (fim ≤ data),
- * CANCELADA (cancelada/excluída — não conta), DESCONHECIDA (medicamento sem carência cadastrada: nunca vira zero;
- * inclui registros antigos sem o campo `carencia_conhecida`), SEM_MEDICAMENTO (procedimento sem produto) ou
- * POSTERIOR (aplicada depois da data).
+ * Situação de UMA aplicação na data: ZERO (carência de 0 dia), ABERTA (fim > data), ENCERRADA (fim ≤ data),
+ * CANCELADA (cancelada/excluída — não conta), DESCONHECIDA (medicamento sem carência cadastrada nem esclarecida:
+ * nunca vira zero; inclui registros antigos sem o campo `carencia_conhecida`), SEM_MEDICAMENTO (procedimento sem
+ * produto) ou POSTERIOR (aplicada depois da data).
  */
 export function withdrawalCase(a, data) {
   if (!a) return null;
@@ -237,9 +238,10 @@ export function withdrawalCase(a, data) {
 }
 
 /**
- * Pendências de carência do animal numa data (abate/venda/transferência): aplicações ativas com carência de
- * carne em aberto (fim > data) e aplicações de medicamento com carência DESCONHECIDA nos `janelaDesconhecida`
- * dias anteriores. Devolve também as encerradas, as de carência zero e as canceladas (transparência).
+ * Pendências de carência do animal numa data (abate/venda/transferência): aplicações ativas com carência de carne
+ * em aberto (fim > data) e TODAS as aplicações de medicamento com carência desconhecida (R2-03: sem prazo de
+ * validade por decurso de tempo; `recente` indica as dos últimos `janelaDesconhecida` dias). Devolve também as
+ * encerradas, as de carência zero e as canceladas (transparência).
  */
 export function withdrawalStatus(aplicacoes = [], data, { janelaDesconhecida = JANELA_CARENCIA_DESCONHECIDA_DIAS } = {}) {
   const abertas = [];
@@ -255,18 +257,61 @@ export function withdrawalStatus(aplicacoes = [], data, { janelaDesconhecida = J
     else if (caso === 'ENCERRADA') encerradas.push({ ...resumo, ate: a.carencia_carne_ate });
     else if (caso === 'ZERO') zeradas.push(resumo);
     else if (caso === 'CANCELADA') canceladas.push(resumo);
-    else if (caso === 'DESCONHECIDA' && a.data >= inicioJanela) desconhecidas.push(resumo);
+    else if (caso === 'DESCONHECIDA') desconhecidas.push({ ...resumo, recente: a.data >= inicioJanela });
   }
   const ate = abertas.map((x) => x.ate).sort().at(-1) || null;
   return { emCarencia: abertas.length > 0, ate, abertas, desconhecidas, encerradas, zeradas, canceladas, janelaDesconhecida };
 }
 
 /**
- * R05: a liberação técnica só cobre carência DESCONHECIDA quando é documentada — responsável, motivo e a
- * evidência (laudo, bula, receituário) registrada. Aceitar o aviso não basta.
+ * Liberação técnica válida para as aplicações pendentes: documentada (responsável, motivo e EVIDÊNCIA) e datada no
+ * dia ou depois da aplicação mais recente que ela precisa cobrir — uma liberação anterior ao tratamento não o cobre.
  */
-export function releaseCoversUnknown(liberacao) {
-  return Boolean(liberacao && String(liberacao.responsavel || '').trim() && String(liberacao.motivo || '').trim() && String(liberacao.evidencia || '').trim());
+export function releaseCoversUnknown(liberacao, aplicacoes = []) {
+  const documentada = Boolean(liberacao && String(liberacao.responsavel || '').trim() && String(liberacao.motivo || '').trim() && String(liberacao.evidencia || '').trim());
+  if (!documentada) return false;
+  const ultima = aplicacoes.map((a) => a?.data).filter(Boolean).sort().at(-1);
+  return !ultima || String(liberacao.data || '') >= ultima;
+}
+
+/**
+ * Política ÚNICA de carência para uma saída (R2-03), usada pela operação de Saída e pelo Lançamento:
+ *   • ABATE com carência aberta: bloqueio, salvo liberação técnica registrada e datada depois dos tratamentos;
+ *   • ABATE com carência desconhecida (qualquer idade): bloqueio, salvo liberação DOCUMENTADA (com evidência) e
+ *     datada depois dos tratamentos — aceitar o aviso nunca basta;
+ *   • venda, transferência e doação: avisos que exigem ciência.
+ * É proteção operacional do sistema, não decisão veterinária automática.
+ */
+export function withdrawalExitPolicy({ status, subtipo, liberacao = null, rotulo = 'Animal' }) {
+  const bloqueios = [];
+  const avisos = [];
+  const abate = subtipo === 'ABATE';
+  if (status.emCarencia) {
+    const texto = `${rotulo} em carência de carne até ${status.ate} (${status.abertas.map((a) => a.medicamento || 'medicamento').join(', ')}).`;
+    const cobre = liberacao && String(liberacao.responsavel || '').trim() && String(liberacao.data || '') >= (status.abertas.map((a) => a.data).sort().at(-1) || '');
+    if (abate && !cobre) bloqueios.push(`${texto} Abate exige liberação técnica registrada${liberacao ? ' com data no dia ou depois do tratamento' : ''}.`);
+    else avisos.push(abate ? `${texto} Liberação técnica: ${liberacao.responsavel}.` : texto);
+  }
+  if (status.desconhecidas.length) {
+    const lista = status.desconhecidas.map((a) => `${a.medicamento || 'medicamento'} em ${a.data}`).join(', ');
+    const texto = `${rotulo}: aplicação de medicamento sem carência cadastrada nem esclarecida (${lista}) — carência desconhecida, não zero.`;
+    if (abate && !releaseCoversUnknown(liberacao, status.desconhecidas)) bloqueios.push(`${texto} Abate exige liberação técnica documentada (responsável, motivo e evidência), com data no dia ou depois do tratamento, ou o esclarecimento da carência na aplicação.`);
+    else avisos.push(abate ? `${texto} Liberação técnica documentada: ${liberacao.responsavel}.` : texto);
+  }
+  return { bloqueios, avisos };
+}
+
+/** Esclarecimento da carência de uma aplicação antiga (R2-03): prazo em dias, fonte e responsável — tudo obrigatório. */
+export function validateWithdrawalClarification(input = {}) {
+  const erros = [];
+  const dias = Number(input.carencia_carne_dias);
+  if (!Number.isInteger(dias) || dias < 0 || dias > 3650) erros.push('Carência de carne: dias inteiros de 0 a 3650.');
+  const fonte = text(input.fonte);
+  const responsavel = text(input.responsavel);
+  if (!fonte || fonte.length < 5) erros.push('Informe a fonte (bula, receituário ou laudo) do prazo.');
+  if (!responsavel) erros.push('Informe o responsável técnico (nome e registro).');
+  if (erros.length) throw new PosologyError(erros[0], erros, 'ESCLARECIMENTO_INVALIDO');
+  return { carencia_carne_dias: dias, fonte, responsavel };
 }
 
 export function validateRelease(input = {}) {

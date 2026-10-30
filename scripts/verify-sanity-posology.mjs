@@ -175,6 +175,36 @@ await lancarAbate(a2, '2', '2026-03-21');
 assert.equal((await animal('2')).situacao, 'ABATIDO', 'carência zero/encerrada não prende o abate');
 ok('R05 carência zero/encerrada não prende o abate no Lançamento');
 
+// R2-03 — carência desconhecida NÃO expira por decurso de tempo (292 dias aqui); liberação datada antes do
+// tratamento não o cobre; o esclarecimento (prazo + fonte + responsável, auditado) regulariza o histórico.
+const compraR2 = await ops.saveDraft({ tipo: 'ENTRADA', subtipo: 'COMPRA', data: '2025-05-01', itens: [7, 8].map((n) => ({ numero_animal: String(n), marca_id: 'MK', sexo: 'M', peso: 300 + n })) });
+await ops.confirmOperation(compraR2.operacao.id);
+const [a7, a8] = [await animal('7'), await animal('8')];
+const antiga7 = await sanity.registerApplication({ animal_id: a7.id, data: '2025-06-01', medicamento_id: medSem.id, dose: 3 });
+await sanity.registerApplication({ animal_id: a8.id, data: '2025-06-01', medicamento_id: medSem.id, dose: 3 });
+const statusAntigo = await sanity.getWithdrawalStatus([a7.id], '2026-03-20');
+assert.equal(statusAntigo[a7.id].desconhecidas.length, 1, '292 dias depois continua desconhecida');
+assert.equal(statusAntigo[a7.id].desconhecidas[0].recente, false, 'fora da janela de prioridade, mas pendente');
+await assert.rejects(lancarAbate(a7, '7', '2026-03-20'), (err) => err.code === 'CARENCIA_ABATE', 'Lançamento: antiga desconhecida bloqueia');
+const abateAntigo = await ops.saveDraft({ tipo: 'SAIDA', subtipo: 'ABATE', data: '2026-03-20', parceiro_id: 'FRIG', itens: [{ animal_id: a7.id, peso: 410 }] });
+await assert.rejects(ops.confirmOperation(abateAntigo.operacao.id, { aceitarAvisos: true }), (err) => err.code === 'OPERACAO_CONFERENCIA' && /desconhecida/.test(err.message), 'operação: aceitar avisos não libera');
+await ops.registerWithdrawalRelease(abateAntigo.operacao.id, { motivo: 'Liberação registrada antes do tratamento (erro de data)', responsavel: 'Dr. Fulano CRMV 123', evidencia: 'Laudo 01/2025', data: '2025-05-15' });
+await assert.rejects(ops.confirmOperation(abateAntigo.operacao.id, { aceitarAvisos: true }), (err) => err.code === 'OPERACAO_CONFERENCIA', 'liberação datada antes do tratamento não cobre');
+await ops.discardDraft(abateAntigo.operacao.id);
+// Venda com a mesma pendência: aviso (não bloqueio).
+const vendaAntiga = await ops.saveDraft({ tipo: 'SAIDA', subtipo: 'VENDA', data: '2026-03-20', itens: [{ animal_id: a8.id, peso: 400 }] });
+await assert.rejects(ops.confirmOperation(vendaAntiga.operacao.id), (err) => err.code === 'OPERACAO_AVISOS' && err.conferencia.avisos.some((a) => /desconhecida/.test(a)));
+await ops.discardDraft(vendaAntiga.operacao.id);
+// Esclarecimento com fonte: vira ENCERRADA (35 dias) e o abate passa nos dois caminhos.
+await assert.rejects(sanity.clarifyWithdrawal(antiga7.id, { carencia_carne_dias: 35, fonte: 'x', responsavel: '' }), /fonte|responsável/i);
+const esclarecida = await sanity.clarifyWithdrawal(antiga7.id, { carencia_carne_dias: 35, fonte: 'Bula do produto (lote 123)', responsavel: 'Dr. Fulano CRMV 123' });
+assert.equal(esclarecida.carencia_carne_ate, '2025-07-06');
+const auditEsc = (await db.table('auditoria').toArray()).find((r) => r.acao === 'ESCLARECER_CARENCIA_SANIDADE' && r.entidade_id === antiga7.id);
+assert.ok(auditEsc && /Bula do produto/.test(auditEsc.resumo), 'esclarecimento auditado');
+await lancarAbate(a7, '7', '2026-03-20');
+assert.equal((await animal('7')).situacao, 'ABATIDO', 'esclarecida e encerrada: abate liberado');
+ok('R2-03 desconhecida não expira (292 d bloqueia nos dois caminhos); liberação anterior ao tratamento não cobre; esclarecimento auditado regulariza');
+
 // Nenhuma dose/produto fixo no código.
 const walk = (dir) => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? walk(join(dir, n)) : [join(dir, n)]));
 const hardcoded = walk('src').filter((f) => /\.(js|jsx)$/.test(f) && /dectomax/i.test(readFileSync(f, 'utf8')));

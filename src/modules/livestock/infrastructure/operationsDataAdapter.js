@@ -25,7 +25,7 @@ import {
   TIPO_MOVIMENTO_INTERNO,
   checkConference,
 } from '../domain/operationRules.js';
-import { releaseCoversUnknown, withdrawalStatus } from '../../sanity/domain/posology.js';
+import { withdrawalExitPolicy, withdrawalStatus } from '../../sanity/domain/posology.js';
 
 export const DEFAULT_EMPRESA_ID = 'local';
 const SAIDA_DEFINITIVA = new Set(['VENDIDO', 'ABATIDO', 'MORTO', 'DOADO', 'TRANSFERIDO', 'CANCELADO', 'INATIVO']);
@@ -254,16 +254,10 @@ async function checkWithdrawals(db, operacao, itens, conferencia) {
   for (const id of ids) {
     const status = withdrawalStatus(aplicacoes.filter((a) => a.animal_id === id), operacao.data);
     const rotulo = animais.get(id)?.numero_animal ? `Animal ${animais.get(id).numero_animal}` : 'Animal';
-    if (status.emCarencia) {
-      const texto = `${rotulo} em carência de carne até ${status.ate} (${status.abertas.map((a) => a.medicamento || 'medicamento').join(', ')}).`;
-      if (operacao.subtipo === 'ABATE' && !operacao.liberacao_carencia) conferencia.bloqueios.push(`${texto} Abate exige liberação técnica registrada.`);
-      else conferencia.avisos.push(operacao.subtipo === 'ABATE' ? `${texto} Liberação técnica: ${operacao.liberacao_carencia.responsavel}.` : texto);
-    }
-    if (status.desconhecidas.length) {
-      const texto = `${rotulo}: aplicação de medicamento sem carência cadastrada nos últimos ${status.janelaDesconhecida} dias (${status.desconhecidas.map((a) => `${a.medicamento || 'medicamento'} em ${a.data}`).join(', ')}) — carência desconhecida, não zero.`;
-      if (operacao.subtipo === 'ABATE' && !releaseCoversUnknown(operacao.liberacao_carencia)) conferencia.bloqueios.push(`${texto} Abate exige liberação técnica documentada (responsável, motivo e evidência).`);
-      else conferencia.avisos.push(operacao.subtipo === 'ABATE' ? `${texto} Liberação técnica documentada: ${operacao.liberacao_carencia.responsavel}.` : texto);
-    }
+    // R2-03: política única (a mesma do Lançamento), sem desvio por aceitarAvisos.
+    const politica = withdrawalExitPolicy({ status, subtipo: operacao.subtipo, liberacao: operacao.liberacao_carencia, rotulo });
+    conferencia.bloqueios.push(...politica.bloqueios);
+    conferencia.avisos.push(...politica.avisos);
   }
   conferencia.ok = conferencia.bloqueios.length === 0;
 }

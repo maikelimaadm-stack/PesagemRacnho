@@ -191,11 +191,20 @@ posologia ou, sem posologia, da carência do medicamento.
   **liberação técnica**: responsável técnico, motivo, evidência (laudo, documento) e data. A liberação fica na
   operação e na auditoria.
 - **Venda, transferência e doação** de animal em carência mostram um aviso que precisa ser conferido.
-- **Aplicação de medicamento sem carência cadastrada** nos últimos **180 dias** tem **carência desconhecida**. Ela
-  nunca é tratada como zero:
+- **Aplicação de medicamento sem carência cadastrada** tem **carência desconhecida**. Ela nunca é tratada como zero
+  e **não vence com o tempo**: uma aplicação de 181 dias, ou de anos atrás, continua pendente. As dos últimos 180
+  dias aparecem como alerta recente. A pendência só se resolve de dois jeitos:
+  - **Esclarecer a carência:** em **Sanidade › Aplicações**, selecione a aplicação e use **Esclarecer carência**.
+    Informe os dias, a fonte (bula, receituário ou laudo) e o responsável técnico. O fim da carência é contado a
+    partir da data da aplicação, e o registro fica na auditoria;
+  - **Liberação técnica documentada** na operação de abate, como abaixo.
+
+  Enquanto estiver pendente:
   - no **abate**, ela **bloqueia** a saída. Só libera com a liberação técnica **documentada**: responsável, motivo
-    e **evidência** (bula, receituário ou laudo). Só conferir o aviso não basta;
+    e **evidência** (bula, receituário ou laudo), com **data no dia ou depois do tratamento**. Só conferir o aviso
+    não basta;
   - na **venda, transferência e doação**, ela mostra um aviso que precisa ser conferido.
 - O **abate lançado direto no Lançamento** (Saída › Abate) segue a mesma regra. Com carência aberta ou
   desconhecida, ele é recusado. Faça o abate em **Rebanho › Saídas**, onde a liberação técnica é registrada.
 - Aplicação cancelada não conta. Carência de 0 dia libera no mesmo dia. Carência já vencida não prende.
+- Isto é uma **proteção operacional do sistema**, não uma decisão veterinária automática.
