@@ -3,6 +3,69 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.6.0] — 2026-10-30
+
+Missão pesagens-integrada (PR DRAFT): correções P01–P26 e gestão pecuária F01–F26. Esquema Dexie **9** (aditivo:
+v7/v8 intactas), backup **formato 3** (mais a pasta de anexos). A primeira abertura migra 8 → 9 com backup
+pré-migração verificado. Notas em `docs/release/1.6.0/RELEASE-NOTES.md`; matriz em
+`docs/evidence/pesagens-integrada/MATRIZ-52-ITENS.md`.
+
+### Fixed
+- **Balança: captura segura.** Uma leitura estável serve a UM animal (portão `seq`/`epoch`). Ela rearma com a
+  plataforma vazia ou depois de uma variação grande. O peso salvo é o liberado pelo portão, e a origem do peso
+  e a leitura bruta ficam gravadas (P01–P03, P15).
+- **Pesagens: linha do tempo do animal.** A série inteira é validada dentro da transação (P05/P07).
+- **Movimentos e lotes.** São reconciliados sem órfãos e de forma idempotente (P04/P09/P13).
+- **Derivados.** Recalculados na mesma transação: com falha, nada fica gravado (P08).
+- **Outras correções de pesagem.** Identificação corrigida com checagem de colisão (P06); banco indisponível
+  aparece como erro (P10); data impossível é recusada (P12); o fechamento do dia fecha todas as sessões da data
+  (P17).
+- **Backup.** Um botão só, gravado e verificado pela leitura de volta. Exportação de pesagens não restaura;
+  diagnóstico sem credenciais (P19–P26).
+
+### Added
+- **Rebanho.**
+  - Entradas, Saídas e Movimentações com efeito único no livro de movimentos (natureza ENTRADA/SAÍDA/INTERNA).
+  - Entrada sem peso (o animal fica pendente de pesagem).
+  - Inventário conciliado por período, lote e propriedade.
+  (F01–F03, F17)
+- **Identidade e idade.**
+  - Nascimento com precisão e fonte; idade calculada para a data.
+  - Era por faixa de idade (parametrizável); categoria produtiva; dentição observada.
+  - Estoque de brincos/RFID/SISBOV por livro imutável.
+  - Marcas a Fogo; dossiê de rastreabilidade interna (sem certificação).
+  (F04–F07, F15)
+- **Sanidade.**
+  - Posologia versionada e aprovada por responsável técnico.
+  - Dose sugerida × aplicada, com confirmação e só com peso estável.
+  - Carência por data civil (desconhecida ≠ zero).
+  - Abate em carência bloqueado sem liberação técnica.
+  (F08–F10)
+- **Desempenho.**
+  - Painel de desempenho por intervalo observado (n, dias, IC, amostra).
+  - Calendário de seca e águas.
+  - Metas com precedência e conflito explícito.
+  - Projeção diária (oráculo 314,6 kg) nunca gravada.
+  - Exportação CSV, Excel e PDF com as mesmas tabelas.
+  (F11–F14, F18)
+- **Documentos.** Documentos com anexos offline (SHA-256, diálogo nativo). Backup completo em pacote (JSON +
+  `.anexos`) verificado. (F16)
+- **Backup e Restauração.**
+  - Periódico com o app aberto.
+  - Cópia para pendrive ou disco conferida.
+  - Retenção segura e backup protegido AES-GCM.
+  - Restauração guiada.
+  (F19–F23)
+
+### Changed
+- Manutenção avançada separada do backup: limpeza e reset numa aba própria. A importação JSON técnica foi para
+  Importação, e a exportação técnica para a Relação de Pesagens (F24).
+- Configurações gerais × Parametrização (mesmas chaves, seção por seção) × Balança e Equipamentos (F25/F26).
+
+### Pendente de homologação
+- P16 (S3 física em Windows) e P18 (proteção administrativa do GitHub) dependem de ação externa. Roteiros em
+  `docs/evidence/pesagens-integrada/`.
+
 ## [1.5.6] — 2026-10-29
 
 Electron 44, zero vulnerabilidades no `npm audit` e listas atualizadas entre telas. Esquema Dexie **8** e

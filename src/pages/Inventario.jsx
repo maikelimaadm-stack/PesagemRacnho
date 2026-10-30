@@ -137,6 +137,7 @@ export default function Inventario() {
             {result.conferencia.divergencias.length ? (
               <section className="rb-card" aria-label="Divergências">
                 <h3 className="rb-subtitle">Divergências ({fmtInt(result.conferencia.divergencias.length)})</h3>
+                {result.conferencia.divergencias.some((d) => /sem movimento de entrada/.test(d.motivo)) ? <p className="rb-note rb-note--warn">Animais com Cadastro e sem movimento de entrada vêm de dados antigos: um administrador pode recompor os movimentos a partir das pesagens em Manutenção avançada › Reconciliar derivados (cria backup antes).</p> : null}
                 <table className="rb-table"><thead><tr><th>Animal</th><th>Motivo</th></tr></thead>
                   <tbody>{result.conferencia.divergencias.map((d) => <tr key={d.animal_id}><td>{d.numero_animal}</td><td className="rb-cell--text">{d.motivo}</td></tr>)}</tbody>
                 </table>
