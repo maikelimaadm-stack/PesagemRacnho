@@ -74,7 +74,7 @@ async function persistFullBackup({ reason, automatic = false } = {}) {
 }
 
 function safetyEvidenceOf(saved) {
-  return { path: saved.path, size: saved.size, sha256: saved.sha256 };
+  return { path: saved.path, size: saved.size, sha256: saved.sha256, verified: saved.verified === true, verifiedAt: saved.verifiedAt || null };
 }
 
 export async function isMaintenanceAvailable() {
@@ -95,7 +95,7 @@ const baseName = (fullPath) => String(fullPath || '').split(/[\\/]/).pop();
  * JSON, formato, SHA-256 do conteúdo, contagens e esquema (dryRunRestore). Registra o resultado no
  * histórico ('verify'): "verificado" só existe com essa leitura de volta — arquivo encontrado não basta.
  */
-export async function verifyBackupFile({ name, expectedFileSha256 = null } = {}) {
+export async function verifyBackupFile({ name, expectedFileSha256 = null, anexosAusentesNaOrigem = [] } = {}) {
   const startedAt = new Date().toISOString();
   let read = null;
   try {
@@ -109,7 +109,10 @@ export async function verifyBackupFile({ name, expectedFileSha256 = null } = {})
     }
     const dry = await storage.dryRunRestore(payload);
     // F16: backup só é COMPLETO com todos os anexos presentes e íntegros na pasta dele.
-    const objetos = backupAttachmentObjects(payload);
+    // R01: anexos que JÁ faltavam no app quando o backup de segurança foi feito (exceção explícita da
+    // restauração) não entram na conferência — e o resultado diz que o pacote está incompleto.
+    const ausentes = new Set(anexosAusentesNaOrigem || []);
+    const objetos = backupAttachmentObjects(payload).filter((o) => !ausentes.has(o.sha256));
     let anexos = { total: 0, ok: 0, faltando: [], corrompidos: [], pasta: null };
     if (objetos.length) {
       if (!attachments()?.verifyBackup) throw Object.assign(new Error('Não foi possível conferir os anexos do backup (abra pelo aplicativo desktop).'), { code: 'BACKUP_VERIFY_ANEXOS' });
@@ -120,6 +123,8 @@ export async function verifyBackupFile({ name, expectedFileSha256 = null } = {})
     }
     const result = {
       anexos,
+      incompleto: ausentes.size > 0,
+      anexosAusentesNaOrigem: [...ausentes],
       ok: true, path: read.path, name: baseName(read.path), size: read.size, fileSha256: read.sha256,
       payloadSha256: payload?.integrity?.sha256 || null, backupId: payload?.manifest?.backupId || null,
       createdAt: payload?.manifest?.createdAt || payload?.createdAt || null, reason: payload?.manifest?.reason || null,
@@ -138,17 +143,47 @@ export async function verifyBackupFile({ name, expectedFileSha256 = null } = {})
  * Comando ÚNICO de backup (P19): cria o backup completo e o verifica lendo de volta do disco.
  * Só devolve ok com a verificação aprovada; se a verificação falhar, o erro diz por quê.
  */
-export async function createBackupNow({ reason = 'manual-ui', automatic = false } = {}) {
+export async function createBackupNow({ reason = 'manual-ui', automatic = false, aceitarAnexosAusentesNaOrigem = false } = {}) {
   const saved = await persistFullBackup({ reason, automatic });
-  if (saved.anexos.faltando.length || saved.anexos.corrompidos.length) {
+  // Exceção explícita (só a restauração a usa): anexo que JÁ falta no app não tem como ser perdido pela
+  // operação; o backup de segurança é conferido sem ele e marcado incompleto. Corrompido nunca é aceito.
+  const toleraAusentes = aceitarAnexosAusentesNaOrigem && saved.anexos.faltando.length > 0 && saved.anexos.corrompidos.length === 0;
+  if (!toleraAusentes && (saved.anexos.faltando.length || saved.anexos.corrompidos.length)) {
     await storage.recordBackupHistory('verify', { ok: false, path: saved.path, name: baseName(saved.path), size: saved.size, fileSha256: saved.sha256, error: 'Anexos faltando na origem: backup incompleto.', code: 'BACKUP_ANEXOS_INCOMPLETO', verifiedAt: new Date().toISOString() });
     throw Object.assign(new Error(`O backup foi gravado, mas NÃO está completo: ${saved.anexos.faltando.length} anexo(s) não encontrado(s) na pasta de anexos e ${saved.anexos.corrompidos.length} corrompido(s). Confira em Documentos.`), { code: 'BACKUP_ANEXOS_INCOMPLETO', backupPath: saved.path, anexos: saved.anexos });
   }
-  const verification = await verifyBackupFile({ name: baseName(saved.path), expectedFileSha256: saved.sha256 });
+  const verification = await verifyBackupFile({ name: baseName(saved.path), expectedFileSha256: saved.sha256, anexosAusentesNaOrigem: toleraAusentes ? saved.anexos.faltando : [] });
   if (!verification.ok) {
     throw Object.assign(new Error(`O backup foi gravado, mas a verificação falhou: ${verification.error}`), { code: 'BACKUP_VERIFY_FAILED', backupPath: saved.path });
   }
-  return { ok: true, backupPath: saved.path, counts: saved.counts, size: saved.size, sha256: saved.sha256, verified: true, verifiedAt: verification.verifiedAt, anexos: saved.anexos };
+  // R01: o arquivo lido de volta tem de ser o MESMO backup gerado em memória (conteúdo e contagens), não só um
+  // JSON válido — uma gravação trocada/truncada que ainda parseia é recusada aqui.
+  if (verification.payloadSha256 !== saved.backup?.integrity?.sha256) {
+    await storage.recordBackupHistory('verify', { ok: false, path: saved.path, name: baseName(saved.path), error: 'Conteúdo lido de volta difere do backup gerado.', code: 'BACKUP_VERIFY_CONTEUDO', verifiedAt: new Date().toISOString() });
+    throw Object.assign(new Error('O backup foi gravado, mas o conteúdo lido de volta não é o que foi gerado (SHA-256 do conteúdo diferente).'), { code: 'BACKUP_VERIFY_FAILED', backupPath: saved.path });
+  }
+  for (const [store, n] of Object.entries(saved.counts || {})) {
+    if ((verification.counts?.[store] ?? 0) !== n) {
+      throw Object.assign(new Error(`O backup foi gravado, mas a contagem de ${store} lida de volta (${verification.counts?.[store] ?? 0}) difere da gerada (${n}).`), { code: 'BACKUP_VERIFY_FAILED', backupPath: saved.path });
+    }
+  }
+  return { ok: true, backupPath: saved.path, counts: saved.counts, size: saved.size, sha256: saved.sha256, verified: true, verifiedAt: verification.verifiedAt, anexos: saved.anexos, reason, incompleto: toleraAusentes, anexosAusentesNaOrigem: toleraAusentes ? saved.anexos.faltando : [] };
+}
+
+/**
+ * R01: backup de SEGURANÇA antes de operação destrutiva (importar, restaurar, limpar, reset) — o MESMO caminho
+ * verificado do botão (gravação + leitura de volta + SHA-256 do arquivo e do conteúdo + contagens + anexos).
+ * Qualquer falha impede a operação: o erro BACKUP_PRE_OPERACAO_FALHOU sobe antes de qualquer escrita destrutiva.
+ * A evidência entregue ao motor é a do arquivo conferido.
+ */
+export async function persistVerifiedSafetyBackup({ reason, aceitarAnexosAusentesNaOrigem = false }) {
+  try {
+    const r = await createBackupNow({ reason, automatic: true, aceitarAnexosAusentesNaOrigem });
+    return { path: r.backupPath, size: r.size, sha256: r.sha256, verified: true, verifiedAt: r.verifiedAt, reason, anexos: r.anexos, incompleto: r.incompleto, anexosAusentesNaOrigem: r.anexosAusentesNaOrigem };
+  } catch (err) {
+    await storage.recordBackupHistory('safety-failed', { reason, error: err.message, code: err.code || null, causa: err.code === 'BACKUP_ANEXOS_INCOMPLETO' ? 'ANEXOS_AUSENTES_NA_ORIGEM' : null });
+    throw Object.assign(new Error(`Operação cancelada: o backup de segurança não pôde ser verificado (${err.message}). Nada foi alterado.`), { code: 'BACKUP_PRE_OPERACAO_FALHOU', causa: err.code || null, anexosAusentes: err.anexos?.faltando || [], cause: err });
+  }
 }
 
 // Compatibilidade: os dois nomes antigos são o MESMO backup completo (antes dois botões sugeriam
@@ -238,7 +273,7 @@ export async function dryRunImportWeighingJson(payload) {
   return storage.dryRunImportPesagens(payload);
 }
 export async function applyImportWeighingJson(payload) {
-  const safety = await persistFullBackup({ reason: 'pre-import', automatic: true });
+  const safety = await persistVerifiedSafetyBackup({ reason: 'pre-import' });
   const result = await storage.applyImportPesagens(payload, { safetyEvidence: safetyEvidenceOf(safety) });
   return { ...result, safetyBackup: safetyEvidenceOf(safety) };
 }
@@ -253,8 +288,8 @@ export async function selectBackupFile() {
 export async function dryRunRestoreBackup(backup) {
   return storage.dryRunRestore(backup);
 }
-export async function applyRestoreBackup(backup, { anexosInline = false } = {}) {
-  const safety = await persistFullBackup({ reason: 'pre-restore', automatic: true });
+export async function applyRestoreBackup(backup, { anexosInline = false, aceitarAnexosAusentesNaOrigem = false } = {}) {
+  const safety = await persistVerifiedSafetyBackup({ reason: 'pre-restore', aceitarAnexosAusentesNaOrigem });
   const result = await storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
   // E1G (1.4.2): backup de antes da 1.4.2 volta sem o marcador 'derivados-saida-v1' — o GMD das saídas com peso é
   // recalculado já, sem esperar a próxima abertura (nunca lança; com o marcador, não faz nada).
@@ -293,13 +328,13 @@ export async function resumeMigration({ onProgress } = {}) {
 }
 
 export async function clearOperationalData() {
-  const safety = await persistFullBackup({ reason: 'pre-clear-operational', automatic: true });
+  const safety = await persistVerifiedSafetyBackup({ reason: 'pre-clear-operational' });
   const result = await storage.clearOperationalData({ safetyEvidence: safetyEvidenceOf(safety) });
   return { ...result, backupPath: safety.path, safetyBackup: safetyEvidenceOf(safety) };
 }
 
 export async function resetAllData({ confirmedByAdmin = false } = {}) {
-  const safety = await persistFullBackup({ reason: 'pre-reset-all', automatic: true });
+  const safety = await persistVerifiedSafetyBackup({ reason: 'pre-reset-all' });
   const result = await storage.resetAllData({ safetyEvidence: safetyEvidenceOf(safety), confirmedByAdmin, files: files() });
   return { ...result, backupPath: safety.path, safetyBackup: safetyEvidenceOf(safety) };
 }

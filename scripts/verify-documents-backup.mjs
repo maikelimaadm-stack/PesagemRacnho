@@ -155,7 +155,10 @@ try {
   writeFileSync(soJson, JSON.stringify(backupJson));
   rmSync(join(dataDir, 'anexos'), { recursive: true, force: true });
   selecionado = { dir: fora, fileName: nomeBackup };
-  const semAnexos = await maintenance.applyRestoreBackup(backupJson);
+  // R01: com anexos já sumidos do app, o backup de segurança não fica completo → restauração recusada…
+  await assert.rejects(maintenance.applyRestoreBackup(backupJson), (err) => err.code === 'BACKUP_PRE_OPERACAO_FALHOU' && err.causa === 'BACKUP_ANEXOS_INCOMPLETO');
+  // …a menos que o ADMIN aceite explicitamente que esses anexos (que já faltam) fiquem fora do pré-backup.
+  const semAnexos = await maintenance.applyRestoreBackup(backupJson, { aceitarAnexosAusentesNaOrigem: true });
   assert.equal(semAnexos.anexos.faltando.length, 2, 'anexo faltante é erro visível');
 
   // Backup sem documentos com anexo (como os anteriores à v9): restaura sem passo de anexos.

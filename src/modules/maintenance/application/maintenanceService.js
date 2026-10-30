@@ -98,9 +98,11 @@ export async function dryRunRestoreBackup(backupPath) {
   return adapter.dryRunRestoreBackup(backupPath);
 }
 
-export async function applyRestoreBackup(backupPath) {
+export async function applyRestoreBackup(backupPath, options = {}) {
   requireMaintenanceAction('Restauração', 'maintenance.restore');
-  return adapter.applyRestoreBackup(backupPath);
+  // R01: `aceitarAnexosAusentesNaOrigem` é a única exceção ao backup de segurança completo — para recuperar
+  // anexos que JÁ sumiram do app; o pré-backup é verificado sem eles e marcado incompleto.
+  return adapter.applyRestoreBackup(backupPath, { aceitarAnexosAusentesNaOrigem: options.aceitarAnexosAusentesNaOrigem === true });
 }
 
 export async function runIntegrityCheck() {
