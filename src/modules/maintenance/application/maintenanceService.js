@@ -59,11 +59,12 @@ export async function verifyBackupFile(options) {
  * Reparo geral (P04/P08/P13): reconcilia lotes, movimentos derivados e GMD de todos os animais.
  * ADMIN (maintenance.migrate). Cria e verifica um backup ANTES; sem backup verificado, não roda.
  */
-export async function reconcileDerivations({ onProgress } = {}) {
+export async function reconcileDerivations({ onProgress, signal } = {}) {
   requireMaintenanceAction('Reconciliar derivados', 'maintenance.migrate');
   const safety = await adapter.createBackupNow({ reason: 'pre-reconcile', automatic: true });
   const { reconcileAllAnimalDerivations } = await import('../../weighing/infrastructure/weighingDataAdapter.js');
-  const result = await reconcileAllAnimalDerivations({ onProgress });
+  // R08: andamento por bloco e cancelamento entre blocos (`signal.aborted`).
+  const result = await reconcileAllAnimalDerivations({ onProgress, signal });
   return { ...result, safetyBackup: { path: safety.backupPath, size: safety.size, sha256: safety.sha256 } };
 }
 

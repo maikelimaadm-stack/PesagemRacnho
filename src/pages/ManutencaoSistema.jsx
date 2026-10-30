@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import * as maintenanceService from "@/modules/maintenance/application/maintenanceService";
@@ -66,6 +66,9 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
   const [lastCheckAt, setLastCheckAt] = useState("");
   const [stats, setStats] = useState(null);
   const [busy, setBusy] = useState("");
+  // R08: andamento e cancelamento do "Reconciliar derivados" (para entre blocos; o que foi feito fica consistente).
+  const [reconcileProgress, setReconcileProgress] = useState(null);
+  const reconcileSignal = useRef(null);
   const [diagText, setDiagText] = useState("");
   const [diag, setDiag] = useState(null);
   const [backups, setBackups] = useState([]);
@@ -166,10 +169,21 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
     run(
       "reconcile",
       async () => {
-        const r = await maintenanceService.reconcileDerivations();
-        const integ = await maintenanceService.runIntegrityCheck();
-        setDiagText(integ?.ok ? `Derivados reconciliados (${fmtInt(r.animais)} animais). Banco íntegro.` : `Derivados reconciliados; restam ${fmtInt(integ?.issues?.length || 0)} problema(s).`);
-        return r;
+        reconcileSignal.current = { aborted: false };
+        setReconcileProgress({ feitos: 0, total: null });
+        try {
+          const r = await maintenanceService.reconcileDerivations({ onProgress: setReconcileProgress, signal: reconcileSignal.current });
+          const integ = await maintenanceService.runIntegrityCheck();
+          if (r.cancelado) {
+            setDiagText(`Reconciliação interrompida: ${fmtInt(r.feitos)} de ${fmtInt(r.animais)} animais feitos (consistentes). Rode de novo para terminar.`);
+          } else {
+            setDiagText(integ?.ok ? `Derivados reconciliados (${fmtInt(r.animais)} animais). Banco íntegro.` : `Derivados reconciliados; restam ${fmtInt(integ?.issues?.length || 0)} problema(s).`);
+          }
+          return r;
+        } finally {
+          reconcileSignal.current = null;
+          setReconcileProgress(null);
+        }
       },
       "Lotes, movimentos e GMD reconciliados (backup criado antes).",
       "Não foi possível reconciliar."
@@ -556,7 +570,12 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
             </Button>
             {allowed("maintenance.migrate") && (
               <Button type="button" className="emp-toolbar-btn px-3" onClick={onReconcile} disabled={!!busy} title="Recompõe lotes, movimentos e GMD a partir das pesagens (cria backup antes)">
-                {busy === "reconcile" ? "Reconciliando…" : "Reconciliar derivados"}
+                {busy === "reconcile" ? (reconcileProgress?.total ? `Reconciliando… ${fmtInt(reconcileProgress.feitos)} de ${fmtInt(reconcileProgress.total)}` : "Reconciliando…") : "Reconciliar derivados"}
+              </Button>
+            )}
+            {busy === "reconcile" && (
+              <Button type="button" className="emp-toolbar-btn px-3" onClick={() => { if (reconcileSignal.current) reconcileSignal.current.aborted = true; }} title="Para ao fim do bloco atual; o que já foi feito fica gravado e consistente">
+                Cancelar
               </Button>
             )}
             <Button type="button" className="emp-toolbar-btn px-3" onClick={onQuick} disabled={!!busy}>

@@ -224,11 +224,12 @@ export function weightOf(row) {
   return row && (row.peso_kg != null || weighingUi(row).peso != null) && Number.isFinite(value) && value > 0 ? value : null;
 }
 
-export async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date().toISOString()) {
+export async function rebuildAnimalStateProjection(db, animalId, timestamp = new Date().toISOString(), pre = null) {
   if (!animalId) return null;
-  const animal = await db.table('animais').where('id').equals(animalId).first();
+  // R08: `pre` (reconciliação em lote) traz o animal, as pesagens ativas e as categorias já lidos.
+  const animal = pre ? pre.animal : await db.table('animais').where('id').equals(animalId).first();
   if (!animal || animal.deleted_at) return null;
-  const events = (await db.table('pesagens').where('animal_id').equals(animalId).toArray())
+  const events = [...(pre ? pre.eventos : (await db.table('pesagens').where('animal_id').equals(animalId).toArray()))]
     .filter((row) => !row.deleted_at)
     .sort(eventOrder);
   const latest = events.at(-1) || null;
@@ -244,7 +245,7 @@ export async function rebuildAnimalStateProjection(db, animalId, timestamp = new
   const latestWeighed = [...events].reverse().find((row) => weightOf(row) != null) || null;
   const categoryChanges = {};
   if (animal.categoria_automatica !== false && latestWeighed) {
-    const categorias = await db.table('categoriasAnimal').toArray();
+    const categorias = pre?.categorias || await db.table('categoriasAnimal').toArray();
     const categoria = suggestCategory({ categorias, sexo: animal.sexo, peso: weightOf(latestWeighed) });
     // Sem faixa correspondente, preserva a última categoria válida em vez de gravar null.
     if (categoria) {
@@ -267,10 +268,11 @@ export async function rebuildAnimalStateProjection(db, animalId, timestamp = new
     ultimo_peso_kg: latestWeighed ? weightOf(latestWeighed) : null,
     lote_atual_id: inactive ? null : currentLot?.lote_id || latest?.lote_id || null,
     apartacao_atual_id: inactive ? null : currentLot?.apartacao_id || latestUi.apartacao_id || null,
-    updated_at: timestamp,
   };
-  await db.table('animais').update(animal.localId, changes);
-  return changes;
+  // R08: só grava o que mudou — reconciliar de novo o mesmo estado não reescreve o animal (idempotente).
+  const diff = Object.fromEntries(Object.entries(changes).filter(([campo, valor]) => (animal[campo] ?? null) !== (valor ?? null)));
+  if (Object.keys(diff).length) await db.table('animais').update(animal.localId, { ...diff, updated_at: timestamp });
+  return { ...changes, updated_at: Object.keys(diff).length ? timestamp : animal.updated_at };
 }
 
 /**
@@ -329,11 +331,11 @@ export async function operationLotEvents(db, animalId) {
   return lotEventsFrom(await db.table('movimentosAnimais').where('animal_id').equals(animalId).toArray());
 }
 
-export async function rebuildAnimalLotProjection(db, animalId, timestamp = new Date().toISOString()) {
+export async function rebuildAnimalLotProjection(db, animalId, timestamp = new Date().toISOString(), pre = null) {
   if (!animalId) return 0;
   const animalLotTable = db.table('animalLotes');
-  const expected = deriveLotStays(await activeEventsOf(db, animalId), { lotEvents: await operationLotEvents(db, animalId) });
-  const previous = (await animalLotTable.where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at);
+  const expected = deriveLotStays(pre ? pre.eventos : await activeEventsOf(db, animalId), { lotEvents: pre ? lotEventsFrom(pre.movimentos) : await operationLotEvents(db, animalId) });
+  const previous = (pre ? pre.lotes : await animalLotTable.where('animal_id').equals(animalId).toArray()).filter((row) => !row.deleted_at);
   const byKey = new Map();
   const extras = [];
   for (const row of previous) {
@@ -365,11 +367,11 @@ export async function rebuildAnimalLotProjection(db, animalId, timestamp = new D
  * pesagem_id. Movimento de pesagem cancelada/alterada é cancelado com auditoria; o que falta é criado; o que
  * bate fica como está (idempotente). Movimentos sem pesagem_id (movimentação própria) nunca são tocados.
  */
-export async function reconcileWeighingMovements(db, animalId, timestamp = new Date().toISOString(), { origem = 'lancamento' } = {}) {
+export async function reconcileWeighingMovements(db, animalId, timestamp = new Date().toISOString(), { origem = 'lancamento', pre = null } = {}) {
   if (!animalId) return { criados: 0, cancelados: 0 };
   const table = db.table('movimentosAnimais');
-  const allMovements = await table.where('animal_id').equals(animalId).toArray();
-  const expected = deriveWeighingMovements(await activeEventsOf(db, animalId), { lotEvents: lotEventsFrom(allMovements) });
+  const allMovements = pre ? pre.movimentos : await table.where('animal_id').equals(animalId).toArray();
+  const expected = deriveWeighingMovements(pre ? pre.eventos : await activeEventsOf(db, animalId), { lotEvents: lotEventsFrom(allMovements) });
   const existing = allMovements.filter((row) => !row.deleted_at && row.pesagem_id);
   const byKey = new Map();
   const duplicates = [];
@@ -433,9 +435,9 @@ const sameDerivedValue = (a, b) => {
  * Recalcula os derivados (anterior, dias, ganho, GMD) da série do animal DENTRO da transação de quem chama
  * (P08): se algo falhar, nada fica gravado com GMD velho. Só reescreve as pesagens cujo derivado mudou.
  */
-export async function recalculateAnimalSeriesInTransaction(db, animalId, timestamp = new Date().toISOString()) {
+export async function recalculateAnimalSeriesInTransaction(db, animalId, timestamp = new Date().toISOString(), pre = null) {
   if (!animalId) return 0;
-  const rows = await activeEventsOf(db, animalId);
+  const rows = pre ? pre.eventos : await activeEventsOf(db, animalId);
   const views = rows.map((row) => storageRecordToViewModel(row));
   const updates = recalculateWeightSeries(views, new Set([`id:${animalId}`]));
   const byId = new Map(rows.map((row) => [row.id, row]));
@@ -445,7 +447,9 @@ export async function recalculateAnimalSeriesInTransaction(db, animalId, timesta
     if (!row) continue;
     const ui = weighingUi(row);
     if (DERIVED_FIELDS.every((field) => sameDerivedValue(ui[field], update.patch[field]))) continue;
-    await db.table('pesagens').update(row.localId, { legacy_payload: filterLegacyPayload({ ...ui, ...update.patch }), updated_at: timestamp });
+    const legacy = filterLegacyPayload({ ...ui, ...update.patch });
+    await db.table('pesagens').update(row.localId, { legacy_payload: legacy, updated_at: timestamp });
+    if (pre) Object.assign(row, { legacy_payload: legacy, updated_at: timestamp }); // a cópia em memória segue o banco
     written += 1;
   }
   return written;
@@ -454,10 +458,12 @@ export async function recalculateAnimalSeriesInTransaction(db, animalId, timesta
 /** Tudo o que deriva das pesagens do animal, na mesma transação: lotes, movimentos, derivados e estado. */
 export async function reconcileAnimalAfterChange(db, animalId, timestamp = new Date().toISOString(), options = {}) {
   if (!animalId) return;
-  await rebuildAnimalLotProjection(db, animalId, timestamp);
+  const { pre = null } = options;
+  await rebuildAnimalLotProjection(db, animalId, timestamp, pre);
   await reconcileWeighingMovements(db, animalId, timestamp, options);
-  await recalculateAnimalSeriesInTransaction(db, animalId, timestamp);
-  await rebuildAnimalStateProjection(db, animalId, timestamp);
+  await recalculateAnimalSeriesInTransaction(db, animalId, timestamp, pre);
+  // As permanências acabaram de mudar: o estado lê as de agora (uma consulta indexada).
+  await rebuildAnimalStateProjection(db, animalId, timestamp, pre ? { ...pre, lotes: null } : null);
 }
 
 async function findPendingAnimal(db, ui) {
@@ -1227,19 +1233,49 @@ export async function getSummary(filters = {}) {
  * duplicadas, derivados velhos). Idempotente: num banco coerente não grava nada. Quem chama faz o backup
  * antes (Manutenção). Em blocos para não segurar uma transação gigante.
  */
-export async function reconcileAllAnimalDerivations({ chunkSize = 200, onProgress } = {}) {
+/**
+ * "Reconciliar derivados" para todos os animais com pesagem (R08). Por bloco de animais, numa transação: lê de
+ * uma vez as pesagens, os movimentos, as permanências e os animais do bloco (índice, `anyOf`) e as categorias uma
+ * vez por execução — antes eram ~7 consultas por animal. Só grava o que difere (2ª execução não escreve nada).
+ * `onProgress({ feitos, total })` a cada bloco; `signal.aborted` interrompe entre blocos (o que foi feito fica
+ * consistente: cada bloco é atômico e reexecutar continua de onde parou, pois é idempotente).
+ */
+export async function reconcileAllAnimalDerivations({ chunkSize = 250, onProgress, signal } = {}) {
   storage.assertWritable('Reconciliação de derivados');
   const db = await storage.ensureReady();
   const ids = [...new Set((await db.table('pesagens').toArray()).filter((row) => !row.deleted_at && row.animal_id).map((row) => row.animal_id))];
   const tables = ['pesagens', 'animais', 'animalLotes', 'movimentosAnimais', 'auditoria', 'categoriasAnimal'].map((name) => db.table(name));
   const before = { animalLotes: await db.table('animalLotes').count(), movimentosAnimais: await db.table('movimentosAnimais').count() };
+  const categorias = await db.table('categoriasAnimal').toArray();
+  const porAnimal = (rows) => {
+    const mapa = new Map();
+    for (const row of rows) { const lista = mapa.get(row.animal_id); if (lista) lista.push(row); else mapa.set(row.animal_id, [row]); }
+    return mapa;
+  };
+  let feitos = 0;
   for (let start = 0; start < ids.length; start += chunkSize) {
+    if (signal?.aborted) return { animais: ids.length, feitos, cancelado: true, antes: before, chunk: chunkSize };
     const chunk = ids.slice(start, start + chunkSize);
     const ts = new Date().toISOString();
     await db.transaction('rw', tables, async () => {
-      for (const animalId of chunk) await reconcileAnimalAfterChange(db, animalId, ts);
+      const [pesagens, movimentos, lotes, animais] = await Promise.all([
+        db.table('pesagens').where('animal_id').anyOf(chunk).toArray(),
+        db.table('movimentosAnimais').where('animal_id').anyOf(chunk).toArray(),
+        db.table('animalLotes').where('animal_id').anyOf(chunk).toArray(),
+        db.table('animais').where('id').anyOf(chunk).toArray(),
+      ]);
+      const eventosPor = porAnimal(pesagens.filter((row) => !row.deleted_at));
+      const movimentosPor = porAnimal(movimentos);
+      const lotesPor = porAnimal(lotes);
+      const animalPor = new Map(animais.map((row) => [row.id, row]));
+      for (const animalId of chunk) {
+        await reconcileAnimalAfterChange(db, animalId, ts, {
+          pre: { eventos: eventosPor.get(animalId) || [], movimentos: movimentosPor.get(animalId) || [], lotes: lotesPor.get(animalId) || [], animal: animalPor.get(animalId) || null, categorias },
+        });
+      }
     });
-    onProgress?.({ feitos: Math.min(start + chunkSize, ids.length), total: ids.length });
+    feitos += chunk.length;
+    onProgress?.({ feitos, total: ids.length });
   }
-  return { animais: ids.length, antes: before };
+  return { animais: ids.length, feitos, cancelado: false, antes: before, chunk: chunkSize };
 }
