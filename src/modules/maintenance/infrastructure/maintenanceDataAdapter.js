@@ -206,33 +206,103 @@ function parseHistory(row) {
  * Situação da proteção (P21): último backup criado, último VERIFICADO (leitura de volta ok) e os
  * arquivos da pasta com o estado de cada um — verificado, falhou na verificação ou não verificado.
  */
-export async function getBackupStatus() {
+/**
+ * Situação do backup local (R03). Separa o que foi VERIFICADO (histórico, com data) do que vale AGORA:
+ *   • disponível agora — o arquivo verificado está na pasta, com o mesmo nome e tamanho e sem modificação
+ *     posterior à verificação;
+ *   • íntegro agora — relido do disco: SHA-256 igual ao verificado e anexos da pasta ".anexos" conferidos.
+ * `lastVerified` só aponta para um backup íntegro agora (é o que a cobertura, o agendador, a cópia externa e a
+ * retenção usam): registro antigo de arquivo apagado, renomeado, truncado ou alterado com o mesmo tamanho não
+ * conta como proteção nem adia o backup periódico. Pasta inacessível = INDISPONIVEL (não "sem backup").
+ */
+const TOLERANCIA_MTIME_MS = 2000;
+const MAX_CANDIDATOS_CONFERIDOS = 3;
+
+async function conferirAgora(verify) {
+  try {
+    const lido = await readUserFile('backups', verify.name || baseName(verify.path));
+    if (verify.fileSha256 && lido.sha256 !== verify.fileSha256) return { ok: false, motivo: 'Conteúdo do arquivo mudou depois da verificação (SHA-256 diferente).' };
+    let payload;
+    try { payload = JSON.parse(lido.content); } catch { return { ok: false, motivo: 'Arquivo não é mais um JSON válido.' }; }
+    if (verify.payloadSha256 && payload?.integrity?.sha256 !== verify.payloadSha256) return { ok: false, motivo: 'Conteúdo do backup difere do verificado.' };
+    const ausentes = new Set(verify.anexosAusentesNaOrigem || []);
+    const objetos = backupAttachmentObjects(payload).filter((o) => !ausentes.has(o.sha256));
+    if (objetos.length) {
+      if (!attachments()?.verifyBackup) return { ok: false, motivo: 'Não foi possível conferir os anexos agora.' };
+      const r = anexosResumo(unwrapDialog(await attachments().verifyBackup({ backupFile: baseName(lido.path), objects: objetos })));
+      if (r.faltando.length || r.corrompidos.length) return { ok: false, motivo: `Anexos do backup: ${r.faltando.length} faltando e ${r.corrompidos.length} corrompido(s) agora.` };
+    }
+    return { ok: true, motivo: null };
+  } catch (err) {
+    return { ok: false, motivo: `Não foi possível reler o arquivo agora (${err.message}).` };
+  }
+}
+
+export async function getBackupStatus({ conferir = true } = {}) {
   const db = await storage.ensureReady();
   const history = (await db.table('backupHistory').toArray()).map(parseHistory)
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   const created = history.filter((h) => h.tipo === 'full-durable');
   const verifies = history.filter((h) => h.tipo === 'verify');
-  const lastVerified = verifies.find((h) => h.ok) || null;
+  const ultimaVerificacao = verifies.find((h) => h.ok) || null; // histórico: "Verificado em [data]"
   let filesList = [];
   let unavailable = false;
-  try {
-    filesList = (await listBackups()).full || [];
-    unavailable = !files()?.listUserFiles;
-  } catch { unavailable = true; }
+  let erroPasta = null;
+  if (!files()?.listUserFiles) {
+    unavailable = true;
+  } else {
+    try { filesList = (await listBackups()).full || []; } catch (err) { unavailable = true; erroPasta = err.message; }
+  }
   const catalog = filesList.map((file) => {
-    const verify = verifies.find((h) => h.path === file.path && h.size === file.size);
+    const verify = verifies.find((h) => h.path === file.path) || null; // a verificação mais recente DESTE arquivo
     const origin = created.find((h) => h.path === file.path);
+    const alterado = Boolean(verify?.ok) && (verify.size !== file.size
+      || (file.modifiedAt && verify.verifiedAt && Date.parse(file.modifiedAt) > Date.parse(verify.verifiedAt) + TOLERANCIA_MTIME_MS));
     return {
       ...file,
       reason: origin?.reason || verify?.reason || null,
       automatic: origin?.automatic ?? verify?.automatic ?? null,
-      estado: verify ? (verify.ok ? 'VERIFICADO' : 'FALHOU') : 'NAO_VERIFICADO',
+      estado: !verify ? 'NAO_VERIFICADO' : !verify.ok ? 'FALHOU' : alterado ? 'ALTERADO' : 'VERIFICADO',
       verifiedAt: verify?.verifiedAt || null,
-      erro: verify && !verify.ok ? verify.error : null,
+      erro: verify && !verify.ok ? verify.error : alterado ? 'Arquivo modificado depois da verificação.' : null,
+      _verify: verify,
     };
   });
-  const protecao = lastVerified ? 'VERIFICADO' : (catalog.length ? 'NAO_VERIFICADO' : 'SEM_BACKUP');
-  return { protecao, lastCreated: created[0] || null, lastVerified, files: catalog, unavailable };
+  const ultimoArquivo = ultimaVerificacao ? catalog.find((c) => c.path === ultimaVerificacao.path) : null;
+  // Disponível agora: o último verificado está na pasta, mesmo nome e tamanho, sem modificação posterior.
+  const disponivelAgora = Boolean(ultimoArquivo && ultimoArquivo.estado === 'VERIFICADO');
+  // Íntegro agora: os mais novos VERIFICADOS são relidos até achar um que confere.
+  let lastVerified = null;
+  let conferencia = null;
+  const candidatos = catalog.filter((c) => c.estado === 'VERIFICADO').sort((x, y) => String(y.verifiedAt).localeCompare(String(x.verifiedAt)));
+  for (const c of candidatos.slice(0, conferir ? MAX_CANDIDATOS_CONFERIDOS : 1)) {
+    const r = conferir ? await conferirAgora(c._verify) : { ok: true, motivo: null, naoConferido: true };
+    if (r.ok) { lastVerified = c._verify; conferencia = { em: new Date().toISOString(), ok: true, name: c.name, naoConferido: Boolean(r.naoConferido) }; break; }
+    c.estado = 'ALTERADO';
+    c.erro = r.motivo;
+    conferencia = conferencia || { em: new Date().toISOString(), ok: false, name: c.name, motivo: r.motivo };
+  }
+  let protecao;
+  if (lastVerified) protecao = 'VERIFICADO';
+  else if (unavailable && files()?.listUserFiles) protecao = 'INDISPONIVEL';
+  else if (ultimaVerificacao) protecao = 'ALTERADO';
+  else protecao = catalog.length ? 'NAO_VERIFICADO' : 'SEM_BACKUP';
+  let motivo = null;
+  if (protecao === 'INDISPONIVEL') motivo = `Pasta de backups inacessível agora${erroPasta ? ` (${erroPasta})` : ''}.`;
+  else if (protecao === 'ALTERADO') motivo = !ultimoArquivo ? `O backup verificado em ${ultimaVerificacao.verifiedAt} não está mais na pasta (apagado ou renomeado).` : (conferencia?.motivo || ultimoArquivo.erro || 'O backup verificado mudou depois da verificação.');
+  return {
+    protecao,
+    motivo,
+    lastCreated: created[0] || null,
+    lastVerified,
+    ultimaVerificacao,
+    disponivelAgora,
+    integroAgora: Boolean(lastVerified) && !conferencia?.naoConferido,
+    conferencia,
+    files: catalog.map(({ _verify, ...rest }) => rest),
+    unavailable,
+    erroPasta,
+  };
 }
 
 export async function exportWeighingCsv() {

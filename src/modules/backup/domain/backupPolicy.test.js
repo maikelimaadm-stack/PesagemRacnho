@@ -22,6 +22,14 @@ describe('backup periódico', () => {
     expect(shouldRunPeriodic({ agora: new Date(), policy: { ...policy, periodico_ativo: false } }).run).toBe(false);
     expect(coverage({ status: { protecao: 'VERIFICADO' }, externo: { configurado: false } })).toEqual({ local: 'OK', copia: 'NAO_CONFIGURADA' });
   });
+  it('R03: cobertura usa o estado de AGORA, não o registro', () => {
+    const ext = { configurado: true, disponivel: true };
+    expect(coverage({ status: { protecao: 'ALTERADO' }, externo: ext, copiaExterna: { valida: true } })).toEqual({ local: 'ALTERADO', copia: 'PENDENTE' });
+    expect(coverage({ status: { protecao: 'INDISPONIVEL' }, externo: ext })).toEqual({ local: 'INDISPONIVEL', copia: 'PENDENTE' });
+    expect(coverage({ status: { protecao: 'VERIFICADO' }, externo: ext, copiaExterna: { valida: false } }).copia).toBe('PENDENTE');
+    expect(coverage({ status: { protecao: 'VERIFICADO' }, externo: ext, copiaExterna: { valida: true } }).copia).toBe('OK');
+    expect(coverage({ status: { protecao: 'VERIFICADO' }, externo: { configurado: true, disponivel: false }, copiaExterna: { valida: true } }).copia).toBe('INDISPONIVEL');
+  });
 });
 
 describe('backup protegido', () => {

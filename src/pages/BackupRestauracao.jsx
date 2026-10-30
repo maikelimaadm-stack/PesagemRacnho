@@ -17,20 +17,40 @@ import '@/styles/rebanho.css';
 const POR_PAGINA = 15;
 const fmtDataHora = (iso) => (iso ? new Date(iso).toLocaleString('pt-BR') : '—');
 const fmtTam = (n) => (n == null ? '—' : n > 1048576 ? `${(n / 1048576).toLocaleString('pt-BR', { maximumFractionDigits: 1 })} MB` : `${Math.max(1, Math.round(n / 1024))} KB`);
-const ESTADO_LABEL = { VERIFICADO: 'Verificado', FALHOU: 'Falhou', NAO_VERIFICADO: 'Não verificado' };
+const ESTADO_LABEL = { VERIFICADO: 'Verificado', FALHOU: 'Falhou', NAO_VERIFICADO: 'Não verificado', ALTERADO: 'Alterado/indisponível agora' };
 const MOTIVO_LABEL = (r) => ({ 'manual-ui': 'Manual', periodico: 'Periódico', 'pre-restore': 'Antes de restaurar', 'pre-import': 'Antes de importar', 'pre-clear-operational': 'Antes de limpar', 'pre-reset-all': 'Antes do reset', protegido: 'Protegido' }[r] || (r && r.startsWith('pre-migration') ? 'Antes da migração' : r || '—'));
 
+// R03: quatro fatos separados — quando foi verificado (histórico), se está disponível agora, se está íntegro
+// agora (relido) e se a cópia externa confere agora. "Protegido" só com o backup íntegro agora.
 function Cobertura({ ov }) {
   const local = ov?.cobertura?.local;
   const copia = ov?.cobertura?.copia;
-  const textoLocal = local === 'OK' ? `Backup verificado em ${fmtDataHora(ov.status.lastVerified?.verifiedAt)}` : local === 'NAO_VERIFICADO' ? 'Há backups, mas nenhum verificado' : 'Nenhum backup ainda';
-  const textoCopia = { OK: `Cópia externa conferida (${ov?.ultimaCopiaExterna?.destino || ''})`, PENDENTE: 'Cópia externa pendente: copie o último backup para o destino', INDISPONIVEL: 'Destino externo desconectado: backup local OK, cópia pendente', NAO_CONFIGURADA: 'Sem destino externo: o backup está só neste computador' }[copia] || '—';
+  const st = ov?.status || {};
+  const sim = (v) => (v ? 'Sim' : 'Não');
+  const titulo = { OK: 'Protegido', NAO_VERIFICADO: 'Atenção', ALTERADO: 'Atenção', INDISPONIVEL: 'Pasta inacessível' }[local] || 'Sem backup';
+  const textoLocal = {
+    OK: `Backup íntegro agora (verificado em ${fmtDataHora(st.lastVerified?.verifiedAt)}).`,
+    NAO_VERIFICADO: 'Há backups, mas nenhum verificado.',
+    ALTERADO: st.motivo || 'O backup verificado não está mais íntegro.',
+    INDISPONIVEL: st.motivo || 'A pasta de backups não pode ser lida agora.',
+  }[local] || 'Nenhum backup ainda.';
+  const textoCopia = { OK: `Cópia externa conferida agora (${ov?.copiaExterna?.destino || ov?.externo?.destino || ''})`, PENDENTE: ov?.copiaExterna?.motivo ? `Cópia externa pendente: ${ov.copiaExterna.motivo}` : 'Cópia externa pendente: copie o último backup para o destino', INDISPONIVEL: 'Destino externo desconectado: cópia não conferida', NAO_CONFIGURADA: 'Sem destino externo: o backup está só neste computador' }[copia] || '—';
+  const maisNovoAlterado = st.lastVerified && st.ultimaVerificacao && st.lastVerified.path !== st.ultimaVerificacao.path;
   return (
-    <div className="rb-summary" aria-label="Situação da proteção">
-      <div className="rb-summary__item" data-protecao={local}><strong>{local === 'OK' ? 'Protegido' : local === 'NAO_VERIFICADO' ? 'Atenção' : 'Sem backup'}</strong><span>{textoLocal}</span></div>
-      <div className="rb-summary__item" data-copia={copia}><strong>{copia === 'OK' ? 'Cópia OK' : copia === 'NAO_CONFIGURADA' ? 'Só local' : 'Pendente'}</strong><span>{textoCopia}</span></div>
-      <div className="rb-summary__item"><strong>{ov?.policy?.periodico_ativo ? `A cada ${ov.policy.intervalo_horas} h` : 'Desligado'}</strong><span>Backup periódico (só com o aplicativo aberto). {ov?.periodico?.proximo?.proximo ? `Próximo após ${fmtDataHora(ov.periodico.proximo.proximo)}.` : ov?.periodico?.proximo?.motivo || ''}</span></div>
-    </div>
+    <>
+      <div className="rb-summary" aria-label="Situação da proteção">
+        <div className="rb-summary__item" data-protecao={local}><strong>{titulo}</strong><span>{textoLocal}</span></div>
+        <div className="rb-summary__item" data-copia={copia}><strong>{copia === 'OK' ? 'Cópia OK' : copia === 'NAO_CONFIGURADA' ? 'Só local' : 'Pendente'}</strong><span>{textoCopia}</span></div>
+        <div className="rb-summary__item"><strong>{ov?.policy?.periodico_ativo ? `A cada ${ov.policy.intervalo_horas} h` : 'Desligado'}</strong><span>Backup periódico (só com o aplicativo aberto). {ov?.periodico?.proximo?.proximo ? `Próximo após ${fmtDataHora(ov.periodico.proximo.proximo)}.` : ov?.periodico?.proximo?.motivo || ''}</span></div>
+      </div>
+      <dl className="rb-dl" aria-label="Conferência do backup agora">
+        <div><dt>Verificado em</dt><dd>{st.ultimaVerificacao ? `${fmtDataHora(st.ultimaVerificacao.verifiedAt)} (${st.ultimaVerificacao.name || '—'})` : '—'}</dd></div>
+        <div><dt>Disponível agora</dt><dd data-r03="disponivel">{sim(st.disponivelAgora)}</dd></div>
+        <div><dt>Íntegro agora</dt><dd data-r03="integro">{sim(st.integroAgora)}{st.conferencia?.em ? ` (conferido ${fmtDataHora(st.conferencia.em)})` : ''}</dd></div>
+        <div><dt>Cópia externa válida</dt><dd data-r03="copia">{ov?.externo?.configurado ? sim(ov?.copiaExterna?.valida === true) : 'Sem destino'}</dd></div>
+      </dl>
+      {maisNovoAlterado ? <p className="rb-note rb-note--warn">O backup verificado mais recente ({st.ultimaVerificacao.name}) não confere agora; a proteção vale pelo anterior, de {fmtDataHora(st.lastVerified.verifiedAt)}.</p> : null}
+    </>
   );
 }
 

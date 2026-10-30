@@ -63,11 +63,17 @@ export function planRetention(catalogo = [], { manter = BACKUP_POLICY_DEFAULTS.m
 }
 
 /** Situação de cobertura para a tela: local × cópia externa. */
-export function coverage({ status, externo, ultimaCopiaExterna }) {
-  const local = status?.protecao === 'VERIFICADO' ? 'OK' : status?.protecao === 'NAO_VERIFICADO' ? 'NAO_VERIFICADO' : 'SEM_BACKUP';
+/**
+ * Quadro de cobertura (R03). `local`: OK só com backup ÍNTEGRO AGORA (status.protecao VERIFICADO, que já relê o
+ * arquivo); ALTERADO quando o último verificado foi apagado/renomeado/alterado; INDISPONIVEL quando a pasta não
+ * pode ser lida. `copia`: OK só com a cópia externa conferida AGORA (`copiaExterna.valida`), não pelo registro.
+ */
+export function coverage({ status, externo, copiaExterna = null }) {
+  const LOCAL = { VERIFICADO: 'OK', NAO_VERIFICADO: 'NAO_VERIFICADO', ALTERADO: 'ALTERADO', INDISPONIVEL: 'INDISPONIVEL' };
+  const local = LOCAL[status?.protecao] || 'SEM_BACKUP';
   let copia = 'NAO_CONFIGURADA';
   if (externo?.configurado) {
-    copia = !externo.disponivel ? 'INDISPONIVEL' : (ultimaCopiaExterna && status?.lastVerified && ultimaCopiaExterna.sha256 && ultimaCopiaExterna.backupName === status.lastVerified.name) ? 'OK' : 'PENDENTE';
+    copia = !externo.disponivel ? 'INDISPONIVEL' : (local === 'OK' && copiaExterna?.valida === true) ? 'OK' : 'PENDENTE';
   }
   return { local, copia };
 }

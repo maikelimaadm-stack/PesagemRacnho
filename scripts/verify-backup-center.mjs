@@ -66,6 +66,7 @@ window.pesagemApp = {
   backup: {
     externalStatus: wrap(async () => bstore.status()),
     copyExternal: wrap(async ({ backupFile }) => bstore.copyToExternal(backupFile)),
+    verifyExternal: wrap(async ({ backupFile, sha256: s }) => bstore.verifyExternal(backupFile, s)),
     deleteBackup: wrap(async ({ backupFile }) => bstore.deleteBackup(backupFile)),
     clearExternalDir: wrap(async () => bstore.clearExternalDir()),
   },

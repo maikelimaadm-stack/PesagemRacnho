@@ -85,13 +85,23 @@ export async function getOverview() {
     maintenanceAdapter.getBackupStatus(), externalStatus(), getPolicy(), history('external-copy'), history('periodic'),
   ]);
   const ultimaCopiaExterna = copias.find((c) => c.ok) || null;
+  // R03: cópia externa válida AGORA = a do backup íntegro agora, relida no destino e conferida pelo SHA-256.
+  let copiaExterna = null;
+  if (externo?.configurado && status.lastVerified?.name) {
+    if (!app()?.backup?.verifyExternal) copiaExterna = { valida: false, motivo: 'Conferência da cópia externa só no aplicativo desktop.' };
+    else {
+      try { copiaExterna = unwrap(await app().backup.verifyExternal({ backupFile: status.lastVerified.name, sha256: status.lastVerified.fileSha256 })); } catch (err) { copiaExterna = { valida: false, motivo: err.message }; }
+    }
+  }
   let protegidos = [];
-  try { protegidos = unwrap(await app()?.files?.listUserFiles?.({ subdir: 'backups', extension: '.pbk' }))?.files || []; } catch { protegidos = []; }
+  let erroProtegidos = null;
+  try { protegidos = unwrap(await app()?.files?.listUserFiles?.({ subdir: 'backups', extension: '.pbk' }))?.files || []; } catch (err) { protegidos = []; erroProtegidos = err.message; }
   return {
-    status, externo, policy, ultimaCopiaExterna, ultimaFalhaCopia: copias.find((c) => !c.ok) || null,
+    status, externo, policy, ultimaCopiaExterna, copiaExterna, ultimaFalhaCopia: copias.find((c) => !c.ok) || null,
     periodico: { ultimo: periodicos[0] || null, proximo: shouldRunPeriodic({ agora: new Date(), ultimoOk: status.lastVerified?.verifiedAt || null, falhas: periodicos.filter((p) => !p.ok).map((p) => p.em || p.created_at), policy }) },
-    cobertura: coverage({ status, externo, ultimaCopiaExterna: ultimaCopiaExterna ? { ...ultimaCopiaExterna } : null }),
+    cobertura: coverage({ status, externo, copiaExterna }),
     protegidos,
+    erroProtegidos,
   };
 }
 

@@ -93,6 +93,22 @@ function createBackupStore(dataDir) {
     return { ok: true, destino: destRoot, arquivos: arquivos.length, bytes: total, sha256: sha256File(path.join(destRoot, name)), copiadoEm: new Date().toISOString() };
   }
 
+  /**
+   * R03: "Cópia externa válida" AGORA — o destino está conectado e a cópia do backup existe e tem o SHA-256 do
+   * backup local verificado (registro antigo de cópia não basta: o pendrive pode ter sido trocado ou apagado).
+   */
+  function verifyExternal(backupFile, expectedSha256) {
+    const name = validBackupName(backupFile);
+    const st = status();
+    if (!st.configurado) return { valida: false, motivo: 'Sem destino externo configurado.' };
+    if (!st.disponivel) return { valida: false, motivo: `Destino externo indisponível agora (${st.destino}).` };
+    const dest = path.join(st.destino, 'pesagens-backups', name);
+    if (!fs.existsSync(dest)) return { valida: false, motivo: 'A cópia deste backup não está no destino externo.' };
+    const atual = sha256File(dest);
+    if (!/^[a-f0-9]{64}$/.test(String(expectedSha256 || '')) || atual !== expectedSha256) return { valida: false, motivo: 'A cópia no destino externo não confere com o backup verificado (SHA-256).' };
+    return { valida: true, motivo: null, destino: path.dirname(dest), conferidoEm: new Date().toISOString() };
+  }
+
   /** Remove um backup da pasta local (JSON + .anexos). Só nomes válidos e só dentro de backups/. */
   function deleteBackup(backupFile) {
     const name = validBackupName(backupFile);
@@ -104,7 +120,7 @@ function createBackupStore(dataDir) {
     return { ok: true, removido: name };
   }
 
-  return { status, setExternalDir, clearExternalDir, copyToExternal, deleteBackup, backupsDir };
+  return { status, setExternalDir, clearExternalDir, copyToExternal, verifyExternal, deleteBackup, backupsDir };
 }
 
 module.exports = { createBackupStore, BackupStoreError };

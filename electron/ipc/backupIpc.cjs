@@ -15,6 +15,7 @@ function registerBackupIpc(ipcMain, getDataDir) {
   }));
   ipcMain.handle('backup:clear-external-dir', wrapIpcHandler(async () => store().clearExternalDir()));
   ipcMain.handle('backup:copy-external', wrapIpcHandler(async (_e, { backupFile } = {}) => store().copyToExternal(backupFile)));
+  ipcMain.handle('backup:verify-external', wrapIpcHandler(async (_e, { backupFile, sha256 } = {}) => store().verifyExternal(backupFile, sha256)));
   ipcMain.handle('backup:delete', wrapIpcHandler(async (_e, { backupFile } = {}) => store().deleteBackup(backupFile)));
 }
 

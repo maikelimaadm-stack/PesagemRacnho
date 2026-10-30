@@ -39,6 +39,7 @@ contextBridge.exposeInMainWorld('pesagemApp', {
     selectExternalDir: () => ipcRenderer.invoke('backup:select-external-dir'),
     clearExternalDir: () => ipcRenderer.invoke('backup:clear-external-dir'),
     copyExternal: (args) => ipcRenderer.invoke('backup:copy-external', args),
+    verifyExternal: (args) => ipcRenderer.invoke('backup:verify-external', args),
     deleteBackup: (args) => ipcRenderer.invoke('backup:delete', args),
   },
   dialogs: {
