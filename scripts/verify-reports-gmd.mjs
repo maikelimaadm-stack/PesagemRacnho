@@ -224,7 +224,9 @@ assert.match(dbSrc, /if \(result\.blocked\) \{[\s\S]*?\} else \{[\s\S]*?await ru
 assert.ok(!/runPendingBackfills[\s\S]{0,200}runSaidaDerivedBackfill/.test(dbSrc), 'NEGATIVO: não é passo da cadeia de migração (falha não bloqueia a escrita)');
 // Restaurar um backup de antes da 1.4.2 (sem o marcador) e "Continuar migração" também rodam o passo (Manutenção).
 const manutencaoSrc = fs.readFileSync(new URL('../src/modules/maintenance/infrastructure/maintenanceDataAdapter.js', import.meta.url), 'utf8');
-assert.match(manutencaoSrc, /await storage\.applyRestore\([^;]*;[\s\S]{0,300}await runSaidaDerivedBackfill\(\)/, 'restauração: recalcula já, sem esperar a próxima abertura');
+// R1-R02: entre a troca da base e o recálculo ficam a efetivação dos anexos e a compensação; o recálculo continua
+// na mesma chamada da restauração, logo depois delas (janela maior, mesma ordem).
+assert.match(manutencaoSrc, /await storage\.applyRestore\(backup[^;]*;[\s\S]{0,3000}?await runSaidaDerivedBackfill\(\)/, 'restauração: recalcula já, sem esperar a próxima abertura');
 assert.match(manutencaoSrc, /runPendingBackfills\([^;]*;[\s\S]{0,200}if \(result\?\.completed\) await runSaidaDerivedBackfill\(\)/, 'Continuar migração: roda o passo adiado');
 ok('A1-recalculo-unico');
 

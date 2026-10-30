@@ -156,7 +156,12 @@ try {
   assert.equal(prot.anexos, 1);
   const envelope = JSON.parse(readFileSync(prot.path, 'utf8'));
   assert.equal(envelope.cipher.alg, 'AES-GCM-256');
-  assert.ok(!/password_hash|ALFA|GTA/.test(readFileSync(prot.path, 'utf8')), 'conteúdo cifrado: nada legível');
+  // Nada legível fora do texto cifrado; dentro dele, os bytes não contêm marcadores longos do JSON em claro. (Antes o
+  // teste procurava "GTA"/"ALFA" no base64, que por acaso pode conter essas letras: falha aleatória de ~1 em 25.)
+  const { ciphertext, ...semCifra } = envelope;
+  assert.ok(!/password_hash|ALFA|GTA/.test(JSON.stringify(semCifra)), 'envelope: nada legível fora do texto cifrado');
+  const bytesCifrados = Buffer.from(String(ciphertext), 'base64');
+  for (const marcador of ['password_hash', 'nome_normalizado', 'legacy_payload']) assert.equal(bytesCifrados.indexOf(marcador), -1, `conteúdo cifrado: "${marcador}" não aparece`);
   assert.deepEqual(await center.inspectBackup(envelope).then((r) => [r.protegido, r.precisaSenha]), [true, true]);
   await assert.rejects(center.inspectBackup(envelope, { senha: 'senha-errada-0000' }), (err) => err.code === 'PROTEGIDO_AUTENTICACAO');
   const adulterado = { ...envelope, ciphertext: `A${envelope.ciphertext.slice(1)}` };
