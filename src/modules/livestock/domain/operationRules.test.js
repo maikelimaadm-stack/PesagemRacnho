@@ -19,7 +19,8 @@ describe('operationRules', () => {
     const morte = validateItem(header({ subtipo: 'MORTE' }), { animal_id: 'A' });
     expect(morte.peso_kg).toBeNull();
     expect(() => validateItem(header(), { animal_id: 'A', peso: '0' })).toThrow(/maior que zero/);
-    expect(validateItem(header(), { animal_id: 'A', peso: '312,6' }).peso_kg).toBe(313);
+    // R07: mesma regra do Lançamento — inteiro por truncamento (antes arredondava para 313).
+    expect(validateItem(header(), { animal_id: 'A', peso: '312,6' }).peso_kg).toBe(312);
   });
 
   it('entrada de animal novo exige sexo; mãe só no nascimento', () => {

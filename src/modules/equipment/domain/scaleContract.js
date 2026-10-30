@@ -1,5 +1,6 @@
 // Contrato único de balança (plano E4): leitura normalizada + adaptador plugável.
 // O Lançamento só consome ScaleReading — não fala com USB/Bluetooth direto.
+import { launchWeightKg } from '../../weighing/domain/weightNormalization.js';
 
 export const SCALE_SOURCES = Object.freeze(['S3', 'SIMULADOR', 'MANUAL', 'ARQUIVO']);
 export const SCALE_ADAPTER_IDS = Object.freeze(['none', 'simulator', 's3-usb', 's3-bluetooth']);
@@ -43,7 +44,9 @@ export function createReading({ weightKg = null, stable = false, source = 'MANUA
  */
 export function formatWeightForField(weightKg) {
   if (weightKg === null || weightKg === undefined || !Number.isFinite(Number(weightKg))) return '';
-  return String(Math.floor(Number(weightKg)));
+  // R07: mesma regra do lançamento (truncamento). Leitura ≤ 0 (balança vazia/tara) mostra o inteiro como antes.
+  const kg = launchWeightKg(Number(weightKg));
+  return String(kg ?? Math.trunc(Number(weightKg)));
 }
 
 export function assertAdapterShape(adapter) {

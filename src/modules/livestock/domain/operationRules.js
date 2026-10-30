@@ -4,6 +4,7 @@
 // pré-requisito: entrada sem peso cria o animal PENDENTE_PESAGEM; peso só é gravado quando medido ou
 // informado (nunca 0 kg inventado).
 import { isFutureCivilDate, parseBrazilianNumber, parseCivilDate } from '../../weighing/domain/brazilianValues.js';
+import { normalizeLaunchWeight } from '../../weighing/domain/weightNormalization.js';
 
 export class OperationError extends Error {
   constructor(code, message, details = {}) {
@@ -142,13 +143,13 @@ export function validateHeader(input = {}) {
 }
 
 function pesoDoItem(input, erros, rotulo) {
-  const raw = input.peso_kg ?? input.peso;
-  if (raw === null || raw === undefined || raw === '') return { peso_kg: null, peso_origem: null };
-  const peso = typeof raw === 'number' ? raw : parseBrazilianNumber(raw);
-  if (peso === null || !Number.isFinite(peso) || peso <= 0) { erros.push(`${rotulo}: peso deve ser maior que zero (deixe em branco se não foi pesado).`); return { peso_kg: null, peso_origem: null }; }
+  // R07: mesma regra do Lançamento (inteiro por truncamento: 328,5 → 328); antes arredondava (328,5 → 329).
+  const r = normalizeLaunchWeight(input.peso_kg ?? input.peso);
+  if (r.ok && r.vazio) return { peso_kg: null, peso_origem: null };
+  if (!r.ok) { erros.push(`${rotulo}: ${r.codigo === 'PESO_INVALIDO' ? r.erro : 'peso deve ser maior que zero'} (deixe em branco se não foi pesado).`); return { peso_kg: null, peso_origem: null }; }
   const origem = String(input.peso_origem || 'MANUAL').toUpperCase();
   if (!PESO_ORIGENS.includes(origem)) erros.push(`${rotulo}: origem do peso inválida.`);
-  return { peso_kg: Math.round(peso), peso_origem: origem };
+  return { peso_kg: r.kg, peso_origem: origem };
 }
 
 /**

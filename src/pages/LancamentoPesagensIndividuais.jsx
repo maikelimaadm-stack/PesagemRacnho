@@ -72,6 +72,7 @@ import { listApplications, listMedicamentos, listProgramas } from "@/modules/san
 import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
 import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
 import { formatWeightForField } from "@/modules/equipment/domain/scaleContract";
+import { launchWeightKg, normalizeLaunchWeight } from "@/modules/weighing/domain/weightNormalization";
 import { getEquipmentConfig } from "@/modules/equipment/application/equipmentConfigService";
 import { consumeCapture, ensureScaleReady, evaluateCapture, getLastStableReading, getStatus as getScaleStatus, onScaleReading, onScaleStatus } from "@/modules/equipment/application/scaleService";
 // Contexto fixo por sequência: o que fica e o que sai entre um animal e o próximo
@@ -1020,8 +1021,7 @@ export default function LancamentoPesagensIndividuais() {
   );
 
   const pesoNumAtual = useMemo(() => {
-    const n = parseBrazilianNumber(peso);
-    return Number.isFinite(n) ? Math.floor(n) : null;
+    return launchWeightKg(peso);
   }, [peso]);
 
   const lotesCandidatosAtalho = useMemo(() => {
@@ -1094,10 +1094,16 @@ export default function LancamentoPesagensIndividuais() {
       }
       capturaBalanca = captura.reading;
     }
-    const pesoInformadoRaw = capturaBalanca ? Number(capturaBalanca.weightKg) : parseBrazilianNumber(peso);
-    // Peso no sistema é inteiro (monitor 58,5 → 58) — decisão de produto P15; o bruto vai em balanca_leitura.
-    const pesoInformado = Number.isFinite(pesoInformadoRaw) ? Math.floor(pesoInformadoRaw) : pesoInformadoRaw;
-    if (!permiteMovimentoSemPeso && (!Number.isFinite(pesoInformado) || pesoInformado <= 0)) {
+    // Peso no sistema é inteiro por truncamento (monitor 58,5 → 58) — decisão de produto P15, regra ÚNICA (R07) para
+    // o peso digitado, a balança e as operações; o bruto vai em balanca_leitura.
+    const pesoNormalizado = normalizeLaunchWeight(capturaBalanca ? Number(capturaBalanca.weightKg) : peso);
+    if (!pesoNormalizado.ok) {
+      toast.error(`⚠️ ${pesoNormalizado.erro}`);
+      if (!pesagemAutoRef.current) pesoInputRef.current?.focus();
+      return;
+    }
+    const pesoInformado = pesoNormalizado.kg;
+    if (!permiteMovimentoSemPeso && pesoInformado === null) {
       toast.error("⚠️ Campo obrigatório: Peso (deve ser maior que zero)");
       if (!pesagemAutoRef.current) pesoInputRef.current?.focus();
       return;
@@ -1135,7 +1141,7 @@ export default function LancamentoPesagensIndividuais() {
     }
     // F09: a dose calculada pela posologia usou o peso da tela; na pesagem automática o peso gravado é o da
     // leitura estável liberada pelo portão — se forem diferentes, a dose não vale (recalcular).
-    const pesoGravadoBalanca = capturaBalanca ? Math.floor(Number(capturaBalanca.weightKg)) : null;
+    const pesoGravadoBalanca = capturaBalanca ? pesoInformado : null;
     if (pesoGravadoBalanca !== null && sanidadeValidada.payload.some((item) => item.posologia_id && Number(item.peso_base_kg) !== pesoGravadoBalanca)) {
       setMostrarSanidade(true);
       toast.error('O peso da balança mudou depois da dose sugerida. Confira a dose e confirme de novo.');
@@ -2168,7 +2174,7 @@ export default function LancamentoPesagensIndividuais() {
             aplicacoesRegistradas={aplicacoesRegistradasEdicao}
             onRecolher={() => setMostrarSanidade(false)}
             pesoBase={{
-              kg: Number.isFinite(parseBrazilianNumber(peso)) ? Math.floor(parseBrazilianNumber(peso)) : null,
+              kg: launchWeightKg(peso),
               origem: pesagemAuto ? 'BALANCA' : 'MANUAL',
               estavel: !pesagemAuto || pesoEstagioBalanca === 'stable',
             }}
