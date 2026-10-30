@@ -91,7 +91,8 @@ assert.deepEqual([c1.animais - c0.animais, c1.pesagens - c0.pesagens, c1.movEntr
 assert.equal((await db.table('animais').where('id').equals(animal2).first()).situacao_cadastro, 'PENDENTE_PESAGEM');
 const semAviso = await erroDe(() => entrada('ciclo-e2b', { numero: '203', peso: null }));
 assert.equal(semAviso?.code, 'OPERACAO_AVISOS', 'sem peso exige ciência explícita');
-const primeira = await weighing.createEntry({ ...pesagemTela({ tipo_manejo: 'Cadastro', data_pesagem: '2026-03-05', numero_animal: '202', peso: 280, peso_origem: 'MANUAL' }) });
+// Como a tela manda: Cadastro com um animal_id NOVO (createAnimalId) — mesmo assim é o animal pendente.
+const primeira = await weighing.createEntry({ ...pesagemTela({ tipo_manejo: 'Cadastro', data_pesagem: '2026-03-05', numero_animal: '202', peso: 280, peso_origem: 'MANUAL', animal_id: crypto.randomUUID() }) });
 assert.equal(primeira.animal_id, animal2, 'primeira pesagem adota o MESMO animal');
 const c2 = await contagens();
 assert.deepEqual([c2.animais - c1.animais, c2.movEntrada - c1.movEntrada, c2.pesagens - c1.pesagens], [0, 0, 1], 'nem animal nem entrada nova');

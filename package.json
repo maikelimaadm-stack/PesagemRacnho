@@ -50,6 +50,7 @@
     "packaged:ui-build:verify": "node scripts/verify-packaged-ui-build.mjs",
     "e2e:installed:verify": "node scripts/verify-installed-app-e2e.mjs",
     "e2e:electron:verify": "node scripts/verify-electron-e2e.mjs",
+    "e2e:launch-integration:verify": "node scripts/verify-launch-integration-e2e.mjs",
     "e2e:installed:verify:dev": "cross-env E2E_DEV_PERMISSIVE=1 node scripts/verify-installed-app-e2e.mjs",
     "docs:user:verify": "node scripts/verify-user-docs.mjs",
     "perf:testmass": "node scripts/generate-test-mass.mjs",

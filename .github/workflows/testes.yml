@@ -41,3 +41,8 @@ jobs:
       # lançamento, repesagem, Relação e reabertura com os dados.
       - name: E2E do app (Electron)
         run: xvfb-run -a npm run e2e:electron:verify
+
+      # Integração do Lançamento com Entradas/Saídas e Sanidade: Compra, Venda, Doação sem peso, Entrada sem peso,
+      # medicamento e posologia no próprio painel, dose sugerida × aplicada e layout 1440/768/390 (dados sintéticos).
+      - name: E2E da integração do Lançamento (Electron)
+        run: xvfb-run -a npm run e2e:launch-integration:verify

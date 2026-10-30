@@ -102,6 +102,8 @@ export function launchOperationMessage(result, { numeroAnimal } = {}) {
   const entrada = op.tipo === 'ENTRADA';
   const rotulo = entrada ? ENTRADA_SUBTIPO_LABELS[op.subtipo] : MOTIVO_SAIDA_LABELS[Object.keys(SUBTIPO_SAIDA_POR_MOTIVO).find((m) => SUBTIPO_SAIDA_POR_MOTIVO[m] === op.subtipo)];
   const ref = op.id ? String(op.id).slice(0, 8) : '';
-  const pesagem = item.pesagem_id ? 'com pesagem' : (entrada ? 'sem pesagem — animal pendente de pesagem' : 'sem peso');
+  // Peso é o que conta para o operador: a Saída sem peso também gera o registro de saída, mas sem peso nenhum.
+  const pesado = item.peso_kg !== null && item.peso_kg !== undefined;
+  const pesagem = pesado ? 'com pesagem' : (entrada ? 'sem pesagem — animal pendente de pesagem' : 'sem peso');
   return `${entrada ? 'Entrada' : 'Saída'} confirmada: animal ${numeroAnimal || ''} · ${rotulo || op.subtipo} · ${pesagem} · operação ${ref}${result?.repetida ? ' (já estava gravada)' : ''}`;
 }

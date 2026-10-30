@@ -547,7 +547,9 @@ export async function createEntry(payload, { aplicacoesSanidade = [], carenciaCo
     if (await db.table('pesagens').where('id').equals(entryId).first()) throw new Error(`Pesagem duplicada (${entryId})`);
     // v9: Cadastro de um animal que entrou por operação SEM peso (PENDENTE_PESAGEM, mesmo número e marca, sem
     // pesagens) é a primeira pesagem DELE — não um segundo animal. O movimento de entrada é adotado depois.
-    if (isRegistration && !animalInformado) {
+    // O Lançamento manda um animal_id NOVO no Cadastro; se ele ainda não existe, a busca do pendente vale igual.
+    const animalInformadoExiste = animalInformado ? Boolean(await db.table('animais').where('id').equals(animalInformado).first()) : false;
+    if (isRegistration && !animalInformadoExiste) {
       const pendente = await findPendingAnimal(db, ui);
       if (pendente) {
         animalId = pendente.id;

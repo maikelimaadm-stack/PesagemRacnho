@@ -39,9 +39,11 @@ describe('launchOperation — Lançamento × livro de operações', () => {
   });
 
   it('mensagem de sucesso diz tipo, animal, pesagem e referência', () => {
-    const msg = launchOperationMessage({ operacao: { id: 'abcdef123456', tipo: 'SAIDA', subtipo: 'VENDA' }, itens: [{ pesagem_id: 'p1' }] }, { numeroAnimal: '101' });
+    const msg = launchOperationMessage({ operacao: { id: 'abcdef123456', tipo: 'SAIDA', subtipo: 'VENDA' }, itens: [{ pesagem_id: 'p1', peso_kg: 360 }] }, { numeroAnimal: '101' });
     expect(msg).toBe('Saída confirmada: animal 101 · Venda · com pesagem · operação abcdef12');
     const semPeso = launchOperationMessage({ operacao: { id: 'x', tipo: 'ENTRADA', subtipo: 'NASCIMENTO' }, itens: [{ pesagem_id: null }] }, { numeroAnimal: '7' });
     expect(semPeso).toMatch(/Entrada confirmada: animal 7 · Nascimento · sem pesagem — animal pendente de pesagem/);
+    const doacao = launchOperationMessage({ operacao: { id: 'y', tipo: 'SAIDA', subtipo: 'DOACAO' }, itens: [{ pesagem_id: 'p9', peso_kg: null }] }, { numeroAnimal: '8' });
+    expect(doacao).toMatch(/Saída confirmada: animal 8 · Doação · sem peso/);
   });
 });

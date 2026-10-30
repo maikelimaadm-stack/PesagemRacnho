@@ -75,7 +75,9 @@ export default function MakDateControl({ value, onChange, disabled = false, read
       const top = rect.bottom + PANEL_HEIGHT + 6 <= window.innerHeight
         ? rect.bottom + 4
         : Math.max(8, rect.top - PANEL_HEIGHT - 4);
-      setPanelStyle({ position: "fixed", left, top, width: PANEL_WIDTH });
+      // pointerEvents: aberto de dentro de um diálogo modal (ex.: posologia no Lançamento), o painel fica no body,
+      // que o diálogo deixa sem eventos de ponteiro; o calendário precisa continuar clicável.
+      setPanelStyle({ position: "fixed", left, top, width: PANEL_WIDTH, pointerEvents: "auto" });
     };
 
     const closeOutside = (event) => {
