@@ -23,6 +23,7 @@ import * as weighingService from '../src/modules/weighing/application/weighingSe
 import { launchWeightKg } from '../src/modules/weighing/domain/weightNormalization.js';
 import { formatWeightForField } from '../src/modules/equipment/domain/scaleContract.js';
 import { createGateAttachmentBridge } from './lib/gateAttachmentBridge.mjs';
+import { analyzeImport, applyImport } from '../src/modules/import/application/importService.js';
 
 const root = mkdtempSync(join(tmpdir(), 'pesagens-r09-'));
 const dataDir = join(root, 'dados');
@@ -136,6 +137,35 @@ try {
   assert.equal((await animal('502')).situacao, 'ATIVO', 'cancelar a saída devolve o animal');
   assert.equal((await ops.getInventory({ from: '2026-03-01', to: '2026-03-31' })).saldo_final, antesSaida, 'inventário volta ao saldo de antes');
   resumo.push('R09 saída cancelada: animal ATIVO e inventário de volta ao saldo anterior');
+
+  // R2-06 — importação de histórico na v9: um movimento de entrada por animal, inventário pelo livro, GMD derivado;
+  // editar e cancelar uma pesagem importada reconcilia movimento e GMD (sem movimento órfão).
+  {
+    const texto = ['Brinco;Marca;Sexo;Raça;Data;Peso', '901;ALFA;M;;01/04/2026;300', '901;ALFA;M;;01/05/2026;330', '902;ALFA;F;;01/04/2026;280'].join('\r\n');
+    const plano = await analyzeImport({ text: texto, type: 'HISTORICO', rules: { categoryMode: 'AUTOMATICA' } });
+    assert.equal(plano.blocking, false);
+    const r = await applyImport(plano);
+    assert.equal(r.animaisNovos, 2);
+    const a901 = await animal('901');
+    const movs = async (id) => (await db.table('movimentosAnimais').where('animal_id').equals(id).toArray()).filter((m) => !m.deleted_at);
+    assert.equal((await movs(a901.id)).filter((m) => m.natureza === 'ENTRADA').length, 1, 'importado: uma entrada no livro');
+    const inv = await ops.getInventory({ from: '2026-04-01', to: '2026-05-31' });
+    assert.equal(inv.entradas.total, 2, 'inventário conta as 2 entradas importadas');
+    const pes901 = (await db.table('pesagens').where('animal_id').equals(a901.id).toArray()).filter((p) => !p.deleted_at).sort((x, y) => x.data_pesagem.localeCompare(y.data_pesagem));
+    assert.equal(Number(pes901[1].legacy_payload.gmd).toFixed(3), (30 / 30).toFixed(3), 'GMD derivado da importação (30 kg / 30 dias)');
+    // Reimportar o mesmo arquivo não duplica nada.
+    const replay = await analyzeImport({ text: texto, type: 'HISTORICO', rules: { categoryMode: 'AUTOMATICA' } });
+    assert.equal(replay.summary.jaExistem, 3, 'reimportação: 100% já existe');
+    // Editar o peso do Manejo recalcula o GMD; cancelar o Manejo remove o derivado sem deixar movimento órfão.
+    await weighingService.updateEntry(pes901[1].id, { ...pes901[1].legacy_payload, peso: 345 });
+    const editado = (await db.table('pesagens').where('id').equals(pes901[1].id).first());
+    assert.equal(Number(editado.legacy_payload.gmd).toFixed(3), (45 / 30).toFixed(3), 'GMD recalculado após editar');
+    await weighingService.deleteEntry(pes901[1].id, { motivo: 'Lançado em duplicidade (gate R2-06)' });
+    const restantes = await movs(a901.id);
+    assert.ok(restantes.every((m) => !m.pesagem_id || m.pesagem_id !== pes901[1].id), 'nenhum movimento aponta para a pesagem cancelada');
+    assert.equal(restantes.filter((m) => m.natureza === 'ENTRADA').length, 1, 'entrada continua única');
+    resumo.push('R2-06 importação na v9: entrada única, inventário, GMD, reimportação sem duplicar, edição e cancelamento reconciliados');
+  }
 
   console.log('OK verify-cross-surface-r1');
   console.log(JSON.stringify(resumo, null, 2));
