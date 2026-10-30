@@ -25,8 +25,12 @@ import { createPageUrl } from "@/utils";
 // relatórios de conferência que saíram do catálogo de Relatórios, abertos na mesma tela de relatório.
 // "Sistema" são os próprios cartões da grade da página (sem painel envolvente): a aba não aponta
 // aria-controls para um id que não existe.
+// F24/P20: Manutenção avançada = integridade, diagnóstico, migração (Sistema), limpeza e reset (Dados — perigoso,
+// em aba própria, longe do backup) e relatórios de conferência (Controle). Backup e restauração têm página
+// própria (Sistema › Backup e Restauração); importação e exportação ficam nas telas de origem.
 const MANUTENCAO_ABAS = [
   { id: "sistema", label: "Sistema", panelId: null },
+  { id: "dados", label: "Dados (limpeza e reset)" },
   { id: "controle", label: "Controle" },
 ];
 
@@ -53,6 +57,7 @@ function migrationTone(status) {
 }
 
 function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
+  const navigate = useNavigate();
   // Ações destrutivas seguem a matriz (maintenance.restore/clear/reset/migrate = ADMIN);
   // o serviço recusa de novo — esconder aqui só evita oferecer o que será negado.
   const auth = useAuth();
@@ -62,17 +67,10 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
   const [stats, setStats] = useState(null);
   const [busy, setBusy] = useState("");
   const [diagText, setDiagText] = useState("");
-  const [importDry, setImportDry] = useState(null);
-  const [importPayload, setImportPayload] = useState(null);
-  const [importFileName, setImportFileName] = useState("");
-  const [restoreDry, setRestoreDry] = useState(null);
-  const [restorePath, setRestorePath] = useState("");
-  const [restoreFileName, setRestoreFileName] = useState("");
   const [diag, setDiag] = useState(null);
   const [backups, setBackups] = useState([]);
   // P21: situação da proteção (último backup VERIFICADO × arquivos encontrados).
   const [backupStatus, setBackupStatus] = useState(null);
-  const [confirmation, setConfirmation] = useState(null);
   const [versions, setVersions] = useState(null);
   const [migration, setMigration] = useState(null);
   const [migrationDry, setMigrationDry] = useState(null);
@@ -152,43 +150,6 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
     }
   };
 
-  // P19: um comando só — cria o backup completo e o verifica lendo de volta do disco.
-  const onBackupNow = () =>
-    run(
-      "bak-now",
-      () => maintenanceService.createBackupNow({ reason: "manual-ui" }),
-      "Backup criado e verificado.",
-      "Não foi possível criar o backup."
-    );
-
-  const onVerifyBackup = (file) =>
-    run(
-      `verify-${file.name}`,
-      async () => {
-        const r = await maintenanceService.verifyBackupFile({ name: file.name });
-        if (!r.ok) throw new Error(r.error);
-        return r;
-      },
-      "Backup verificado: arquivo íntegro e restaurável.",
-      "A verificação falhou."
-    );
-
-  const onExportCsv = () =>
-    run(
-      "exp-csv",
-      () => maintenanceService.exportWeighingCsv({}),
-      "Exportação CSV concluída.",
-      "Não foi possível exportar CSV."
-    );
-
-  const onExportJson = () =>
-    run(
-      "exp-json",
-      () => maintenanceService.exportWeighingJson({}),
-      "Exportação JSON concluída.",
-      "Não foi possível exportar JSON."
-    );
-
   const onIntegrity = () =>
     run(
       "integrity",
@@ -221,92 +182,6 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
       "Verificação rápida OK.",
       "Verificação rápida encontrou problema."
     );
-
-  const onSelectImport = async () => {
-    setBusy("imp-select");
-    try {
-      const selected = await maintenanceService.selectImportJsonFile();
-      if (selected?.canceled) return;
-      const dry = await maintenanceService.dryRunImportWeighingJson(selected.payload);
-      setImportPayload(selected.payload);
-      setImportFileName(selected.fileName || "arquivo.json");
-      setImportDry(dry);
-      toast.success("Análise concluída (dry-run).");
-    } catch (err) {
-      toast.error("Não foi possível analisar o arquivo.", { description: err.message });
-      setImportDry(null);
-      setImportPayload(null);
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const onApplyImport = async () => {
-    if (!importPayload || !importDry) return;
-    setConfirmation('import');
-  };
-
-  const applyImportConfirmed = async () => {
-    setConfirmation(null);
-    await run(
-      "imp-apply",
-      async () => {
-        const result = await maintenanceService.applyImportWeighingJson(importPayload, {
-          skipDuplicates: true,
-        });
-        setImportDry(null);
-        setImportPayload(null);
-        setImportFileName("");
-        return result;
-      },
-      "Importação concluída.",
-      "Não foi possível importar os dados."
-    );
-  };
-
-  const onSelectRestore = async () => {
-    setBusy("res-select");
-    try {
-      const selected = await maintenanceService.selectBackupFile();
-      if (selected?.canceled) return;
-      const dry = await maintenanceService.dryRunRestoreBackup(selected.payload);
-      setRestorePath(selected.payload);
-      setRestoreFileName(selected.fileName || "backup.json");
-      setRestoreDry(dry);
-      if (dry?.restorable) toast.success("Backup válido (dry-run).");
-      else toast.error("Backup inválido ou não restaurável.");
-    } catch (err) {
-      toast.error("Não foi possível analisar o backup.", { description: err.message });
-      setRestoreDry(null);
-      setRestorePath("");
-    } finally {
-      setBusy("");
-    }
-  };
-
-  const onApplyRestore = async () => {
-    if (!restorePath || !restoreDry?.restorable) return;
-    setConfirmation('restore');
-  };
-
-  const applyRestoreConfirmed = async () => {
-    setConfirmation(null);
-    await run(
-      "res-apply",
-      async () => {
-        const result = await maintenanceService.applyRestoreBackup(restorePath);
-        setRestoreDry(null);
-        setRestorePath("");
-        setRestoreFileName("");
-        // F16: anexo que não veio com o backup é aviso VISÍVEL (o documento restaurado aponta para ele).
-        const faltando = (result?.anexos?.faltando?.length || 0) + (result?.anexos?.corrompidos?.length || 0);
-        if (faltando) toast.error(`Restaurado, mas ${faltando} anexo(s) não vieram com o backup (pasta "${result.anexos.pasta || 'arquivo.anexos'}" ao lado do arquivo). Os documentos ficam sem o arquivo até você copiar a pasta e restaurar de novo.`, { duration: 15000 });
-        return result;
-      },
-      "Restauração concluída.",
-      "Não foi possível restaurar o backup."
-    );
-  };
 
   const onMigrationDryRun = () =>
     run(
@@ -410,8 +285,8 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
     >
       <ModeloBase1PageHeader
         visuallyHidden
-        title="Backup e Manutenção"
-        description="Proteja seus dados: backup, exportação, restauração, migração e verificação do banco."
+        title="Manutenção avançada"
+        description="Integridade, diagnóstico, migração, limpeza e reset. Backup e restauração ficam em Sistema › Backup e Restauração."
       />
       <ModeloBase1ActionBar
         className="mb1-operational-actionbar"
@@ -427,6 +302,7 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
       {aba === "controle" ? (
         <MaintenanceControlReports actor={actor} onOpen={onOpenReport} />
       ) : (<>
+      {aba === "sistema" && (<>
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
           <CardTitle className="text-xs font-semibold uppercase tracking-wide">Status do banco</CardTitle>
@@ -591,138 +467,24 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
 
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Backup</CardTitle>
+          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Backup, restauração, importação e exportação</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <div className="w-full text-xs" data-backup-protecao={backupStatus?.protecao || "desconhecida"}>
-            {backupStatus?.lastVerified ? (
-              <p className="text-emerald-700">
-                <strong>Último backup verificado:</strong> {fmtDateTimeBR(backupStatus.lastVerified.verifiedAt)} · {fmtInt(backupStatus.lastVerified.size)} bytes · {backupStatus.lastVerified.name}
-              </p>
-            ) : (
-              <p className="text-amber-700">
-                <strong>Nenhum backup verificado ainda.</strong> {backups.length ? "Há arquivos na pasta, mas nenhum foi conferido: use Verificar." : "Crie o primeiro backup."}
-              </p>
-            )}
-          </div>
-          <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={onBackupNow} disabled={!!busy}>
-            {busy === "bak-now" ? "Criando e verificando…" : "Criar backup agora"}
-          </Button>
-          <p className="w-full text-xs text-slate-500">
-            Backup completo: todos os dados, cadastros, usuários e configurações, com manifesto e SHA-256. Depois de gravar, o arquivo é lido de volta e conferido; só então conta como verificado.
+        <CardContent className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          <p className="w-full" data-backup-protecao={backupStatus?.protecao || "desconhecida"}>
+            {backupStatus?.lastVerified ? <>Último backup verificado: {fmtDateTimeBR(backupStatus.lastVerified.verifiedAt)}.</> : <>Nenhum backup verificado ainda.</>}{" "}
+            Backup e restauração têm página própria; a importação fica em Operação › Importação e a exportação de pesagens na Relação de Pesagens.
           </p>
-          <p className="w-full text-xs text-amber-800" role="note">
-            O arquivo de backup contém todos os dados, inclusive valores comerciais e os usuários do sistema (credenciais guardadas só de forma cifrada). Guarde a cópia em local protegido (pendrive ou disco seu) e não envie por e-mail ou mensagem sem proteção.
-          </p>
-          <div className="w-full border border-slate-200 rounded-md overflow-hidden">
-            <div className="px-3 py-2 text-xs font-semibold bg-slate-50">Arquivos de backup neste computador</div>
-            {backups.length === 0 ? (
-              <p className="px-3 py-2 text-xs text-slate-500">Nenhum backup neste computador. Use Criar backup agora para guardar uma cópia.</p>
-            ) : backups.slice(0, 10).map((backup) => (
-              <div key={backup.path} className="px-3 py-2 border-t border-slate-100 text-xs flex flex-wrap items-center justify-between gap-2" data-backup-estado={backup.estado || "NAO_VERIFICADO"}>
-                <span className="font-medium break-all">{backup.name}</span>
-                <span>{fmtInt(backup.size)} bytes · {fmtDateTimeBR(backup.modifiedAt)}</span>
-                <span className={backup.estado === "VERIFICADO" ? "text-emerald-700" : backup.estado === "FALHOU" ? "text-red-700" : "text-slate-500"}>
-                  {backup.estado === "VERIFICADO" ? `Verificado em ${fmtDateTimeBR(backup.verifiedAt)}` : backup.estado === "FALHOU" ? `Falhou: ${backup.erro}` : "Não verificado"}
-                </span>
-                <Button type="button" variant="outline" className="h-6 px-2 text-xs" onClick={() => onVerifyBackup(backup)} disabled={!!busy}>
-                  {busy === `verify-${backup.name}` ? "Verificando…" : "Verificar"}
-                </Button>
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="emp-content-card">
-        <CardHeader className="emp-form-section-panel--corp">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Exportação de pesagens (não é backup)</CardTitle>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <p className="w-full text-xs text-slate-500">
-            Arquivo só com as pesagens, para planilha ou outro sistema. Não traz animais, cadastros, usuários nem configurações e não serve para restaurar.
-          </p>
-          <Button type="button" className="emp-toolbar-btn px-4" onClick={onExportCsv} disabled={!!busy}>
-            Exportar pesagens em CSV
+          <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={() => navigate(createPageUrl("BackupRestauracao"))}>
+            Abrir Backup e Restauração
           </Button>
-          <Button type="button" className="emp-toolbar-btn px-4" onClick={onExportJson} disabled={!!busy}>
-            Exportar pesagens em JSON
+          <Button type="button" className="emp-toolbar-btn px-4" onClick={() => navigate(createPageUrl("Importacao"))}>
+            Abrir Importação
           </Button>
         </CardContent>
       </Card>
 
-      <Card className="emp-content-card">
-        <CardHeader className="emp-form-section-panel--corp">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Importação</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button type="button" className="emp-toolbar-btn px-4" onClick={onSelectImport} disabled={!!busy}>
-            Selecionar JSON e analisar
-          </Button>
-          {importDry && (
-            <div className="text-sm text-slate-700 space-y-1 border border-slate-200 rounded-md p-3 bg-slate-50">
-              <p className="font-medium">Arquivo: {importFileName}</p>
-              <p>Registros: {(importDry.totalRecords ?? importDry.total) != null ? fmtInt(importDry.totalRecords ?? importDry.total) : "—"}</p>
-              <p>Válidos: {(importDry.validRecords ?? importDry.valid) != null ? fmtInt(importDry.validRecords ?? importDry.valid) : "—"}</p>
-              <p>Inválidos: {(importDry.invalidRecords ?? importDry.invalid) != null ? fmtInt(importDry.invalidRecords ?? importDry.invalid) : "—"}</p>
-              <p>Duplicados: {importDry.duplicates != null ? fmtInt(importDry.duplicates) : "—"}</p>
-              <p>Conflitos: {fmtInt(importDry.conflicts ?? 0)}</p>
-              <p className="text-xs text-slate-500">
-                Antes da importação, o sistema criará um backup automático.
-              </p>
-              <Button type="button" className="emp-toolbar-btn emp-toolbar-btn-save px-4" onClick={onApplyImport} disabled={!!busy || !importPayload}>
-                Importar dados
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {allowed("maintenance.restore") && (
-      <Card className="emp-content-card">
-        <CardHeader className="emp-form-section-panel--corp">
-          <CardTitle className="text-xs font-semibold uppercase tracking-wide">Restauração</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <Button type="button" className="emp-toolbar-btn px-4" onClick={onSelectRestore} disabled={!!busy}>
-            Selecionar backup (.json)
-          </Button>
-          {restoreDry && (
-            <div className="text-sm text-slate-700 space-y-1 border border-slate-200 rounded-md p-3 bg-slate-50">
-              <p className="font-medium">Arquivo: {restoreFileName}</p>
-              <p>Backup válido: {restoreDry.restorable ? "sim" : "não"}</p>
-              <p>Integridade: {restoreDry.integrity || "—"}</p>
-              <p>Formato: {restoreDry.formatVersion ?? "—"} · Banco de origem: {restoreDry.sourceDbVersion ?? "—"}</p>
-              {restoreDry.schemaUpgradeRequired && (
-                <p className="text-amber-700">Backup de esquema anterior: será convertido automaticamente após a restauração.</p>
-              )}
-              {(restoreDry.ignoredStores || []).length > 0 && (
-                <p className="text-xs text-slate-500">Stores ignoradas (removidas do esquema): {restoreDry.ignoredStores.join(", ")}</p>
-              )}
-              {(restoreDry.newStores || []).length > 0 && (
-                <p className="text-xs text-slate-500">Stores novas (nascem vazias): {restoreDry.newStores.join(", ")}</p>
-              )}
-              <p>
-                Data:{" "}
-                {restoreDry.manifest?.createdAt || restoreDry.createdAt
-                  ? fmtDateTimeBR(restoreDry.manifest?.createdAt || restoreDry.createdAt)
-                  : "não informada no manifesto"}
-              </p>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={onApplyRestore}
-                disabled={!!busy || !restoreDry.restorable}
-              >
-                Restaurar backup
-              </Button>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      )}
-
-      {(allowed("maintenance.clear") || allowed("maintenance.reset")) && (
+      </>)}
+      {aba === "dados" && (allowed("maintenance.clear") || allowed("maintenance.reset")) && (
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
           <CardTitle className="text-xs font-semibold uppercase tracking-wide">Limpeza de dados</CardTitle>
@@ -782,6 +544,7 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
       </Card>
       )}
 
+      {aba === "sistema" && (
       <Card className="emp-content-card">
         <CardHeader className="emp-form-section-panel--corp">
           <CardTitle className="text-xs font-semibold uppercase tracking-wide">Diagnóstico</CardTitle>
@@ -818,19 +581,8 @@ function ManutencaoSistemaPainel({ aba, onAba, actor, onOpenReport }) {
           )}
         </CardContent>
       </Card>
+      )}
       </>)}
-      <ConfirmActionDialog
-        open={Boolean(confirmation)}
-        onOpenChange={(nextOpen) => { if (!nextOpen) setConfirmation(null); }}
-        title={confirmation === 'restore' ? 'Restaurar backup' : 'Importar dados'}
-        description={confirmation === 'restore'
-          ? 'O banco atual será substituído somente depois que um backup físico de segurança for criado e validado. Backups de esquema anterior são convertidos automaticamente. Deseja continuar?'
-          : 'Antes da importação, o sistema criará e validará um backup físico automático. Deseja continuar?'}
-        confirmLabel={confirmation === 'restore' ? 'Restaurar' : 'Importar'}
-        destructive={confirmation === 'restore'}
-        busy={Boolean(busy)}
-        onConfirm={confirmation === 'restore' ? applyRestoreConfirmed : applyImportConfirmed}
-      />
     </ModeloBase1PageContainer>
   );
 }
@@ -843,7 +595,7 @@ export default function ManutencaoSistema() {
   const actor = useReportActor();
   const auth = useAuth();
   const query = new URLSearchParams(location.search);
-  const aba = query.get("aba") === "controle" ? "controle" : "sistema";
+  const aba = ["controle", "dados"].includes(query.get("aba")) ? query.get("aba") : "sistema";
   const base = createPageUrl("ManutencaoSistema");
   const report = aba === "controle" && query.get("r") ? resolveReportId(query.get("r")) : null;
   const reportOpen = Boolean(report?.definition && actor);
@@ -874,7 +626,7 @@ export default function ManutencaoSistema() {
         <ManutencaoSistemaPainel
           aba={aba}
           actor={actor}
-          onAba={(id) => navigate(id === "controle" ? `${base}?aba=controle` : base)}
+          onAba={(id) => navigate(id === "sistema" ? base : `${base}?aba=${id}`)}
           onOpenReport={(id) => navigate(`${base}?aba=controle&r=${encodeURIComponent(id)}`)}
         />
       </div>

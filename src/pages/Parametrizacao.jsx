@@ -25,10 +25,15 @@ import {
 } from '@/modules/analytics/application/analyticsService';
 import { describeError, fmtDate, loadRebanhoCatalog } from '@/components/rebanho/rebanhoModel';
 import MakDateControl from '@/components/mak/MakDateControl';
+import { ConfigSection } from './Configuracoes';
+import { createPageUrl } from '@/utils';
+import { Link } from 'react-router-dom';
 import '@/styles/rebanho.css';
 
 // Menu SISTEMA › Parametrização (F25): regras de negócio por seção, cada uma salva isolada. Esta versão traz
-// "Idade, era e categorias" (F05), "Calendário de seca e águas" (F12) e "Metas e cenários" (F13).
+// Pesagens e alertas, GMD e indicadores e Comercial e saídas (as MESMAS chaves de appSettings das Configurações,
+// cada seção salva sozinha), "Idade, era e categorias" (F05), Sanidade e carência (link), "Calendário de seca e
+// águas" (F12) e "Metas e cenários" (F13).
 // Mudança de regra não reescreve histórico: idade e era são calculadas na hora, para a data consultada.
 const toText = (list) => list.join(', ');
 const fromNumbers = (text) => text.split(/[,;\s]+/).filter(Boolean).map(Number);
@@ -238,12 +243,19 @@ export default function Parametrizacao() {
   const auth = useAuth();
   const can = (action) => (auth ? Boolean(auth.can?.(action)) : true);
   const catalog = useCatalog();
-  if (!can('animal.read')) return <AccessDenied role={auth?.user?.role} permission="animal.read" />;
+  if (!can('settings.operational')) return <AccessDenied role={auth?.user?.role} permission="settings.operational" />;
   return (
     <ModeloBase1PageContainer variant="table" className="d17b-page rb-page">
       <ModeloBase1PageHeader title="Parametrização" description="Regras de negócio, cada seção salva separadamente." />
       <div className="rb-scroll">
+        {can('settings.manage') ? <ConfigSection id="curral" /> : null}
+        {can('settings.reports') ? <ConfigSection id="relatorios" /> : null}
+        {can('settings.manage') ? <ConfigSection id="comercial" /> : null}
         <AgePolicySection canEdit={can('settings.manage')} />
+        <section className="rb-card" aria-label="Sanidade e carência">
+          <div className="rb-section-head"><h3>Sanidade e carência</h3></div>
+          <p className="rb-note">A regra de dose (posologia) e a carência de cada medicamento são versionadas e aprovadas por responsável técnico em <Link to={createPageUrl('Sanidade')}>Operação › Sanidade › Posologias</Link>. A carência do abate é conferida na Saída.</p>
+        </section>
         <SeasonSection canEdit={can('settings.manage')} catalog={catalog} />
         <TargetsSection canEdit={can('settings.manage')} catalog={catalog} />
       </div>

@@ -61,6 +61,7 @@ import { gmdExibicao, isGmdConfiavel } from "@/modules/weighing/domain/gmdQualit
 import { EXPORT_PROFILES } from "@/modules/weighing/export/weighingExportContract";
 import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
 import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
+import * as maintenanceService from "@/modules/maintenance/application/maintenanceService";
 import { parseBrazilianNumber } from "@/modules/weighing/domain/brazilianValues";
 
 // Importação (17/09/2026): a Relação não lê mais arquivo nenhum. "Importar CSV" leva ao
@@ -673,6 +674,15 @@ export default function PesagensIndividuais() {
   // a mesma da tela (pesquisa, filtros e ordenação, todas as páginas). O relatório leva as colunas
   // visíveis na ordem da tela (Tipo e Motivo da saída sempre; valores só com commercial.values);
   // a reimportação leva o contrato técnico fixo, sem derivados. O serviço repete reports.export.
+  const exportarJsonTecnico = async () => {
+    try {
+      const r = await maintenanceService.exportWeighingJson({});
+      toast.success('Exportação JSON concluída (não é backup).', { description: r?.filePath });
+    } catch (error) {
+      toast.error(error.message || 'Não foi possível exportar.');
+    }
+  };
+
   const exportarCSV = (profile) => {
     try {
       const arquivo = exportWeighingCsv(pesagensFiltradas, {
@@ -804,6 +814,10 @@ export default function PesagensIndividuais() {
                   ...(podeExportar ? [
                     { id: "exportar", label: "Exportar relatório (CSV)", icon: Download, onClick: () => exportarCSV(EXPORT_PROFILES.FRIENDLY) },
                     { id: "exportar-reimportacao", label: "Exportar para reimportação (CSV)", icon: FileDown, onClick: () => exportarCSV(EXPORT_PROFILES.REIMPORT) },
+                  ] : []),
+                  // F24: exportação técnica (JSON, pasta do app) junto da Relação — não é backup.
+                  ...(pode('maintenance.backup') ? [
+                    { id: "exportar-json", label: "Exportar JSON técnico (não é backup)", icon: FileDown, onClick: exportarJsonTecnico },
                   ] : []),
                   ...(podeImportar ? [
                     { id: "importar", label: "Importar CSV", icon: Upload, onClick: () => navigate(createPageUrl("Importacao")) },

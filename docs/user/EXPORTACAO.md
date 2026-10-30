@@ -109,6 +109,6 @@ A permissão é conferida também no momento de gerar o arquivo, não só no bot
 
 ## 5. Outras exportações
 
-- **Backup e Manutenção** continua com **Exportar pesagens em CSV/JSON** e o backup completo — veja
+- A exportação técnica em JSON está na **Relação de Pesagens** (Mais opções › Exportar JSON técnico), e o backup completo em **Sistema › Backup e Restauração** — veja
   [EXPORTAR-DADOS.md](EXPORTAR-DADOS.md) e [BACKUP-E-RESTAURACAO.md](BACKUP-E-RESTAURACAO.md).
 - **Relatórios** têm a própria exportação (CSV, Excel, PDF) — veja [RELATORIOS.md](RELATORIOS.md).

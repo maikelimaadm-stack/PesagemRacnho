@@ -115,9 +115,12 @@ try {
   // P26: diagnóstico copiável não leva hash/salt nem usuários.
   const diag = JSON.stringify(await maintenance.getDiagnosticSnapshot());
   assert.doesNotMatch(diag, /password_hash|password_salt/);
-  const ui = readFileSync(new URL('../src/pages/ManutencaoSistema.jsx', import.meta.url), 'utf8');
+  // F19/F24: o backup tem página própria (Sistema › Backup e Restauração); a exportação técnica fica na Relação.
+  const ui = readFileSync(new URL('../src/pages/BackupRestauracao.jsx', import.meta.url), 'utf8');
+  const relacao = readFileSync(new URL('../src/pages/PesagensIndividuais.jsx', import.meta.url), 'utf8');
   assert.match(ui, /O arquivo de backup contém todos os dados, inclusive valores comerciais e os usuários/, 'aviso de dado sensível na tela');
-  assert.match(ui, /Exportação de pesagens \(não é backup\)/, 'exportação rotulada como não-backup');
+  assert.match(relacao, /Exportar JSON técnico \(não é backup\)/, 'exportação rotulada como não-backup');
+  assert.doesNotMatch(readFileSync(new URL('../src/pages/ManutencaoSistema.jsx', import.meta.url), 'utf8'), /onClick=\{onBackupNow\}/, 'P20: Manutenção avançada não tem o botão de backup ao lado do reset');
   assert.equal((ui.match(/maintenanceService\.(createDatabaseBackup|createFullDataBackup)\(/g) || []).length, 0, 'P19: a tela não oferece os dois comandos antigos');
   ok('P26 diagnóstico sem credenciais; avisos e rótulos na tela');
 

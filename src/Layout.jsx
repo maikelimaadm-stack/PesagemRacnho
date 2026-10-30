@@ -1,7 +1,8 @@
-import { ArrowLeftRight, BarChart3, TrendingUp, CalendarCheck, ClipboardList, Contact, Database, Dna, Handshake, Layers, ListChecks, LogIn, LogOut, MapPin, PlusCircle, ScanBarcode, Settings, SlidersHorizontal, Skull, Syringe, Tag, Upload, Users } from "lucide-react";
+import { ArchiveRestore, ArrowLeftRight, BarChart3, Scale, TrendingUp, CalendarCheck, ClipboardList, Contact, Database, Dna, Handshake, Layers, ListChecks, LogIn, LogOut, MapPin, PlusCircle, ScanBarcode, Settings, SlidersHorizontal, Skull, Syringe, Tag, Upload, Users } from "lucide-react";
 import { ModeloBase1AppShell } from "@/components/modelobase1";
 import RequirePermission from "@/components/auth/RequirePermission";
 import { useAuth } from "@/components/auth/useAuth";
+import PeriodicBackupScheduler from "@/components/backup/PeriodicBackupScheduler";
 
 // Menu do Programa 2.0 (docs/arquitetura-produto/10-MODELO-PRODUTO-2.0.md §3).
 // Grupos: operacao · rebanho · comercial (Fase 3) · cadastros · sistema.
@@ -242,12 +243,34 @@ const NAV_ITEMS = [
     Icon: SlidersHorizontal,
     group: "sistema",
     mobile: false,
-    permission: "settings.manage",
+    permission: "settings.operational",
+  },
+  // F19: página própria de Backup e Restauração (separada da Manutenção avançada — P20/F24).
+  {
+    id: "pec-backup",
+    title: "Backup",
+    longTitle: "Backup e Restauração",
+    url: "BackupRestauracao",
+    Icon: ArchiveRestore,
+    group: "sistema",
+    mobile: false,
+    permission: "maintenance.backup",
+  },
+  // F26: Balança e Equipamentos (S3, conexão, estabilidade, simulador) fora das Configurações gerais.
+  {
+    id: "pec-equipamentos",
+    title: "Equipamentos",
+    longTitle: "Balança e Equipamentos",
+    url: "Equipamentos",
+    Icon: Scale,
+    group: "sistema",
+    mobile: false,
+    permission: "settings.operational",
   },
   {
     id: "pec-manutencao",
     title: "Manutenção",
-    longTitle: "Backup e Manutenção",
+    longTitle: "Manutenção avançada",
     url: "ManutencaoSistema",
     Icon: Database,
     group: "sistema",
@@ -261,6 +284,7 @@ export default function Layout({ children, currentPageName }) {
   const current = NAV_ITEMS.find((item) => item.url === currentPageName);
   return (
     <ModeloBase1AppShell navItems={visibleItems} navGroups={NAV_GROUPS}>
+      <PeriodicBackupScheduler ativo={Boolean(auth?.user)} />
       <RequirePermission permission={current?.permission}>{children}</RequirePermission>
     </ModeloBase1AppShell>
   );

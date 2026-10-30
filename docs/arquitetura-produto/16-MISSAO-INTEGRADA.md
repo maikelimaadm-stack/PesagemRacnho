@@ -346,3 +346,61 @@ essa identificação pertence a **um** animal.
   escolhido no diálogo. O processo principal lembra o caminho; o renderer não o informa.
   - Faltando ou corrompido é erro visível no resultado e na tela.
   - Backups anteriores à v9 (sem documentos com arquivo) seguem o fluxo antigo.
+
+## ADR-063 — Central de Backup e Restauração, periódico, cópia externa, protegido, retenção e telas separadas (F19–F26; fecha P14, P20, P22, P23, P26)
+
+**Decisão.**
+- **F19 — Página própria.** **Sistema › Backup e Restauração** (`BackupRestauracao.jsx` e `backupCenterService`)
+  reúne:
+  - a situação da proteção: local verificado, cópia externa e periódico;
+  - o botão único "Criar backup agora" (ADR-057);
+  - o catálogo, paginado e pesquisável, com Verificar;
+  - o destino externo, o agendamento e a retenção;
+  - o backup protegido e a restauração guiada.
+- **F20 — Backup periódico.** O `PeriodicBackupScheduler` (no Layout) só roda com sessão aberta no app desktop:
+  confere 3 minutos depois de abrir e depois a cada 15 minutos. `runPeriodicIfDue` decide pela política
+  (`backup-policy:local`, chave nova e aditiva):
+  - **Intervalo:** desde o último backup verificado.
+  - **Reentrada:** trava em memória tomada antes de qualquer await, mais trava gravada com validade.
+  - **Falhas:** espera de 60 minutos depois de uma falha e no máximo 3 falhas por dia.
+  - **Consistência:** o snapshot é coerente porque o `createFullBackupFromDb` lê todas as stores numa única
+    transação de leitura.
+  - **Promessa:** a página não promete backup com o app fechado.
+- **F21 — Cópia externa.** `electron/ipc/backupStore.cjs` e `backupIpc.cjs`.
+  - **Destino:** só pelo diálogo nativo, persistido pelo main em `<dados>/backup-externo.json`. Um destino dentro
+    da pasta de dados é recusado.
+  - **Cópia:** o JSON e a pasta `.anexos` vão para `<destino>/pesagens-backups/`, com temporário + rename e
+    SHA-256 lido de volta. Há checagem de espaço (`statfs`).
+  - **Destino indisponível:** dá erro claro, e a cobertura mostra "backup local OK / cópia pendente".
+- **F22 — Retenção.** `planRetention` só remove backups PERIÓDICOS além dos N mais novos. O último verificado e
+  os de reason protegida (manual, pre-*, migração) nunca são removidos.
+  - A exclusão é feita pelo IPC `backup:delete`, que só aceita basename `.json` e age só dentro de `backups/`.
+- **F22 — Backup protegido.** `protectedBackup.js` monta um envelope `pesagens-backup-protegido` v1:
+  - chave por PBKDF2-SHA-256 com 310.000 iterações e salt de 16 bytes;
+  - cifra AES-GCM-256, com nonce de 12 bytes e AAD de formato.
+  - Ele leva o backup e os anexos em base64 (até 200 MB).
+  - A senha (mínimo de 10 caracteres) não é guardada.
+  - Senha errada ou arquivo alterado falha na autenticação. O leitor JSON antigo continua igual. A leitura de
+    volta decifra e confere o hash do conteúdo.
+- **F23 — Restauração guiada.** Passos: Selecionar (`.json` ou `.pbk`) → Inspecionar/Comparar → Confirmar →
+  Resultado.
+  - **Inspecionar:** não grava nada; mostra o resumo e as contagens de hoje × backup.
+  - **Confirmar:** exige digitar RESTAURAR e o papel ADMIN (`maintenance.restore`). Antes de restaurar, é feito
+    o pré-backup verificado.
+  - **Restaurar:** a restauração é atômica no banco; os anexos voltam (da pasta ou do envelope).
+  - **Resultado:** mostra a integridade pós-restore; se o backup trouxe usuários, a sessão atual é encerrada.
+- **F24 — Separação.** O antigo "Backup e Manutenção" virou **Manutenção avançada**:
+  - **aba Sistema:** status, versões, migração, diagnóstico e reconciliar;
+  - **aba Dados:** limpeza e reset, separados do backup (P20);
+  - **aba Controle.**
+
+  A importação técnica de JSON foi para **Importação**. A exportação técnica JSON foi para a **Relação de
+  Pesagens**. Os deep links antigos (`ManutencaoSistema?aba=controle`) continuam funcionando.
+- **F25/F26 — Configurações, Parametrização e Balança.**
+  - **Configurações gerais:** Geral e Segurança.
+  - **Parametrização:** Pesagens e alertas, GMD e indicadores, Comercial e saídas (as MESMAS chaves de
+    appSettings, via `ConfigSection`, uma seção por vez com Salvar/Descartar e indicação de alterações
+    pendentes), além de Idade/era, Sanidade e carência (link), Calendário e Metas.
+  - **Balança e Equipamentos:** página própria (`ScaleEquipmentCard`).
+  - Nenhum valor é editado em dois lugares, e as permissões por grupo continuam as mesmas: o GESTOR mantém GMD
+    e indicadores.

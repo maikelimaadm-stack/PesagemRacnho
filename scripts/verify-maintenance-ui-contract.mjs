@@ -25,13 +25,18 @@ const adapter = join(root, 'src/modules/maintenance/infrastructure/maintenanceDa
 assert(existsSync(page), 'ManutencaoSistema.jsx exists');
 const pageSrc = readFileSync(page, 'utf8');
 assert(pageSrc.includes('maintenanceService'), 'page uses maintenanceService');
-// P19 (missão pesagens-integrada): um comando só de backup, gravado e verificado.
-assert(pageSrc.includes('Criar backup agora'), 'single backup button');
-assert(!pageSrc.includes('Criar backup do banco') && !pageSrc.includes('Criar backup completo'), 'no duplicated backup buttons');
-assert(pageSrc.includes('Exportar pesagens em CSV'), 'export csv');
-assert(pageSrc.includes('Exportar pesagens em JSON'), 'export json');
-assert(pageSrc.includes('Importar dados'), 'import apply');
-assert(pageSrc.includes('Restaurar backup'), 'restore apply');
+// P19/F19/F24 (missão pesagens-integrada): backup e restauração em página própria (um comando só, verificado);
+// a Manutenção avançada não tem o botão de backup ao lado do reset; exportação na Relação; importação na Importação.
+const backupSrc = readFileSync(join(root, 'src/pages/BackupRestauracao.jsx'), 'utf8');
+const relacaoSrc = readFileSync(join(root, 'src/pages/PesagensIndividuais.jsx'), 'utf8');
+const importJsonSrc = readFileSync(join(root, 'src/components/importacao/ImportacaoJsonTecnica.jsx'), 'utf8');
+assert(backupSrc.includes('Criar backup agora'), 'single backup button');
+assert(!pageSrc.includes('Criar backup agora') && pageSrc.includes('Abrir Backup e Restauração'), 'maintenance links to the backup page (no backup button next to reset)');
+assert(![pageSrc, backupSrc].some((src) => src.includes('Criar backup do banco') || src.includes('Criar backup completo')), 'no duplicated backup buttons');
+assert(relacaoSrc.includes('Exportar relatório (CSV)'), 'export csv');
+assert(relacaoSrc.includes('Exportar JSON técnico (não é backup)'), 'export json');
+assert(importJsonSrc.includes('Importar dados'), 'import apply');
+assert(backupSrc.includes('Restaurar agora') && backupSrc.includes('CONFIRMACAO_RESTAURAR'), 'restore apply (guided, typed confirmation)');
 assert(pageSrc.includes('Verificar integridade'), 'integrity');
 assert(pageSrc.includes('Status do banco'), 'status section');
 assert(!pageSrc.includes('login'), 'no login');
@@ -50,7 +55,7 @@ assert(pageSrc.includes('Simular migração (dry-run)'), 'migration dry-run butt
 assert(pageSrc.includes('Continuar migração'), 'migration resume button');
 assert(pageSrc.includes('Relatório da migração'), 'migration report block');
 assert(pageSrc.includes('maintenanceService.dryRunMigration') && pageSrc.includes('maintenanceService.resumeMigration'), 'page calls migration service functions');
-assert(pageSrc.includes('Backup de esquema anterior'), 'restore dry-run explains schema conversion');
+assert(backupSrc.includes('Backup de esquema anterior'), 'restore dry-run explains schema conversion');
 
 // Programa 2.0 — Limpeza em dois níveis com confirmação textual (ADR-032).
 assert(pageSrc.includes('Limpar dados operacionais'), 'clear operational command');

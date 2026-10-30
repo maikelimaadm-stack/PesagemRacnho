@@ -16,7 +16,7 @@ Cada pessoa tem o próprio usuário e um perfil (**ADMIN**, **GESTOR** ou **OPER
 |---|---|
 | **Operação** | Lançamento · Relação de Pesagens · Fechamento · Ficha do Animal |
 | **Cadastros** | Marcas · Raças · Categorias · Parceiros · Propriedades · Causas de Morte |
-| **Sistema** | Usuários · Backup e Manutenção |
+| **Sistema** | Usuários · Configurações · Parametrização · Balança e Equipamentos · Backup e Restauração · Manutenção avançada (antiga Backup e Manutenção) |
 
 Na barra superior ficam o seu nome e perfil, a versão do programa, o tema claro/escuro e o menu do usuário (**Bloquear**, **Trocar senha**, **Sair**).
 
@@ -53,7 +53,7 @@ Na tela de lançamento, use a documentação de embarque para organizar saídas 
 
 ## Como fazer backup
 
-1. Abra **Backup e Manutenção**.
+1. Abra **Sistema › Backup e Restauração**.
 2. Clique em **Criar backup completo**.
 3. Confira nome, tamanho e SHA-256 na mensagem de sucesso e no catálogo da tela.
 
@@ -61,7 +61,7 @@ O backup leva tudo: pesagens, animais, cadastros e usuários. Veja `BACKUP-E-RES
 
 ## Como verificar se o banco está saudável
 
-1. Abra **Backup e Manutenção**.
+1. Abra **Sistema › Backup e Restauração**.
 2. Clique em **Verificar integridade**.
 3. Se aparecer "Banco íntegro.", está tudo certo.
 
@@ -70,6 +70,6 @@ Na mesma tela, o **Status** mostra a versão do programa, a versão do banco, o 
 ## Se algo der errado
 
 1. Faça um **backup** imediatamente (ADMIN ou GESTOR).
-2. Anote a mensagem de erro (use **Copiar diagnóstico** na tela de Backup e Manutenção; a senha nunca vai no diagnóstico).
+2. Anote a mensagem de erro (use **Copiar diagnóstico** na Manutenção avançada, antiga Backup e Manutenção; a senha nunca vai no diagnóstico).
 3. Não apague a pasta de dados do programa nem edite manualmente o backup JSON.
 4. Consulte também `BACKUP-E-RESTAURACAO.md`, `INSTALACAO-WINDOWS.md` e `LOGIN.md`.

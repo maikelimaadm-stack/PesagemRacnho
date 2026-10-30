@@ -30,7 +30,7 @@ O arquivo traz:
 
 ## Criar um backup
 
-1. Abra **Backup e Manutenção**.
+1. Abra **Sistema › Backup e Restauração**.
 2. Clique em **Criar backup agora**.
 3. Aguarde a mensagem **"Backup criado e verificado."**
 
@@ -74,7 +74,7 @@ pesagens e não restaura nada.
 
 ## Restaurar
 
-1. Abra **Backup e Manutenção** (perfil ADMIN).
+1. Abra **Sistema › Backup e Restauração** (perfil ADMIN) e use **Restaurar backup** (passo a passo abaixo).
 2. Em **Restauração**, selecione um arquivo `backup-completo-….json`.
 3. Confira a análise:
    - versão do programa e do banco;
@@ -129,7 +129,7 @@ coerente não muda nada.
 
 ## Dois níveis de limpeza
 
-A tela de Backup e Manutenção tem duas limpezas diferentes (somente ADMIN):
+A **Manutenção avançada** (aba **Dados (limpeza e reset)**, longe do backup) tem duas limpezas diferentes (somente ADMIN):
 
 | | Limpar dados operacionais | Reset completo |
 |---|---|---|
@@ -159,3 +159,67 @@ O backup só é **verificado** quando todos os anexos estão na pasta dele e con
 algum, a tela diz que o backup **não está completo**.
 
 Para guardar ou restaurar o backup em outro lugar, copie **o arquivo e a pasta juntos**.
+
+
+## Página Backup e Restauração
+
+Em **Sistema › Backup e Restauração** fica tudo o que protege os dados. Destrutivo, só a restauração guiada.
+
+- **Situação da proteção.** A página mostra:
+  - se há um **backup verificado** e quando foi feito;
+  - se a **cópia em outro disco** está em dia;
+  - quando roda o **backup periódico**.
+- **Criar backup agora.** É o mesmo botão de sempre: grava o backup e o confere lendo de volta.
+- **Backups neste computador.** É a lista dos backups, com busca, páginas e o botão **Verificar** em cada
+  arquivo.
+
+### Backup periódico
+
+O aplicativo faz o backup sozinho, **só com o aplicativo aberto**. O padrão é uma vez por dia: logo depois de
+abrir, se o último backup verificado já passou do intervalo.
+
+- **Com o computador desligado, não há backup.**
+- **Falha:** se o backup periódico falhar (disco cheio, por exemplo), o aplicativo espera um pouco e tenta de
+  novo, até 3 vezes por dia. O último backup verificado continua valendo.
+- **Configuração:** o intervalo e quantos backups periódicos guardar ficam em **Agendamento e retenção**.
+
+### Cópia em outro disco ou pendrive
+
+Backup só no mesmo computador não protege contra perda ou defeito da máquina.
+
+1. Em **Escolher destino**, escolha um pendrive, outro disco ou outra pasta. Não pode ser a pasta de dados do
+   aplicativo.
+2. Use **Copiar para o destino externo**. O aplicativo copia o backup e a pasta `.anexos` para
+   `pesagens-backups` no destino e **confere cada arquivo lendo de volta**.
+
+Se o pendrive estiver desconectado, a página mostra **"backup local OK, cópia pendente"**. A opção **Copiar para
+o destino externo depois de cada backup** faz a cópia sozinha. Nada é enviado para a internet.
+
+### Retenção
+
+Só os backups **periódicos** são removidos: ficam os mais recentes, 14 por padrão. Nunca são removidos por
+regra:
+
+- os backups **manuais**;
+- os de **segurança**: antes de migrar, restaurar, importar, limpar ou fazer o reset;
+- o **último backup verificado**.
+
+### Backup protegido por senha
+
+Gera um arquivo `.pbk` **cifrado** (AES-GCM 256) com o banco e os anexos.
+
+- A senha precisa de pelo menos 10 caracteres e **não é guardada em lugar nenhum**: sem ela, o arquivo não abre.
+- Senha errada ou arquivo alterado: a restauração é recusada e nada muda.
+- O código SHA-256 confere se o arquivo está íntegro, mas não esconde o conteúdo. Só o backup protegido
+  esconde.
+
+### Restaurar backup (passo a passo, somente ADMIN)
+
+1. **Selecionar:** escolha o `.json` (com a pasta `.anexos` ao lado) ou o `.pbk`. Para o `.pbk`, informe a senha.
+2. **Inspecionar e comparar:** veja a data, a versão, os usuários e os anexos do backup, e as quantidades de
+   hoje lado a lado com as do backup. Nada é gravado nesta etapa.
+3. **Confirmar:** digite **RESTAURAR**. Antes de restaurar, o aplicativo grava e verifica um backup da situação
+   de hoje.
+4. **Resultado:** a página mostra a integridade do banco depois da restauração e os anexos que voltaram.
+
+Se o backup trouxe usuários, a sessão é encerrada e você entra de novo com um usuário do backup.

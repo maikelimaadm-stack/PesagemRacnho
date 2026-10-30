@@ -189,7 +189,8 @@ try {
   // 7. Balança (simulador no modo do S3 real: só envia o peso quando muda e nunca
   // marca estável). Com a pesagem automática, o campo Peso tem de chegar a estável
   // quando o número para — era o defeito: o monitor estabilizava e o app não.
-  await irPara(win, 'Configuracoes');
+  // F26: a balança fica em Sistema › Balança e Equipamentos.
+  await irPara(win, 'Equipamentos');
   await win.getByRole('combobox', { name: 'Balança ativa' }).click();
   await win.getByRole('option', { name: /Simulador/ }).click();
   await irPara(win, 'LancamentoPesagensIndividuais');
@@ -226,12 +227,17 @@ try {
 
   // 8. Backup (P19/P21): um botão só, que grava e lê de volta pela ponte do Electron; o quadro mostra
   // o último backup VERIFICADO e o arquivo aparece como verificado no catálogo.
-  await irPara(win, 'ManutencaoSistema');
+  // F19: página própria de Backup e Restauração; a Manutenção avançada não tem o botão de backup (P20).
+  await irPara(win, 'BackupRestauracao');
   await win.getByRole('button', { name: 'Criar backup agora' }).click();
   await win.getByText('Backup criado e verificado.').first().waitFor({ timeout: 30000 });
-  await win.getByText('Último backup verificado:').first().waitFor();
+  await win.locator('[data-protecao="OK"]').first().waitFor();
+  await win.locator('[data-copia="NAO_CONFIGURADA"]').first().waitFor();
   assert.ok(await win.locator('[data-backup-estado="VERIFICADO"]').count() >= 1, 'catálogo mostra o arquivo verificado');
   assert.equal(await win.getByRole('button', { name: /Criar backup completo|Criar backup do banco/ }).count(), 0, 'P19: sem os dois botões antigos');
+  await irPara(win, 'ManutencaoSistema');
+  await win.getByRole('button', { name: 'Abrir Backup e Restauração' }).first().waitFor();
+  assert.equal(await win.getByRole('button', { name: 'Criar backup agora' }).count(), 0, 'P20: Manutenção avançada sem o botão de backup');
 
   // 9. Entradas (F01) e Inventário (F17): compra de 2 animais (um sem peso) pela tela, conferência com aviso,
   // confirmação; o inventário do dia conta as 2 compras.
