@@ -406,7 +406,8 @@ export default function PesagensIndividuais() {
       setDeleteRequest({ open: false, ids: [] });
       queryClient.invalidateQueries({ queryKey: ['pesagens-individuais'] });
     },
-    onError: () => toast.error('Erro ao excluir'),
+    // Recusa do serviço (ex.: pesagem de operação confirmada) aparece com o motivo real; nada foi apagado.
+    onError: (error) => toast.error(error?.message || 'Erro ao excluir'),
   });
 
   const handleEditarLote = () => {

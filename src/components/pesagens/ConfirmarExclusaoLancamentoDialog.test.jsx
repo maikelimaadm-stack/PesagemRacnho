@@ -41,4 +41,27 @@ describe('ConfirmarExclusaoLancamentoDialog', () => {
     expect(screen.getByText(/operação com 3 animais/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Cancelar operação' }).disabled).toBe(true);
   });
+
+  it('consulta do vínculo em andamento: não deixa confirmar', () => {
+    render(<ConfirmarExclusaoLancamentoDialog pesagem={PESAGEM} consulta={{ status: 'carregando' }} onCancel={() => {}} onConfirm={() => {}} />);
+    expect(screen.getByText(/Conferindo se o lançamento de 1234/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Excluir' }).disabled).toBe(true);
+  });
+
+  it('consulta do vínculo falhou: diz que nada foi apagado, não confirma e permite tentar de novo', async () => {
+    const onConfirm = vi.fn();
+    const onRetry = vi.fn();
+    render(<ConfirmarExclusaoLancamentoDialog pesagem={PESAGEM} consulta={{ status: 'erro', erro: 'IndexedDB indisponível' }} onRetry={onRetry} onCancel={() => {}} onConfirm={onConfirm} />);
+    expect(screen.getByText(/Não foi possível confirmar se o lançamento de 1234 .* pertence a uma operação\. Nenhum dado foi apagado\./)).toBeTruthy();
+    expect(screen.getByText('IndexedDB indisponível')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Excluir' }).disabled).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: 'Tentar de novo' }));
+    expect(onRetry).toHaveBeenCalled();
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('consulta concluída com vínculo: vira cancelamento da operação', () => {
+    render(<ConfirmarExclusaoLancamentoDialog pesagem={PESAGEM} consulta={{ status: 'pronto', vinculo: { operacao: { id: 'op1', tipo: 'ENTRADA' }, quantidade: 1 } }} onCancel={() => {}} onConfirm={() => {}} />);
+    expect(screen.getByRole('button', { name: 'Cancelar operação' })).toBeTruthy();
+  });
 });

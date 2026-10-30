@@ -561,7 +561,8 @@ export async function cancelOperation(id, { motivo }) {
       }
       await db.table('operacaoItens').update(item.localId, { status: ITEM_STATUS.CANCELADO, updated_at: ts });
       if (item.pesagem_id) {
-        await weighingAdapter.bulkDeleteEntries([item.pesagem_id], { motivo: `Cancelamento da operação: ${motivo}` });
+        // Exceção canônica da guarda de pesagem vinculada: mesma transação, item já CANCELADO, operação desta chamada.
+        await weighingAdapter.bulkDeleteEntries([item.pesagem_id], { motivo: `Cancelamento da operação: ${motivo}`, cancelamentoOperacaoId: operacao.id });
       }
       for (const movimento of (await movimentosDo(db, item.animal_id)).filter((row) => row.operacao_id === operacao.id && row.origem === 'operacao')) {
         await db.table('movimentosAnimais').update(movimento.localId, { deleted_at: ts, updated_at: ts });

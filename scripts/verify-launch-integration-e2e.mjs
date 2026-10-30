@@ -224,6 +224,40 @@ try {
   assert.equal(doacao.peso_kg ?? null, null, 'doação sem peso inventado');
   resumo.push('3 Saída VENDA com peso e DOAÇÃO sem peso (aviso de carência confirmado): 2 operações, 2 movimentos, nenhum peso inventado');
 
+  // 3b (PR #5 R1, T10). Desfazer a Doação com a CONSULTA DO VÍNCULO FALHANDO (falha injetada na leitura do índice
+  // operacaoItens.pesagem_id do IndexedDB): a tela não trata como "sem vínculo" — avisa que nada foi apagado e não
+  // deixa confirmar. Sem a falha, "Tentar de novo" mostra o cancelamento da operação, que exige motivo.
+  const opDoacao = banco.operacoes.find((o) => o.subtipo === 'DOACAO');
+  await win.evaluate(() => {
+    const original = IDBObjectStore.prototype.index;
+    window.__indexOriginal = original;
+    IDBObjectStore.prototype.index = function indexComFalha(nome) {
+      if (this.name === 'operacaoItens' && nome === 'pesagem_id') throw new DOMException('falha injetada na consulta (teste)', 'InvalidStateError');
+      return original.call(this, nome);
+    };
+  });
+  await win.getByRole('button', { name: 'Desfazer' }).click();
+  const dlgFalha = win.getByRole('dialog').filter({ hasText: 'Nenhum dado foi apagado' });
+  await dlgFalha.waitFor();
+  assert.equal(await dlgFalha.getByRole('button', { name: 'Excluir' }).isDisabled(), true, 'consulta falhou: não confirma');
+  await capturar(win, 'desfazer-consulta-falhou-1440.png');
+  banco = await lerBanco(win);
+  assert.equal(banco.operacoes.find((o) => o.id === opDoacao.id).status, 'CONFIRMADA', 'nada mudou com a consulta falhando');
+  await win.evaluate(() => { IDBObjectStore.prototype.index = window.__indexOriginal; });
+  await dlgFalha.getByRole('button', { name: 'Tentar de novo' }).click();
+  const dlgCancelar = win.getByRole('dialog').filter({ hasText: 'Cancelar operação' });
+  await dlgCancelar.getByText(/é a Saída registrada como operação/).waitFor();
+  await dlgCancelar.getByLabel('Motivo do cancelamento').fill('doação lançada por engano (teste)');
+  await dlgCancelar.getByRole('button', { name: 'Cancelar operação' }).click();
+  await dlgCancelar.waitFor({ state: 'detached', timeout: 15000 });
+  await toast(win, /Operação cancelada/);
+  banco = await lerBanco(win);
+  assert.equal(banco.operacoes.find((o) => o.id === opDoacao.id).status, 'CANCELADA', 'Desfazer cancela a operação de saída');
+  const animal502 = banco.animais.find((a) => a.numero_animal === '502');
+  assert.equal(animal502.situacao, 'ATIVO', 'o animal volta ao rebanho');
+  assert.equal(banco.movimentos.filter((m) => m.natureza === 'SAIDA' && m.animal_id === animal502.id).length, 0, 'saída fora do livro');
+  resumo.push('3b Desfazer da Saída com a consulta do vínculo falhando: bloqueado e "nenhum dado foi apagado"; Tentar de novo → cancelamento da operação com motivo (operação CANCELADA, animal ATIVO, saída fora do livro)');
+
   // 4. Entrada NASCIMENTO sem peso → 1ª pesagem do mesmo animal
   await escolherTipo(win, 'Entrada (novo animal)');
   await escolherNoCombo(win, 'Motivo da Entrada', 'Nascimento');

@@ -82,6 +82,7 @@ import {
   launchUsesOperation,
 } from "@/modules/weighing/domain/launchOperation";
 import OperacaoAvisosDialog from "../components/pesagens/OperacaoAvisosDialog";
+import { useVinculoOperacao, vinculoConferido } from "../components/pesagens/useVinculoOperacao";
 import { exportWeighingCsv } from "@/modules/weighing/export/weighingExportService";
 import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
 import { formatWeightForField } from "@/modules/equipment/domain/scaleContract";
@@ -383,7 +384,8 @@ export default function LancamentoPesagensIndividuais() {
   const [subtipoEntrada, setSubtipoEntrada] = useState(ENTRADA_SUBTIPO_PADRAO);
   const [entradaSemPeso, setEntradaSemPeso] = useState(false);
   const [operacaoAvisos, setOperacaoAvisos] = useState(null);
-  const [exclusaoVinculo, setExclusaoVinculo] = useState(null);
+  // Vínculo da pesagem com operação, consultado FAIL-CLOSED antes de excluir (ver useVinculoOperacao).
+  const vinculoExclusao = useVinculoOperacao(findOperationOfEntry);
   const [outlierDialog, setOutlierDialog] = useState({ open: false, warnings: [], options: null });
   // M1 — Repesagem no mesmo dia: { anterioresIds, resumo, avisoSanidade, options } enquanto o diálogo está aberto.
   const [repesagemDialog, setRepesagemDialog] = useState(null);
@@ -1592,30 +1594,49 @@ export default function LancamentoPesagensIndividuais() {
   // ========== EXCLUIR PESAGEM ==========
   const handleExcluir = async (pesagem) => {
     // Pesagem que é a Entrada/Saída de uma operação: excluir = cancelar a operação (motivo, auditoria), para o
-    // livro, o inventário e a pesagem continuarem coerentes.
-    let vinculo = null;
-    try { vinculo = pesagem?.id ? await findOperationOfEntry(pesagem.id) : null; } catch { vinculo = null; }
-    setExclusaoVinculo(vinculo);
+    // livro, o inventário e a pesagem continuarem coerentes. Consulta falha ou em andamento = nada se confirma;
+    // o serviço ainda recusa, na transação, pesagem de operação confirmada (PESAGEM_VINCULADA_OPERACAO).
     setDeleteLaunchRequest(pesagem);
+    vinculoExclusao.consultar(pesagem?.id || null);
+  };
+
+  const fecharExclusao = () => {
+    setDeleteLaunchRequest(null);
+    vinculoExclusao.limpar();
   };
 
   const confirmarExclusaoLancamento = async (motivoCancelamento) => {
     const pesagem = deleteLaunchRequest;
     if (!pesagem) return;
-    if (exclusaoVinculo?.operacao) {
+    // Sem consulta concluída para ESTA pesagem, nada é excluído (fail-closed).
+    if (!vinculoConferido(vinculoExclusao.estado, pesagem.id)) return;
+    const vinculo = vinculoExclusao.estado.vinculo;
+    if (vinculo?.operacao) {
       try {
-        await cancelOperation(exclusaoVinculo.operacao.id, { motivo: motivoCancelamento });
-        setDeleteLaunchRequest(null);
-        setExclusaoVinculo(null);
-        setAvisoTela({ tipo: 'info', mensagem: `Operação cancelada (${String(exclusaoVinculo.operacao.id).slice(0, 8)}): o lançamento saiu do rebanho e do livro, com o motivo na auditoria.` });
+        await cancelOperation(vinculo.operacao.id, { motivo: motivoCancelamento });
+        fecharExclusao();
+        const mensagemCancelamento = `Operação cancelada (${String(vinculo.operacao.id).slice(0, 8)}): o lançamento saiu do rebanho e do livro, com o motivo na auditoria.`;
+        toast.success(mensagemCancelamento);
+        setAvisoTela({ tipo: 'info', mensagem: mensagemCancelamento });
         await loadAllData();
       } catch (error) {
+        // O diálogo e os dados ficam; nada é anunciado como feito.
         toast.error('Erro: ' + error.message);
       }
       return;
     }
-    const result = await deleteEntriesRespectingHistory({ entries: pesagens, ids: [pesagem.id], empresaId: empresaSelecionadaId });
+    let result;
+    try {
+      result = await deleteEntriesRespectingHistory({ entries: pesagens, ids: [pesagem.id], empresaId: empresaSelecionadaId });
+    } catch (error) {
+      // Ex.: a pesagem passou a pertencer a uma operação depois da consulta — o serviço recusa na transação e nada
+      // é apagado. O diálogo fica aberto e a consulta é refeita para mostrar o caminho certo (cancelar a operação).
+      toast.error('Erro: ' + error.message);
+      if (error?.code === 'PESAGEM_VINCULADA_OPERACAO') vinculoExclusao.consultar(pesagem.id);
+      return;
+    }
     setDeleteLaunchRequest(null);
+    vinculoExclusao.limpar();
     setAvisoTela({
       tipo: 'info',
       mensagem: `Exclusão concluída: ${fmtInt(result.ids.length)} registro(s) removido(s).`,
@@ -2939,9 +2960,10 @@ export default function LancamentoPesagensIndividuais() {
 
       <ConfirmarExclusaoLancamentoDialog
         pesagem={deleteLaunchRequest}
-        bloqueado={exclusaoVinculo ? exclusaoVinculo.quantidade > 1 : deleteLaunchPlan.cascades.some((cascade) => cascade.blocked)}
-        operacao={exclusaoVinculo}
-        onCancel={() => { setDeleteLaunchRequest(null); setExclusaoVinculo(null); }}
+        bloqueado={deleteLaunchPlan.cascades.some((cascade) => cascade.blocked)}
+        consulta={deleteLaunchRequest && vinculoExclusao.estado.pesagemId === deleteLaunchRequest.id ? vinculoExclusao.estado : { status: 'carregando' }}
+        onRetry={() => vinculoExclusao.consultar(deleteLaunchRequest?.id || null)}
+        onCancel={fecharExclusao}
         onConfirm={confirmarExclusaoLancamento}
       />
 
