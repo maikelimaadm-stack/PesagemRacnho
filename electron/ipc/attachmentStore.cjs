@@ -120,13 +120,35 @@ function createAttachmentStore(dataDir) {
     return { pasta: path.basename(dir), ...summarize(checks) };
   }
 
+  /** Bytes de um anexo em base64 (backup protegido, F22) — conferidos pelo hash antes de sair. */
+  function readObject(sha, ext) {
+    const full = objectPath(anexosDir, sha, ext);
+    if (!fs.existsSync(full)) throw new AttachmentError('ANEXO_FALTANDO', 'Arquivo do anexo não encontrado.');
+    const bytes = fs.readFileSync(full);
+    if (sha256(bytes) !== sha) throw new AttachmentError('ANEXO_CORROMPIDO', 'Anexo corrompido (SHA-256).');
+    return { sha256: sha, ext: normalizeExt(ext).slice(1), base64: bytes.toString('base64') };
+  }
+
+  /** Grava um anexo vindo de backup protegido; recusa se o conteúdo não bater com o SHA-256 informado. */
+  function writeObject(sha, ext, base64) {
+    const bytes = Buffer.from(String(base64 || ''), 'base64');
+    if (!bytes.length || bytes.length > MAX_BYTES) throw new AttachmentError('ANEXO_INVALIDO', 'Anexo inválido.');
+    if (sha256(bytes) !== assertSha(sha)) throw new AttachmentError('ANEXO_CORROMPIDO', 'O conteúdo do anexo não confere com o SHA-256.');
+    const dest = objectPath(anexosDir, sha, ext);
+    fs.mkdirSync(anexosDir, { recursive: true });
+    const tmp = `${dest}.tmp-${process.pid}-${Date.now()}`;
+    fs.writeFileSync(tmp, bytes);
+    fs.renameSync(tmp, dest);
+    return checkObject(anexosDir, { sha256: sha, ext });
+  }
+
   function pathOf(sha, ext) {
     const full = objectPath(anexosDir, sha, ext);
     if (!fs.existsSync(full)) throw new AttachmentError('ANEXO_FALTANDO', 'Arquivo do anexo não encontrado.');
     return full;
   }
 
-  return { importFromPath, verify, snapshot, verifyBackup, restore, pathOf, anexosDir, backupsDir };
+  return { importFromPath, verify, snapshot, verifyBackup, restore, readObject, writeObject, pathOf, anexosDir, backupsDir };
 }
 
 module.exports = { createAttachmentStore, AttachmentError, EXTENSOES, MAX_BYTES };

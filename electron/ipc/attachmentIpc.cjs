@@ -33,6 +33,8 @@ function registerAttachmentIpc(ipcMain, getDataDir) {
     const erro = await shell.openPath(full);
     return { ok: !erro, error: erro || null };
   }));
+  ipcMain.handle('attachments:read', wrapIpcHandler(async (_e, { sha256, ext } = {}) => store().readObject(sha256, ext)));
+  ipcMain.handle('attachments:write', wrapIpcHandler(async (_e, { sha256, ext, base64 } = {}) => store().writeObject(sha256, ext, base64)));
   ipcMain.handle('attachments:snapshot', wrapIpcHandler(async (_e, { backupFile, objects } = {}) => store().snapshot(backupFile, objectsOf(objects))));
   ipcMain.handle('attachments:verify-backup', wrapIpcHandler(async (_e, { backupFile, objects } = {}) => store().verifyBackup(backupFile, objectsOf(objects))));
   ipcMain.handle('attachments:restore', wrapIpcHandler(async (_e, { origem, backupFile, objects } = {}) => {

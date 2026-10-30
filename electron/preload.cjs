@@ -28,6 +28,16 @@ contextBridge.exposeInMainWorld('pesagemApp', {
     snapshot: (args) => ipcRenderer.invoke('attachments:snapshot', args),
     verifyBackup: (args) => ipcRenderer.invoke('attachments:verify-backup', args),
     restore: (args) => ipcRenderer.invoke('attachments:restore', args),
+    read: (args) => ipcRenderer.invoke('attachments:read', args),
+    write: (args) => ipcRenderer.invoke('attachments:write', args),
+  },
+  // Backup (F21/F22): destino externo escolhido no diálogo nativo; o renderer só envia o nome do backup.
+  backup: {
+    externalStatus: () => ipcRenderer.invoke('backup:external-status'),
+    selectExternalDir: () => ipcRenderer.invoke('backup:select-external-dir'),
+    clearExternalDir: () => ipcRenderer.invoke('backup:clear-external-dir'),
+    copyExternal: (args) => ipcRenderer.invoke('backup:copy-external', args),
+    deleteBackup: (args) => ipcRenderer.invoke('backup:delete', args),
   },
   dialogs: {
     selectImportJson: () => ipcRenderer.invoke('dialog:select-import-json'),

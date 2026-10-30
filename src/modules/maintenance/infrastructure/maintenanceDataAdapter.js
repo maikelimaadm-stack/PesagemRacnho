@@ -253,7 +253,7 @@ export async function selectBackupFile() {
 export async function dryRunRestoreBackup(backup) {
   return storage.dryRunRestore(backup);
 }
-export async function applyRestoreBackup(backup) {
+export async function applyRestoreBackup(backup, { anexosInline = false } = {}) {
   const safety = await persistFullBackup({ reason: 'pre-restore', automatic: true });
   const result = await storage.applyRestore(backup, { safetyEvidence: safetyEvidenceOf(safety), files: files() });
   // E1G (1.4.2): backup de antes da 1.4.2 volta sem o marcador 'derivados-saida-v1' — o GMD das saídas com peso é
@@ -261,7 +261,8 @@ export async function applyRestoreBackup(backup) {
   await runSaidaDerivedBackfill();
   // F16: anexos do backup voltam da pasta "<backup>.anexos" ao lado do arquivo escolhido, conferidos pelo hash.
   // Anexo faltando ou corrompido é erro VISÍVEL no resultado (o banco já restaurado aponta para ele).
-  const objetos = backupAttachmentObjects(backup);
+  // Backup protegido traz os anexos dentro do envelope (gravados por quem chama): não há pasta .anexos.
+  const objetos = anexosInline ? [] : backupAttachmentObjects(backup);
   if (objetos.length) {
     result.anexos = attachments()?.restore
       ? anexosResumo(unwrapDialog(await attachments().restore({ origem: 'selecionado', objects: objetos })))

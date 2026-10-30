@@ -34,13 +34,14 @@ function registerDialogIpc(ipcMain, getDataDir) {
       const result = await dialog.showOpenDialog(win, {
         title: 'Selecionar arquivo JSON para importação',
         properties: ['openFile'],
-        filters: [{ name: 'JSON', extensions: ['json'] }],
+        // F22: backup protegido por senha (.pbk) também é escolhido aqui (envelope JSON cifrado).
+        filters: [{ name: 'Backup ou JSON', extensions: ['json', 'pbk'] }],
       });
       if (result.canceled || !result.filePaths?.[0]) {
         return { canceled: true };
       }
       const filePath = assertRegularFile(result.filePaths[0]);
-      assertExtension(filePath, ['.json']);
+      assertExtension(filePath, ['.json', '.pbk']);
       let payload;
       try {
         payload = JSON.parse(fs.readFileSync(filePath, 'utf8'));
