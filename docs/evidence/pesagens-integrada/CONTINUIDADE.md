@@ -22,6 +22,7 @@ Este arquivo diz onde a missão está e como continuar sem refazer nada.
 | B5 | F19–F26; fecha P14, P20, P22, P23 e P26 | feito | B5 |
 | Final | versão 1.6.0 (sem tag), docs, rollback, desempenho | feito | final-hardening |
 | R1 | auditoria corretiva R01–R09 (`AUDITORIA-CORRETIVA-R1.md`) | feito; R04 Windows bloqueado (homologação) | `fix(R1-R0x)`, `perf(R1-R08)`, `test(R1-R09)` |
+| R2 | auditoria corretiva R2-01 a R2-06 (`AUDITORIA-CORRETIVA-R2.md`) | feito; `test:full` termina (36k medido à parte) | `fix(R2-0x)`, `test(R2-05/R2-06)` |
 
 A situação item a item (os 52, com evidência) está em `MATRIZ-52-ITENS.md`.
 
@@ -35,6 +36,9 @@ A situação item a item (os 52, com evidência) está em `MATRIZ-52-ITENS.md`.
 - **R04 — volta para a 1.5.x no Windows:** os dados estão verificados (`npm run rollback:v8:verify`). Os passos
   de instalador e de `PESAGENS_USER_DATA_DIR` no Windows real estão **BLOQUEADOS PARA HOMOLOGAÇÃO WINDOWS**. O
   roteiro está em `MIGRACAO-ROLLBACK.md`.
+- **Homologação numa cópia isolada do banco real:** ainda não feita. O proprietário faz numa máquina de teste: copia a
+  pasta de dados para um perfil separado (`PESAGENS_USER_DATA_DIR`), abre a 1.6.0 nessa cópia e confere a migração,
+  o backup, a restauração e o inventário. Nenhum dado real foi pedido nem usado aqui.
 - **Merge, tag e release:** somente pelo proprietário.
 
 ## Como verificar
@@ -63,7 +67,11 @@ Gates novos da missão (todos dentro de `test:quick` e `test:full`):
 | `restore:preflight:verify` | R02: anexos conferidos antes da troca da base; seleção vinculada; compensação |
 | `backup:availability:verify` | R03: verificado × disponível × íntegro agora × cópia externa válida |
 | `reconcile:derivations:verify` | R08: reconciliar idempotente e cancelável |
-| `cross:surface:verify` | R09: regressões entre telas |
+| `cross:surface:verify` | R09/R2-06: regressões entre telas e importação na v9 |
+| `backup:partial:verify` | R2-01: backup parcial nunca é proteção completa |
+| `restore:compensation:verify` | R2-02: compensação depois da troca da base; estado crítico |
+
+O `test:full` usa `import:contract:verify` (600 × 3), que confere a correção da importação em massa pequena.
 
 Verificações pesadas, fora do `test:quick`:
 
@@ -72,6 +80,8 @@ Verificações pesadas, fora do `test:quick`:
 | `rollback:v8:verify` | R04, com o código real da 1.5.6 |
 | `perf:reconcile:electron` (com `xvfb-run -a` no Linux) | R08, no Electron real |
 | `perf:reconcile:node` | R08, no fake-indexeddb |
+| `perf:import:electron` (com `xvfb-run -a`) | R2-05: 36.000 linhas no IndexedDB real; levou cerca de 85 s |
+| `perf:import:node` (o mesmo que `import:performance:verify`) | R2-05: 36.000 linhas no fake-indexeddb; cresce ~N² |
 
 O E2E (`scripts/verify-electron-e2e.mjs`) percorre, no Electron real:
 

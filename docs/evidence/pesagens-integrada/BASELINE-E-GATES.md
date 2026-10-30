@@ -61,3 +61,41 @@ Problema **preexistente**: `abertura_lancamento_simulada` com 36 mil pesagens j�
 ## Gates durante a missão
 
 Cada checkpoint roda o gate do que mudou e, antes de cada push: `npm run lint`, `npm run test:unit`, `xvfb-run -a npm run test:quick`, `xvfb-run -a npm run e2e:electron:verify`. Resultados por checkpoint ficam em `MATRIZ-52-ITENS.md` e no fim deste arquivo.
+
+## Auditoria corretiva R2 (30/10/2026) — gates no HEAD da R2
+
+| Comando | Resultado | Tempo |
+|---|---|---|
+| `npm ci` | OK | 19s |
+| `npm run lint` | OK | 11s |
+| `npm run test:unit` | OK | 11s |
+| `npm run build` | OK | 13s |
+| `xvfb-run -a npm run e2e:electron:verify` | OK | 37s |
+| `npm run storage:all:verify` | OK | 24s |
+| `npm run migration:v9:verify` | OK | 1s |
+| `npm run backup:recovery:verify` | OK | 0s |
+| `npm run documents:backup:verify` | OK | 1s |
+| `npm run backup:center:verify` | FALHOU 1 vez (teste defeituoso, ver abaixo) → corrigido; OK 52/52 seguidas | 1s |
+| `npm run safety:backup:verify` | OK | 1s |
+| `npm run restore:preflight:verify` | OK | 1s |
+| `npm run backup:availability:verify` | OK | 0s |
+| `npm run livestock:operations:verify` | OK | 1s |
+| `npm run sanity:posology:verify` | OK | 0s |
+| `npm run weighing:integrity:verify` | OK | 1s |
+| `npm run cross:surface:verify` | OK | 1s |
+| `npm run backup:partial:verify` | OK | 0s |
+| `npm run restore:compensation:verify` | OK | 1s |
+| `npm run import:contract:verify` | OK | 5s |
+| `xvfb-run -a npm run test:quick` | OK | 110s |
+| `xvfb-run -a npm run test:full` | OK | 152s |
+
+- **`backup:center:verify`.** A única falha foi do teste, não do app. O detalhe está em
+  `AUDITORIA-CORRETIVA-R2.md` §Gates. Depois da correção: 52 de 52.
+- **`test:full`** agora termina. O benchmark de 36.000 linhas foi trocado por `import:contract:verify` (600 × 3).
+- **Medições de capacidade (36.000 linhas):**
+
+  | Motor | Comando | Tempo |
+  |---|---|---|
+  | IndexedDB real (Electron) | `perf:import:electron` | 85 s |
+  | fake-indexeddb | `perf:import:node` | 16 min 21 s |
+

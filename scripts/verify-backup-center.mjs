@@ -164,7 +164,8 @@ try {
   for (const marcador of ['password_hash', 'nome_normalizado', 'legacy_payload']) assert.equal(bytesCifrados.indexOf(marcador), -1, `conteúdo cifrado: "${marcador}" não aparece`);
   assert.deepEqual(await center.inspectBackup(envelope).then((r) => [r.protegido, r.precisaSenha]), [true, true]);
   await assert.rejects(center.inspectBackup(envelope, { senha: 'senha-errada-0000' }), (err) => err.code === 'PROTEGIDO_AUTENTICACAO');
-  const adulterado = { ...envelope, ciphertext: `A${envelope.ciphertext.slice(1)}` };
+  // Troca SEMPRE o 1º caractere (antes virava 'A' — se o texto já começasse com 'A', nada mudava: falha 1 em 64).
+  const adulterado = { ...envelope, ciphertext: `${envelope.ciphertext[0] === 'A' ? 'B' : 'A'}${envelope.ciphertext.slice(1)}` };
   await assert.rejects(center.inspectBackup(adulterado, { senha: 'senha-forte-2026' }), (err) => err.code === 'PROTEGIDO_AUTENTICACAO');
   ok('F22 backup protegido AES-GCM: senha errada e arquivo alterado recusados; conteúdo ilegível sem senha');
 

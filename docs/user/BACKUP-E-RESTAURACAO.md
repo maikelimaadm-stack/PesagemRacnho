@@ -183,6 +183,8 @@ Em **Sistema › Backup e Restauração** fica tudo o que protege os dados. Dest
     um backup íntegro agora. Arquivo apagado, renomeado, truncado ou alterado deixa de contar, e o backup periódico
     roda na próxima oportunidade. Pasta inacessível aparece como **Pasta inacessível**;
   - **Cópia externa válida**: se a cópia no pendrive ou disco existe agora e confere com o backup;
+  - a conferência relê os **3 backups verificados mais novos**. Se nenhum deles conferir e houver outros mais
+    antigos, a página avisa que eles não foram relidos. Use **Verificar** neles;
   - se a **cópia em outro disco** está em dia;
   - quando roda o **backup periódico**.
 - **Criar backup agora.** É o mesmo botão de sempre: grava o backup e o confere lendo de volta.
@@ -241,13 +243,20 @@ Gera um arquivo `.pbk` **cifrado** (AES-GCM 256) com o banco e os anexos.
    - prepara os anexos numa pasta à parte.
 
    Se faltar ou não conferir algum anexo, nada é alterado. Num `.pbk`, um anexo adulterado também faz recusar.
-   Só depois disso o banco é trocado. Se os anexos não puderem ser gravados depois disso, o banco volta sozinho à
-   situação de antes, pelo backup de segurança.
+   Só depois disso o banco é trocado. Se algo falhar depois da troca, o banco volta sozinho à situação de antes,
+   pelo backup de segurança, e a tela diz **"Restauração NÃO concluída — o banco voltou ao estado anterior"**. Isso
+   vale para a migração do backup antigo, a gravação dos anexos, o recálculo do GMD e a conferência final.
+
+   Se nem a volta automática funcionar, a tela diz **"Restauração NÃO concluída — base possivelmente
+   inconsistente"** e as gravações ficam bloqueadas. Nesse caso, restaure o backup de segurança indicado, pelo nome
+   e pelo SHA-256. Isso desbloqueia.
 4. **Resultado:** a página confere tudo de novo e diz **Recuperação completa** ou **Recuperação INCOMPLETA**, com o
    que não voltou. Ela mostra as contagens, os anexos e a integridade do banco.
 
 Exceções existem só depois de uma recusa, e só para o ADMIN:
 - restaurar um pacote ao qual **faltam** anexos. Anexo corrompido nunca é aceito. A recuperação sai incompleta;
-- restaurar quando anexos **já sumiram** deste computador. O backup de segurança é marcado como incompleto.
+- restaurar quando anexos **já sumiram** deste computador. O backup de segurança fica **PARCIAL**: ele vai para o
+  histórico e para a lista, mas **não conta como proteção**. Ele não aparece como "Protegido" e não adia o backup
+  periódico. Importar, limpar e fazer o reset nunca aceitam backup parcial.
 
 Se o backup trouxe usuários, a sessão é encerrada e você entra de novo com um usuário do backup.
