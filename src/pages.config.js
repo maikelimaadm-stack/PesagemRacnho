@@ -22,6 +22,7 @@ const Movimentacoes = lazy(() => import('./pages/Movimentacoes'));
 const Inventario = lazy(() => import('./pages/Inventario'));
 const Identificadores = lazy(() => import('./pages/Identificadores'));
 const Parametrizacao = lazy(() => import('./pages/Parametrizacao'));
+const Desempenho = lazy(() => import('./pages/Desempenho'));
 // Cadastros mestres (Programa 2.0 · ADR-018)
 const Marcas = lazy(() => import('./pages/Marcas'));
 const Racas = lazy(() => import('./pages/Racas'));
@@ -45,6 +46,7 @@ export const PAGES = {
     "Inventario": Inventario,
     "Identificadores": Identificadores,
     "Parametrizacao": Parametrizacao,
+    "Desempenho": Desempenho,
     "Sanidade": Sanidade,
     "Relatorios": Relatorios,
     "Marcas": Marcas,

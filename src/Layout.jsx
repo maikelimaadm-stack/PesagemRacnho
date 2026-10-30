@@ -1,4 +1,4 @@
-import { ArrowLeftRight, BarChart3, CalendarCheck, ClipboardList, Contact, Database, Dna, Handshake, Layers, ListChecks, LogIn, LogOut, MapPin, PlusCircle, ScanBarcode, Settings, SlidersHorizontal, Skull, Syringe, Tag, Upload, Users } from "lucide-react";
+import { ArrowLeftRight, BarChart3, TrendingUp, CalendarCheck, ClipboardList, Contact, Database, Dna, Handshake, Layers, ListChecks, LogIn, LogOut, MapPin, PlusCircle, ScanBarcode, Settings, SlidersHorizontal, Skull, Syringe, Tag, Upload, Users } from "lucide-react";
 import { ModeloBase1AppShell } from "@/components/modelobase1";
 import RequirePermission from "@/components/auth/RequirePermission";
 import { useAuth } from "@/components/auth/useAuth";
@@ -127,6 +127,17 @@ const NAV_ITEMS = [
     url: "Relatorios",
     Icon: BarChart3,
     group: "relatorios",
+    permission: "reports.read",
+  },
+  // F11–F14, F18: painel do gestor (desempenho, metas, projeção, seca), exportação CSV/Excel/PDF.
+  {
+    id: "pec-desempenho",
+    title: "Desempenho",
+    longTitle: "Desempenho",
+    url: "Desempenho",
+    Icon: TrendingUp,
+    group: "relatorios",
+    mobile: false,
     permission: "reports.read",
   },
   {

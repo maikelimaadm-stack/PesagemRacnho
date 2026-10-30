@@ -58,14 +58,14 @@ restaurável no app v9. Gate: `npm run migration:v9:verify` (no `test:quick`/`te
 | F08 | Posologia estruturada e versionada | `sanity/domain/posology.js`, `posologyDataAdapter`, Sanidade › Posologias | `scripts/verify-sanity-posology.mjs` (`npm run sanity:posology:verify`), `posology.test.js`, E2E passo 11 | rascunho incompleto não aprova nem calcula; aprovada imutável; nova versão substitui; texto legado = referência; ADR-060 | PASS |
 | F09 | Painel de dose sugerida × aplicada | `computeDose`, `getDoseSuggestion`, painel do Lançamento e aplicação avulsa | `sanity:posology:verify`, `sanity:launch-integration:verify` | arredondamento da regra; faixas; peso estimado/futuro bloqueia; só peso estável na pesagem automática; confirmação; snapshot; peso mudou = recalcular | PASS |
 | F10 | Carência e liberação para abate | `withdrawalEnd`/`withdrawalStatus`, Saídas (bloqueio + liberação técnica) | `sanity:posology:verify` | data civil; zero ≠ desconhecida; abate em carência bloqueado sem liberação auditada; venda avisa | PASS |
-| F11 | Desempenho comparativo | — | — | — | PENDENTE |
-| F12 | Calendário de águas/seca | — | — | — | PENDENTE |
-| F13 | Metas e cenários | — | — | — | PENDENTE |
-| F14 | Planejado × realizado | — | — | — | PENDENTE |
+| F11 | Desempenho por raça, sexo, idade/era, lote, origem e época | `analytics/domain/performance.js`, Relatórios › Desempenho | `scripts/verify-analytics-forecast.mjs` (`npm run analytics:forecast:verify`) | intervalo observado com dimensões no início; n/dias/GMD ponderado/IC; amostra insuficiente ≠ zero; intervalo curto fora; quem perde peso; ADR-061 | PASS |
+| F12 | Calendário de águas, transição e seca | `seasonCalendar.js`, Parametrização › Calendário | `analytics:forecast:verify`, E2E passo 12 | por propriedade/ano com fonte; sem sobreposição; específico prevalece; dias expostos; intervalo misto não atribuído | PASS |
+| F13 | Metas e cenários de peso/GMD | `targets.js`, `projection.js`, Parametrização › Metas e cenários | `analytics:forecast:verify`, `projection.test.js` | oráculo 314,6 kg; bissexto; troca no meio do mês; precedência; conflito explícito; projeção nunca gravada | PASS |
+| F14 | Planejado × realizado por coorte | `compareToTarget`, `monthlyObserved`, painel › Metas | `analytics:forecast:verify` | GMD observado × meta; peso na data observado/projetado; 01/01→01/03 não vira GMD mensal | PASS |
 | F15 | Rastreabilidade interna completa | `domain/traceability.js`, Ficha › Dossiê CSV/JSON | `animal:profile:verify` | origem/documentos/propriedades/lotes/sanidade+carência/dentição/destino; desconhecidos listados; aviso de não-certificação | PASS |
 | F16 | Documentos/anexos offline | — | — | — | PENDENTE |
 | F17 | Conciliação de inventário | `domain/inventory.js`, tela Rebanho › Inventário (CSV) | `inventory.test.js`, `livestock:operations:verify`, E2E passo 9 | saldo pela data do evento; lote/propriedade com internas separadas; conferência por animal; cancelado não conta | PASS (categoria na data → F05) |
-| F18 | Painel do gestor | — | — | — | PENDENTE |
+| F18 | Relatório gestor | `dashboard.js` + `dashboardExport.js`, Relatórios › Desempenho | `analytics:forecast:verify` (paridade CSV/XLSX/HTML), E2E passo 12 | ranking com amostra; perdendo peso; seca por lote; metas; comparação com ano anterior; exportação CSV/Excel/PDF | PASS |
 | F19 | Página Backup e Restauração | — | — | — | PENDENTE |
 | F20 | Backup periódico | — | — | — | PENDENTE |
 | F21 | Destino externo | — | — | — | PENDENTE |

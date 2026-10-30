@@ -290,7 +290,16 @@ try {
   await win.getByRole('tab', { name: 'Posologias' }).click();
   await win.getByText('Nenhuma posologia. Sem posologia aprovada, a dose é sempre manual.').first().waitFor();
 
-  // 12. Relatórios abre sem erro.
+  // 12. Parametrização (F05/F12/F13) e Desempenho (F11/F18): as seções abrem e o painel monta as tabelas.
+  await irPara(win, 'Parametrizacao');
+  await win.getByRole('region', { name: 'Idade, era e categorias' }).waitFor();
+  await win.getByRole('region', { name: 'Calendário de seca e águas' }).waitFor();
+  await win.getByRole('region', { name: 'Metas e cenários' }).waitFor();
+  await irPara(win, 'Desempenho');
+  await win.getByText(/Desempenho por Raça/).first().waitFor({ timeout: 15000 });
+  await win.getByText('Dias de seca por lote (intervalos observados)').first().waitFor();
+
+  // 13. Relatórios abre sem erro.
   await irPara(win, 'Relatorios');
   await win.getByText('Relatório de Pesagens Individuais').first().waitFor();
 

@@ -280,3 +280,46 @@ essa identificação pertence a **um** animal.
   - **Venda, transferência e doação** com carência aberta geram **aviso**.
   - **Carência desconhecida** recente (120 dias) gera **aviso**.
   - **Morte e ajuste** não são verificados.
+
+## ADR-061 — Desempenho por intervalo observado, calendário sazonal, metas com precedência e projeção diária (F11–F14, F18)
+
+**Decisão.**
+- **Desempenho (F11).** A unidade é o **intervalo observado** entre duas pesagens com peso do mesmo animal
+  (`performance.buildIntervals`).
+  - Cada intervalo carrega as dimensões **do início**: raça, sexo, era pela idade na data, categoria produtiva,
+    lote vigente (`animalLotes`), origem da entrada, propriedade e estação predominante (mínimo de 80%; abaixo
+    disso, MISTO).
+  - Intervalo menor que `gmd_dias_minimos` fica fora da média, como nos relatórios.
+  - Por grupo: n, dias, Σganho/Σdias, média e desvio individual, IC 95%, ganharam/perderam/mantiveram (±0,05
+    kg/dia) e sem GMD.
+  - Amostra mínima: 3 animais com GMD e 21 dias. Abaixo disso, o grupo é "sem dados suficientes", fica fora do
+    ranking e nunca vira zero.
+- **Calendário sazonal (F12).** Fica na store `calendariosSazonais`, por propriedade (ou geral) e ano, com
+  período, intervalo e fonte.
+  - Não há sobreposição no mesmo escopo.
+  - O período da propriedade prevalece sobre o geral.
+  - `exposure` conta os dias de um intervalo por período.
+- **Metas e cenários (F13).** Ficam em `metasDesempenho`, nos tipos GMD, PESO_DATA e CENARIO, com escopo e
+  vigência.
+  - **Precedência:** INDIVIDUAL > LOTE > COORTE > PROPRIEDADE > GERAL.
+  - **Conflito:** dois candidatos no mesmo nível são CONFLITO, não aplicado. A gravação recusa outra meta do
+    mesmo escopo, alvo, tipo e cenário com vigência sobreposta.
+  - **Encerramento:** é uma exclusão lógica, com motivo e auditoria.
+- **Projeção (F13).** `projectWeight` soma o GMD dia a dia a partir do último peso real; base estimada ou
+  projetada é recusada.
+  - O GMD de cada dia vem, nesta ordem: do regime planejado, do cenário por mês, do cenário por estação do
+    calendário da propriedade ou do GMD único.
+  - Dia sem regra interrompe a projeção com a data, sem completar o valor.
+  - Oráculo: 300 kg + 31 × 0,2 + 28 × 0,3 = 314,6 kg; com fevereiro bissexto, 314,9 kg.
+  - A projeção nunca é gravada.
+- **Planejado × realizado (F14).** Meta de GMD contra o GMD observado nos intervalos confiáveis da vigência.
+  Meta de peso numa data contra o peso observado (se já passou) ou contra o projetado. A classificação usa
+  tolerância de 0,05 kg/dia ou 5 kg.
+  - `monthlyObserved` só atribui GMD a um mês quando o intervalo cabe inteiro nele.
+- **Painel (F18).** `buildDashboard` monta tudo, e `dashboardTables` é a **fonte única** da tela, do CSV, do
+  XLSX e do HTML/PDF. Os exportadores reaproveitam as peças do motor de relatórios: célula CSV protegida,
+  `zipStored`, `escapeXml` e `printToPdf` do Electron.
+- **Permissões.**
+  - `reports.read` para o painel e a projeção;
+  - `reports.export` para exportar;
+  - `settings.manage` para calendário, metas e cenários.

@@ -88,3 +88,4 @@
 .rb-summary__item strong { font-size: 16px; color: var(--mb1-text-1, #111827); }
 .rb-summary__item span { font-size: 11px; color: var(--mb1-text-2, #6b7280); }
 .rb-textarea { width: 100%; min-height: 70px; padding: 6px 8px; border: 1px solid var(--mb1-border, #e7eaee); border-radius: 6px; background: var(--mb1-bg-field, #f1f3f4); color: var(--mb1-text-1, #111827); font: inherit; font-size: 12px; }
+.rb-table-wrap--inline { flex: 0 0 auto; max-height: 420px; border: 0; }
