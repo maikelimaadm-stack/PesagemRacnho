@@ -7,7 +7,7 @@
 // (weighingDataAdapter.createEntry/bulkDeleteEntries), que inclui as stores de
 // LAUNCH_SANITY_TABLES no seu escopo.
 import storage from '../../../storage/storageAdapter.js';
-import { withdrawalEnd } from '../domain/posology.js';
+import { validateWithdrawalClarification, withdrawalEnd } from '../domain/posology.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
 import { normalizeName } from '../../../storage/indexedDb/normalize.js';
 import { SANITY_APPLICATIONS_STORE } from '../../../storage/indexedDb/schema.js';
@@ -285,7 +285,9 @@ export async function cancelApplication(id, { motivo = null } = {}) {
  * prazo, a fonte e o responsável, recalcula o fim da carência pela data da aplicação e audita (antes/depois). Só
  * para aplicação ativa com carência desconhecida; carência já conhecida não é reescrita.
  */
-export async function clarifyWithdrawal(id, { carencia_carne_dias, fonte, responsavel }) {
+export async function clarifyWithdrawal(id, input) {
+  // R3-03: a persistência valida de novo — nenhum chamador interno grava prazo não informado como zero.
+  const { carencia_carne_dias, fonte, responsavel, zero_confirmado: zeroConfirmado = false } = validateWithdrawalClarification(input);
   storage.assertWritable('Esclarecimento de carência');
   const db = await storage.ensureReady();
   const table = db.table(APLICACOES_STORE);
@@ -300,7 +302,7 @@ export async function clarifyWithdrawal(id, { carencia_carne_dias, fonte, respon
     const changes = {
       carencia_carne_ate: fim.carencia_carne_ate,
       carencia_conhecida: true,
-      carencia_esclarecimento: { carencia_carne_dias, fonte, responsavel, em: ts, por: actor?.usuario_nome_snapshot ?? null },
+      carencia_esclarecimento: { carencia_carne_dias, fonte, responsavel, ...(zeroConfirmado ? { zero_confirmado: true } : {}), em: ts, por: actor?.usuario_nome_snapshot ?? null },
       updated_at: ts,
     };
     await table.update(existing.localId, changes);

@@ -197,12 +197,29 @@ await assert.rejects(ops.confirmOperation(vendaAntiga.operacao.id), (err) => err
 await ops.discardDraft(vendaAntiga.operacao.id);
 // Esclarecimento com fonte: vira ENCERRADA (35 dias) e o abate passa nos dois caminhos.
 await assert.rejects(sanity.clarifyWithdrawal(antiga7.id, { carencia_carne_dias: 35, fonte: 'x', responsavel: '' }), /fonte|responsável/i);
+// R3-03: prazo não informado não vira zero, nem pelo serviço nem pelo adaptador; nada muda e nada é auditado.
+const auditAntes = await db.table('auditoria').count();
+const apAntes = JSON.stringify(await db.table('aplicacoesSanidade').where('id').equals(antiga7.id).first());
+for (const vazio of [null, undefined, '', '   ', false]) {
+  await assert.rejects(sanity.clarifyWithdrawal(antiga7.id, { carencia_carne_dias: vazio, fonte: 'Bula do produto', responsavel: 'Dr. Fulano CRMV 123' }), (err) => err.code === 'ESCLARECIMENTO_INVALIDO', `serviço recusa ${String(vazio)}`);
+}
+const sanityAdapter = await import('../src/modules/sanity/infrastructure/sanityDataAdapter.js');
+await assert.rejects(sanityAdapter.clarifyWithdrawal(antiga7.id, { carencia_carne_dias: '', fonte: 'Bula do produto', responsavel: 'Dr. Fulano CRMV 123' }), (err) => err.code === 'ESCLARECIMENTO_INVALIDO', 'adaptador também recusa');
+await assert.rejects(sanity.clarifyWithdrawal(antiga7.id, { carencia_carne_dias: 0, fonte: 'Bula do produto', responsavel: 'Dr. Fulano CRMV 123' }), /confirme/, 'zero sem confirmação');
+assert.equal(JSON.stringify(await db.table('aplicacoesSanidade').where('id').equals(antiga7.id).first()), apAntes, 'aplicação intacta');
+assert.equal(await db.table('auditoria').count(), auditAntes, 'nada auditado');
+await assert.rejects(lancarAbate(a7, '7', '2026-03-20'), (err) => err.code === 'CARENCIA_ABATE', 'continua bloqueado depois das tentativas inválidas');
+ok('R3-03 prazo vazio/nulo/branco/false recusado no serviço e no adaptador; zero só confirmado; aplicação e auditoria intactas');
 const esclarecida = await sanity.clarifyWithdrawal(antiga7.id, { carencia_carne_dias: 35, fonte: 'Bula do produto (lote 123)', responsavel: 'Dr. Fulano CRMV 123' });
 assert.equal(esclarecida.carencia_carne_ate, '2025-07-06');
 const auditEsc = (await db.table('auditoria').toArray()).find((r) => r.acao === 'ESCLARECER_CARENCIA_SANIDADE' && r.entidade_id === antiga7.id);
 assert.ok(auditEsc && /Bula do produto/.test(auditEsc.resumo), 'esclarecimento auditado');
 await lancarAbate(a7, '7', '2026-03-20');
 assert.equal((await animal('7')).situacao, 'ABATIDO', 'esclarecida e encerrada: abate liberado');
+const ap8 = (await db.table('aplicacoesSanidade').where('animal_id').equals(a8.id).toArray())[0];
+const zero8 = await sanity.clarifyWithdrawal(ap8.id, { carencia_carne_dias: '0', zero_confirmado: true, fonte: 'Bula: carência zero para carne', responsavel: 'Dr. Fulano CRMV 123' });
+assert.equal(zero8.carencia_carne_ate, ap8.data, 'zero explícito e confirmado: carência termina no dia da aplicação');
+assert.equal(zero8.carencia_esclarecimento.zero_confirmado, true);
 ok('R2-03 desconhecida não expira (292 d bloqueia nos dois caminhos); liberação anterior ao tratamento não cobre; esclarecimento auditado regulariza');
 
 // Nenhuma dose/produto fixo no código.

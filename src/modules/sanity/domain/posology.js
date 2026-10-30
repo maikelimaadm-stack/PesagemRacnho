@@ -301,17 +301,36 @@ export function withdrawalExitPolicy({ status, subtipo, liberacao = null, rotulo
   return { bloqueios, avisos };
 }
 
-/** Esclarecimento da carência de uma aplicação antiga (R2-03): prazo em dias, fonte e responsável — tudo obrigatório. */
+/**
+ * Dias de carência INFORMADOS (R3-03). Prazo não informado nunca vira zero: em JavaScript `Number(null)`,
+ * `Number('')`, `Number('  ')` e `Number(false)` valem 0. Só são aceitos um número inteiro (tipo number) ou um texto só
+ * com dígitos (espaços nas pontas tolerados); tudo o mais — ausente, vazio, branco, booleano, NaN, decimal,
+ * negativo, separador, objeto — devolve null (inválido).
+ */
+export function parseWithdrawalDays(value) {
+  if (typeof value === 'number') return Number.isInteger(value) && value >= 0 ? value : null;
+  if (typeof value !== 'string') return null;
+  const t = value.trim();
+  if (!/^\d{1,4}$/.test(t)) return null;
+  return Number(t);
+}
+
+/**
+ * Esclarecimento da carência de uma aplicação antiga (R2-03/R3-03): prazo em dias INFORMADO, fonte e responsável —
+ * tudo obrigatório. Zero só vale quando informado literalmente (0 ou "0") E confirmado (`zero_confirmado: true`):
+ * carência de 0 dia libera o abate no mesmo dia, então não pode nascer de um campo vazio.
+ */
 export function validateWithdrawalClarification(input = {}) {
   const erros = [];
-  const dias = Number(input.carencia_carne_dias);
-  if (!Number.isInteger(dias) || dias < 0 || dias > 3650) erros.push('Carência de carne: dias inteiros de 0 a 3650.');
+  const dias = parseWithdrawalDays(input.carencia_carne_dias);
+  if (dias === null || dias > 3650) erros.push('Carência de carne: informe os dias como número inteiro de 0 a 3650 (campo vazio não é zero).');
+  else if (dias === 0 && input.zero_confirmado !== true) erros.push('Carência de 0 dia: confirme que a fonte indica zero (vazio ou "não sei" não é zero).');
   const fonte = text(input.fonte);
   const responsavel = text(input.responsavel);
   if (!fonte || fonte.length < 5) erros.push('Informe a fonte (bula, receituário ou laudo) do prazo.');
   if (!responsavel) erros.push('Informe o responsável técnico (nome e registro).');
   if (erros.length) throw new PosologyError(erros[0], erros, 'ESCLARECIMENTO_INVALIDO');
-  return { carencia_carne_dias: dias, fonte, responsavel };
+  return { carencia_carne_dias: dias, fonte, responsavel, ...(dias === 0 ? { zero_confirmado: true } : {}) };
 }
 
 export function validateRelease(input = {}) {

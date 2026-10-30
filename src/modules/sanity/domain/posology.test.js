@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { JANELA_CARENCIA_DESCONHECIDA_DIAS, computeDose, missingForApproval, releaseCoversUnknown, validatePosologyInput, validateWithdrawalClarification, withdrawalCase, withdrawalEnd, withdrawalExitPolicy, withdrawalStatus } from './posology.js';
+import { JANELA_CARENCIA_DESCONHECIDA_DIAS, computeDose, missingForApproval, parseWithdrawalDays, releaseCoversUnknown, validatePosologyInput, validateWithdrawalClarification, withdrawalCase, withdrawalEnd, withdrawalExitPolicy, withdrawalStatus } from './posology.js';
 
 const aprovada = (extra = {}) => ({
   ...validatePosologyInput({ medicamento_id: 'M', modo: 'PROPORCIONAL', unidade: 'ml', dose_por_unidade: 1, kg_por_unidade: 50, principio_ativo: 'P', apresentacao: 'A', indicacao: 'I', via_aplicacao: 'SC', carencia_carne_dias: 30, fonte: 'BULA', vigencia_inicio: '2026-01-01', ...extra }),
@@ -84,6 +84,22 @@ describe('posology', () => {
     // Zero e encerrada não prendem.
     const livre = withdrawalStatus([{ id: 'z', data: '2026-06-01', carencia_carne_ate: '2026-06-01', medicamento_id: 'M' }, { id: 'e', data: '2026-01-01', carencia_carne_ate: '2026-02-01', medicamento_id: 'M' }], '2026-06-10');
     expect(withdrawalExitPolicy({ status: livre, subtipo: 'ABATE' }).bloqueios).toHaveLength(0);
+  });
+
+  it('R3-03: prazo não informado nunca vira zero; zero só literal e confirmado', () => {
+    const base = { fonte: 'Bula do produto', responsavel: 'Dr. X CRMV 1' };
+    for (const v of [null, undefined, '', '   ', false, true, Number.NaN, 35.5, '35.5', '35,5', '-1', -1, '1.000', '3 5', {}, [], '0x10', '1e2', 3651]) {
+      expect(() => validateWithdrawalClarification({ ...base, carencia_carne_dias: v }), JSON.stringify(v) ?? String(v)).toThrow();
+    }
+    expect(parseWithdrawalDays(null)).toBeNull();
+    expect(parseWithdrawalDays('')).toBeNull();
+    expect(validateWithdrawalClarification({ ...base, carencia_carne_dias: 35 }).carencia_carne_dias).toBe(35);
+    expect(validateWithdrawalClarification({ ...base, carencia_carne_dias: ' 35 ' }).carencia_carne_dias).toBe(35);
+    // Zero literal sem confirmação é recusado; com confirmação, aceito.
+    expect(() => validateWithdrawalClarification({ ...base, carencia_carne_dias: 0 })).toThrow(/confirme/);
+    expect(() => validateWithdrawalClarification({ ...base, carencia_carne_dias: '0' })).toThrow(/confirme/);
+    expect(validateWithdrawalClarification({ ...base, carencia_carne_dias: '0', zero_confirmado: true }).carencia_carne_dias).toBe(0);
+    expect(validateWithdrawalClarification({ ...base, carencia_carne_dias: 0, zero_confirmado: true }).carencia_carne_dias).toBe(0);
   });
 
   it('R2-03: esclarecimento exige prazo, fonte e responsável', () => {
