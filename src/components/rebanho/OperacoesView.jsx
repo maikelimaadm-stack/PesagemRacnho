@@ -525,7 +525,7 @@ export default function OperacoesView({ tipo, title, singular, description }) {
           {header.subtipo === 'ABATE' && erros.some((e) => /carência/.test(e)) && current?.operacao?.id ? (
             canRelease ? (
               <div className="rb-subsection" aria-label="Liberação técnica de carência">
-                <p className="rb-note">Animal em carência não vai para abate sem <strong>liberação técnica</strong> registrada (responsável, motivo e evidência). Fica na operação e na auditoria.</p>
+                <p className="rb-note">Animal em carência não vai para abate sem <strong>liberação técnica</strong> registrada (responsável, motivo e evidência). Com carência <strong>desconhecida</strong> (medicamento sem carência cadastrada), a evidência é obrigatória: só aceitar o aviso não libera. Fica na operação e na auditoria.</p>
                 <div className="rb-inline rb-inline--wrap">
                   <input className="rb-control" value={liberacao.responsavel} onChange={(e) => setLiberacao((l) => ({ ...l, responsavel: e.target.value }))} placeholder="Responsável técnico (nome e registro)" aria-label="Responsável técnico" />
                   <input className="rb-control" value={liberacao.motivo} onChange={(e) => setLiberacao((l) => ({ ...l, motivo: e.target.value }))} placeholder="Motivo da liberação" aria-label="Motivo da liberação" />
@@ -536,7 +536,7 @@ export default function OperacoesView({ tipo, title, singular, description }) {
               </div>
             ) : <p className="rb-note rb-note--warn">Peça a um gestor para registrar a liberação técnica de carência.</p>
           ) : null}
-          {current?.operacao?.liberacao_carencia ? <p className="rb-note">Liberação técnica: {current.operacao.liberacao_carencia.responsavel} — {current.operacao.liberacao_carencia.motivo}</p> : null}
+          {current?.operacao?.liberacao_carencia ? <p className="rb-note">Liberação técnica: {current.operacao.liberacao_carencia.responsavel} — {current.operacao.liberacao_carencia.motivo}{current.operacao.liberacao_carencia.evidencia ? ` · evidência: ${current.operacao.liberacao_carencia.evidencia}` : ' · sem evidência (não cobre carência desconhecida)'}</p> : null}
           {conferencia?.avisos?.length ? (
             <>
               <ul className="rb-alerts rb-alerts--warn">{conferencia.avisos.map((a) => <li key={a}>{a}</li>)}</ul>

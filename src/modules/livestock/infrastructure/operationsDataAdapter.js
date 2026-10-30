@@ -25,7 +25,7 @@ import {
   TIPO_MOVIMENTO_INTERNO,
   checkConference,
 } from '../domain/operationRules.js';
-import { withdrawalStatus } from '../../sanity/domain/posology.js';
+import { releaseCoversUnknown, withdrawalStatus } from '../../sanity/domain/posology.js';
 
 export const DEFAULT_EMPRESA_ID = 'local';
 const SAIDA_DEFINITIVA = new Set(['VENDIDO', 'ABATIDO', 'MORTO', 'DOADO', 'TRANSFERIDO', 'CANCELADO', 'INATIVO']);
@@ -242,8 +242,9 @@ export async function confirmOperation(id, { aceitarAvisos = false, operador = n
 
 /**
  * Carência (F10) na data da saída. Abate com carência de carne em aberto é BLOQUEIO, salvo liberação técnica
- * registrada na operação (responsável, motivo, evidência). Venda, transferência e doação com carência aberta,
- * e qualquer saída com aplicação de carência DESCONHECIDA recente, são AVISOS (exigem ciência).
+ * registrada na operação (responsável, motivo, evidência). R05: abate com aplicação de carência DESCONHECIDA
+ * recente também é BLOQUEIO até liberação técnica DOCUMENTADA (com evidência) — aceitar o aviso não basta.
+ * Venda, transferência e doação com carência aberta ou desconhecida são AVISOS (exigem ciência).
  */
 async function checkWithdrawals(db, operacao, itens, conferencia) {
   const ids = itens.map((item) => item.animal_id).filter(Boolean);
@@ -258,7 +259,11 @@ async function checkWithdrawals(db, operacao, itens, conferencia) {
       if (operacao.subtipo === 'ABATE' && !operacao.liberacao_carencia) conferencia.bloqueios.push(`${texto} Abate exige liberação técnica registrada.`);
       else conferencia.avisos.push(operacao.subtipo === 'ABATE' ? `${texto} Liberação técnica: ${operacao.liberacao_carencia.responsavel}.` : texto);
     }
-    if (status.desconhecidas.length) conferencia.avisos.push(`${rotulo}: aplicação recente de medicamento sem carência cadastrada (${status.desconhecidas.map((a) => a.medicamento || 'medicamento').join(', ')}) — carência desconhecida, não zero.`);
+    if (status.desconhecidas.length) {
+      const texto = `${rotulo}: aplicação de medicamento sem carência cadastrada nos últimos ${status.janelaDesconhecida} dias (${status.desconhecidas.map((a) => `${a.medicamento || 'medicamento'} em ${a.data}`).join(', ')}) — carência desconhecida, não zero.`;
+      if (operacao.subtipo === 'ABATE' && !releaseCoversUnknown(operacao.liberacao_carencia)) conferencia.bloqueios.push(`${texto} Abate exige liberação técnica documentada (responsável, motivo e evidência).`);
+      else conferencia.avisos.push(operacao.subtipo === 'ABATE' ? `${texto} Liberação técnica documentada: ${operacao.liberacao_carencia.responsavel}.` : texto);
+    }
   }
   conferencia.ok = conferencia.bloqueios.length === 0;
 }
@@ -387,7 +392,7 @@ async function confirmarSaida({ db, operacao, ts, operador, parceiro }, item, po
   }
   let created;
   try {
-    created = await weighingAdapter.createEntry(uiToStorageRecord(ui));
+    created = await weighingAdapter.createEntry(uiToStorageRecord(ui), { carenciaConferida: true });
   } catch (err) {
     fail(err.code || 'OPERACAO_SAIDA', `${rotulo}: ${err.message}`);
   }

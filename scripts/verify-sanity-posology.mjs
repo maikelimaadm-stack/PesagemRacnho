@@ -155,6 +155,26 @@ await assert.rejects(ops.confirmOperation(venda.operacao.id), (err) => err.code 
 await ops.discardDraft(venda.operacao.id);
 ok('F10 abate em carência bloqueado sem liberação técnica (auditada); desconhecida avisa; zero não prende');
 
+// R05 — carência DESCONHECIDA bloqueia ABATE até liberação técnica documentada; aceitar o aviso não basta.
+// Pelo Lançamento (Saída › Abate) a mesma regra vale, sem liberação nessa tela.
+const pesagensAntes = await db.table('pesagens').count();
+const lancarAbate = (a, n, data) => weighingService.createEntry({ tipo_manejo: 'Saída', motivo_saida: 'Abate', animal_id: a.id, numero_animal: n, marca: 'ALFA', data_pesagem: data, peso: 410 });
+await assert.rejects(lancarAbate(a3, '3', '2026-03-20'), (err) => err.code === 'CARENCIA_ABATE' && /carência desconhecida/.test(err.message));
+assert.equal(await db.table('pesagens').count(), pesagensAntes, 'abate bloqueado no Lançamento não grava nada');
+const abateDesc = await ops.saveDraft({ tipo: 'SAIDA', subtipo: 'ABATE', data: '2026-03-20', parceiro_id: 'FRIG', itens: [{ animal_id: a3.id, peso: 410 }] });
+await assert.rejects(ops.confirmOperation(abateDesc.operacao.id, { aceitarAvisos: true }), (err) => err.code === 'OPERACAO_CONFERENCIA' && /liberação técnica documentada/.test(err.message));
+await ops.registerWithdrawalRelease(abateDesc.operacao.id, { motivo: 'Avaliação técnica sem documento anexo', responsavel: 'Dr. Fulano CRMV 123', data: '2026-03-19' });
+await assert.rejects(ops.confirmOperation(abateDesc.operacao.id, { aceitarAvisos: true }), (err) => err.code === 'OPERACAO_CONFERENCIA', 'liberação sem evidência não cobre carência desconhecida');
+await ops.registerWithdrawalRelease(abateDesc.operacao.id, { motivo: 'Bula do produto confere carência de 30 dias', responsavel: 'Dr. Fulano CRMV 123', evidencia: 'Bula e receituário 88/2026', data: '2026-03-19' });
+await assert.rejects(ops.confirmOperation(abateDesc.operacao.id), (err) => err.code === 'OPERACAO_AVISOS' && err.conferencia.avisos.some((a) => /Liberação técnica documentada: Dr. Fulano/.test(a)));
+await ops.confirmOperation(abateDesc.operacao.id, { aceitarAvisos: true });
+assert.equal((await animal('3')).situacao, 'ABATIDO', 'abate com liberação documentada passa');
+ok('R05 carência desconhecida bloqueia abate (operação e Lançamento) até liberação técnica documentada com evidência');
+// Carência zero, encerrada e cancelada não prendem o abate no Lançamento.
+await lancarAbate(a2, '2', '2026-03-21');
+assert.equal((await animal('2')).situacao, 'ABATIDO', 'carência zero/encerrada não prende o abate');
+ok('R05 carência zero/encerrada não prende o abate no Lançamento');
+
 // Nenhuma dose/produto fixo no código.
 const walk = (dir) => readdirSync(dir).flatMap((n) => (statSync(join(dir, n)).isDirectory() ? walk(join(dir, n)) : [join(dir, n)]));
 const hardcoded = walk('src').filter((f) => /\.(js|jsx)$/.test(f) && /dectomax/i.test(readFileSync(f, 'utf8')));

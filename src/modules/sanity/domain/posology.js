@@ -212,24 +212,61 @@ export function withdrawalEnd(dataAplicacao, { posologia = null, medicamento = n
 }
 
 /**
+ * Janela em que uma aplicação de carência DESCONHECIDA ainda pesa sobre abate/venda (R05). Era 120 dias; há
+ * produtos de longa ação para bovinos com carência de carne acima de 120 dias, então a janela passou a 180 dias
+ * (margem sobre os mais longos de uso comum). Fora da janela a aplicação continua listada no dossiê do animal.
+ */
+export const JANELA_CARENCIA_DESCONHECIDA_DIAS = 180;
+
+/**
+ * Situação de UMA aplicação na data (R05): ZERO (carência de 0 dia), ABERTA (fim > data), ENCERRADA (fim ≤ data),
+ * CANCELADA (cancelada/excluída — não conta), DESCONHECIDA (medicamento sem carência cadastrada: nunca vira zero;
+ * inclui registros antigos sem o campo `carencia_conhecida`), SEM_MEDICAMENTO (procedimento sem produto) ou
+ * POSTERIOR (aplicada depois da data).
+ */
+export function withdrawalCase(a, data) {
+  if (!a) return null;
+  if (a.cancelled_at || a.deleted_at) return 'CANCELADA';
+  if (!a.data || a.data > data) return 'POSTERIOR';
+  if (a.carencia_carne_ate) {
+    if (a.carencia_carne_ate === a.data) return 'ZERO';
+    return a.carencia_carne_ate > data ? 'ABERTA' : 'ENCERRADA';
+  }
+  if (!a.medicamento_id) return 'SEM_MEDICAMENTO';
+  return 'DESCONHECIDA';
+}
+
+/**
  * Pendências de carência do animal numa data (abate/venda/transferência): aplicações ativas com carência de
  * carne em aberto (fim > data) e aplicações de medicamento com carência DESCONHECIDA nos `janelaDesconhecida`
- * dias anteriores.
+ * dias anteriores. Devolve também as encerradas, as de carência zero e as canceladas (transparência).
  */
-export function withdrawalStatus(aplicacoes = [], data, { janelaDesconhecida = 120 } = {}) {
+export function withdrawalStatus(aplicacoes = [], data, { janelaDesconhecida = JANELA_CARENCIA_DESCONHECIDA_DIAS } = {}) {
   const abertas = [];
   const desconhecidas = [];
+  const encerradas = [];
+  const zeradas = [];
+  const canceladas = [];
   const inicioJanela = addDays(data, -janelaDesconhecida);
   for (const a of aplicacoes) {
-    if (!a || a.cancelled_at || a.deleted_at || !a.data || a.data > data) continue;
-    if (a.carencia_carne_ate) {
-      if (a.carencia_carne_ate > data) abertas.push({ id: a.id, data: a.data, medicamento: a.medicamento_nome_snapshot || null, ate: a.carencia_carne_ate });
-    } else if (a.medicamento_id && a.carencia_conhecida === false && a.data >= inicioJanela) {
-      desconhecidas.push({ id: a.id, data: a.data, medicamento: a.medicamento_nome_snapshot || null });
-    }
+    const caso = withdrawalCase(a, data);
+    const resumo = a ? { id: a.id, data: a.data, medicamento: a.medicamento_nome_snapshot || null } : null;
+    if (caso === 'ABERTA') abertas.push({ ...resumo, ate: a.carencia_carne_ate });
+    else if (caso === 'ENCERRADA') encerradas.push({ ...resumo, ate: a.carencia_carne_ate });
+    else if (caso === 'ZERO') zeradas.push(resumo);
+    else if (caso === 'CANCELADA') canceladas.push(resumo);
+    else if (caso === 'DESCONHECIDA' && a.data >= inicioJanela) desconhecidas.push(resumo);
   }
   const ate = abertas.map((x) => x.ate).sort().at(-1) || null;
-  return { emCarencia: abertas.length > 0, ate, abertas, desconhecidas };
+  return { emCarencia: abertas.length > 0, ate, abertas, desconhecidas, encerradas, zeradas, canceladas, janelaDesconhecida };
+}
+
+/**
+ * R05: a liberação técnica só cobre carência DESCONHECIDA quando é documentada — responsável, motivo e a
+ * evidência (laudo, bula, receituário) registrada. Aceitar o aviso não basta.
+ */
+export function releaseCoversUnknown(liberacao) {
+  return Boolean(liberacao && String(liberacao.responsavel || '').trim() && String(liberacao.motivo || '').trim() && String(liberacao.evidencia || '').trim());
 }
 
 export function validateRelease(input = {}) {

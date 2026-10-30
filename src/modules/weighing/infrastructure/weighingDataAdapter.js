@@ -11,6 +11,8 @@ import { filterLegacyPayload, storageRecordToViewModel } from '../domain/weighin
 import { TimelineError, validateAnimalTimeline } from '../domain/animalTimeline.js';
 import { deriveLotStays, deriveWeighingMovements, movementKey, stayKey } from '../domain/weighingMovements.js';
 import { naturezaDoTipo } from '../../livestock/domain/movementNature.js';
+import { withdrawalStatus } from '../../sanity/domain/posology.js';
+import { WeighingError } from '../domain/weighingErrors.js';
 import storage from '../../../storage/storageAdapter.js';
 import { getActor } from '../../../storage/indexedDb/auditActor.js';
 import { isOpenSessionStatus, normalizeName, situacaoFromExitReason } from '../../../storage/indexedDb/normalize.js';
@@ -487,10 +489,28 @@ export async function isStorageAvailable() {
 // stores de sanidade entram no escopo da transação e as aplicações (com auditoria
 // CRIAR_APLICACAO_SANIDADE) são gravadas junto da pesagem; referência inválida
 // aborta a transação inteira. O retorno traz `aplicacoes_sanidade` (linhas criadas).
-export async function createEntry(payload, { aplicacoesSanidade = [] } = {}) {
+async function assertAbateSemCarencia(db, animalId, data, numero) {
+  const aplicacoes = (await db.table('aplicacoesSanidade').where('animal_id').equals(animalId).toArray()).filter((a) => !a.deleted_at && !a.cancelled_at);
+  const status = withdrawalStatus(aplicacoes, data);
+  const rotulo = numero ? `Animal ${numero}` : 'Animal';
+  if (status.emCarencia) {
+    throw new WeighingError('CARENCIA_ABATE', `${rotulo} em carência de carne até ${status.ate}: abate só pela operação de Saída (Rebanho › Saídas) com liberação técnica registrada.`, { ate: status.ate });
+  }
+  if (status.desconhecidas.length) {
+    throw new WeighingError('CARENCIA_ABATE', `${rotulo}: aplicação de medicamento sem carência cadastrada nos últimos ${status.janelaDesconhecida} dias — carência desconhecida. Abate só pela operação de Saída (Rebanho › Saídas) com liberação técnica documentada.`, { desconhecidas: status.desconhecidas.map((a) => a.id) });
+  }
+}
+
+export async function createEntry(payload, { aplicacoesSanidade = [], carenciaConferida = false } = {}) {
   storage.assertWritable('Lançamento de pesagem');
   const db = await storage.ensureReady();
   const ui = typeof payload.legacy_payload === 'object' ? payload.legacy_payload : {};
+  // R05/R09: Saída por Abate lançada direto no Lançamento passa pela MESMA regra de carência das operações. Sem
+  // liberação técnica nesta tela, carência aberta ou desconhecida bloqueia; o abate com liberação documentada é
+  // feito em Rebanho › Saídas (a operação confere e chama esta função com `carenciaConferida`).
+  if (!carenciaConferida && ui.tipo_manejo === 'Saída' && ui.motivo_saida === 'Abate' && (payload.animal_id || ui.animal_id)) {
+    await assertAbateSemCarencia(db, payload.animal_id || ui.animal_id, payload.data_pesagem || ui.data_pesagem, ui.numero_animal);
+  }
   const ts = new Date().toISOString();
   const entryId = payload.id || crypto.randomUUID();
   const animalInformado = payload.animal_id || ui.animal_id || null;
