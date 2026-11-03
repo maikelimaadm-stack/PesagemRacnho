@@ -46,3 +46,8 @@ jobs:
       # medicamento e posologia no próprio painel, dose sugerida × aplicada e layout 1440/768/390 (dados sintéticos).
       - name: E2E da integração do Lançamento (Electron)
         run: xvfb-run -a npm run e2e:launch-integration:verify
+
+      # Lançamento: sair da tela e voltar mantém motivo da Entrada, sequência de brincos e pesagem automática;
+      # bip de peso estável (1 toque por animal, nunca com balança vazia) com a balança simulada.
+      - name: E2E da sessão do Lançamento e bip de estável (Electron)
+        run: xvfb-run -a npm run e2e:launch-session:verify

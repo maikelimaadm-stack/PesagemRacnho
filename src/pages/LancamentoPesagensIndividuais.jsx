@@ -100,6 +100,7 @@ import {
   endEdit,
   exitReasonUsesShipment,
   focusAfterSave,
+  formatSequenceIdentifier,
   launchContextStorageKey,
   mergeDefaults,
   modeSupportsSanity,
@@ -110,6 +111,9 @@ import {
   switchMode,
   writeStoredLaunchState,
 } from "@/modules/weighing/domain/launchContext";
+import { LAUNCH_PREFERENCES_VERSION, launchPreferencesStorageKey, sanitizeLaunchPreferences } from "@/modules/weighing/domain/launchPreferences";
+import { createStableBeepTracker } from "@/modules/equipment/domain/stableBeep";
+import { playStableBeep, prepareStableBeep } from "@/modules/equipment/infrastructure/stableBeepSound";
 const formatarData = fmtDateBR;
 const n = fmtNum;
 const m = fmtCurrency;
@@ -167,6 +171,13 @@ export default function LancamentoPesagensIndividuais() {
   if (contextoSessaoRef.current === undefined) {
     contextoSessaoRef.current = restoreLaunchState(readStoredLaunchState(armazenamentoSessao(), chaveContextoSessao));
   }
+  // Preferências de trabalho na sessão (launchPreferences): motivo da Entrada, sequência de brincos (com o cursor)
+  // e pesagem automática. Sair da tela e voltar não as apaga.
+  const chavePreferenciasSessao = launchPreferencesStorageKey({ empresaId: empresaSelecionadaId, usuarioId: auth?.user?.id });
+  const preferenciasSessaoRef = useRef(undefined);
+  if (preferenciasSessaoRef.current === undefined) {
+    preferenciasSessaoRef.current = sanitizeLaunchPreferences(readStoredLaunchState(armazenamentoSessao(), chavePreferenciasSessao), { subtiposEntrada: ENTRADA_SUBTIPOS_LANCAMENTO });
+  }
   // Contexto de cada modo já visitado (troca de modo guarda/restaura) e contexto anterior à edição.
   const contextosPorModoRef = useRef(contextoSessaoRef.current?.contexts || {});
   const contextoAntesEdicaoRef = useRef(null);
@@ -217,6 +228,9 @@ export default function LancamentoPesagensIndividuais() {
   const pesoUiRafRef = useRef(0);
   const pesoUiPendenteRef = useRef(null);
   const pesoUiAplicadoRef = useRef({ text: '', stage: 'idle' });
+  // Bip de peso estável (Configurações › Equipamentos liga/desliga).
+  const bipEstavelRef = useRef(createStableBeepTracker());
+  const bipAtivoRef = useRef(true);
 
   const estagioPesoDoMonitor = (weightKg, stable) => {
     // Estável, mas já usado no animal anterior: espera o próximo (portão da captura, P01).
@@ -381,7 +395,8 @@ export default function LancamentoPesagensIndividuais() {
   const [deleteLaunchRequest, setDeleteLaunchRequest] = useState(null);
   // Integração com o livro de operações: motivo da Entrada (subtipo), Entrada sem peso, avisos da conferência e
   // vínculo da pesagem com uma operação (exclusão = cancelamento auditado da operação).
-  const [subtipoEntrada, setSubtipoEntrada] = useState(ENTRADA_SUBTIPO_PADRAO);
+  const [subtipoEntrada, setSubtipoEntrada] = useState(() => preferenciasSessaoRef.current.subtipoEntrada || ENTRADA_SUBTIPO_PADRAO);
+  const [sequenciaEstado, setSequenciaEstado] = useState(() => preferenciasSessaoRef.current.sequencia);
   const [entradaSemPeso, setEntradaSemPeso] = useState(false);
   const [operacaoAvisos, setOperacaoAvisos] = useState(null);
   // Vínculo da pesagem com operação, consultado FAIL-CLOSED antes de excluir (ver useVinculoOperacao).
@@ -416,7 +431,11 @@ export default function LancamentoPesagensIndividuais() {
   const [contextoSessaoAplicado, setContextoSessaoAplicado] = useState(!contextoSessaoRef.current);
   useLayoutEffect(() => {
     if (!contextoSessaoRef.current) return;
-    aplicarForm(contextoSessaoRef.current.form);
+    const form = { ...contextoSessaoRef.current.form };
+    // Entrada com a sequência ativa: o Nº volta a ser o próximo brinco da sequência.
+    const cursor = preferenciasSessaoRef.current.sequencia?.cursor;
+    if (form.tipoManejo === 'Cadastro' && cursor) form.numeroAnimal = formatSequenceIdentifier(cursor.prefixo, cursor.numeroAtual, cursor.digitos);
+    aplicarForm(form);
     setContextoSessaoAplicado(true);
   }, []);
   const contextoSerializado = JSON.stringify(serializeLaunchState({ form: formularioAtual, contexts: contextosPorModoRef.current, savedContext: contextoAntesEdicaoRef.current }));
@@ -424,6 +443,18 @@ export default function LancamentoPesagensIndividuais() {
     if (!contextoSessaoAplicado) return;
     writeStoredLaunchState(armazenamentoSessao(), chaveContextoSessao, JSON.parse(contextoSerializado));
   }, [contextoSessaoAplicado, chaveContextoSessao, contextoSerializado]);
+
+  // Pesagem automática que estava ligada: volta a ligar quando a balança conectar (até o operador mexer no botão).
+  const pesagemAutoPendenteRef = useRef(preferenciasSessaoRef.current.pesagemAuto);
+  const preferenciasSerializadas = JSON.stringify({
+    versao: LAUNCH_PREFERENCES_VERSION,
+    subtipoEntrada,
+    pesagemAuto: pesagemAuto || pesagemAutoPendenteRef.current,
+    sequencia: sequenciaEstado,
+  });
+  useEffect(() => {
+    writeStoredLaunchState(armazenamentoSessao(), chavePreferenciasSessao, JSON.parse(preferenciasSerializadas));
+  }, [chavePreferenciasSessao, preferenciasSerializadas]);
 
   useEffect(() => {
     pesagemAutoRef.current = pesagemAuto;
@@ -444,11 +475,16 @@ export default function LancamentoPesagensIndividuais() {
         reading.weightKg,
         estagioPesoDoMonitor(reading.weightKg, reading.stable),
       );
+      // Bip de estável: um toque quando o portão da captura LIBERA o peso deste animal (nunca com plataforma vazia).
+      const liberado = Boolean(reading.stable) && Number(reading.weightKg) > 0 && evaluateCapture().ok;
+      if (bipEstavelRef.current.update({ kg: reading.weightKg, liberado }) && bipAtivoRef.current) playStableBeep();
     };
     (async () => {
       try {
         const config = await getEquipmentConfig();
         if (cancelled || config.adapter === 'none') return;
+        bipEstavelRef.current = createStableBeepTracker({ emptyThresholdKg: config.emptyThresholdKg });
+        bipAtivoRef.current = config.beepOnStable !== false;
         await ensureScaleReady();
         if (cancelled) return;
         setBalancaOnline(Boolean(getScaleStatus().connected));
@@ -471,13 +507,17 @@ export default function LancamentoPesagensIndividuais() {
     };
   }, []);
 
-  const alternarPesagemAuto = () => {
+  const alternarPesagemAuto = ({ restaurada = false } = {}) => {
+    if (!restaurada) pesagemAutoPendenteRef.current = false;
     if (!balancaOnline) {
       toast.info('Conecte a balança em Configurações › Equipamentos para usar a pesagem automática.');
       return;
     }
+    // Clique do operador libera o som do bip neste aparelho.
+    prepareStableBeep();
+    bipEstavelRef.current.reset();
     setPesagemAuto((ligado) => {
-      const next = !ligado;
+      const next = restaurada ? true : !ligado;
       pesagemAutoRef.current = next;
       if (next) {
         ensureScaleReady().catch(() => {});
@@ -486,7 +526,10 @@ export default function LancamentoPesagensIndividuais() {
           || (status.lastWeightKg != null ? { weightKg: status.lastWeightKg } : null);
         if (current?.weightKg != null) setPeso(formatWeightForField(current.weightKg));
         setPesoEstagioBalanca(status.stable || getLastStableReading() ? 'stable' : 'settling');
-        toast.success('Pesagem automática ligada — campo Peso bloqueado.');
+        // A S3 só manda leitura quando o peso muda: um animal já parado na balança ao ligar também ganha o bip
+        // (se o portão liberar o peso dele — o mesmo animal já salvo, não).
+        if (bipEstavelRef.current.update({ kg: current?.weightKg ?? null, liberado: evaluateCapture().ok }) && bipAtivoRef.current) playStableBeep();
+        toast.success(restaurada ? 'Pesagem automática religada (estava ligada antes de sair da tela).' : 'Pesagem automática ligada — campo Peso bloqueado.');
       } else {
         setPesoEstagioBalanca('idle');
         toast.info('Pesagem automática desligada — digite o peso manualmente.');
@@ -494,6 +537,13 @@ export default function LancamentoPesagensIndividuais() {
       return next;
     });
   };
+
+  // Voltou ao Lançamento com a pesagem automática ligada antes: religa quando a balança estiver conectada.
+  useEffect(() => {
+    if (!pesagemAutoPendenteRef.current || !balancaOnline || pesagemAuto) return;
+    pesagemAutoPendenteRef.current = false;
+    alternarPesagemAuto({ restaurada: true });
+  }, [balancaOnline, pesagemAuto]);
 
   // Sem balança online, desliga a pesagem automática.
   useEffect(() => {
@@ -505,7 +555,10 @@ export default function LancamentoPesagensIndividuais() {
 
   useEffect(() => {
     getSetting(ATALHO_LOTE_SETTING_KEY, false).then((v) => setAtalhoLoteAtivo(Boolean(v))).catch(() => {});
-    const applyAccent = (cfg) => setStatusAccentBalanca(cfg?.statusAccent || 'green');
+    const applyAccent = (cfg) => {
+      setStatusAccentBalanca(cfg?.statusAccent || 'green');
+      if (cfg) bipAtivoRef.current = cfg.beepOnStable !== false;
+    };
     getEquipmentConfig().then(applyAccent).catch(() => {});
     const onConfig = (event) => applyAccent(event?.detail);
     window.addEventListener('pesagens:equipment-config', onConfig);
@@ -2085,7 +2138,7 @@ export default function LancamentoPesagensIndividuais() {
                       'is-online',
                       statusAccentBalanca === 'blue' ? 'is-accent-blue' : '',
                     ].filter(Boolean).join(' ')}
-                    onClick={alternarPesagemAuto}
+                    onClick={() => alternarPesagemAuto()}
                     aria-pressed={pesagemAuto}
                     title={pesagemAuto ? 'Desligar pesagem automática' : 'Ligar pesagem automática'}
                     aria-label={pesagemAuto ? 'Desligar pesagem automática' : 'Ligar pesagem automática'}
@@ -2215,7 +2268,7 @@ export default function LancamentoPesagensIndividuais() {
             )}
           </div>
 
-          <SequenciaBrincos visivel={tipoManejo === 'Cadastro' && mostrarSequenciaBrinco} brincoAtual={numeroAnimal} onSetNumeroAnimal={setNumeroAnimal} numerosUsados={numerosUsados} onFocusPeso={() => setTimeout(() => focarAposIdentificacao(), 100)} controllerRef={sequenciaBrincosRef} />
+          <SequenciaBrincos visivel={tipoManejo === 'Cadastro' && mostrarSequenciaBrinco} brincoAtual={numeroAnimal} onSetNumeroAnimal={setNumeroAnimal} numerosUsados={numerosUsados} onFocusPeso={() => setTimeout(() => focarAposIdentificacao(), 100)} controllerRef={sequenciaBrincosRef} estadoInicial={preferenciasSessaoRef.current.sequencia} onEstadoChange={setSequenciaEstado} />
           {tipoManejo === 'Cadastro' && mostrarDadosCompra &&
           <div className="d17d-detail-panel mt-3 p-3 border-t bg-slate-50 rounded">
               <h3 className="text-xs font-semibold text-slate-700 mb-3 flex items-center gap-2">

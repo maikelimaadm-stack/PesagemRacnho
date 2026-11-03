@@ -61,6 +61,8 @@ const createWindow = () => {
       sandbox: true,
       // Instalado: sem DevTools (a sessão e as regras de permissão vivem no renderer).
       devTools: !app.isPackaged,
+      // Bip de peso estável da balança: tocar mesmo quando a pesagem automática religa sozinha (sem clique).
+      autoplayPolicy: 'no-user-gesture-required',
     },
   });
 
