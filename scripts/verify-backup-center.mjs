@@ -158,8 +158,13 @@ try {
   assert.equal(envelope.cipher.alg, 'AES-GCM-256');
   // Nada legível fora do texto cifrado; dentro dele, os bytes não contêm marcadores longos do JSON em claro. (Antes o
   // teste procurava "GTA"/"ALFA" no base64, que por acaso pode conter essas letras: falha aleatória de ~1 em 25.)
-  const { ciphertext, ...semCifra } = envelope;
-  assert.ok(!/password_hash|ALFA|GTA/.test(JSON.stringify(semCifra)), 'envelope: nada legível fora do texto cifrado');
+  // salt e iv também são bytes ALEATÓRIOS em base64 — procurar texto neles é a mesma falha aleatória (um salt com
+  // "GTA" por acaso derrubou o CI). Eles são conferidos pelo tamanho; o texto, só nos campos legíveis do envelope.
+  const { ciphertext, kdf, cipher, ...resto } = envelope;
+  assert.equal(Buffer.from(String(kdf.salt), 'base64').length, 16, 'salt: 16 bytes');
+  assert.equal(Buffer.from(String(cipher.iv), 'base64').length, 12, 'iv: 12 bytes');
+  const legivel = { ...resto, kdf: { ...kdf, salt: null }, cipher: { ...cipher, iv: null } };
+  assert.ok(!/password_hash|ALFA|GTA/.test(JSON.stringify(legivel)), 'envelope: nada legível fora do texto cifrado');
   const bytesCifrados = Buffer.from(String(ciphertext), 'base64');
   for (const marcador of ['password_hash', 'nome_normalizado', 'legacy_payload']) assert.equal(bytesCifrados.indexOf(marcador), -1, `conteúdo cifrado: "${marcador}" não aparece`);
   assert.deepEqual(await center.inspectBackup(envelope).then((r) => [r.protegido, r.precisaSenha]), [true, true]);

@@ -18,15 +18,19 @@ import {
 // prefixo + dígitos, próximo livre, avanço) vivem em launchContext; o componente
 // guarda só o cursor. A página recebe o controle por `controllerRef` (sem ponte
 // global em window) e decide, com stateAfterSave, o Nº e o foco depois de salvar.
-export default function SequenciaBrincos({ visivel = true, brincoAtual, onSetNumeroAnimal, numerosUsados, onFocusPeso, onAtivoChange, controllerRef }) {
-  const [usarSequencia, setUsarSequencia] = useState(false);
-  const [brincoInicial, setBrincoInicial] = useState("");
-  const [brincoFinal, setBrincoFinal] = useState("");
-  const [direcao, setDirecao] = useState("crescente");
+// `estadoInicial`/`onEstadoChange` (launchPreferences): a configuração e o cursor ficam na sessão — sair do
+// Lançamento e voltar não zera a sequência.
+export default function SequenciaBrincos({ visivel = true, brincoAtual, onSetNumeroAnimal, numerosUsados, onFocusPeso, onAtivoChange, controllerRef, estadoInicial = null, onEstadoChange }) {
+  const [usarSequencia, setUsarSequencia] = useState(() => estadoInicial?.usar === true);
+  const [brincoInicial, setBrincoInicial] = useState(() => estadoInicial?.inicial || "");
+  const [brincoFinal, setBrincoFinal] = useState(() => estadoInicial?.final || "");
+  const [direcao, setDirecao] = useState(() => estadoInicial?.direcao || "crescente");
   const [pulados, setPulados] = useState(0);
-  const [ativoInterno, setAtivoInterno] = useState(false);
+  const [ativoInterno, setAtivoInterno] = useState(() => Boolean(estadoInicial?.usar && estadoInicial?.cursor));
+  // Muda a cada avanço do cursor (o cursor fica em ref; isto só avisa quem guarda o estado).
+  const [versaoCursor, setVersaoCursor] = useState(0);
 
-  const sequenciaRef = useRef(null);
+  const sequenciaRef = useRef(estadoInicial?.usar && estadoInicial?.cursor ? { ...estadoInicial.cursor } : null);
   const numerosUsadosRef = useRef(numerosUsados || new Set());
 
   useEffect(() => {
@@ -39,6 +43,22 @@ export default function SequenciaBrincos({ visivel = true, brincoAtual, onSetNum
     setPulados(0);
     onAtivoChange?.(false);
   }, [onAtivoChange]);
+
+  // Sequência restaurada da sessão: a página sabe que está ativa.
+  useEffect(() => {
+    if (sequenciaRef.current) onAtivoChange?.(true);
+    // só na montagem (deps vazias de propósito)
+  }, []);
+
+  useEffect(() => {
+    onEstadoChange?.({
+      usar: usarSequencia,
+      inicial: brincoInicial,
+      final: brincoFinal,
+      direcao,
+      cursor: ativoInterno && sequenciaRef.current ? { ...sequenciaRef.current } : null,
+    });
+  }, [usarSequencia, brincoInicial, brincoFinal, direcao, ativoInterno, versaoCursor, onEstadoChange]);
 
   useEffect(() => {
     if (!usarSequencia) {
@@ -80,6 +100,7 @@ export default function SequenciaBrincos({ visivel = true, brincoAtual, onSetNum
 
     setPulados(livre.pulos);
     setAtivoInterno(true);
+    setVersaoCursor((v) => v + 1);
     onAtivoChange?.(true);
     onSetNumeroAnimal?.(livre.formatado);
     onFocusPeso?.();
@@ -110,6 +131,7 @@ export default function SequenciaBrincos({ visivel = true, brincoAtual, onSetNum
         }
         sequenciaRef.current = resultado.state;
         setPulados((prev) => prev + resultado.pulos);
+        setVersaoCursor((v) => v + 1);
         return { ok: true, formatado: resultado.formatado, pulos: resultado.pulos };
       },
       getState: () => sequenciaRef.current,

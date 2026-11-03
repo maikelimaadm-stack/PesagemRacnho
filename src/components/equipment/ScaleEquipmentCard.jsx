@@ -223,6 +223,15 @@ export default function ScaleEquipmentCard() {
           />
           Preencher o campo Peso automaticamente com o que aparece no monitor
         </label>
+        <label className="flex items-center gap-2 text-xs">
+          <Checkbox
+            checked={config.beepOnStable !== false}
+            onCheckedChange={(checked) => save({ beepOnStable: Boolean(checked) })}
+            disabled={saving}
+            aria-label="Bip quando o peso estabilizar"
+          />
+          Bip curto (1 toque) quando o peso estabilizar na pesagem automática — não toca com a balança vazia
+        </label>
         <div className="space-y-1">
           <Label className="text-xs">Cor do indicador (online / ícone no Peso)</Label>
           <Select

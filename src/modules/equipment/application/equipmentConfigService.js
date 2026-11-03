@@ -19,6 +19,8 @@ export const EQUIPMENT_CONFIG_DEFAULTS = Object.freeze({
   /** Variação mínima (kg) que conta como troca de animal sem esvaziar a plataforma. */
   rearmDeltaKg: 30,
   autoFillOnStable: true,
+  /** Bip curto (1 toque, ~1 s) quando a pesagem automática libera o peso estável do animal. */
+  beepOnStable: true,
   /** Cor do “prontinho” / ícone da balança (online e pesagem automática). */
   statusAccent: 'green', // green | blue
   rememberedPort: null,
@@ -59,6 +61,7 @@ export function normalizeEquipmentConfig(raw = {}) {
     emptyThresholdKg: Number.isFinite(emptyThresholdKg) && emptyThresholdKg > 0 && emptyThresholdKg <= 100 ? emptyThresholdKg : EQUIPMENT_CONFIG_DEFAULTS.emptyThresholdKg,
     rearmDeltaKg: Number.isFinite(rearmDeltaKg) && rearmDeltaKg >= 5 && rearmDeltaKg <= 500 ? rearmDeltaKg : EQUIPMENT_CONFIG_DEFAULTS.rearmDeltaKg,
     autoFillOnStable: raw.autoFillOnStable === false ? false : true,
+    beepOnStable: raw.beepOnStable === false ? false : true,
     statusAccent,
     rememberedPort,
     rememberedBluetooth,

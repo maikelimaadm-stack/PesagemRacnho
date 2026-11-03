@@ -24,3 +24,29 @@ Cada seção da Parametrização mostra **"alterações não salvas"** enquanto 
 botões **Salvar seção** e **Descartar alterações**.
 
 Mudar uma regra vale **daqui em diante**. Pesagens já gravadas não são reescritas.
+
+## Bip de peso estável
+
+Com a **pesagem automática** ligada no Lançamento, o sistema toca **um bip curto (cerca de 1 segundo)** quando o peso
+do animal estabiliza e fica liberado para salvar.
+
+- Toca **uma vez por animal**. Não repete enquanto o animal fica parado na balança, nem quando ele mexe e volta ao
+  mesmo peso.
+- **Não toca com a balança vazia** ou com peso zero.
+- Depois de salvar, só toca de novo quando a balança mostrar o próximo animal: plataforma vazia ou peso bem
+  diferente. É a mesma regra que impede reaproveitar o peso do animal anterior.
+- Para desligar, desmarque **Bip curto (1 toque) quando o peso estabilizar** em **Sistema › Balança e Equipamentos**.
+
+## O Lançamento lembra a sua lida
+
+Durante a sessão, sair da tela de Lançamento (para a Relação, a Ficha do Animal ou outro menu) e voltar mantém o
+que você montou:
+
+- o tipo de movimentação e o **Motivo da Entrada**;
+- marca, sexo, raça e categoria;
+- a **sequência de brincos**, com o próximo número;
+- os painéis abertos;
+- a **pesagem automática**. Ela religa sozinha quando a balança estiver conectada.
+
+Trocar entre Entrada, Manejo e Saída também mantém o contexto de cada tipo. O número do animal e o peso nunca são
+guardados.
