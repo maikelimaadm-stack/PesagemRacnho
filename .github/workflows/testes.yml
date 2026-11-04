@@ -51,3 +51,7 @@ jobs:
       # bip de peso estável (1 toque por animal, nunca com balança vazia) com a balança simulada.
       - name: E2E da sessão do Lançamento e bip de estável (Electron)
         run: xvfb-run -a npm run e2e:launch-session:verify
+
+      # Lançamento: trocar Entrada/Manejo com a balança estável não zera o Peso; quadro opcional de peso e lote.
+      - name: E2E do peso na troca de modo e do quadro de peso e lote (Electron)
+        run: xvfb-run -a npm run e2e:weight-board:verify

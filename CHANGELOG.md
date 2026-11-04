@@ -3,6 +3,26 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.6.1] — 2026-11-04
+
+Melhorias do Lançamento de Pesagens. Sem mudança de banco (Dexie 9) nem de backup (formato 3).
+Notas em `docs/release/1.6.1/RELEASE-NOTES.md`.
+
+### Fixed
+- **Peso da balança na troca de modo.** Com a pesagem automática ligada, trocar entre Entrada, Manejo e Saída zerava
+  o campo Peso; como a balança só manda leitura quando o número muda, o peso só voltava quando o animal se mexia.
+  Agora o campo mantém o peso e o estado (estável / esperando o próximo animal). O portão da captura não muda:
+  continua valendo só peso estável e novo.
+- **Lançamento lembra a lida.** Sair da tela e voltar mantém Motivo da Entrada, sequência de brincos (com o próximo
+  número) e a pesagem automática ligada.
+- **Instalador.** O empacotamento não tenta mais publicar release no GitHub sozinho (`--publish never`).
+
+### Added
+- **Bip de peso estável.** Um toque curto (1 s) quando o peso do animal estabiliza na pesagem automática; nunca com
+  a balança vazia nem repetido para o mesmo animal. Liga/desliga em Balança e Equipamentos.
+- **Quadro de peso e lote destino.** Opcional, ao lado da Distribuição de Lotes: o mesmo peso do campo Peso e o lote
+  destino em letra grande, com tamanho Grande/Pequeno lembrado no computador.
+
 ## [1.6.0] — 2026-10-30
 
 Missão pesagens-integrada (PR DRAFT): correções P01–P26 e gestão pecuária F01–F26. Esquema Dexie **9** (aditivo:

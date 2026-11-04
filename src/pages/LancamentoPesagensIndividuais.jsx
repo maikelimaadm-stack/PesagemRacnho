@@ -41,6 +41,7 @@ import { useAuth } from "@/components/auth/useAuth";
 import SequenciaBrincos from "../components/pesagens/SequenciaBrincos";
 import GerenciarApartacoesDialog from "../components/pesagens/GerenciarApartacoesDialog";
 import ResumoLotes from "../components/pesagens/ResumoLotes";
+import PainelPesoLote, { descreverLoteDestino, gravarPreferenciaPainel, lerPreferenciaPainel } from "../components/pesagens/PainelPesoLote";
 import PesagensResumoRodape from "../components/pesagens/PesagensResumoRodape";
 import ConfirmarAnimalSnDialog from "../components/pesagens/ConfirmarAnimalSnDialog";
 import { criarMensagemAnimal } from "../components/pesagens/animalLookup";
@@ -277,6 +278,25 @@ export default function LancamentoPesagensIndividuais() {
     aplicarPesoDoMonitorNaUi(kg, estagioPesoDoMonitor(kg, status.stable), { force });
   };
 
+  // Com a pesagem automática ligada, o Peso do formulário seguinte (próximo animal, troca de modo)
+  // continua sendo o do monitor — o estágio (estável / esperando o próximo animal) vem do portão da captura.
+  const manterPesoDoMonitor = (form) => {
+    if (!pesagemAutoRef.current || !form) return;
+    const status = getScaleStatus();
+    const kg = status.lastWeightKg ?? getLastStableReading()?.weightKg ?? null;
+    if (kg == null || !Number.isFinite(Number(kg))) return;
+    form.peso = formatWeightForField(kg);
+    const stage = estagioPesoDoMonitor(kg, status.stable);
+    pesoUiAplicadoRef.current = { text: form.peso, stage };
+    setPesoEstagioBalanca(stage);
+  };
+
+  const ressincronizarPesoDoMonitor = () => {
+    if (!pesagemAutoRef.current) return;
+    sincronizarPesoDoMonitor({ force: true });
+    requestAnimationFrame(() => sincronizarPesoDoMonitor({ force: true }));
+  };
+
   const focarBotaoSalvar = () => {
     // Marca visual na hora. O foco no botão espera o keyup do Enter —
     // senão o próprio Enter “clica” o Salvar e some a seleção (Tab funcionava, Enter não).
@@ -409,6 +429,13 @@ export default function LancamentoPesagensIndividuais() {
 
   // Painel direito: modo de visualização (apartacao | venda | abate)
   const [painelResumoTipo, setPainelResumoTipo] = useState('apartacao');
+  // Quadro opcional de peso e lote destino em letra grande (lembrado neste computador).
+  const [painelPeso, setPainelPeso] = useState(lerPreferenciaPainel);
+  const alterarPainelPeso = (mudanca) => setPainelPeso((atual) => {
+    const proximo = { ...atual, ...mudanca };
+    gravarPreferenciaPainel(proximo);
+    return proximo;
+  });
 
   // ========== CONTEXTO DA SEQUÊNCIA ==========
   // Snapshot dos estados do formulário (chaves = FORM_FIELDS de launchContext) e
@@ -847,9 +874,14 @@ export default function LancamentoPesagensIndividuais() {
       return;
     }
     const proximoNumero = novoTipo === 'Cadastro' ? sequenciaBrincosRef.current?.atual?.() || null : null;
-    const { form, contexts } = switchMode(formRef.current, novoTipo, contextosPorModoRef.current, { defaults: padroesEmpresaRef.current, proximoNumero });
+    const { form: formDoModo, contexts } = switchMode(formRef.current, novoTipo, contextosPorModoRef.current, { defaults: padroesEmpresaRef.current, proximoNumero });
+    const form = { ...formDoModo };
     contextosPorModoRef.current = contexts;
+    // Pesagem automática: a troca de modo não zera o Peso. O S3 só manda leitura quando o número muda,
+    // então com o animal parado na balança o campo ficaria vazio até ele se mexer.
+    manterPesoDoMonitor(form);
     aplicarForm(form);
+    ressincronizarPesoDoMonitor();
     setTimeout(() => {
       if (proximoNumero && !pesagemAutoRef.current) pesoInputRef.current?.focus();
       else numeroInputRef.current?.focus();
@@ -1606,22 +1638,10 @@ export default function LancamentoPesagensIndividuais() {
       const foco = focusAfterSave(proximoFormulario.tipoManejo, opcoesSequencia);
       contextoAntesEdicaoRef.current = null;
       // Pesagem automática: não zera o Peso — mantém o valor atual do monitor no próximo animal.
-      if (pesagemAutoRef.current) {
-        const status = getScaleStatus();
-        const kg = status.lastWeightKg ?? getLastStableReading()?.weightKg ?? null;
-        if (kg != null && Number.isFinite(Number(kg))) {
-          proximoFormulario.peso = formatWeightForField(kg);
-          const stage = estagioPesoDoMonitor(kg, status.stable);
-          pesoUiAplicadoRef.current = { text: proximoFormulario.peso, stage };
-          setPesoEstagioBalanca(stage);
-        }
-      }
+      manterPesoDoMonitor(proximoFormulario);
       aplicarForm(proximoFormulario);
       setSalvarSelecionado(false);
-      if (pesagemAutoRef.current) {
-        sincronizarPesoDoMonitor({ force: true });
-        requestAnimationFrame(() => sincronizarPesoDoMonitor({ force: true }));
-      }
+      ressincronizarPesoDoMonitor();
       if (pesagemAutoRef.current) {
         setTimeout(() => numeroInputRef.current?.focus(), 0);
       } else if (foco === 'peso') {
@@ -3007,6 +3027,25 @@ export default function LancamentoPesagensIndividuais() {
             pesagensDia={pesagensDia}
             dataPesagem={dataPesagem}
             mostrarArrobas={podeVerValores}
+            onMostrarDestaque={() => alterarPainelPeso({ visivel: true })}
+            destaque={painelPeso.visivel ? (
+              <PainelPesoLote
+                peso={peso}
+                pesagemAuto={pesagemAuto}
+                estagio={pesoEstagioBalanca}
+                tamanho={painelPeso.tamanho}
+                onTamanhoChange={(tamanho) => alterarPainelPeso({ tamanho })}
+                onFechar={() => alterarPainelPeso({ visivel: false })}
+                lote={descreverLoteDestino({
+                  apartacaoSelecionada,
+                  loteTransferencia,
+                  lotesApartacaoAtual,
+                  temPeso: pesoNumAtual != null,
+                  loteAutomatico: pesoNumAtual != null ? getLoteAutomatico(pesoNumAtual) : null,
+                  lotesAtalho: lotesCandidatosAtalho.map((item, index) => ({ nome_lote: item.nome_lote, tecla: ATALHO_LOTE_TECLAS[index] })),
+                })}
+              />
+            ) : null}
           />
         )}
       </div>

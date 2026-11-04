@@ -910,3 +910,39 @@ html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-sc
 html body #root .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-field--weight .d17d-weight-control.is-auto.is-waiting > input {
   color: #94a3b8 !important;
 }
+
+/* Quadro de peso e lote destino (opcional, ao lado da Distribuição de Lotes): letra grande para ler de longe. */
+html body .d17b-launch-page .d17d-summary-column.has-weight-board { display: flex; flex-direction: column; gap: 6px; }
+html body .d17b-shell.cadastro-emp-scope .d17b-launch-page.cadastro-emp-scope .d17d-summary-column.has-weight-board > .d17d-summary-panel { height: auto !important; flex: 1 1 auto; min-height: 0; }
+.d17d-weight-board {
+  --wb-accent: #64748b; --wb-bg: #f8fafc; --wb-border: #cbd5e1;
+  border: 2px solid var(--wb-border); border-radius: 12px; background: var(--wb-bg);
+  padding: 6px 10px 8px; color: #0f172a; min-width: 0;
+}
+.d17d-weight-board.is-stable { --wb-accent: #15803d; --wb-bg: #f0fdf4; --wb-border: #4ade80; }
+.d17d-weight-board.is-settling { --wb-accent: #b45309; --wb-bg: #fffbeb; --wb-border: #fbbf24; }
+.d17d-weight-board.is-waiting { --wb-accent: #475569; --wb-bg: #f1f5f9; --wb-border: #94a3b8; }
+.d17d-weight-board.is-manual { --wb-accent: #1d4ed8; --wb-bg: #eff6ff; --wb-border: #93c5fd; }
+.d17d-weight-board__bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.d17d-weight-board__status { font-size: 11px; font-weight: 600; color: var(--wb-accent); text-transform: uppercase; letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.d17d-weight-board__actions { display: flex; gap: 2px; flex: 0 0 auto; }
+.d17d-weight-board__actions button, .d17d-weight-board-open {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 6px;
+  border: 1px solid transparent; background: transparent; color: #475569; cursor: pointer;
+}
+.d17d-weight-board__actions button:hover, .d17d-weight-board-open:hover { background: rgba(15, 23, 42, .06); border-color: #cbd5e1; }
+.d17d-weight-board__actions svg, .d17d-weight-board-open svg { width: 14px; height: 14px; }
+.d17d-weight-board__weight { display: flex; align-items: baseline; justify-content: center; gap: 6px; font-variant-numeric: tabular-nums; line-height: 1; }
+.d17d-weight-board__weight output { font-weight: 800; color: var(--wb-accent); }
+.d17d-weight-board__weight span { font-weight: 700; color: #475569; }
+.d17d-weight-board__lot { display: flex; flex-direction: column; align-items: center; text-align: center; margin-top: 4px; padding-top: 4px; border-top: 1px dashed var(--wb-border); min-width: 0; }
+.d17d-weight-board__lot-label { font-size: 11px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: .03em; }
+.d17d-weight-board__lot strong { font-weight: 800; color: #0f172a; max-width: 100%; overflow-wrap: anywhere; line-height: 1.1; }
+.d17d-weight-board__lot.is-nao-encontrado strong { color: #b91c1c; }
+.d17d-weight-board__lot.is-sem-peso strong, .d17d-weight-board__lot.is-sem-apartacao strong, .d17d-weight-board__lot.is-sem-lote strong { color: #64748b; }
+.d17d-weight-board.is-large .d17d-weight-board__weight output { font-size: clamp(48px, 5.4vw, 84px); }
+.d17d-weight-board.is-large .d17d-weight-board__weight span { font-size: 22px; }
+.d17d-weight-board.is-large .d17d-weight-board__lot strong { font-size: clamp(24px, 2.6vw, 40px); }
+.d17d-weight-board.is-small .d17d-weight-board__weight output { font-size: 34px; }
+.d17d-weight-board.is-small .d17d-weight-board__weight span { font-size: 14px; }
+.d17d-weight-board.is-small .d17d-weight-board__lot strong { font-size: 18px; }
