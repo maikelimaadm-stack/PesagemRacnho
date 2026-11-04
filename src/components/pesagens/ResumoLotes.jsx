@@ -5,8 +5,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { fmtDateBR, fmtInt, fmtNum } from "@/components/common/formatNumber";
 import { avg, sum } from "@/modules/reporting/domain/aggregateEngine";
 import { normalizeCarcassYield } from "@/modules/weighing/domain/commercialCalculations";
+import { Scale } from "lucide-react";
 
-export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApartacaoAtual, pesagens, pesagensDia, dataPesagem, mostrarArrobas = true }) {
+// destaque: quadro opcional de peso e lote (PainelPesoLote) no topo da coluna; onMostrarDestaque o reabre.
+export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApartacaoAtual, pesagens, pesagensDia, dataPesagem, mostrarArrobas = true, destaque = null, onMostrarDestaque = null }) {
   const [modoVisualizacao, setModoVisualizacao] = useState('dia');
 
   const resumoLotes = useMemo(() => {
@@ -30,10 +32,18 @@ export default function ResumoLotes({ apartacaoSelecionada, apartacoes, lotesApa
   }, [apartacaoSelecionada, lotesApartacaoAtual, pesagens, pesagensDia, modoVisualizacao]);
 
   return (
-    <div className="d17d-summary-column">
+    <div className={`d17d-summary-column${destaque ? ' has-weight-board' : ''}`}>
+      {destaque}
       <Card className="d17d-summary-panel sticky top-2">
         <CardHeader className="d17d-summary-panel__header py-2 px-3 border-b flex flex-row items-center justify-between">
-          <CardTitle className="d17d-summary-panel__title text-xs font-semibold">Distribuição de Lotes</CardTitle>
+          <div className="flex items-center gap-1">
+            <CardTitle className="d17d-summary-panel__title text-xs font-semibold">Distribuição de Lotes</CardTitle>
+            {!destaque && onMostrarDestaque ? (
+              <button type="button" tabIndex={-1} className="d17d-weight-board-open" onClick={onMostrarDestaque} aria-label="Mostrar quadro de peso e lote" title="Mostrar peso e lote destino em letra grande">
+                <Scale aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
           {apartacaoSelecionada && resumoLotes.length > 0 &&
             <div className="d17d-summary-panel__modes flex gap-1" role="group" aria-label="Período do resumo">
               <Button variant={modoVisualizacao === 'dia' ? 'default' : 'outline'} size="sm" className="d17d-summary-panel__mode h-6 text-[10px] px-2" data-active={modoVisualizacao === 'dia' ? 'true' : 'false'} aria-pressed={modoVisualizacao === 'dia'} onClick={() => setModoVisualizacao('dia')}>Dia</Button>

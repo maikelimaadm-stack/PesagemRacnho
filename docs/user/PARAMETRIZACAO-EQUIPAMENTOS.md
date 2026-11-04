@@ -50,3 +50,23 @@ que você montou:
 
 Trocar entre Entrada, Manejo e Saída também mantém o contexto de cada tipo. O número do animal e o peso nunca são
 guardados.
+
+Com a **pesagem automática ligada**, trocar entre Entrada, Manejo e Saída **não zera o Peso**: o campo continua com
+o peso da balança e com o mesmo estado (estável, estabilizando ou esperando o próximo animal). Antes, o campo ficava
+vazio até o animal se mexer, porque a balança só manda leitura quando o número muda. Salvar continua exigindo peso
+estável e novo: o peso já usado no animal anterior não serve para o próximo.
+
+## Quadro de peso e lote destino
+
+Ao lado da **Distribuição de Lotes** (painel Apartação) há um quadro opcional que mostra, em letra grande, o mesmo
+peso do campo **Peso** e o **lote destino**, para ler de longe.
+
+- Para abrir, clique no ícone de balança ao lado do título **Distribuição de Lotes**. Para fechar, use o **X** do quadro.
+- O botão de setas alterna entre **Grande** e **Pequeno**.
+- A cor indica o estado da balança: verde = estável, amarelo = estabilizando, cinza = peso já usado (esperando o
+  próximo animal), azul = peso digitado.
+- O lote segue a mesma regra do campo **Lote destino**: o lote escolhido em **Transferência de Lote**, ou o lote
+  automático pela faixa de peso (**Não encontrado** quando nenhum lote aceita). Com o atalho de lote ligado e mais
+  de um lote na faixa, mostra as teclas (F11, F12…).
+- O quadro só mostra: o peso salvo continua sendo o da balança, conferido no Salvar.
+- Aberto ou fechado, e o tamanho, ficam lembrados neste computador.

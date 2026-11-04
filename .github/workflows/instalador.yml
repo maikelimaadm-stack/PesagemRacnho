@@ -14,7 +14,8 @@ on:
   push:
     tags: ['v*']
   # Em PR, só quando muda a versão/dependências (package.json) ou o próprio workflow:
-  # o .exe de teste fica nos Artifacts da execução.
+  # gera e confere o .exe, mas não guarda nos Artifacts (cada um tem ~126 MB e a cota de
+  # armazenamento do Actions enchia — o upload falhava com "Artifact storage quota has been hit").
   pull_request:
     paths: ['package.json', '.github/workflows/instalador.yml']
 
@@ -57,6 +58,7 @@ jobs:
         run: npm run dist:unsigned
 
       - name: Guardar instalador
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v5
         with:
           name: instalador-windows
@@ -65,7 +67,7 @@ jobs:
             release-unsigned/*.sha256
             release-unsigned/*.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 7
 
   # Só a tag publica em Releases; este job não roda código do repositório.
   publicar:

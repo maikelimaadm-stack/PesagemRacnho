@@ -1,6 +1,6 @@
 ﻿# Teste em máquina limpa
 
-Este roteiro valida o pacote Windows da versão **1.6.0** em um computador ou
+Este roteiro valida o pacote Windows da versão **1.6.1** em um computador ou
 usuário sem uma instalação anterior, a atualização a partir da 1.3.2 e, em
 máquina separada, a atualização histórica a partir da 1.1.17.
 Use somente um instalador acompanhado de `release-manifest.json` e SHA-256.
@@ -9,7 +9,7 @@ diagnóstico, nunca como release oficial.
 
 ## Instalação e segurança
 
-- [ ] Conferir nome (`Pesagens Individuais Setup 1.6.0.exe`), tamanho e SHA-256
+- [ ] Conferir nome (`Pesagens Individuais Setup 1.6.1.exe`), tamanho e SHA-256
       contra `release-manifest.json` (`installer.sha256`, `installer.sizeBytes`).
 - [ ] Em **Propriedades > Assinaturas Digitais**, validar assinatura Authenticode,
       cadeia confiável e carimbo de tempo (ou registrar `signed: false`).
