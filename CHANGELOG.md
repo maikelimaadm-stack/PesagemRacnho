@@ -3,6 +3,26 @@
 Todas as mudanças relevantes deste app desktop offline são registradas aqui.
 Formato baseado em "Keep a Changelog"; versionamento semântico (MAJOR.MINOR.PATCH).
 
+## [1.6.2] — 2026-11-05
+
+Correções do Lançamento (balança e cadastro) e dos filtros. Sem mudança de banco (Dexie 9) nem de backup
+(formato 3). Notas em `docs/release/1.6.2/RELEASE-NOTES.md`.
+
+### Fixed
+- **"Esse peso já foi usado" sem ter lançado.** Com a balança sem tara (vazia marcando 15–40 kg), a plataforma
+  nunca ficava abaixo de 10 kg e o próximo animal continuava bloqueado. Agora o peso cair para menos de 1/4 do
+  peso salvo também libera o próximo animal. No aviso, o botão **Liberar peso** deixa o operador confirmar que é
+  outro animal (continua exigindo peso estável).
+- **"Selecione o animal cadastrado" com o animal cadastrado.** Digitar o número e salvar na hora (Enter, clique ou
+  atalho, sem sair do campo) recusava o lançamento. Agora o número de um animal só é reconhecido no Salvar.
+- **"Animal não cadastrado" para quem entrou sem peso.** O Manejo avisa que o animal entrou sem peso e oferece
+  **Pesar em Entrada**, que abre a Entrada com o número e a marca. A 1ª pesagem usa o mesmo animal.
+- **Filtros: condição ignorada.** Em **Maior que**, **Menor que**, **Começa com**, **Termina com**, **Antes de** e
+  **Depois de**, o filtro mostrava a lista de valores, e marcar um valor ignorava a condição. Agora essas condições
+  têm um campo de valor; a lista de valores fica em Contém, Não contém, É igual a e É diferente de.
+- **Filtros: listas sobrepostas.** A lista **Condição** (e os demais menus) abria atrás do filtro da coluna,
+  escondendo as primeiras opções. Os menus agora abrem por cima dos painéis de filtro.
+
 ## [1.6.1] — 2026-11-04
 
 Melhorias do Lançamento de Pesagens. Sem mudança de banco (Dexie 9) nem de backup (formato 3).

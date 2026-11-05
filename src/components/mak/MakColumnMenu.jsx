@@ -39,6 +39,10 @@ const OPERATORS = {
   ],
 };
 
+// Condições em que a lista de valores (caixas de marcar) faz sentido. Nas de comparação (maior que, começa com,
+// antes de…) a lista virava "é um destes" e a condição escolhida era ignorada: nelas vai o campo de valor.
+const LIST_OPERATORS = new Set(["contains", "not_contains", "equals", "not_equals"]);
+
 const defaultOperatorFor = (filterType) => filterType === "text" ? "contains" : filterType === "number" ? "between" : "equals";
 
 function normalizeFilter(filter, filterType = "text") {
@@ -157,7 +161,7 @@ export default function MakColumnMenu({
   }, [normalizedOptions, search]);
   const needsValue = !["empty", "not_empty"].includes(draft.operator);
   const needsRange = ["between", "not_between"].includes(draft.operator);
-  const showValueList = needsValue && !needsRange && (filterType !== "date" || draft.operator === "contains") && normalizedOptions.length > 0;
+  const showValueList = needsValue && !needsRange && LIST_OPERATORS.has(draft.operator) && (filterType !== "date" || draft.operator === "contains") && normalizedOptions.length > 0;
   const formatOption = (option) => {
     if (filterType !== "date") return option;
     const [year, month, day] = option.slice(0, 10).split("-");

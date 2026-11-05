@@ -520,6 +520,21 @@ export async function findPendingEntryAnimal({ numero, marcaId = null }) {
   return null;
 }
 
+/** Animais que entraram sem peso com esta identificação (qualquer marca) e ainda não têm pesagem. */
+export async function listPendingEntryAnimalsByNumber(numero) {
+  const chave = normalized(numero);
+  if (!chave) return [];
+  const db = await readyDb();
+  const candidatos = (await db.table('animais').where('identificacao_normalizada').equals(chave).toArray())
+    .filter((row) => active(row) && row.situacao === 'ATIVO' && row.situacao_cadastro === 'PENDENTE_PESAGEM');
+  const pendentes = [];
+  for (const animal of candidatos) {
+    const pesagens = (await db.table('pesagens').where('animal_id').equals(animal.id).toArray()).filter(active);
+    if (!pesagens.length) pendentes.push(strip(animal));
+  }
+  return pendentes;
+}
+
 /** Operação (não legada) a que uma pesagem pertence, com o item; null se a pesagem não veio de operação. */
 export async function findOperationOfEntry(pesagemId) {
   if (!pesagemId) return null;

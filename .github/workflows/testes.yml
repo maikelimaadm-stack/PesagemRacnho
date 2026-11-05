@@ -55,3 +55,8 @@ jobs:
       # Lançamento: trocar Entrada/Manejo com a balança estável não zera o Peso; quadro opcional de peso e lote.
       - name: E2E do peso na troca de modo e do quadro de peso e lote (Electron)
         run: xvfb-run -a npm run e2e:weight-board:verify
+
+      # 1.6.2: condição do filtro da coluna vale e a lista abre por cima; Salvar reconhece o animal digitado;
+      # animal que entrou sem peso orienta a 1ª pesagem; "Liberar peso" na pesagem automática.
+      - name: E2E dos filtros e da captura da balança (Electron)
+        run: xvfb-run -a npm run e2e:filters-scale:verify

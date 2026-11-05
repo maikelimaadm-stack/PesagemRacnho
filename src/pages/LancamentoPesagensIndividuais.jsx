@@ -70,7 +70,7 @@ import { getAnimalRecord } from "@/modules/operations/application/operationalIns
 import { categoriesForSex, eraOfCategory, suggestCategory } from "@/modules/operations/domain/categorySuggestion";
 import SanidadeLancamentoPanel from "../components/pesagens/SanidadeLancamentoPanel";
 import { listApplications, listMedicamentos, listProgramas } from "@/modules/sanity/application/sanityService";
-import { cancelOperation, findOperationOfEntry, findPendingEntryAnimal, registerLaunchOperation } from "@/modules/livestock/application/operationsService";
+import { cancelOperation, findOperationOfEntry, findPendingEntryAnimal, listPendingEntryAnimalsByNumber, registerLaunchOperation } from "@/modules/livestock/application/operationsService";
 import {
   ENTRADA_SUBTIPOS_LANCAMENTO,
   ENTRADA_SUBTIPO_LABELS,
@@ -89,7 +89,7 @@ import { downloadCsvFile } from "@/modules/weighing/export/csvDownload";
 import { formatWeightForField } from "@/modules/equipment/domain/scaleContract";
 import { launchWeightKg, normalizeLaunchWeight } from "@/modules/weighing/domain/weightNormalization";
 import { getEquipmentConfig } from "@/modules/equipment/application/equipmentConfigService";
-import { consumeCapture, ensureScaleReady, evaluateCapture, getLastStableReading, getStatus as getScaleStatus, onScaleReading, onScaleStatus } from "@/modules/equipment/application/scaleService";
+import { consumeCapture, ensureScaleReady, evaluateCapture, getLastStableReading, getStatus as getScaleStatus, onScaleReading, onScaleStatus, releaseCapture } from "@/modules/equipment/application/scaleService";
 // Contexto fixo por sequência: o que fica e o que sai entre um animal e o próximo
 // é decidido pelo módulo puro launchContext (matriz STICKY_FIELDS/ANIMAL_FIELDS por modo).
 import {
@@ -809,8 +809,35 @@ export default function LancamentoPesagensIndividuais() {
     }
     setAnimalIdSelecionado('');
     setAvisoTela(null);
-    toast.error(`Animal ${String(value || '').trim()} não cadastrado. Faça o Cadastro antes do manejo ou da saída.`);
+    avisarAnimalNaoCadastrado(value);
     return false;
+  };
+
+  // Não achou o número entre os animais cadastrados. Se ele entrou "sem peso" (Entrada sem peso ou Rebanho ›
+  // Entradas), a 1ª pesagem é feita pela Entrada (o sistema adota o mesmo animal): avisa e oferece ir para lá.
+  const avisarAnimalNaoCadastrado = (value) => {
+    const numero = String(value || '').trim();
+    const generico = () => toast.error(`Animal ${numero} não cadastrado. Faça o Cadastro antes do manejo ou da saída.`, { id: `animal-nao-cadastrado-${numero}` });
+    listPendingEntryAnimalsByNumber(numero)
+      .then((pendentes) => {
+        if (!pendentes?.length) return generico();
+        const animal = pendentes[0];
+        toast.warning(`Animal ${numero} entrou sem peso e ainda não foi pesado. A 1ª pesagem dele é lançada em Entrada (novo animal): o sistema usa o mesmo animal, sem entrada nova.`, {
+          id: `animal-nao-cadastrado-${numero}`,
+          duration: 12000,
+          action: { label: 'Pesar em Entrada', onClick: () => pesarPendenteEmEntrada(animal, numero) },
+        });
+      })
+      .catch(generico);
+  };
+
+  const pesarPendenteEmEntrada = (animal, numero) => {
+    handleTipoManejoChange('Cadastro');
+    setTimeout(() => {
+      setNumeroAnimal(numero);
+      if (animal?.marca_id) selecionarMarca(animal.marca_id);
+      if (animal?.sexo) setSexo(animal.sexo);
+    }, 0);
   };
 
   useEffect(() => {
@@ -1201,7 +1228,23 @@ export default function LancamentoPesagensIndividuais() {
       const captura = evaluateCapture();
       if (!captura.ok) {
         setAvisoTela(null);
-        toast.error(captura.message);
+        // "Peso já usado" com outro animal na balança (ex.: balança sem tara que não volta a zero): o operador
+        // confirma que é outro animal e libera o peso estável atual — continua exigindo leitura estável.
+        const podeLiberar = captura.reason === 'AGUARDANDO_PROXIMO_ANIMAL' || captura.reason === 'MESMO_PESO_DO_ANTERIOR';
+        toast.error(captura.message, podeLiberar ? {
+          id: 'captura-balanca',
+          duration: 10000,
+          action: {
+            label: 'Liberar peso',
+            onClick: () => {
+              releaseCapture();
+              sincronizarPesoDoMonitor({ force: true });
+              const liberado = evaluateCapture();
+              if (liberado.ok) toast.success(`Peso ${formatWeightForField(liberado.reading.weightKg)} kg liberado para este animal. Confira e salve.`, { id: 'captura-liberada' });
+              else toast.info(liberado.message, { id: 'captura-liberada' });
+            },
+          },
+        } : { id: 'captura-balanca' });
         return;
       }
       capturaBalanca = captura.reading;
@@ -1291,8 +1334,16 @@ export default function LancamentoPesagensIndividuais() {
       return;
     }
     if (tipoManejo !== 'Cadastro' && !isSN && !animalIdSelecionado) {
+      // Número digitado e Salvar/Enter/atalho antes de a identificação terminar: se o número é de UM animal só,
+      // seleciona e salva em seguida (antes recusava com "Selecione o animal cadastrado" mesmo cadastrado).
+      const matches = animalLookupIndex.byNumber.get(normalizeAnimalText(numeroDigitado)) || [];
+      if (matches.length === 1 && !options?.animalResolvido) {
+        aplicarAnimalSelecionado(matches[0]);
+        setTimeout(() => handleSalvarRef.current?.({ ...options, animalResolvido: true }), 60);
+        return;
+      }
+      // Vários animais com o número (escolher a marca) ou nenhum (aviso de não cadastrado / entrada sem peso).
       resolverAnimalDigitado(numeroDigitado);
-      toast.error('Selecione o animal cadastrado antes de salvar.');
       return;
     }
 

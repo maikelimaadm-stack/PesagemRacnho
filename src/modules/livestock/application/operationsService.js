@@ -153,6 +153,12 @@ export async function findPendingEntryAnimal({ numero, marcaId = null } = {}) {
   return adapter.findPendingEntryAnimal({ numero, marcaId });
 }
 
+/** Animais que entraram sem peso com esta identificação (para o Manejo orientar a 1ª pesagem pela Entrada). */
+export async function listPendingEntryAnimalsByNumber(numero) {
+  requirePermission('weighing.read');
+  return adapter.listPendingEntryAnimalsByNumber(numero);
+}
+
 /** Operação de origem de uma pesagem (para editar/excluir no Lançamento sem descasar o livro). */
 export async function findOperationOfEntry(pesagemId) {
   requirePermission('weighing.read');

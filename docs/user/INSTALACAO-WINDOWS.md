@@ -1,11 +1,11 @@
 ﻿# Instalação no Windows
 
-Versão deste guia: **1.6.1**. O instalador chama-se
-**Pesagens Individuais Setup 1.6.1.exe**.
+Versão deste guia: **1.6.2**. O instalador chama-se
+**Pesagens Individuais Setup 1.6.2.exe**.
 
 ## Como instalar
 
-1. Execute o arquivo **Pesagens Individuais Setup 1.6.1.exe**.
+1. Execute o arquivo **Pesagens Individuais Setup 1.6.2.exe**.
 2. Siga as telas do instalador.
 3. Você pode escolher a pasta de instalação.
 4. Ao terminar, o atalho é criado.
@@ -34,15 +34,15 @@ Um build sem assinatura pode ser gerado em `release-unsigned/` apenas para
 diagnóstico local (`signed: false` no manifesto); ele não é instalador oficial
 e pode ser corretamente bloqueado por uma política corporativa do Windows.
 
-## Como atualizar da 1.3.x, 1.4.x, 1.5.x ou 1.6.0 para a 1.6.1
+## Como atualizar da 1.3.x, 1.4.x, 1.5.x, 1.6.0 ou 1.6.1 para a 1.6.2
 
 1. Abra a versão atual e crie um **backup completo** em **Backup e Manutenção**. Guarde o arquivo
    fora do computador (pen drive ou outra pasta).
 2. Feche **todas** as janelas do programa.
-3. Execute o **Setup 1.6.1** por cima da instalação atual.
-4. Abra o programa e faça o login. A barra superior mostra **v1.6.1**.
+3. Execute o **Setup 1.6.2** por cima da instalação atual.
+4. Abra o programa e faça o login. A barra superior mostra **v1.6.2**.
 
-Da **1.6.0 para a 1.6.1** não há migração: o banco continua na versão 9.
+Da **1.6.0 ou 1.6.1 para a 1.6.2** não há migração: o banco continua na versão 9.
 
 Vindo da 1.5.x ou anterior, a atualização **migra o banco da versão 8 para a 9** (mudança da 1.6.0). Na primeira abertura, o programa grava e confere um **backup pré-migração** (pasta `backups`, arquivo `pre-migration-v9-…json`) e depois migra. Os dados existentes não são reescritos. Para voltar à 1.5.x, restaure esse backup na versão antiga **num perfil separado** — nunca abra a 1.5.x sobre a pasta de dados da 1.6.0 nem apague essa pasta. O passo a passo está em `docs/evidence/pesagens-integrada/MIGRACAO-ROLLBACK.md`.
 

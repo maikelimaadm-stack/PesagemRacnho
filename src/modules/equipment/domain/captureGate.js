@@ -13,6 +13,9 @@
 //     Assim o boi A parado na balança (ou mexendo e voltando ao mesmo peso) não vira o peso
 //     do boi B, e leitura tardia do A depois de começar o B não libera o B.
 //   - nunca promove leitura instável a estável (sem timeout que "inventa" estabilidade).
+//   - balança sem tara (vazia marcando 15–40 kg, barro na plataforma): conta como "vazia" qualquer leitura abaixo
+//     de EMPTY_RATIO do peso consumido — o animal saiu mesmo sem o número chegar perto de zero (1.6.2);
+//   - release(): o operador confirma que é outro animal ("Liberar peso"): o estável atual vale para o próximo.
 // Puro: sem timers, sem Dexie, sem React. O scaleService alimenta e a tela consulta.
 
 export const CAPTURE_REASONS = Object.freeze({
@@ -37,6 +40,8 @@ export const CAPTURE_MESSAGES = Object.freeze({
 export const DEFAULT_EMPTY_THRESHOLD_KG = 10;
 export const DEFAULT_REARM_DELTA_KG = 30;
 export const DEFAULT_SAME_WEIGHT_TOLERANCE_KG = 1;
+/** Depois de salvar, leitura abaixo desta fração do peso usado = plataforma vazia (balança sem tara). */
+export const EMPTY_RATIO = 0.25;
 
 const finite = (value) => (value === null || value === undefined || value === '' ? null : (Number.isFinite(Number(value)) ? Number(value) : null));
 
@@ -75,6 +80,13 @@ export function createCaptureGate({
         awaitingNext = false;
         rearmedBySwing = false;
       }
+      return;
+    }
+    if (awaitingNext && consumed && kg < consumed.weightKg * EMPTY_RATIO) {
+      // Balança sem tara: o animal saiu (o peso caiu para menos de 1/4 do usado) sem chegar a zero.
+      lastStable = null;
+      awaitingNext = false;
+      rearmedBySwing = false;
       return;
     }
     if (reading.stable) {
@@ -118,6 +130,18 @@ export function createCaptureGate({
     lastStable = null;
   };
 
+  /**
+   * O operador confirma que o animal na balança é OUTRO ("Liberar peso"): a espera do próximo animal acaba e o
+   * último estável (se a leitura atual é estável e não vazia) volta a valer. Continua exigindo leitura estável.
+   */
+  const release = () => {
+    awaitingNext = false;
+    rearmedBySwing = false;
+    consumed = null;
+    const kg = finite(lastReading?.weightKg);
+    if (!lastStable && lastReading?.stable && kg != null && kg >= emptyThresholdKg) lastStable = lastReading;
+  };
+
   /** Desconexão, erro do adaptador ou troca de aparelho: o estável deixa de valer. */
   const invalidate = () => {
     lastStable = null;
@@ -140,5 +164,5 @@ export function createCaptureGate({
     awaitingNext,
   });
 
-  return { observe, evaluate, consume, invalidate, reset, snapshot };
+  return { observe, evaluate, consume, release, invalidate, reset, snapshot };
 }

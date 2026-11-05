@@ -2465,9 +2465,11 @@ html body [role="dialog"] :is(
 /* ===== Correção: menus flutuantes dentro de diálogos =====
    O overlay do diálogo usa z-index 210 e o conteúdo 220, mas os menus do Radix
    (select, popover, dropdown) ficavam em 50 — o clique do mouse batia no overlay
-   e a opção não podia ser escolhida. Os menus precisam ficar acima do diálogo. */
+   e a opção não podia ser escolhida. Os menus precisam ficar acima do diálogo.
+   1.6.2: e acima dos painéis de filtro (filtro rápido 440, filtro da coluna 450,
+   calendário 460) — em 300 a lista "Condição" abria ATRÁS do filtro da coluna. */
 [data-radix-popper-content-wrapper] {
-  z-index: 300 !important;
+  z-index: 600 !important;
 }
 
 [data-radix-select-content],
@@ -2475,7 +2477,7 @@ html body [role="dialog"] :is(
 [data-radix-dropdown-menu-content],
 .erp-menu-panel,
 .erp-select-menu {
-  z-index: 300 !important;
+  z-index: 600 !important;
 }
 
 /* Fonte unificada nos campos: mesma dos campos de lançamento (11px).

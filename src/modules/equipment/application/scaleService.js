@@ -187,6 +187,11 @@ export function consumeCapture(reading) {
   captureGate.consume(reading);
 }
 
+/** "Liberar peso": o operador confirma que é outro animal; o estável atual volta a valer (ver captureGate.release). */
+export function releaseCapture() {
+  captureGate.release();
+}
+
 /** Pesagem automática religada / troca de dia: o portão recomeça (não muda a conexão). */
 export function resetCapture() {
   captureGate.reset();
