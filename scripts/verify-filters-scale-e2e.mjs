@@ -123,7 +123,7 @@ try {
   await salvar();
   await win.getByText(/Esse peso já foi usado no animal anterior/).first().waitFor({ timeout: 5000 });
   await win.getByRole('button', { name: 'Liberar peso' }).click();
-  await win.getByText(/Peso 328 kg liberado para este animal/).first().waitFor({ timeout: 5000 });
+  await win.getByText(/Peso da balança liberado para este animal \(328\)/).first().waitFor({ timeout: 5000 });
   await numero().fill('8002');
   await salvar();
   await win.getByText(/Entrada confirmada: animal 8002/).first().waitFor({ timeout: 15000 });

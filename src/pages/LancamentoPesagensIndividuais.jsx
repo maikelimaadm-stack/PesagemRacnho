@@ -1240,7 +1240,7 @@ export default function LancamentoPesagensIndividuais() {
               releaseCapture();
               sincronizarPesoDoMonitor({ force: true });
               const liberado = evaluateCapture();
-              if (liberado.ok) toast.success(`Peso ${formatWeightForField(liberado.reading.weightKg)} kg liberado para este animal. Confira e salve.`, { id: 'captura-liberada' });
+              if (liberado.ok) toast.success(`Peso da balança liberado para este animal (${formatWeightForField(liberado.reading.weightKg)}). Confira e salve.`, { id: 'captura-liberada' });
               else toast.info(liberado.message, { id: 'captura-liberada' });
             },
           },
