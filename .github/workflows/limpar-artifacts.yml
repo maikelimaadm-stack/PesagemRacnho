@@ -1,0 +1,38 @@
+name: Limpar instaladores antigos
+
+# Libera a cota de armazenamento do Actions: apaga os artifacts "instalador-windows"
+# antigos (cada um tem ~126 MB) e mantém só o mais recente.
+# Manual: aba Actions → "Limpar instaladores antigos" → Run workflow.
+# O GitHub recalcula o espaço usado a cada 6–12 h depois de apagar.
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+
+jobs:
+  limpar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Apagar instaladores antigos (mantém o mais recente)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const artifacts = await github.paginate(github.rest.actions.listArtifactsForRepo, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'instalador-windows',
+              per_page: 100,
+            });
+            const vivos = artifacts
+              .filter((a) => !a.expired)
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            const [manter, ...apagar] = vivos;
+            if (manter) core.info(`Mantido: #${manter.id} de ${manter.created_at}`);
+            let bytes = 0;
+            for (const a of apagar) {
+              await github.rest.actions.deleteArtifact({ owner: context.repo.owner, repo: context.repo.repo, artifact_id: a.id });
+              bytes += a.size_in_bytes;
+              core.info(`Apagado: #${a.id} de ${a.created_at} (${Math.round(a.size_in_bytes / 1e6)} MB)`);
+            }
+            core.notice(`${apagar.length} instalador(es) antigo(s) apagado(s), ${Math.round(bytes / 1e6)} MB liberados. O GitHub recalcula o espaço em 6–12 h.`);
