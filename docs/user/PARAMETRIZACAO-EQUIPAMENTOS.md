@@ -56,6 +56,19 @@ o peso da balança e com o mesmo estado (estável, estabilizando ou esperando o 
 vazio até o animal se mexer, porque a balança só manda leitura quando o número muda. Salvar continua exigindo peso
 estável e novo: o peso já usado no animal anterior não serve para o próximo.
 
+## "Esse peso já foi usado no animal anterior"
+
+Depois de salvar um animal, o próximo peso é liberado quando a balança mostra que o animal saiu:
+
+- a plataforma vazia (abaixo de 10 kg); **ou**
+- desde a 1.6.2, o peso cai para menos de 1/4 do peso salvo — vale para a **balança sem tara**, que fica marcando
+  15, 20 ou 40 kg vazia (barro, plataforma suja); **ou**
+- uma variação grande (30 kg ou mais), seguida de um peso estável diferente.
+
+Se mesmo assim aparecer "Esse peso já foi usado no animal anterior" com **outro animal** na balança, use o botão
+**Liberar peso** do aviso: o peso estável que está na balança passa a valer para este animal. Use só quando tiver
+certeza de que é outro animal. O botão não libera peso instável nem a balança vazia.
+
 ## Quadro de peso e lote destino
 
 Ao lado da **Distribuição de Lotes** (painel Apartação) há um quadro opcional que mostra, em letra grande, o mesmo

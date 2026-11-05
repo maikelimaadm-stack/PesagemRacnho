@@ -112,4 +112,55 @@ describe('createCaptureGate — liberação do peso para salvar', () => {
     gate.reset();
     expect(gate.evaluate(conectado).reason).toBe(CAPTURE_REASONS.SEM_LEITURA);
   });
+
+  it('1.6.2: balança sem tara (vazia marcando 22 kg) libera o próximo animal quando o peso cai', () => {
+    const gate = createCaptureGate();
+    gate.observe(leitura(328, true));
+    gate.consume(gate.evaluate(conectado).reading);
+    // O animal sai: a balança não tarada fica em 22 kg (nunca abaixo de 10 kg).
+    gate.observe(leitura(22, false));
+    gate.observe(leitura(22, true));
+    // Entra o próximo animal com peso parecido (340 kg, menos de 30 kg de diferença).
+    gate.observe(leitura(340, false));
+    const b = leitura(340, true);
+    gate.observe(b);
+    const r = gate.evaluate(conectado);
+    expect(r.ok).toBe(true);
+    expect(r.reading).toBe(b);
+  });
+
+  it('1.6.2: o mesmo animal mexendo (sem cair abaixo de 1/4 do peso) continua esperando o próximo', () => {
+    const gate = createCaptureGate();
+    gate.observe(leitura(328, true));
+    gate.consume(gate.evaluate(conectado).reading);
+    gate.observe(leitura(310, false));
+    gate.observe(leitura(329, true));
+    expect(gate.evaluate(conectado).reason).toBe(CAPTURE_REASONS.AGUARDANDO_PROXIMO_ANIMAL);
+  });
+
+  it('1.6.2: "Liberar peso" — o operador confirma outro animal e o estável atual volta a valer', () => {
+    const gate = createCaptureGate();
+    gate.observe(leitura(328, true));
+    gate.consume(gate.evaluate(conectado).reading);
+    const b = leitura(331, true);
+    gate.observe(b);
+    expect(gate.evaluate(conectado).reason).toBe(CAPTURE_REASONS.AGUARDANDO_PROXIMO_ANIMAL);
+    gate.release();
+    const r = gate.evaluate(conectado);
+    expect(r.ok).toBe(true);
+    expect(r.reading).toBe(b);
+  });
+
+  it('1.6.2: "Liberar peso" não inventa estabilidade nem libera balança vazia', () => {
+    const gate = createCaptureGate();
+    gate.observe(leitura(328, true));
+    gate.consume(gate.evaluate(conectado).reading);
+    gate.observe(leitura(330, false));
+    gate.release();
+    expect(gate.evaluate(conectado).reason).toBe(CAPTURE_REASONS.INSTAVEL);
+    const vazio = createCaptureGate();
+    vazio.observe(leitura(0, true));
+    vazio.release();
+    expect(vazio.evaluate(conectado).ok).toBe(false);
+  });
 });

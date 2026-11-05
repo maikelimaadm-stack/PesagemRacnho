@@ -60,6 +60,11 @@ largura vale também na impressão e no PDF e fica guardada.
 **Mais filtros…:** no quadro de filtros, ao lado dos botões, lista todas as outras colunas do relatório (ex.:
 Motivo da saída, Comprador, Peso). Escolha uma, marque os valores ou a condição, e ela vira um botão com contador.
 
+**Condição do filtro (1.6.2):** a lista de valores para marcar aparece só em **Contém**, **Não contém**, **É igual
+a** e **É diferente de**. Nas condições de comparação (**Maior que**, **Menor que**, **Começa com**, **Termina
+com**, **Antes de**, **Depois de**…) aparece um campo para digitar o valor. Exemplo: Peso → Maior que → 250 lista
+só os pesos acima de 250. Antes, marcar um valor nessas condições ignorava a condição escolhida.
+
 **Colunas Painel / Colunas Detalhes / Colunas Visíveis:** marque, desmarque e arraste para mudar a ordem. Coluna
 marcada aparece sempre na folha, mesmo sem valor no período (com "-"). A escolha fica guardada para cada tipo e
 para o seu usuário.
