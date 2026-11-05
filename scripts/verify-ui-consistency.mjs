@@ -147,7 +147,8 @@ for (const file of [
   }
 }
 assert.match(launchPage, /if \(matches\.length > 1\) \{\s*setOpcoesAnimal\(matches\);\s*setSeletorAnimalOpen\(true\);/, 'ambiguidade de marca abre o seletor de animal (1.5.4: sem notificação extra)');
-assert.match(launchPage, /toast\.error\(`Animal \$\{String\(value \|\| ''\)\.trim\(\)\} não cadastrado/, 'animal sem cadastro aparece na notificação superior');
+assert.match(launchPage, /toast\.error\(`Animal \$\{numero\} não cadastrado/, 'animal sem cadastro aparece na notificação superior');
+assert.match(launchPage, /toast\.warning\(`Animal \$\{numero\} entrou sem peso/, 'animal que entrou sem peso: aviso na notificação superior (1.6.2)');
 assert.match(dialogBase, /onPointerDownOutside=\{\(event\) => \{[\s\S]{0,120}event\.preventDefault\(\)/, 'diálogos não fecham ao clicar fora');
 assert.match(dialogBase, /onEscapeKeyDown=\{\(event\) => \{[\s\S]{0,120}event\.preventDefault\(\)/, 'diálogos não fecham pela tecla Escape');
 assert.match(visualCss, /R27[\s\S]*?d17b-standard-dialog table th[\s\S]{0,260}text-transform:\s*none\s*!important/i, 'cabeçalhos de todos os pop-ups preservam capitalização normal');
